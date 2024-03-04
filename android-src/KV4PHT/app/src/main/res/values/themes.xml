@@ -1,0 +1,13 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.KV4PHT" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your light theme here. -->
+        <item name="android:fontFamily">@font/jost</item>
+        <item name="fontFamily">@font/jost
+        </item> <!-- target android sdk versions < 26 and > 14 if theme other than AppCompat -->
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+    </style>
+
+    <style name="Theme.KV4PHT" parent="Base.Theme.KV4PHT" />
+</resources>
