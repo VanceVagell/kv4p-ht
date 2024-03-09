@@ -89,7 +89,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                 threadPoolExecutor.execute(new Runnable() {
                        @Override
                        public void run() {
-                           mMemory = MainActivity.appDb.channelMemoryDao().getById(mMemoryId);
+                           mMemory = MainViewModel.appDb.channelMemoryDao().getById(mMemoryId);
                            populateOriginalValues();
                        }
                 });
@@ -122,7 +122,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                List<String> memoryGroups = MainActivity.appDb.channelMemoryDao().getGroups();
+                List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
                 activity.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -186,7 +186,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     }
 
     public void cancelButtonClicked(View view) {
-        setResult(Activity.RESULT_CANCELED);
+        setResult(Activity.RESULT_CANCELED, getIntent());
         finish();
     }
 
@@ -230,11 +230,11 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (isAdd) {
-                    MainActivity.appDb.channelMemoryDao().insertAll(finalMemory);
+                    MainViewModel.appDb.channelMemoryDao().insertAll(finalMemory);
                 } else {
-                    MainActivity.appDb.channelMemoryDao().update(finalMemory);
+                    MainViewModel.appDb.channelMemoryDao().update(finalMemory);
                 }
-                setResult(Activity.RESULT_OK);
+                setResult(Activity.RESULT_OK, getIntent());
                 finish();
             }
         });

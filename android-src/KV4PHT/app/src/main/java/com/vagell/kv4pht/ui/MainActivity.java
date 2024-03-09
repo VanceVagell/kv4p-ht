@@ -4,10 +4,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.room.Room;
+import androidx.databinding.DataBindingUtil;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import android.Manifest;
 import android.app.Activity;
@@ -31,14 +34,11 @@ import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
-import android.view.LayoutInflater;
-import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.PopupMenu;
 import android.widget.TextView;
 
 import com.google.android.material.snackbar.Snackbar;
@@ -47,23 +47,18 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
+import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.databinding.ActivityMainBinding;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
     // Must match the ESP32 device we support.
@@ -83,9 +78,7 @@ public class MainActivity extends AppCompatActivity {
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private UsbSerialPort serialPort;
-    // private TextView debugText;
     private SerialInputOutputManager usbIoManager;
-    private Queue<byte[]> serialOutBufferQueue;
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
@@ -108,30 +101,72 @@ public class MainActivity extends AppCompatActivity {
     // Radio params
     private String activeFrequencyStr = "144.0000";
 
-    // Various user-defined app parameters
-    public static AppDatabase appDb = null;
-
     // Activity callback values
     public static final int REQUEST_ADD_MEMORY = 0;
     public static final int REQUEST_EDIT_MEMORY = 1;
 
-    private static final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
-            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
-
     private Map<String, Integer> mTones = new HashMap<>();
+
+    private MainViewModel viewModel;
+    private RecyclerView recyclerView;
+    private MemoriesAdapter adapter;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
-        // debugText = findViewById(R.id.debugText);
-        // debugText.setMovementMethod(new ScrollingMovementMethod());
+        // Bind data to the UI via the MainViewModel class
+        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
+        viewModel.setActivity(this);
+        ActivityMainBinding binding = DataBindingUtil.setContentView(this, R.layout.activity_main);
+        binding.setLifecycleOwner(this);
+        binding.setVariable(BR.viewModel, viewModel);
+
+        // Prepare a RecyclerView for the list of channel memories
+        recyclerView = findViewById(R.id.memoriesList);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        adapter = new MemoriesAdapter(new MemoriesAdapter.MemoryListener() {
+            @Override
+            public void onMemoryClick(ChannelMemory memory) {
+                // Actually tune to it.
+                tuneToMemory(memory);
+
+                // Highlight the tapped memory, unhighlight all the others.
+                viewModel.highlightMemory(memory);
+                adapter.notifyDataSetChanged();
+            }
+
+            @Override
+            public void onMemoryDelete(ChannelMemory memory) {
+                String freq = memory.frequency;
+                viewModel.deleteMemory(memory);
+                viewModel.loadData();
+                adapter.notifyDataSetChanged();
+                tuneToFreq(freq); // Stay on the same freq as the now-deleted memory
+            }
+
+            @Override
+            public void onMemoryEdit(ChannelMemory memory) {
+                Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
+                intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
+                intent.putExtra("memoryId", memory.memoryId);
+                startActivityForResult(intent, REQUEST_EDIT_MEMORY);
+            }
+        });
+        recyclerView.setAdapter(adapter);
+
+        // Observe the LiveData in MainViewModel (so the RecyclerView can populate with the memories)
+        viewModel.getChannelMemories().observe(this, new Observer<List<ChannelMemory>>() {
+            @Override
+            public void onChanged(List<ChannelMemory> channelMemories) {
+                // Update the adapter's data
+                adapter.setMemoriesList(channelMemories);
+                adapter.notifyDataSetChanged();
+            }
+        });
 
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
-
-        serialOutBufferQueue = new LinkedList<>();
 
         requestAudioPermissions();
         findESP32Device();
@@ -141,10 +176,7 @@ public class MainActivity extends AppCompatActivity {
 
         setupTones();
 
-        appDb = Room.databaseBuilder(getApplicationContext(),
-                AppDatabase.class, "kv4pht-db").build();
-        loadSettings();
-        loadChannelMemories();
+        viewModel.loadData();
     }
 
     private void setupTones() {
@@ -187,107 +219,6 @@ public class MainActivity extends AppCompatActivity {
         mTones.put("233.6", 36);
         mTones.put("241.8", 37);
         mTones.put("250.3", 38);
-    }
-
-    private void loadSettings() {
-        // TODO use appDb
-    }
-
-    private void loadChannelMemories() {
-        final Activity activity = this;
-        threadPoolExecutor.execute(
-            new Runnable() {
-               @Override
-               public void run() {
-                   final List<ChannelMemory> channelMemories = appDb.channelMemoryDao().getAll();
-
-                   activity.runOnUiThread(new Runnable() {
-                       @Override
-                       public void run() {
-                           LayoutInflater inflater = (LayoutInflater)getApplicationContext().getSystemService
-                                   (Context.LAYOUT_INFLATER_SERVICE);
-
-                           final LinearLayoutCompat memoriesList = findViewById(R.id.memoriesList);
-                           memoriesList.removeAllViews();
-
-                           for (int i = 0; i < channelMemories.size(); i++) {
-                               View memoryRow = inflater.inflate(R.layout.memory_row, null);
-                               final ChannelMemory memory = channelMemories.get(i);
-                               ((TextView) memoryRow.findViewById(R.id.memoryName)).setText(memory.name);
-                               ((TextView) memoryRow.findViewById(R.id.memoryFrequency)).setText(memory.frequency);
-
-                               // Make tapping this row tune to the memory.
-                               memoryRow.setOnClickListener(new View.OnClickListener() {
-                                   @Override
-                                   public void onClick(View v) {
-                                       // Actually tune to it.
-                                       tuneToMemory(memory);
-
-                                       // Unhighlight all rows.
-                                       int memoryRows = memoriesList.getChildCount();
-                                       for (int i = 0; i < memoryRows; i++) {
-                                           View tempMemoryRow = memoriesList.getChildAt(i);
-                                           setMemoryRowHighlighted(activity, tempMemoryRow, false);
-                                       }
-
-                                       // Highlight the tapped row.
-                                       setMemoryRowHighlighted(activity, memoryRow, true);
-                                   }
-                               });
-
-                               // Make tapping this row's menu bring up a couple options.
-                               final View memoryMenuButton = memoryRow.findViewById(R.id.memoryMenu);
-                               memoryMenuButton.setOnClickListener(new View.OnClickListener() {
-                                   @Override
-                                   public void onClick(View v) {
-                                       PopupMenu memoryMenu = new PopupMenu(activity, memoryMenuButton);
-                                       memoryMenu.inflate(R.menu.memory_row_menu);
-                                       memoryMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-                                           @Override
-                                           public boolean onMenuItemClick(MenuItem item) {
-                                               if (item.getTitle().equals("Delete")) {
-                                                   threadPoolExecutor.execute(
-                                                       new Runnable() {
-                                                           @Override
-                                                           public void run() {
-                                                               appDb.channelMemoryDao().delete(memory);
-                                                               loadChannelMemories();
-                                                           }
-                                                       });
-                                               } else if (item.getTitle().equals("Edit")) {
-                                                   Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
-                                                   intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
-                                                   intent.putExtra("memoryId", memory.memoryId);
-                                                   startActivityForResult(intent, REQUEST_EDIT_MEMORY);
-                                               }
-                                               return true;
-                                           }
-                                       });
-                                       memoryMenu.show();
-                                   }
-                               });
-
-                               memoriesList.addView(memoryRow);
-                           }
-                       }
-                   });
-               }
-           });
-    }
-
-    private static void setMemoryRowHighlighted(Context context, View memoryRow, boolean highlighted) {
-        if (highlighted) {
-            memoryRow.findViewById(R.id.memoryContainer)
-                    .setBackgroundColor(context.getResources().getColor(R.color.primary_veryfaint));
-            memoryRow.findViewById(R.id.memoryMenu).setVisibility(View.VISIBLE);
-            ((TextView) memoryRow.findViewById(R.id.memoryName)).setTextColor(context.getResources().getColor(R.color.primary));
-            ((TextView) memoryRow.findViewById(R.id.memoryFrequency)).setTextColor(context.getResources().getColor(R.color.primary));
-        } else {
-            memoryRow.setBackgroundColor(context.getResources().getColor(R.color.clear));
-            memoryRow.findViewById(R.id.memoryMenu).setVisibility(View.GONE);
-            ((TextView) memoryRow.findViewById(R.id.memoryName)).setTextColor(context.getResources().getColor(R.color.primary_deselected));
-            ((TextView) memoryRow.findViewById(R.id.memoryFrequency)).setTextColor(context.getResources().getColor(R.color.primary_deselected));
-        }
     }
 
     private void attachListeners() {
@@ -373,12 +304,8 @@ public class MainActivity extends AppCompatActivity {
         showFrequency(activeFrequencyStr);
 
         // Unhighlight all memory rows, since this is a simplex frequency.
-        LinearLayoutCompat memoriesList = findViewById(R.id.memoriesList);
-        int memoryRows = memoriesList.getChildCount();
-        for (int i = 0; i < memoryRows; i++) {
-            View tempMemoryRow = memoriesList.getChildAt(i);
-            setMemoryRowHighlighted(this, tempMemoryRow, false);
-        }
+        viewModel.highlightMemory(null);
+        adapter.notifyDataSetChanged();
 
         // Reset audio prebuffer
         prebufferComplete = false;
@@ -536,22 +463,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void debugLog(String text) {
-        /* runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                debugText.append("\n" + text);
-                debugText.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        final int scrollAmount = debugText.getLayout().getLineTop(debugText.getLineCount()) - debugText.getHeight();
-                        if (scrollAmount > 0)
-                            debugText.scrollTo(0, scrollAmount);
-                        else
-                            debugText.scrollTo(0, 0);
-                    }
-                });
-            }
-        }); */
         Log.d("DEBUG", text);
     }
     private void initAudioRecorder() {
@@ -628,15 +539,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showUSBRetrySnackbar() {
-        CharSequence snackbarMsg = "Radio not found, is it plugged in to USB?";
+        CharSequence snackbarMsg = "KV4P-HT radio not found, plugged in?";
         CharSequence buttonLabel = "RETRY";
-        Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+        Snackbar snackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                 .setAction(buttonLabel, new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
                         findESP32Device();
                     }
-                }).setBackgroundTint(Color.RED).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE).show();
+                }).setBackgroundTint(Color.RED).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+
+        // Make the text of the snackbar larger.
+        TextView snackbarActionTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        snackbarActionTextView.setTextSize(20);
+        TextView snackbarTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        snackbar.show();
     }
 
     private boolean isESP32Device(UsbDevice device) {
@@ -778,18 +697,46 @@ public class MainActivity extends AppCompatActivity {
 
         switch (requestCode) {
             case REQUEST_ADD_MEMORY:
+                if (resultCode == Activity.RESULT_OK) {
+                    viewModel.loadData();
+                    adapter.notifyDataSetChanged();
+                }
+                break;
             case REQUEST_EDIT_MEMORY:
                 if (resultCode == Activity.RESULT_OK) {
-                    loadChannelMemories();
+                    // Add an observer to the model so we know when it's done reloading
+                    // the edited memory, so we can tune to it.
+                    final int editedMemoryId = data.getExtras().getInt("memoryId");
+                    viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
+                        @Override
+                        public void onLoadDataDone() {
+                            super.onLoadDataDone();
+
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    adapter.notifyDataSetChanged();
+                                    // Tune to the edited memory to force any changes to be applied (e.g. new tone
+                                    // or frequency).
+                                    List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+                                    for (int i = 0; i < channelMemories.size(); i++) {
+                                        if (channelMemories.get(i).memoryId == editedMemoryId) {
+                                            viewModel.highlightMemory(channelMemories.get(i));
+                                            tuneToMemory(channelMemories.get(i));
+                                        }
+                                    }
+                                    viewModel.setCallback(null);
+                                }
+                            });
+                        }
+                    });
+                    viewModel.loadData();
                 }
                 break;
             default:
                 debugLog("Warning: Returned to MainActivity from unexpected request code: " + requestCode);
         }
     }
-
-    // TODO editMemoryClicked
-    // intent.putExtra("memoryId", memory.getId()\);
 
     public void settingsClicked(View view) {
         // TODO

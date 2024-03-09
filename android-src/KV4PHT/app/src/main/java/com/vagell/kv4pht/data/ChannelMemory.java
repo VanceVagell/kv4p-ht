@@ -2,6 +2,7 @@ package com.vagell.kv4pht.data;
 
 import androidx.room.ColumnInfo;
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 @Entity(tableName = "channel_memories")
@@ -27,4 +28,13 @@ public class ChannelMemory {
 
     @ColumnInfo(name = "group")
     public String group; // Optional
+
+    @Ignore
+    private boolean highlighted = false;
+
+    public void setHighlighted(boolean highlighted) {
+        this.highlighted = highlighted;
+    }
+
+    public boolean isHighlighted() { return highlighted; }
 }
