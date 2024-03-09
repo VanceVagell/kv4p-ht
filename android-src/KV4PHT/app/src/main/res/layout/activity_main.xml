@@ -85,13 +85,16 @@
                     android:gravity="center_vertical" />
 
                 <TextView
+                    android:id="@+id/groupSelector"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_weight="0"
                     android:fontFamily="@font/jost"
-                    android:text="ALL MEMORIES"
+                    android:text="ALL MEMORIES ▼"
+                    android:textAllCaps="true"
                     android:textColor="@color/primary"
-                    android:textSize="16dp" />
+                    android:textSize="16dp"
+                    android:onClick="groupSelectorClicked" />
 
                 <View
                     android:layout_width="fill_parent"

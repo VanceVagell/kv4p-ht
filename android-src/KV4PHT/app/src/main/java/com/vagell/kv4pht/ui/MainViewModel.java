@@ -74,4 +74,27 @@ public class MainViewModel extends ViewModel {
             appDb.channelMemoryDao().delete(memory);
         });
     }
+
+    // Only displays memories that have the given group, or if group
+    // is null displays all memories (no filter).
+    public void filterMemories(String group) {
+        setCallback(new MainViewModelCallback() {
+            @Override
+            public void onLoadDataDone() {
+                setCallback(null);
+                List<ChannelMemory> memories = channelMemories.getValue();
+
+                if (group == null) {
+                    return;
+                }
+
+                for (int i = 0; i < memories.size(); i++) {
+                    if (!memories.get(i).group.equals(group)) {
+                        memories.remove(i--);
+                    }
+                }
+            }
+        });
+        loadData(); // Repopulate all memories, then filter (see callback above)
+    }
 }

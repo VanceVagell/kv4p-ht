@@ -4,6 +4,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.menu.MenuBuilder;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
@@ -34,6 +36,7 @@ import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -59,6 +62,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
     // Must match the ESP32 device we support.
@@ -111,6 +117,11 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private MemoriesAdapter adapter;
 
+    private static final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
+            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+
+    private String selectedMemoryGroup = null; // null means unfiltered, no group selected
+
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -161,6 +172,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onChanged(List<ChannelMemory> channelMemories) {
                 // Update the adapter's data
+                if (selectedMemoryGroup != null) {
+                    for (int i = 0; i < channelMemories.size(); i++) {
+                        if (!channelMemories.get(i).group.equals(selectedMemoryGroup)) {
+                            channelMemories.remove(i--);
+                        }
+                    }
+                }
                 adapter.setMemoriesList(channelMemories);
                 adapter.notifyDataSetChanged();
             }
@@ -547,7 +565,7 @@ public class MainActivity extends AppCompatActivity {
                     public void onClick(View v) {
                         findESP32Device();
                     }
-                }).setBackgroundTint(Color.RED).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+                }).setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
 
         // Make the text of the snackbar larger.
         TextView snackbarActionTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
@@ -689,6 +707,45 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent("com.vagell.kv4pht.ADD_MEMORY_ACTION");
         intent.putExtra("requestCode", REQUEST_ADD_MEMORY);
         startActivityForResult(intent, REQUEST_ADD_MEMORY);
+    }
+
+    public void groupSelectorClicked(View view) {
+        PopupMenu groupsMenu = new PopupMenu(this, view);
+        groupsMenu.inflate(R.menu.groups_menu);
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
+                for (int i = 0; i < memoryGroups.size(); i++) {
+                    groupsMenu.getMenu().add(memoryGroups.get(i));
+                }
+
+                groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                    @Override
+                    public boolean onMenuItemClick(MenuItem item) {
+                        selectMemoryGroup(item.getTitle().toString());
+                        return true;
+                    }
+                });
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        groupsMenu.show();
+                    }
+                });
+            }
+        });
+    }
+
+    private void selectMemoryGroup(String groupName) {
+        this.selectedMemoryGroup = groupName.equals("All memories") ? null : groupName;
+        viewModel.loadData();
+
+        // Add drop-down arrow to end of selected group to suggest it's tappable
+        TextView groupSelector = findViewById(R.id.groupSelector);
+        groupSelector.setText(groupName + " ▼");
     }
 
     @Override
