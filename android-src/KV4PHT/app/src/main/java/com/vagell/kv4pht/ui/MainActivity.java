@@ -537,6 +537,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void findESP32Device() {
+        debugLog("findESP32Device()");
+
         HashMap<String, UsbDevice> usbDevices = usbManager.getDeviceList();
 
         for (UsbDevice device : usbDevices.values()) {
@@ -577,6 +579,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isESP32Device(UsbDevice device) {
+        debugLog("isESP32Device()");
+
         int vendorId = device.getVendorId();
         int productId = device.getProductId();
         debugLog("vendorId: " + vendorId + " productId: " + productId + " name: " + device.getDeviceName());
@@ -589,21 +593,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void requestUSBPermission() {
+        debugLog("requestUSBPermission()");
+
         if (usbManager.hasPermission(esp32Device)) {
             synchronized (this) {
+                debugLog("hasPermission");
+
                 setupSerialConnection();
                 return;
             }
         }
 
+        debugLog("No USB permission yet");
+
         PendingIntent permissionIntent = PendingIntent.getBroadcast(this, 0, new Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE);
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
-        registerReceiver(usbReceiver, filter);
+        registerReceiver(usbReceiver, filter, RECEIVER_EXPORTED);
         usbManager.requestPermission(esp32Device, permissionIntent);
     }
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
+            debugLog("usbReceiver.onReceive()");
+
             String action = intent.getAction();
             if (ACTION_USB_PERMISSION.equals(action)) {
                 synchronized (this) {
@@ -614,6 +626,8 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private void setupSerialConnection() {
+        debugLog("setupSerialConnection()");
+
         // Find all available drivers from attached devices.
         UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);

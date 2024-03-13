@@ -60,6 +60,7 @@ public class MainViewModel extends ViewModel {
 
     public void highlightMemory(ChannelMemory memory) {
         List<ChannelMemory> memories = channelMemories.getValue();
+        if (memories == null) { return; }
         for (int i = 0; i < memories.size(); i++) {
             memories.get(i).setHighlighted(false);
         }
