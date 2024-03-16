@@ -1,0 +1,9 @@
+KV4P HT privacy policy
+----------------------
+
+This app is open source, and as such its code may be fully reviewed, reused, and reopurposed by end users however they like.
+KV4P HT Android app does not transmit any user data outside of the user's own device. Settings are stored locally on the user's
+device in an Android Room DB, which keeps them secure on the user's device. That said, there's no sensitive data used or
+stored even locally by the app.
+
+(This privacy policy is here because it's required to be referenced to publish the app in the Play Store.)
