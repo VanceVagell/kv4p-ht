@@ -171,7 +171,7 @@ void loop() {
         if (matchedDelimiterTokens == DELIMITER_LENGTH) {
           // Process next byte as a command.
           uint8_t command = tempBuffer[i];
-          // TODO remove the delimiter and command from buffer so it's not played back as audio (just a few bytes, can't really hear it)
+
           matchedDelimiterTokens = 0;
           switch (command) {
             case COMMAND_PTT_DOWN:
@@ -186,27 +186,23 @@ void loop() {
                 // 145.450144.85006
                 // 7 chars for tx, 7 chars for rx, 2 chars for tone (16 bytes total for params)
                 setMode(MODE_RX);
-
                 i++; // Skip over the command byte
+
+                String paramsStr = "";
+                paramsStr += String((char *)tempBuffer + i);
 
                 // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
                 // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
                 // putting them in there. If so, we take byte-by-byte until we get the full params.
                 int paramBytesMissing = 16 - (bytesRead - i);
-                uint8_t paramPartsBuffer[paramBytesMissing];
                 if (paramBytesMissing > 0) {
+                  uint8_t paramPartsBuffer[paramBytesMissing];
                   for (int j = 0; j < paramBytesMissing; j++) {
                     while (!Serial.available()) { 
                       // Wait for a byte.
                     }
                     paramPartsBuffer[j] = Serial.read();
                   }
-                }
-
-                // Combine the final list of parameters as a string (from the initial buffer, and any missing bytes we just waited for)
-                String paramsStr = "";
-                paramsStr += String((char *)tempBuffer + i);
-                if (paramBytesMissing > 0) {
                   paramsStr += String((char *)paramPartsBuffer);
                 }
                 
@@ -215,7 +211,6 @@ void loop() {
                 int toneInt = paramsStr.substring(14, 16).toInt();
 
                 // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
-
                 i += 16; // Skip over the param bytes we just pulled out
                 if (i >= TX_AUDIO_BUFFER_SIZE) { // If we skipped past the end of tempBuffer, manually pull i back to the end of tempBuffer (so subsequent code has a working i variable).
                   i = TX_AUDIO_BUFFER_SIZE - 1;
