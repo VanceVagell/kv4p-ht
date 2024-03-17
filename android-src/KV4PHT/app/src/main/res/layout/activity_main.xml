@@ -141,6 +141,7 @@
             android:layout_marginTop="8dp">
 
             <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/scanButton"
                 android:layout_width="64dp"
                 android:layout_height="wrap_content"
                 android:text="SCAN"
@@ -149,8 +150,7 @@
                 android:textFontWeight="500"
                 android:background="?android:attr/selectableItemBackground"
                 android:layout_weight="0"
-                android:onClick="scanClicked"
-                android:enabled="false" />
+                android:onClick="scanClicked" />
 
             <View
                 android:layout_weight="1"

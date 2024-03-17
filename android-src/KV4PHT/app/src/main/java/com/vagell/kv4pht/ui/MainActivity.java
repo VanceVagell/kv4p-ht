@@ -56,6 +56,7 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -92,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
+    private static final int SEC_BETWEEN_SCANS = 1; // how long to wait during silence to scan to next frequency in scan mode
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -102,6 +104,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int MODE_RX = 0;
     private static final int MODE_TX = 1;
+    private static final int MODE_SCAN = 2;
     private int mode = MODE_RX;
 
     // Radio params
@@ -121,6 +124,8 @@ public class MainActivity extends AppCompatActivity {
             2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
+    private int activeMemoryId = -1; // -1 means we're in simplex mode
+    private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -314,7 +319,9 @@ public class MainActivity extends AppCompatActivity {
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
     private void tuneToFreq(String frequencyStr) {
+        mode = MODE_RX;
         activeFrequencyStr = validateFrequency(frequencyStr);
+        activeMemoryId = -1;
 
         sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00"); // tx, rx, tone
 
@@ -330,8 +337,21 @@ public class MainActivity extends AppCompatActivity {
         rxPrebufferIdx = 0;
     }
 
+    private void tuneToMemory(int memoryId) {
+        List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+        for (int i = 0; i < channelMemories.size(); i++) {
+            if (channelMemories.get(i).memoryId == memoryId) {
+                tuneToMemory(channelMemories.get(i));
+                return;
+            }
+        }
+    }
+
     private void tuneToMemory(ChannelMemory memory) {
+        // TODO if user tapped on a memory explicitly during scan, stop scan and enter RX mode.
+
         activeFrequencyStr = validateFrequency(memory.frequency);
+        activeMemoryId = memory.memoryId;
 
         sendCommandToESP32(ESP32Command.TUNE_TO,
                 getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone));
@@ -344,15 +364,37 @@ public class MainActivity extends AppCompatActivity {
         rxPrebufferIdx = 0;
     }
 
+    private void checkScanDueToSilence() {
+        // Note that we handle scanning explicitly like this rather than using dra->scan() because
+        // as best I can tell the DRA818v chip has a defect where it always returns "S=1" (which
+        // means there is no signal detected on the given frequency) even when there is. I did
+        // extensive debugging and even rewrote large portions of the DRA818v library to determine
+        // that this was the case. So in lieu of that, we scan using a timing/silence-based system.
+        if (consecutiveSilenceBytes >= (AUDIO_SAMPLE_RATE * SEC_BETWEEN_SCANS)) { // 8kHz*3sec is 24kb (3 seconds of silence)
+            consecutiveSilenceBytes = 0;
+            nextScan();
+        }
+    }
+
     private void showMemoryName(String name) {
-        TextView activeFrequencyField = findViewById(R.id.activeMemoryName);
-        activeFrequencyField.setText(name);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                TextView activeFrequencyField = findViewById(R.id.activeMemoryName);
+                activeFrequencyField.setText(name);
+            }
+        });
     }
 
     private void showFrequency(String frequency) {
-        EditText activeFrequencyField = findViewById(R.id.activeFrequency);
-        activeFrequencyField.setText(frequency);
-        activeFrequencyStr = frequency;
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                EditText activeFrequencyField = findViewById(R.id.activeFrequency);
+                activeFrequencyField.setText(frequency);
+                activeFrequencyStr = frequency;
+            }
+        });
     }
 
     private String getTxFreq(String txFreq, int offset) {
@@ -710,7 +752,48 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void scanClicked(View view) {
-        // TODO
+        // Stop scanning
+        if (mode == MODE_SCAN) {
+            mode = MODE_RX;
+            // TODO if squelch was off before we started scanning, turn it off again
+        } else { // Start scanning
+            mode = MODE_SCAN;
+            nextScan();
+        }
+    }
+
+    private void nextScan() {
+        if (mode != MODE_SCAN) {
+            return;
+        }
+
+        List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+        ChannelMemory memoryToScanNext = null;
+
+        // If we're in simplex, start by scanning to the first memory
+        if (activeMemoryId == -1) {
+            memoryToScanNext = channelMemories.get(0);
+        }
+
+        if (memoryToScanNext == null) {
+            // Find the next memory after the one we last scanned
+            for (int i = 0; i < channelMemories.size() - 1; i++) {
+                if (channelMemories.get(i).memoryId == activeMemoryId) {
+                    memoryToScanNext = channelMemories.get(i + 1);
+                    break;
+                }
+            }
+        }
+
+        if (memoryToScanNext == null) {
+            // If we hit the end of memories, go back to scanning from the start
+            memoryToScanNext = channelMemories.get(0);
+        }
+
+        consecutiveSilenceBytes = 0;
+
+        // debugLog("Scanning to: " + memoryToScanNext.name);
+        tuneToMemory(memoryToScanNext);
     }
 
     public void importMemoriesClicked(View view) {
@@ -816,7 +899,7 @@ public class MainActivity extends AppCompatActivity {
     private enum ESP32Command {
         PTT_DOWN((byte) 1),
         PTT_UP((byte) 2),
-        TUNE_TO((byte) 3); // paramsStr length of 8 (xxx.xxxx frequency)
+        TUNE_TO((byte) 3); // paramsStr contains freq, offset, tone details
 
         private byte commandByte;
         ESP32Command(byte commandByte) {
@@ -863,13 +946,43 @@ public class MainActivity extends AppCompatActivity {
             debugLog("Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();
+            try {
+                serialPort.close();
+            } catch (IOException ex) {
+                // Ignore.
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+            findESP32Device(); // Attempt to reconnect after the brief pause above.
         }
     }
 
     private void handleESP32Data(byte[] data) {
         // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
-        // debugLog("Str data from ESP32: " + new String(data, "UTF-8"));
+        try {
+            String dataStr = new String(data, "UTF-8");
+            if (dataStr.length() < 100 && dataStr.length() > 0)
+                debugLog("Str data from ESP32: " + dataStr);
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+        }
         // debugLog("Num bytes from ESP32: " + data.length);
+
+        // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
+        if (mode == MODE_SCAN) {
+            for (int i = 0; i < data.length; i++) {
+                if (data[i] == -128 || data[i] == 128) {
+                    consecutiveSilenceBytes++;
+                    // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
+                    checkScanDueToSilence();
+                } else {
+                    consecutiveSilenceBytes = 0;
+                }
+            }
+        }
 
         // If the prebuffer was already filled and sent to the audio track, we start
         // writing incoming data in realtime to keep the audio track prepped with audio.

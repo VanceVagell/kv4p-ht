@@ -181,30 +181,48 @@ void loop() {
               setMode(MODE_RX);
               break;
             case COMMAND_TUNE_TO:
-              // Example:
-              // 145.450144.85006
-              // 7 chars for tx, 7 chars for rx, 2 chars for tone
+              {
+                // Example:
+                // 145.450144.85006
+                // 7 chars for tx, 7 chars for rx, 2 chars for tone (16 bytes total for params)
+                setMode(MODE_RX);
 
-              char freqTxChars[7] = {tempBuffer[i + 1], tempBuffer[i + 2], tempBuffer[i + 3], tempBuffer[i + 4], tempBuffer[i + 5], tempBuffer[i + 6], tempBuffer[i + 7]};
-              String freqTxStr = String(freqTxChars);
-              float freqTxFloat = freqTxStr.toFloat();
+                i++; // Skip over the command byte
 
-              i += 7; // Skip over the tx frequency string now that we have it.
+                // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
+                // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
+                // putting them in there. If so, we take byte-by-byte until we get the full params.
+                int paramBytesMissing = 16 - (bytesRead - i);
+                uint8_t paramPartsBuffer[paramBytesMissing];
+                if (paramBytesMissing > 0) {
+                  for (int j = 0; j < paramBytesMissing; j++) {
+                    while (!Serial.available()) { 
+                      // Wait for a byte.
+                    }
+                    paramPartsBuffer[j] = Serial.read();
+                  }
+                }
 
-              char freqRxChars[7] = {tempBuffer[i + 1], tempBuffer[i + 2], tempBuffer[i + 3], tempBuffer[i + 4], tempBuffer[i + 5], tempBuffer[i + 6], tempBuffer[i + 7]};
-              String freqRxStr = String(freqRxChars);
-              float freqRxFloat = freqRxStr.toFloat();
+                // Combine the final list of parameters as a string (from the initial buffer, and any missing bytes we just waited for)
+                String paramsStr = "";
+                paramsStr += String((char *)tempBuffer + i);
+                if (paramBytesMissing > 0) {
+                  paramsStr += String((char *)paramPartsBuffer);
+                }
+                
+                float freqTxFloat = paramsStr.substring(0, 8).toFloat();
+                float freqRxFloat = paramsStr.substring(7, 15).toFloat();
+                int toneInt = paramsStr.substring(14, 16).toInt();
 
-              i += 7; // Skip over the rx frequency string now that we have it
+                // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
 
-              char toneChars[2] = {tempBuffer[i + 1], tempBuffer[i + 2]};
-              String toneStr = String(toneChars);
-              int toneInt = toneStr.toInt();
+                i += 16; // Skip over the param bytes we just pulled out
+                if (i >= TX_AUDIO_BUFFER_SIZE) { // If we skipped past the end of tempBuffer, manually pull i back to the end of tempBuffer (so subsequent code has a working i variable).
+                  i = TX_AUDIO_BUFFER_SIZE - 1;
+                }
 
-              i += 2; // Skip over the tone string now that we have it
-
-              tuneTo(freqTxFloat, freqRxFloat, toneInt);
-
+                tuneTo(freqTxFloat, freqRxFloat, toneInt);
+              }
               break;
           }
         } else {
@@ -246,12 +264,12 @@ void loop() {
     esp_task_wdt_reset();
   } catch (int e) {
     // Disregard, we don't want to crash. Just pick up at next loop().)
-    Serial.println("Exception in loop(), skipping cycle.");
+    // Serial.println("Exception in loop(), skipping cycle.");
   }
 }
 
 void tuneTo(float freqTx, float freqRx, int tone) {
-  int result = dra->group(DRA818_25K, freqTx, freqRx, tone, 0, 0);  // TODO use squelch setting here when we have it
+  int result = dra->group(DRA818_25K, freqTx, freqRx, tone, 1, 0);  // TODO apply user-selected squelch setting here when we have it
   // Serial.println("tuneTo: " + String(result));
 }
 
@@ -259,13 +277,13 @@ void setMode(int newMode) {
   mode = newMode;
   switch (mode) {
     case MODE_RX:
-      neopixel.setPixelColor(0, 0, 10, 0);
+      neopixel.setPixelColor(0, 0, 10, 0); // Green LED
       neopixel.show();
       digitalWrite(PTT_PIN, HIGH);
       rxAudioBufferIdx = 0;
       break;
     case MODE_TX:
-      neopixel.setPixelColor(0, 10, 0, 0);
+      neopixel.setPixelColor(0, 10, 0, 0); // Red LED
       neopixel.show();
       digitalWrite(PTT_PIN, LOW);
       usingTxBuffer1 = true;
