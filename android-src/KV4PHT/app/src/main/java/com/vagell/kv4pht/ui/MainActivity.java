@@ -596,7 +596,7 @@ public class MainActivity extends AppCompatActivity {
             showUSBRetrySnackbar();
         } else {
             debugLog("Found ESP32.");
-            requestUSBPermission();
+            setupSerialConnection();
         }
     }
 
@@ -632,26 +632,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return false;
-    }
-
-    private void requestUSBPermission() {
-        debugLog("requestUSBPermission()");
-
-        if (usbManager.hasPermission(esp32Device)) {
-            synchronized (this) {
-                debugLog("hasPermission");
-
-                setupSerialConnection();
-                return;
-            }
-        }
-
-        debugLog("No USB permission yet");
-
-        PendingIntent permissionIntent = PendingIntent.getBroadcast(this, 0, new Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE);
-        IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
-        registerReceiver(usbReceiver, filter, RECEIVER_EXPORTED);
-        usbManager.requestPermission(esp32Device, permissionIntent);
     }
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
