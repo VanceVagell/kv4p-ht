@@ -93,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
-    private static final int SEC_BETWEEN_SCANS = 1; // how long to wait during silence to scan to next frequency in scan mode
+    private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -672,7 +672,7 @@ public class MainActivity extends AppCompatActivity {
         debugLog("serialPort: " + serialPort);
         try {
             serialPort.open(connection);
-            serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (IOException e) {
             debugLog("Error: couldn't open USB serial port.");
             showUSBRetrySnackbar();
@@ -712,7 +712,7 @@ public class MainActivity extends AppCompatActivity {
         });
         usbIoManager.setWriteBufferSize(1000); // Must not exceed receive buffer set on ESP32 (so we don't overflow it)
         usbIoManager.setReadBufferSize(1000); // Must be much larger than ESP32's send buffer (so we never block it)
-        usbIoManager.setReadTimeout(0); // In ms; if 0/infinite, writes may block until a read happens
+        usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
 
         debugLog("Connected to ESP32.");
@@ -954,7 +954,7 @@ public class MainActivity extends AppCompatActivity {
         // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
         if (mode == MODE_SCAN) {
             for (int i = 0; i < data.length; i++) {
-                if (data[i] == -128 || data[i] == 128) {
+                if (data[i] == -128) {
                     consecutiveSilenceBytes++;
                     // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
                     checkScanDueToSilence();
