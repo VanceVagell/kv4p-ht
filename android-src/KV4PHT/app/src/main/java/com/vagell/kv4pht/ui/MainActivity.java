@@ -63,6 +63,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -94,6 +95,9 @@ public class MainActivity extends AppCompatActivity {
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
+    private int receivedBytesCount = 0;
+    private Queue<CommandWithParams> commandQueue = new LinkedBlockingQueue<CommandWithParams>();
+    private static final int BYTES_BEFORE_SEND_COMMAND = 1000;
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -127,6 +131,28 @@ public class MainActivity extends AppCompatActivity {
     private int activeMemoryId = -1; // -1 means we're in simplex mode
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
 
+    private class CommandWithParams {
+        private ESP32Command command;
+        private String params;
+
+        public CommandWithParams(ESP32Command command) {
+            this.command = command;
+            this.params = null;
+        }
+
+        public CommandWithParams(ESP32Command command, String params) {
+            this.command = command;
+            this.params = params;
+        }
+
+        public ESP32Command getCommand() {
+            return command;
+        }
+
+        public String getParams() {
+            return params;
+        }
+    }
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -323,7 +349,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyStr = validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
-        sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00"); // tx, rx, tone
+        queueCommand(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00"); // tx, rx, tone
 
         showMemoryName("Simplex");
         showFrequency(activeFrequencyStr);
@@ -353,7 +379,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
 
-        sendCommandToESP32(ESP32Command.TUNE_TO,
+        queueCommand(ESP32Command.TUNE_TO,
                 getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone));
 
         showMemoryName(memory.name);
@@ -453,7 +479,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         mode = MODE_TX;
-        sendCommandToESP32(ESP32Command.PTT_DOWN);
+        queueCommand(ESP32Command.PTT_DOWN);
         startRecording();
         audioTrack.stop();
     }
@@ -463,7 +489,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         mode = MODE_RX;
-        sendCommandToESP32(ESP32Command.PTT_UP);
+        queueCommand(ESP32Command.PTT_UP);
         stopRecording();
         audioTrack.flush();
         prebufferComplete = false;
@@ -672,7 +698,7 @@ public class MainActivity extends AppCompatActivity {
         debugLog("serialPort: " + serialPort);
         try {
             serialPort.open(connection);
-            serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE); // 115200 or 921600
         } catch (IOException e) {
             debugLog("Error: couldn't open USB serial port.");
             showUSBRetrySnackbar();
@@ -879,7 +905,8 @@ public class MainActivity extends AppCompatActivity {
     private enum ESP32Command {
         PTT_DOWN((byte) 1),
         PTT_UP((byte) 2),
-        TUNE_TO((byte) 3); // paramsStr contains freq, offset, tone details
+        TUNE_TO((byte) 3), // paramsStr contains freq, offset, tone details
+        CONTINUE_RX((byte) 4);
 
         private byte commandByte;
         ESP32Command(byte commandByte) {
@@ -895,11 +922,28 @@ public class MainActivity extends AppCompatActivity {
         sendBytesToESP32(audioBuffer);
     }
 
+    private void queueCommand(ESP32Command command) {
+        if (mode == MODE_TX) { // Send immediately when in tx mode, we already have a byte stream.
+            sendCommandToESP32(command);
+        } else {
+            commandQueue.add(new CommandWithParams(command));
+        }
+    }
+
+    private void queueCommand(ESP32Command command, String params) {
+        if (mode == MODE_TX) { // Send immediately when in tx mode, we already have a byte stream.
+            sendCommandToESP32(command, params);
+        } else {
+            commandQueue.add(new CommandWithParams(command, params));
+        }
+    }
+
     private void sendCommandToESP32(ESP32Command command) {
         byte[] commandArray = { COMMAND_DELIMITER[0], COMMAND_DELIMITER[1],
                 COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
                 COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
         sendBytesToESP32(commandArray);
+        debugLog("Sent command: " + command);
     }
 
     private void sendCommandToESP32(ESP32Command command, String paramsStr) {
@@ -917,6 +961,7 @@ public class MainActivity extends AppCompatActivity {
         // buffer size on mcu.
         // TODO implement a more robust way (in mcu code) of ensuring params are received by mcu
         sendBytesToESP32(combined);
+        debugLog("Sent command: " + command + " params: " + paramsStr);
     }
 
     private synchronized void sendBytesToESP32(byte[] newBytes) {
@@ -942,47 +987,67 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleESP32Data(byte[] data) {
         // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
-        try {
+        /* try {
             String dataStr = new String(data, "UTF-8");
             if (dataStr.length() < 100 && dataStr.length() > 0)
                 debugLog("Str data from ESP32: " + dataStr);
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
-        }
-        // debugLog("Num bytes from ESP32: " + data.length);
+        } */
+        debugLog("Num bytes from ESP32: " + data.length);
 
-        // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
-        if (mode == MODE_SCAN) {
-            for (int i = 0; i < data.length; i++) {
-                if (data[i] == -128) {
-                    consecutiveSilenceBytes++;
-                    // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
-                    checkScanDueToSilence();
-                } else {
-                    consecutiveSilenceBytes = 0;
+        // Track audio bytes, so we know when we have our next window to send a command.
+        // This is to avoid simultaneous rx/tx with the ESP32-S2 which tends to cause it to
+        // lock up given the speed of ADC reading, and CDC-based USB Serial.
+        if (mode == MODE_RX || mode == MODE_SCAN) {
+            // If the prebuffer was already filled and sent to the audio track, we start
+            // writing incoming data in realtime to keep the audio track prepped with audio.
+            if (prebufferComplete) {
+                audioTrack.write(data, 0, data.length);
+            } else {
+                for (int i = 0; i < data.length; i++) {
+                    // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
+                    // while we're waiting for more bytes.
+                    rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
+                    if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
+                        prebufferComplete = true;
+                        //debugLog("Rx prebuffer full, writing to audioTrack.");
+                        if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                            audioTrack.play();
+                        }
+                        audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
+                        rxPrebufferIdx = 0;
+                        break; // Might drop a few audio bytes from data[], should be very minimal
+                    }
                 }
             }
-        }
 
-        // If the prebuffer was already filled and sent to the audio track, we start
-        // writing incoming data in realtime to keep the audio track prepped with audio.
-        if (prebufferComplete) {
-            audioTrack.write(data, 0, data.length);
-        } else {
-            for (int i = 0; i < data.length; i++) {
-                // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
-                // while we're waiting for more bytes.
-                rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
-                if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
-                    prebufferComplete = true;
-                    //debugLog("Rx prebuffer full, writing to audioTrack.");
-                    if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                        audioTrack.play();
+            // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
+            if (mode == MODE_SCAN) {
+                for (int i = 0; i < data.length; i++) {
+                    if (data[i] == -128) {
+                        consecutiveSilenceBytes++;
+                        // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
+                        checkScanDueToSilence();
+                    } else {
+                        consecutiveSilenceBytes = 0;
                     }
-                    audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
-                    rxPrebufferIdx = 0;
-                    break; // Might drop a few audio bytes from data[], should be very minimal
                 }
+            }
+
+            receivedBytesCount += data.length;
+            if (receivedBytesCount >= BYTES_BEFORE_SEND_COMMAND) {
+                if (commandQueue.peek() != null) { // If we have a command waiting, send it.
+                    CommandWithParams commandWithParams = commandQueue.remove();
+                    if (commandWithParams.getParams() != null) {
+                        sendCommandToESP32(commandWithParams.getCommand(), commandWithParams.getParams());
+                    } else {
+                        sendCommandToESP32(commandWithParams.getCommand());
+                    }
+                } else { // Otherwise just tell ESP32-S2 to continue sending rx audio bytes.
+                    sendCommandToESP32(ESP32Command.CONTINUE_RX);
+                }
+                receivedBytesCount = 0;
             }
         }
     }

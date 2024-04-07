@@ -6,9 +6,10 @@
 #include "esp_adc_cal.h"
 
 // Commands defined here must match the Android app
-const uint8_t COMMAND_PTT_DOWN = 1;
-const uint8_t COMMAND_PTT_UP = 2;
-const uint8_t COMMAND_TUNE_TO = 3;
+const uint8_t COMMAND_PTT_DOWN = 1; // start transmitting audio that Android app will send
+const uint8_t COMMAND_PTT_UP = 2; // stop transmitting audio, go into RX mode
+const uint8_t COMMAND_TUNE_TO = 3; // change the frequency
+const uint8_t COMMAND_CONTINUE_RX = 4; // continue handling rx audio from radio
 
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
@@ -24,13 +25,17 @@ int mode = MODE_RX;
 #define AUDIO_SAMPLE_RATE 8000
 
 // Buffer for sample audio bytes from the radio module
-#define RX_AUDIO_BUFFER_SIZE 50 // very low buffer size because Adafruit QT Py ESP32-S2 has very small USB buffers
-uint8_t rxAudioBuffer[RX_AUDIO_BUFFER_SIZE];
-int rxAudioBufferIdx = 0;
-uint8_t rxAudioBufferCopy[RX_AUDIO_BUFFER_SIZE];
+#define RX_AUDIO_BUFFER_SIZE 50000
+#define WAIT_AFTER_BYTES 1000
+uint8_t rxAudioBuffer[RX_AUDIO_BUFFER_SIZE]; // Circular buffer
+uint8_t* rxBufferHead = &rxAudioBuffer[0];
+uint8_t* rxBufferTail = &rxAudioBuffer[0];
+int bytesSinceCommand = 0;
+#define AUDIO_SEND_THRESHOLD 500 // minimum bytes in buffer before they'll be sent
 
 // Buffer for outgoing audio bytes to send to radio module
-#define TX_AUDIO_BUFFER_SIZE 1000 // doesn't need to be small like RX_AUDIO_BUFFER_SIZE because this holds data we already got off of USB serial
+#define TX_AUDIO_BUFFER_SIZE 1000 // Holds data we already got off of USB serial from Android app
+// TODO change this to a circular buffer too
 uint8_t txAudioBuffer1[TX_AUDIO_BUFFER_SIZE]; // Processed tx audio bytes that will be sent to radio module
 uint8_t txAudioBuffer2[TX_AUDIO_BUFFER_SIZE]; // 2nd tx audio buffer so we can alternate to avoid any gaps due to processing
 bool usingTxBuffer1 = true;
@@ -62,7 +67,8 @@ void setup() {
   // Communication with Android via USB cable
   Serial.setRxBufferSize(TX_AUDIO_BUFFER_SIZE);
   // Serial.setTxTimeoutMs(1000); // FYI keep an eye on this: https://github.com/espressif/arduino-esp32/issues/7779#issuecomment-1969652597
-  Serial.begin(115200);
+  // Serial.begin(115200);
+  Serial.begin(921600);
   // Serial.setTxBufferSize(1024); Not supported by ESP32-S2 :(
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
@@ -122,14 +128,18 @@ unsigned long ulmap(unsigned long x, unsigned long in_min, unsigned long in_max,
 
 void IRAM_ATTR readWriteAnalog() {
   try {
+    if (bytesSinceCommand >= WAIT_AFTER_BYTES) {
+      return;
+    }
+
     // This needs to do as LITTLE processing as possible, or we won't capture
     // enough audio for it to play back properly.
-    if (mode) { // Since MODE_RX is 1, using this hack to avoid a few cycles.
-      if (rxAudioBufferIdx < RX_AUDIO_BUFFER_SIZE) { 
-        // TODO rewrite this to use the same interpolating approach as tx below. the difference is that this needs to ensure that
-        // any skipped indices are filled with the current value (so can't just jump to interpolated index but count up to it).
-        rxAudioBuffer[rxAudioBufferIdx++] = (uint8_t) analogRead(ADC_PIN);
-        // rxAudioBuffer[rxAudioBufferIdx++] = (uint8_t) analogRead(ADC_PIN);
+    if (mode) { // MODE_RX
+      // TODO consider replacing this with an interpolating approach like is used for MODE_TX below
+      *rxBufferTail = (uint8_t) analogRead(ADC_PIN);
+      rxBufferTail++;
+      if ((rxBufferTail - rxAudioBuffer - RX_AUDIO_BUFFER_SIZE) == 0) {
+        rxBufferTail = &rxAudioBuffer[0]; // loop circular buffer
       }
     } else { // MODE_TX
       unsigned long now = micros();
@@ -162,113 +172,135 @@ void setupTimer() {
 
 void loop() {
   try {
-    // Check for incoming commands or audio from Android
-    int bytesRead = 0;
-    uint8_t tempBuffer[TX_AUDIO_BUFFER_SIZE];
-    int bytesAvailable = Serial.available();
-    if (bytesAvailable > 0) {
-      bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
-
-      for (int i = 0; i < bytesRead; i++) {
-        // If we've seen the entire delimiter...
-        if (matchedDelimiterTokens == DELIMITER_LENGTH) {
-          // Process next byte as a command.
-          uint8_t command = tempBuffer[i];
-          matchedDelimiterTokens = 0;
-          switch (command) {
-            case COMMAND_PTT_DOWN:
-              setMode(MODE_TX);
-              break;
-            case COMMAND_PTT_UP:
-              setMode(MODE_RX);
-              break;
-            case COMMAND_TUNE_TO:
-              {
-                // Example:
-                // 145.450144.85006
-                // 7 chars for tx, 7 chars for rx, 2 chars for tone (16 bytes total for params)
-                setMode(MODE_RX);
-                i++; // Skip over the command byte
-
-                // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
-                // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
-                // putting them in there. If so, we take byte-by-byte until we get the full params.
-                int paramBytesMissing = 16 - (bytesRead - i);
-                if (i > TX_AUDIO_BUFFER_SIZE) {
-                  i = TX_AUDIO_BUFFER_SIZE; // If the command byte was at the very end of buffer, prevent out of bounds i.
-                }
-                String paramsStr = "";
-                paramsStr += String((char *)tempBuffer + i);
-                if (paramBytesMissing > 0) {
-                  uint8_t paramPartsBuffer[paramBytesMissing];
-                  for (int j = 0; j < paramBytesMissing; j++) {
-                    unsigned long waitStart = micros();
-                    while (!Serial.available()) { 
-                      // Wait for a byte.
-                      if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
-                        esp_task_wdt_reset();
-                        return;
-                      }
-                    }
-                    paramPartsBuffer[j] = Serial.read();
-                  }
-                  paramsStr += String((char *)paramPartsBuffer);
-                }
-                
-                float freqTxFloat = paramsStr.substring(0, 8).toFloat();
-                float freqRxFloat = paramsStr.substring(7, 15).toFloat();
-                int toneInt = paramsStr.substring(14, 16).toInt();
-                int squelchInt = 0; // TODO get squelch from params
-
-                // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
-
-                tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
-                return;
-              }
-              break;
-          }
-        } else {
-          if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
-            matchedDelimiterTokens++;
-          } else { // This byte is not consistent with the command delimiter, reset counter
-            matchedDelimiterTokens = 0;
-          }
-        }
-      }
-    }
-
     if (mode == MODE_RX) {
-      // Intercept the rx audio buffer before an overrun happens.
-      if (rxAudioBufferIdx >= RX_AUDIO_BUFFER_SIZE - BYTES_TO_TRIGGER_FROM_BUFFER_END) { 
-        // Copy the buffer so the timer reading from ADC can continue without being blocked.
-        // This is very quick compared to writing to Serial.
-        
-        int copySize = std::min(rxAudioBufferIdx, RX_AUDIO_BUFFER_SIZE);
-        memcpy(rxAudioBufferCopy, rxAudioBuffer, copySize);
-        rxAudioBufferIdx = 0; // This will cause sampling to resume in parallel.
-
-        // If the radio module is indicating that squelch is active, force the audio to quiet (remove background hiss).
-        if (digitalRead(SQ_PIN) == HIGH) {
-          for (int i = 0; i < copySize; i++) {
-            rxAudioBufferCopy[i] = 128; // No sound (half of byte, or 0v)
-          }
+      // We periodically pause while sending rx audio bytes to the Android app to give it
+      // a chance to issue us a command (e.g. change frequency, start transmitting). In most
+      // cases the Android app will just tell us to continue. This is necessary because the
+      // ESP32-S2 is single-threaded and uses a CDC-based USB serial connection (which is
+      // a software serial implementation), and during very rapid rx audio processing and
+      // sending, handling incoming serial data can freeze the ESP32-S2. By pausing to receive
+      // commands more gracefully, we avoid this condition.
+      if (bytesSinceCommand >= WAIT_AFTER_BYTES) {
+        if (!Serial.available()) {
+          return; // Free processor cycles for USB handling and ADC sampling.
         }
 
-        // Wait for room in the Serial buffer to write the bytes we have. Otherwise we might not have enough
-        // room to send them all.
-        unsigned long waitStart = micros();
-        while (Serial.availableForWrite() < copySize) { 
-          // Wait for a byte.
-          if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
-            esp_task_wdt_reset();
-            return;
-          }
+        // Read a command from Android app
+        uint8_t tempBuffer[100]; // Big enough for a command and params, won't hold audio data
+        int bytesRead = 0;
+
+        while (bytesRead < (DELIMITER_LENGTH + 1)) { // Read the delimiter and the command byte only (no params yet)
+          tempBuffer[bytesRead++] = Serial.read();
+          // while (bytesRead < (DELIMITER_LENGTH + 1) && !Serial.available()) { } // If we need more bytes, wait for a byte.
         }
-        Serial.write(rxAudioBufferCopy, copySize);
-        Serial.flush();
+
+        bool commandHandled = false;
+        switch (tempBuffer[DELIMITER_LENGTH]) {
+          case COMMAND_PTT_DOWN:
+          {
+            commandHandled = true;
+            setMode(MODE_TX);
+          }
+            break;
+          case COMMAND_PTT_UP: // TODO actually need to check this in the MODE_TX handler, not here.
+          {
+            commandHandled = true;
+            setMode(MODE_RX);
+          }
+            break;
+          case COMMAND_TUNE_TO:
+          {
+            commandHandled = true;
+
+            // Example:
+            // 145.450144.85006
+            // 7 chars for tx, 7 chars for rx, 2 chars for tone (16 bytes total for params)
+            setMode(MODE_RX);
+
+            // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
+            // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
+            // putting them in there. If so, we take byte-by-byte until we get the full params.
+            int paramBytesMissing = 16;
+            String paramsStr = "";
+            if (paramBytesMissing > 0) {
+              uint8_t paramPartsBuffer[paramBytesMissing];
+              for (int j = 0; j < paramBytesMissing; j++) {
+                unsigned long waitStart = micros();
+                while (!Serial.available()) { 
+                  // Wait for a byte.
+                  if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
+                    esp_task_wdt_reset();
+                    return;
+                  }
+                }
+                paramPartsBuffer[j] = Serial.read();
+              }
+              paramsStr += String((char *)paramPartsBuffer);
+              paramBytesMissing--;
+            }
+            
+            float freqTxFloat = paramsStr.substring(0, 8).toFloat();
+            float freqRxFloat = paramsStr.substring(7, 15).toFloat();
+            int toneInt = paramsStr.substring(14, 16).toInt();
+            int squelchInt = 1; // TODO get squelch from params
+
+            // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
+
+            tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
+          }
+            break;
+          case COMMAND_CONTINUE_RX:
+          {
+            commandHandled = true;
+            // Android app wants us to continue sending rx audio bytes. Noop, just continue.
+          }
+            break;
+          default:
+          {
+            // Unexpected.
+          }
+            break;
+        }
+        if (commandHandled) {
+          bytesSinceCommand = 0;
+        }
       }
+
+      // Don't send every byte as it comes in or it will bog down the processor.
+      // Wait for a critical mass of bytes to be ready.
+      int bytesToSend = (rxBufferTail < rxBufferHead) ? // has the buffer looped?
+          (rxAudioBuffer + RX_AUDIO_BUFFER_SIZE - rxBufferHead) + (rxBufferTail - rxAudioBuffer) : // buffer has looped
+          (rxBufferTail - rxBufferHead); // buffer has not looped
+      if (bytesToSend < AUDIO_SEND_THRESHOLD) {
+        return;
+      }
+
+      // Make a copy of the audio to send, so the ADC reading doesn't conflict with us reading from the circular
+      // buffer. This copy is very short-lived, just what we need to send right now.
+      uint8_t rxAudioBufferCopy[bytesToSend];
+      if (rxBufferTail < rxBufferHead) { // Tail pointer has looped to start of circular buffer
+        memcpy(rxAudioBufferCopy, rxBufferHead, rxAudioBuffer - rxBufferHead); // Unsent data up to end of buffer
+        memcpy(rxAudioBufferCopy + (rxAudioBuffer - rxBufferHead), rxAudioBuffer, rxBufferTail - rxAudioBuffer); // Unsent data at start of looped buffer
+      } else { // Buffer has not looped
+        memcpy(rxAudioBufferCopy, rxBufferHead, bytesToSend);
+      }
+      rxBufferHead += bytesToSend;
+      bytesSinceCommand += bytesToSend;
+      if ((rxBufferHead - rxAudioBuffer - RX_AUDIO_BUFFER_SIZE) > 0) {
+        rxBufferHead -= RX_AUDIO_BUFFER_SIZE; // Loop head pointer back into the circular buffer (it was out of bounds)
+      }
+
+      // If the radio module is indicating that squelch is active, force the audio to quiet (remove background hiss).
+      if (digitalRead(SQ_PIN) == HIGH) {
+        for (int i = 0; i < bytesToSend; i++) {
+          rxAudioBufferCopy[i] = 128; // No sound (half of byte, or 0v)
+        }
+      }
+
+      Serial.write(rxAudioBufferCopy, bytesToSend);
     } else if (mode == MODE_TX) {
-      processTxAudio(tempBuffer, bytesRead);
+      // TODO rewrite this to read from Serial here in a different way than MODE_RX
+      // processTxAudio(tempBuffer, bytesRead);
     }
 
     // Regularly reset the WDT timer to prevent the device from rebooting (prove we're not locked up).
@@ -281,7 +313,6 @@ void loop() {
 
 void tuneTo(float freqTx, float freqRx, int tone, int squelch) {
   int result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
-  rxAudioBufferIdx = 0;
   // Serial.println("tuneTo: " + String(result));
 }
 
@@ -292,7 +323,6 @@ void setMode(int newMode) {
       neopixel.setPixelColor(0, 0, 10, 0); // Green LED
       neopixel.show();
       digitalWrite(PTT_PIN, HIGH);
-      rxAudioBufferIdx = 0;
       break;
     case MODE_TX:
       neopixel.setPixelColor(0, 10, 0, 0); // Red LED
