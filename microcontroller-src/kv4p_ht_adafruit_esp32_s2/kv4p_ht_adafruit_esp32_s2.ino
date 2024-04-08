@@ -26,7 +26,7 @@ int mode = MODE_RX;
 
 // Buffer for sample audio bytes from the radio module
 #define RX_AUDIO_BUFFER_SIZE 50000
-#define WAIT_AFTER_BYTES 1000
+#define WAIT_AFTER_BYTES 2000
 uint8_t rxAudioBuffer[RX_AUDIO_BUFFER_SIZE]; // Circular buffer
 uint8_t* rxBufferHead = &rxAudioBuffer[0];
 uint8_t* rxBufferTail = &rxAudioBuffer[0];
@@ -213,14 +213,14 @@ void loop() {
             commandHandled = true;
 
             // Example:
-            // 145.450144.85006
-            // 7 chars for tx, 7 chars for rx, 2 chars for tone (16 bytes total for params)
+            // 145.450144.850061
+            // 7 chars for tx, 7 chars for rx, 2 chars for tone, 1 char for squelch (17 bytes total for params)
             setMode(MODE_RX);
 
             // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
             // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
             // putting them in there. If so, we take byte-by-byte until we get the full params.
-            int paramBytesMissing = 16;
+            int paramBytesMissing = 17;
             String paramsStr = "";
             if (paramBytesMissing > 0) {
               uint8_t paramPartsBuffer[paramBytesMissing];
@@ -242,7 +242,7 @@ void loop() {
             float freqTxFloat = paramsStr.substring(0, 8).toFloat();
             float freqRxFloat = paramsStr.substring(7, 15).toFloat();
             int toneInt = paramsStr.substring(14, 16).toInt();
-            int squelchInt = 1; // TODO get squelch from params
+            int squelchInt = paramsStr.substring(16, 17).toInt();
 
             // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
 

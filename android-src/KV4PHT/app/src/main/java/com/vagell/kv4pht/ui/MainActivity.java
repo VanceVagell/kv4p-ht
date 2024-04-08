@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.view.menu.MenuBuilder;
+import androidx.appcompat.widget.AppCompatButton;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -90,14 +91,14 @@ public class MainActivity extends AppCompatActivity {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 2000;
+    private static final int PRE_BUFFER_SIZE = 500;
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private int receivedBytesCount = 0;
     private Queue<CommandWithParams> commandQueue = new LinkedBlockingQueue<CommandWithParams>();
-    private static final int BYTES_BEFORE_SEND_COMMAND = 1000;
+    private static final int BYTES_BEFORE_SEND_COMMAND = 2000; // Must match WAIT_AFTER_BYTES in ESP32's Arduino sketch.
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -113,6 +114,7 @@ public class MainActivity extends AppCompatActivity {
 
     // Radio params
     private String activeFrequencyStr = "144.0000";
+    private int squelchSetting = 0; // TODO let user change this in settings UI
 
     // Activity callback values
     public static final int REQUEST_ADD_MEMORY = 0;
@@ -172,7 +174,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onMemoryClick(ChannelMemory memory) {
                 // Actually tune to it.
-                tuneToMemory(memory);
+                if (mode == MODE_SCAN) {
+                    setScanning(false);
+                }
+                tuneToMemory(memory, squelchSetting);
 
                 // Highlight the tapped memory, unhighlight all the others.
                 viewModel.highlightMemory(memory);
@@ -185,7 +190,7 @@ public class MainActivity extends AppCompatActivity {
                 viewModel.deleteMemory(memory);
                 viewModel.loadData();
                 adapter.notifyDataSetChanged();
-                tuneToFreq(freq); // Stay on the same freq as the now-deleted memory
+                tuneToFreq(freq, squelchSetting); // Stay on the same freq as the now-deleted memory
             }
 
             @Override
@@ -295,7 +300,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                tuneToFreq(activeFrequencyField.getText().toString());
+                tuneToFreq(activeFrequencyField.getText().toString(), squelchSetting);
                 hideKeyboard();
                 activeFrequencyField.clearFocus();
                 return true;
@@ -344,12 +349,12 @@ public class MainActivity extends AppCompatActivity {
 
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
-    private void tuneToFreq(String frequencyStr) {
+    private void tuneToFreq(String frequencyStr, int squelchLevel) {
         mode = MODE_RX;
         activeFrequencyStr = validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
-        queueCommand(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00"); // tx, rx, tone
+        queueCommand(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel); // tx, rx, tone, squelch
 
         showMemoryName("Simplex");
         showFrequency(activeFrequencyStr);
@@ -363,24 +368,24 @@ public class MainActivity extends AppCompatActivity {
         rxPrebufferIdx = 0;
     }
 
-    private void tuneToMemory(int memoryId) {
+    private void tuneToMemory(int memoryId, int squelchLevel) {
         List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
         for (int i = 0; i < channelMemories.size(); i++) {
             if (channelMemories.get(i).memoryId == memoryId) {
-                tuneToMemory(channelMemories.get(i));
+                tuneToMemory(channelMemories.get(i), squelchLevel);
                 return;
             }
         }
     }
 
-    private void tuneToMemory(ChannelMemory memory) {
+    private void tuneToMemory(ChannelMemory memory, int squelchLevel) {
         // TODO if user tapped on a memory explicitly during scan, stop scan and enter RX mode.
 
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
 
         queueCommand(ESP32Command.TUNE_TO,
-                getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone));
+                getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone) + squelchLevel);
 
         showMemoryName(memory.name);
         showFrequency(activeFrequencyStr);
@@ -754,15 +759,24 @@ public class MainActivity extends AppCompatActivity {
 
         // Always start on VHF calling frequency
         // TODO instead start on the previous frequency or memory from last use
-        tuneToFreq("146.520");
+        tuneToFreq("146.520", squelchSetting);
     }
 
     public void scanClicked(View view) {
-        // Stop scanning
-        if (mode == MODE_SCAN) {
+        setScanning(mode != MODE_SCAN); // Toggle scanning on/off
+    }
+
+    private void setScanning(boolean scanning) {
+        AppCompatButton scanButton = findViewById(R.id.scanButton);
+        if (!scanning) {
+            scanButton.setText("SCAN");
             mode = MODE_RX;
-            // TODO if squelch was off before we started scanning, turn it off again
+            // If squelch was off before we started scanning, turn it off again
+            if (squelchSetting == 0) {
+                tuneToMemory(activeMemoryId, squelchSetting);
+            }
         } else { // Start scanning
+            scanButton.setText("STOP SCAN");
             mode = MODE_SCAN;
             nextScan();
         }
@@ -799,7 +813,7 @@ public class MainActivity extends AppCompatActivity {
         consecutiveSilenceBytes = 0;
 
         // debugLog("Scanning to: " + memoryToScanNext.name);
-        tuneToMemory(memoryToScanNext);
+        tuneToMemory(memoryToScanNext, squelchSetting > 0 ? squelchSetting : 1); // If user turned off squelch, set it to 1 during scan.
     }
 
     public void importMemoriesClicked(View view) {
@@ -882,7 +896,7 @@ public class MainActivity extends AppCompatActivity {
                                     for (int i = 0; i < channelMemories.size(); i++) {
                                         if (channelMemories.get(i).memoryId == editedMemoryId) {
                                             viewModel.highlightMemory(channelMemories.get(i));
-                                            tuneToMemory(channelMemories.get(i));
+                                            tuneToMemory(channelMemories.get(i), squelchSetting);
                                         }
                                     }
                                     viewModel.setCallback(null);
@@ -968,7 +982,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             // usbIoManager.writeAsync(newBytes);
             serialPort.write(newBytes, 200);
-            debugLog("Wrote data: " + Arrays.toString(newBytes));
+            // debugLog("Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();
             try {
@@ -994,7 +1008,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         } */
-        debugLog("Num bytes from ESP32: " + data.length);
+        // debugLog("Num bytes from ESP32: " + data.length);
 
         // Track audio bytes, so we know when we have our next window to send a command.
         // This is to avoid simultaneous rx/tx with the ESP32-S2 which tends to cause it to
