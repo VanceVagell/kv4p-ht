@@ -500,7 +500,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         mode = MODE_RX;
-        queueCommand(ESP32Command.PTT_UP);
+        sendCommandToESP32(ESP32Command.PTT_UP);
         stopRecording();
         audioTrack.flush();
         prebufferComplete = false;
@@ -731,14 +731,12 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onRunError(Exception e) {
-                debugLog("Error reading from ESP32 (ignored).");
-                // TODO determine if it's OK to skip these errors in all cases. If not,
-                // may need some of this cleanup code below reintroduced. The reason this
-                // was commented out is it looks like the USB library we're using has a 200ms
+                debugLog("Error reading from ESP32.");
+                // The USB library we're using has a 200ms
                 // timeout that the ESP32 may sometimes be failing to meet, which leads to a
                 // catastrophic failure when it should just gracefully continue. See:
                 // https://github.com/mik3y/usb-serial-for-android/blob/1245293888c7230ef376e11fe9d1712633f60dd8/usbSerialForAndroid/src/main/java/com/hoho/android/usbserial/driver/CommonUsbSerialPort.java#L165
-                /* connection.close();
+                connection.close();
                 try {
                     serialPort.close();
                 } catch (IOException ex) {
@@ -750,7 +748,6 @@ public class MainActivity extends AppCompatActivity {
                     throw new RuntimeException(ex);
                 }
                 findESP32Device(); // Attempt to reconnect after the brief pause above.
-                */
                 return;
             }
         });

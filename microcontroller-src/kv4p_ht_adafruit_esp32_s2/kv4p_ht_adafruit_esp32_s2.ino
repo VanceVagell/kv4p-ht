@@ -128,6 +128,9 @@ unsigned long ulmap(unsigned long x, unsigned long in_min, unsigned long in_max,
 
 void IRAM_ATTR readWriteAnalog() {
   try {
+    // This if-statement is CRITICAL to stability of USB connection. If we take this out, USB connection fails
+    // within seconds. Presumably it's because this interrupt is sometimes called in the middle of USB
+    // communication.
     if (bytesSinceCommand >= WAIT_AFTER_BYTES) {
       return;
     }
@@ -301,8 +304,35 @@ void loop() {
 
       Serial.write(rxAudioBufferCopy, bytesToSend);
     } else if (mode == MODE_TX) {
-      // TODO rewrite this to read from Serial here in a different way than MODE_RX
-      // processTxAudio(tempBuffer, bytesRead);
+      // Check for incoming commands or audio from Android
+      int bytesRead = 0;
+      uint8_t tempBuffer[TX_AUDIO_BUFFER_SIZE];
+      int bytesAvailable = Serial.available();
+      if (bytesAvailable > 0) {
+        bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
+
+        for (int i = 0; i < bytesRead; i++) {
+          // If we've seen the entire delimiter...
+          if (matchedDelimiterTokens == DELIMITER_LENGTH) {
+            // Process next byte as a command.
+            uint8_t command = tempBuffer[i];
+            matchedDelimiterTokens = 0;
+            switch (command) {
+              case COMMAND_PTT_UP: // Only command we can receive in TX mode is PTT_UP
+                // TODO fix bug where PTT never lets up
+                setMode(MODE_RX);
+                break;
+            }
+          } else {
+            if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
+              matchedDelimiterTokens++;
+            } else { // This byte is not consistent with the command delimiter, reset counter
+              matchedDelimiterTokens = 0;
+            }
+          }
+        }
+      }
+      processTxAudio(tempBuffer, bytesRead);
     }
 
     // Regularly reset the WDT timer to prevent the device from rebooting (prove we're not locked up).
