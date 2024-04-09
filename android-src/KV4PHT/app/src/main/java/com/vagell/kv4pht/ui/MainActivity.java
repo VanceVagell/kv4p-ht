@@ -190,7 +190,7 @@ public class MainActivity extends AppCompatActivity {
                 viewModel.deleteMemory(memory);
                 viewModel.loadData();
                 adapter.notifyDataSetChanged();
-                tuneToFreq(freq, squelchSetting); // Stay on the same freq as the now-deleted memory
+                tuneToFreq(freq, squelchSetting, false); // Stay on the same freq as the now-deleted memory
             }
 
             @Override
@@ -300,7 +300,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                tuneToFreq(activeFrequencyField.getText().toString(), squelchSetting);
+                tuneToFreq(activeFrequencyField.getText().toString(), squelchSetting, false);
                 hideKeyboard();
                 activeFrequencyField.clearFocus();
                 return true;
@@ -349,12 +349,18 @@ public class MainActivity extends AppCompatActivity {
 
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
-    private void tuneToFreq(String frequencyStr, int squelchLevel) {
+    private void tuneToFreq(String frequencyStr, int squelchLevel, boolean immediate) {
         mode = MODE_RX;
         activeFrequencyStr = validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
-        queueCommand(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel); // tx, rx, tone, squelch
+        // Sometimes we need to tune immediatley (namely, when the app first starts) since we can't
+        // count on the ESP32 sending us bytes if it's in an indeterminate state when we start.
+        if (immediate) {
+            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
+        } else {
+            queueCommand(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel); // tx, rx, tone, squelch
+        }
 
         showMemoryName("Simplex");
         showFrequency(activeFrequencyStr);
@@ -725,8 +731,14 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onRunError(Exception e) {
-                debugLog("Error reading from ESP32.");
-                connection.close();
+                debugLog("Error reading from ESP32 (ignored).");
+                // TODO determine if it's OK to skip these errors in all cases. If not,
+                // may need some of this cleanup code below reintroduced. The reason this
+                // was commented out is it looks like the USB library we're using has a 200ms
+                // timeout that the ESP32 may sometimes be failing to meet, which leads to a
+                // catastrophic failure when it should just gracefully continue. See:
+                // https://github.com/mik3y/usb-serial-for-android/blob/1245293888c7230ef376e11fe9d1712633f60dd8/usbSerialForAndroid/src/main/java/com/hoho/android/usbserial/driver/CommonUsbSerialPort.java#L165
+                /* connection.close();
                 try {
                     serialPort.close();
                 } catch (IOException ex) {
@@ -738,6 +750,7 @@ public class MainActivity extends AppCompatActivity {
                     throw new RuntimeException(ex);
                 }
                 findESP32Device(); // Attempt to reconnect after the brief pause above.
+                */
                 return;
             }
         });
@@ -759,7 +772,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Always start on VHF calling frequency
         // TODO instead start on the previous frequency or memory from last use
-        tuneToFreq("146.520", squelchSetting);
+        tuneToFreq("146.520", squelchSetting, true);
     }
 
     public void scanClicked(View view) {
@@ -940,6 +953,7 @@ public class MainActivity extends AppCompatActivity {
         if (mode == MODE_TX) { // Send immediately when in tx mode, we already have a byte stream.
             sendCommandToESP32(command);
         } else {
+            debugLog("Queued command: " + command);
             commandQueue.add(new CommandWithParams(command));
         }
     }
@@ -948,6 +962,7 @@ public class MainActivity extends AppCompatActivity {
         if (mode == MODE_TX) { // Send immediately when in tx mode, we already have a byte stream.
             sendCommandToESP32(command, params);
         } else {
+            debugLog("Queued command: " + command + " with params: " + params);
             commandQueue.add(new CommandWithParams(command, params));
         }
     }

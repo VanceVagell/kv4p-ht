@@ -182,6 +182,7 @@ void loop() {
       // commands more gracefully, we avoid this condition.
       if (bytesSinceCommand >= WAIT_AFTER_BYTES) {
         if (!Serial.available()) {
+          esp_task_wdt_reset();
           return; // Free processor cycles for USB handling and ADC sampling.
         }
 
@@ -272,6 +273,7 @@ void loop() {
           (rxAudioBuffer + RX_AUDIO_BUFFER_SIZE - rxBufferHead) + (rxBufferTail - rxAudioBuffer) : // buffer has looped
           (rxBufferTail - rxBufferHead); // buffer has not looped
       if (bytesToSend < AUDIO_SEND_THRESHOLD) {
+        esp_task_wdt_reset();
         return;
       }
 
