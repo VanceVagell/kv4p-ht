@@ -26,12 +26,12 @@ int mode = MODE_RX;
 
 // Buffer for sample audio bytes from the radio module
 #define RX_AUDIO_BUFFER_SIZE 50000
-#define WAIT_AFTER_BYTES 2000
+#define WAIT_AFTER_BYTES 1024
 uint8_t rxAudioBuffer[RX_AUDIO_BUFFER_SIZE]; // Circular buffer
 uint8_t* rxBufferHead = &rxAudioBuffer[0];
 uint8_t* rxBufferTail = &rxAudioBuffer[0];
 int bytesSinceCommand = 0;
-#define AUDIO_SEND_THRESHOLD 500 // minimum bytes in buffer before they'll be sent
+#define AUDIO_SEND_THRESHOLD 100 // minimum bytes in buffer before they'll be sent
 
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_AUDIO_BUFFER_SIZE 1000 // Holds data we already got off of USB serial from Android app
@@ -66,7 +66,7 @@ DRA818* dra = new DRA818(&Serial1, DRA818_VHF);
 void setup() {
   // Communication with Android via USB cable
   Serial.setRxBufferSize(TX_AUDIO_BUFFER_SIZE);
-  // Serial.setTxTimeoutMs(1000); // FYI keep an eye on this: https://github.com/espressif/arduino-esp32/issues/7779#issuecomment-1969652597
+  Serial.setTxTimeoutMs(1000); // FYI keep an eye on this: https://github.com/espressif/arduino-esp32/issues/7779#issuecomment-1969652597
   // Serial.begin(115200);
   Serial.begin(921600);
   // Serial.setTxBufferSize(1024); Not supported by ESP32-S2 :(
@@ -206,12 +206,6 @@ void loop() {
             setMode(MODE_TX);
           }
             break;
-          case COMMAND_PTT_UP: // TODO actually need to check this in the MODE_TX handler, not here.
-          {
-            commandHandled = true;
-            setMode(MODE_RX);
-          }
-            break;
           case COMMAND_TUNE_TO:
           {
             commandHandled = true;
@@ -303,6 +297,7 @@ void loop() {
       }
 
       Serial.write(rxAudioBufferCopy, bytesToSend);
+      Serial.flush();
     } else if (mode == MODE_TX) {
       // Check for incoming commands or audio from Android
       int bytesRead = 0;

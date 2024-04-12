@@ -1,0 +1,59 @@
+plugins {
+    id 'com.android.library'
+    id 'maven-publish'
+}
+
+android {
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 17
+        targetSdkVersion 34
+        consumerProguardFiles 'proguard-rules.pro'
+        
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments = [                    // Raspi   Windows   LinuxVM   ...
+                'rfc2217_server_host': '192.168.0.147',
+                'rfc2217_server_nonstandard_baudrates': 'true',   // true    false     false
+        ]
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    namespace 'com.hoho.android.usbserial'
+    publishing {
+        // if coverage is enabled, change 'release' to 'anyDeviceRelease' or comment out publishing rule
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.annotation:annotation:1.7.1"
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.8.0'
+    androidTestImplementation 'androidx.test:core:1.5.0'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'commons-net:commons-net:3.10.0'
+    androidTestImplementation 'org.apache.commons:commons-lang3:3.12.0'
+}
+
+// gradle task: publishToMavenLocal
+project.afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+
+                // values used for local maven repo, jitpack uses github release:
+                groupId 'com.github.mik3y'
+                artifactId 'usb-serial-for-android'
+                version '3.5.2beta'
+            }
+        }
+    }
+}
+
+//apply from: 'coverage.gradle'

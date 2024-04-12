@@ -1,0 +1,3 @@
+com.hoho.android.usbserial.test
+style WhiteBackgroundDialogTheme
+style WhiteBackgroundTheme

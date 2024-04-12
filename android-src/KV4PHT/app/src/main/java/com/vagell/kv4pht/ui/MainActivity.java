@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.view.menu.MenuBuilder;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
@@ -17,11 +16,9 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.annotation.SuppressLint;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
@@ -64,7 +61,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -96,9 +92,6 @@ public class MainActivity extends AppCompatActivity {
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
-    private int receivedBytesCount = 0;
-    private Queue<CommandWithParams> commandQueue = new LinkedBlockingQueue<CommandWithParams>();
-    private static final int BYTES_BEFORE_SEND_COMMAND = 2000; // Must match WAIT_AFTER_BYTES in ESP32's Arduino sketch.
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -133,28 +126,6 @@ public class MainActivity extends AppCompatActivity {
     private int activeMemoryId = -1; // -1 means we're in simplex mode
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
 
-    private class CommandWithParams {
-        private ESP32Command command;
-        private String params;
-
-        public CommandWithParams(ESP32Command command) {
-            this.command = command;
-            this.params = null;
-        }
-
-        public CommandWithParams(ESP32Command command, String params) {
-            this.command = command;
-            this.params = params;
-        }
-
-        public ESP32Command getCommand() {
-            return command;
-        }
-
-        public String getParams() {
-            return params;
-        }
-    }
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -354,13 +325,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyStr = validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
-        // Sometimes we need to tune immediatley (namely, when the app first starts) since we can't
-        // count on the ESP32 sending us bytes if it's in an indeterminate state when we start.
-        if (immediate) {
-            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
-        } else {
-            queueCommand(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel); // tx, rx, tone, squelch
-        }
+        sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
 
         showMemoryName("Simplex");
         showFrequency(activeFrequencyStr);
@@ -390,7 +355,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
 
-        queueCommand(ESP32Command.TUNE_TO,
+        sendCommandToESP32(ESP32Command.TUNE_TO,
                 getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone) + squelchLevel);
 
         showMemoryName(memory.name);
@@ -490,7 +455,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         mode = MODE_TX;
-        queueCommand(ESP32Command.PTT_DOWN);
+        sendCommandToESP32(ESP32Command.PTT_DOWN);
         startRecording();
         audioTrack.stop();
     }
@@ -732,10 +697,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onRunError(Exception e) {
                 debugLog("Error reading from ESP32.");
-                // The USB library we're using has a 200ms
-                // timeout that the ESP32 may sometimes be failing to meet, which leads to a
-                // catastrophic failure when it should just gracefully continue. See:
-                // https://github.com/mik3y/usb-serial-for-android/blob/1245293888c7230ef376e11fe9d1712633f60dd8/usbSerialForAndroid/src/main/java/com/hoho/android/usbserial/driver/CommonUsbSerialPort.java#L165
                 connection.close();
                 try {
                     serialPort.close();
@@ -929,8 +890,7 @@ public class MainActivity extends AppCompatActivity {
     private enum ESP32Command {
         PTT_DOWN((byte) 1),
         PTT_UP((byte) 2),
-        TUNE_TO((byte) 3), // paramsStr contains freq, offset, tone details
-        CONTINUE_RX((byte) 4);
+        TUNE_TO((byte) 3); // paramsStr contains freq, offset, tone details
 
         private byte commandByte;
         ESP32Command(byte commandByte) {
@@ -944,24 +904,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void sendAudioToESP32(byte[] audioBuffer) {
         sendBytesToESP32(audioBuffer);
-    }
-
-    private void queueCommand(ESP32Command command) {
-        if (mode == MODE_TX) { // Send immediately when in tx mode, we already have a byte stream.
-            sendCommandToESP32(command);
-        } else {
-            debugLog("Queued command: " + command);
-            commandQueue.add(new CommandWithParams(command));
-        }
-    }
-
-    private void queueCommand(ESP32Command command, String params) {
-        if (mode == MODE_TX) { // Send immediately when in tx mode, we already have a byte stream.
-            sendCommandToESP32(command, params);
-        } else {
-            debugLog("Queued command: " + command + " with params: " + params);
-            commandQueue.add(new CommandWithParams(command, params));
-        }
     }
 
     private void sendCommandToESP32(ESP32Command command) {
@@ -1013,13 +955,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleESP32Data(byte[] data) {
         // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
-        /* try {
+        try {
             String dataStr = new String(data, "UTF-8");
             if (dataStr.length() < 100 && dataStr.length() > 0)
                 debugLog("Str data from ESP32: " + dataStr);
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
-        } */
+        }
         // debugLog("Num bytes from ESP32: " + data.length);
 
         // Track audio bytes, so we know when we have our next window to send a command.
@@ -1059,21 +1001,6 @@ public class MainActivity extends AppCompatActivity {
                         consecutiveSilenceBytes = 0;
                     }
                 }
-            }
-
-            receivedBytesCount += data.length;
-            if (receivedBytesCount >= BYTES_BEFORE_SEND_COMMAND) {
-                if (commandQueue.peek() != null) { // If we have a command waiting, send it.
-                    CommandWithParams commandWithParams = commandQueue.remove();
-                    if (commandWithParams.getParams() != null) {
-                        sendCommandToESP32(commandWithParams.getCommand(), commandWithParams.getParams());
-                    } else {
-                        sendCommandToESP32(commandWithParams.getCommand());
-                    }
-                } else { // Otherwise just tell ESP32-S2 to continue sending rx audio bytes.
-                    sendCommandToESP32(ESP32Command.CONTINUE_RX);
-                }
-                receivedBytesCount = 0;
             }
         }
     }

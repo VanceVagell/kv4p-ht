@@ -1,0 +1,78 @@
+// see https://github.com/mik3y/usb-serial-for-android/wiki/Device-Tests-&-Coverage-Report for instructions
+apply plugin: 'jacoco'
+
+android {
+    flavorDimensions += 'device'
+    productFlavors {
+        anyDevice {
+            // Used as fallback in usbSerialExample/build.gradle -> missingDimensionStrategy, but not for coverage report
+            dimension 'device'
+        }
+        arduino {
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'CdcAcm']
+        }
+        ch340 {
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Ch34x']
+        }
+        cp2102 { // and cp2105 first port
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Cp21xx']
+        }
+        cp2105 { // second port
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Cp21xx', 'test_device_port': '1']
+        }
+        ft232 { // and ft2232 first port
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Ftdi']
+        }
+        ft2232 { // second port
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Ftdi', 'test_device_port': '1']
+        }
+        pl2303 {
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Prolific']
+        }
+        pl2303t {
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Prolific']
+        }
+        pl2303g {
+            dimension 'device'
+            testInstrumentationRunnerArguments = ['test_device_driver': 'Prolific']
+        }
+    }
+
+    buildTypes {
+        debug {
+            enableUnitTestCoverage true
+            enableAndroidTestCoverage true
+        }
+    }
+}
+
+// create report even if tests fail
+project.gradle.taskGraph.whenReady {
+    -> project.tasks.findAll { it.name =~ /connected.+AndroidTest/ }.each {
+        it.ignoreFailures = true
+    }
+}
+
+task jacocoTestReport(type: JacocoReport, dependsOn: ['compileAnyDeviceDebugSources'
+                                                  /*, 'testAnyDeviceDebugUnitTest' */
+                                                  /*, 'create<device>DebugCoverageReport' */]) {
+    def fileFilter = ['**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*', '**/*Test*.*', 'android/**/*.*']
+    def debugTree = fileTree(dir: "$project.buildDir/intermediates/javac/anyDeviceDebug", excludes: fileFilter)
+    def mainSrc = "$project.projectDir/src/main/java"
+
+    reports.xml.required = true
+    sourceDirectories.from files([mainSrc])
+    classDirectories.from files([debugTree])
+    executionData.from fileTree(dir: project.buildDir, includes: [
+            'outputs/unit_test_code_coverage/anyDeviceDebugUnitTest/testAnyDeviceDebugUnitTest.exec',
+            'outputs/code_coverage/*DebugAndroidTest/connected/*/coverage.ec'
+    ])
+}

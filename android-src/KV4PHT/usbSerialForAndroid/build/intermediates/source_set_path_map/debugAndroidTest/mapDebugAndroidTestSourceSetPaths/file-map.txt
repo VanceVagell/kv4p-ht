@@ -1,0 +1,7 @@
+com.hoho.android.usbserial.test.usbSerialForAndroid-annotation-experimental-1.1.0-0 C:\Users\vance\.gradle\caches\transforms-3\d2a0a54779441a9619a33f4c1212f487\transformed\annotation-experimental-1.1.0\res
+com.hoho.android.usbserial.test.usbSerialForAndroid-core-1.5.0-1 C:\Users\vance\.gradle\caches\transforms-3\d964abf0a4666ff808ac00b1fa8f3604\transformed\core-1.5.0\res
+com.hoho.android.usbserial.test.usbSerialForAndroid-androidTest-2 C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\generated\res\resValues\androidTest\debug
+com.hoho.android.usbserial.test.usbSerialForAndroid-mergeDebugAndroidTestResources-3 C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\merged.dir
+com.hoho.android.usbserial.test.usbSerialForAndroid-mergeDebugAndroidTestResources-4 C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\stripped.dir
+com.hoho.android.usbserial.test.usbSerialForAndroid-debugAndroidTest-5 C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\merged_res\debugAndroidTest\mergeDebugAndroidTestResources
+com.hoho.android.usbserial.test.usbSerialForAndroid-debug-6 C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\packaged_res\debug\packageDebugResources
