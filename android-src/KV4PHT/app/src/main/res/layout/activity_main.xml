@@ -164,7 +164,8 @@
                 android:contentDescription="Import memories file"
                 android:background="@drawable/ic_folder"
                 android:layout_marginRight="16dp"
-                android:onClick="importMemoriesClicked" />
+                android:onClick="importMemoriesClicked"
+                android:visibility="invisible"/> <!-- Import not yet implemented -->
 
             <ImageButton
                 android:layout_width="36dp"
