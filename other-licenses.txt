@@ -2,6 +2,32 @@ KV4P-HT uses a number of other open source libraries and materials. This file in
 The main project (KV4P-HT) is licensed under GPL 3.0 but many of the other libraries and materials have
 other licenses. Please see the file LICENSE for GPL 3.0. Other licenses in this project...
 
+############## LICENSE FOR: usb-serial-for-android library
+
+MIT License
+
+Copyright (c) 2011-2013 Google Inc.
+Copyright (c) 2013 Mike Wakerly
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
 ############## LICENSE FOR: Jost Font
 
 Copyright 2020 The Jost Project Authors (https://github.com/indestructible-type)
