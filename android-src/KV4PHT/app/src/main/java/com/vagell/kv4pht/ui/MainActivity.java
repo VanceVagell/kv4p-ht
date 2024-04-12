@@ -674,7 +674,7 @@ public class MainActivity extends AppCompatActivity {
         debugLog("serialPort: " + serialPort);
         try {
             serialPort.open(connection);
-            serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE); // 115200 or 921600
+            serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (IOException e) {
             debugLog("Error: couldn't open USB serial port.");
             showUSBRetrySnackbar();

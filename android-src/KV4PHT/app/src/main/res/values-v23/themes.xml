@@ -5,5 +5,9 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
+
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/primary</item>
+        <item name="colorSecondary">@color/primary</item>
     </style>
 </resources>

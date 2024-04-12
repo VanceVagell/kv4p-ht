@@ -7,6 +7,10 @@
         </item> <!-- target android sdk versions < 26 and > 14 if theme other than AppCompat -->
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:windowTranslucentNavigation">true</item>
+
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/primary</item>
+        <item name="colorSecondary">@color/primary</item>
     </style>
 
     <style name="Theme.KV4PHT" parent="Base.Theme.KV4PHT" />

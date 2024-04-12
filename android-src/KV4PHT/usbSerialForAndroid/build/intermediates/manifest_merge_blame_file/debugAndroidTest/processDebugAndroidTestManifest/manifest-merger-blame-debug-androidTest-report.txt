@@ -5,28 +5,28 @@
 5    android:versionName="1.0" >
 6
 7    <uses-sdk
-7-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:7:5-9:41
+7-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:7:5-9:41
 8        android:minSdkVersion="17"
-8-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:8:9-35
+8-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:8:9-35
 9        android:targetSdkVersion="34" />
-9-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:9:9-38
+9-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:9:9-38
 10
 11    <uses-permission android:name="android.permission.INTERNET" />
-11-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:11:5-67
-11-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:11:22-64
+11-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:11:5-67
+11-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:11:22-64
 12
 13    <instrumentation
-13-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:13:5-18:67
+13-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:13:5-18:67
 14        android:name="androidx.test.runner.AndroidJUnitRunner"
-14-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:14:9-63
+14-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:14:9-63
 15        android:functionalTest="false"
-15-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:15:9-39
+15-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:15:9-39
 16        android:handleProfiling="false"
-16-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:16:9-40
+16-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:16:9-40
 17        android:label="Tests for com.hoho.android.usbserial.test"
-17-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:17:9-66
+17-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:17:9-66
 18        android:targetPackage="com.hoho.android.usbserial.test" />
-18-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:18:9-64
+18-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:18:9-64
 19
 20    <uses-permission android:name="android.permission.REORDER_TASKS" />
 20-->[androidx.test:core:1.5.0] C:\Users\vance\.gradle\caches\transforms-3\d964abf0a4666ff808ac00b1fa8f3604\transformed\core-1.5.0\AndroidManifest.xml:24:5-72
@@ -46,12 +46,12 @@
 26    </queries>
 27
 28    <application
-28-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:20:5-22:19
+28-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:20:5-22:19
 29        android:debuggable="true"
 30        android:extractNativeLibs="true" >
 31        <uses-library android:name="android.test.runner" />
-31-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:21:9-60
-31-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest3492393924173230625.xml:21:23-57
+31-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:21:9-60
+31-->C:\Users\vance\git\kv4p-ht\android-src\KV4PHT\usbSerialForAndroid\build\intermediates\tmp\manifest\androidTest\debug\tempFile2ProcessTestManifest4958603717476944909.xml:21:23-57
 32
 33        <activity
 33-->[androidx.test:core:1.5.0] C:\Users\vance\.gradle\caches\transforms-3\d964abf0a4666ff808ac00b1fa8f3604\transformed\core-1.5.0\AndroidManifest.xml:27:9-34:20
