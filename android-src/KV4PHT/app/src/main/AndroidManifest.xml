@@ -17,29 +17,41 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.KV4PHT"
-        tools:targetApi="31" >
+        tools:targetApi="31">
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="true"
+            android:theme="@style/Theme.KV4PHT"
+            android:windowSoftInputMode="stateVisible">
+            <intent-filter>
+                <action android:name="com.vagell.kv4pht.SETTINGS_ACTION" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ui.AddEditMemoryActivity"
             android:exported="true"
-            android:label="@string/title_activity_add_edit_memory"
             android:theme="@style/Theme.KV4PHT"
             android:windowSoftInputMode="stateVisible">
             <intent-filter>
                 <action android:name="com.vagell.kv4pht.ADD_MEMORY_ACTION" />
                 <action android:name="com.vagell.kv4pht.EDIT_MEMORY_ACTION" />
+
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
-            android:launchMode="singleTask" >
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter" />

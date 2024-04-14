@@ -50,6 +50,7 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
 
@@ -100,18 +101,22 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
+    private static final int MODE_STARTUP = -1;
     private static final int MODE_RX = 0;
     private static final int MODE_TX = 1;
     private static final int MODE_SCAN = 2;
-    private int mode = MODE_RX;
+    private int mode = MODE_STARTUP;
 
-    // Radio params
+    // Radio params and related settings
     private String activeFrequencyStr = "144.0000";
-    private int squelchSetting = 0; // TODO let user change this in settings UI
+    private int squelch = 0;
+    private String callsign = null;
+    private boolean stickyPTT = false;
 
     // Activity callback values
     public static final int REQUEST_ADD_MEMORY = 0;
     public static final int REQUEST_EDIT_MEMORY = 1;
+    public static final int REQUEST_SETTINGS = 2;
 
     private Map<String, Integer> mTones = new HashMap<>();
 
@@ -148,7 +153,7 @@ public class MainActivity extends AppCompatActivity {
                 if (mode == MODE_SCAN) {
                     setScanning(false);
                 }
-                tuneToMemory(memory, squelchSetting);
+                tuneToMemory(memory, squelch);
 
                 // Highlight the tapped memory, unhighlight all the others.
                 viewModel.highlightMemory(memory);
@@ -161,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
                 viewModel.deleteMemory(memory);
                 viewModel.loadData();
                 adapter.notifyDataSetChanged();
-                tuneToFreq(freq, squelchSetting, false); // Stay on the same freq as the now-deleted memory
+                tuneToFreq(freq, squelch); // Stay on the same freq as the now-deleted memory
             }
 
             @Override
@@ -201,7 +206,113 @@ public class MainActivity extends AppCompatActivity {
 
         setupTones();
 
+        viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
+            @Override
+            public void onLoadDataDone() {
+                applySettings();
+                viewModel.setCallback(null);
+            }
+        });
         viewModel.loadData();
+    }
+
+    private void applySettings() {
+        if (viewModel.appDb == null) {
+            return; // DB not yet loaded (e.g. radio attached before DB init completed)
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting callsignSetting = viewModel.appDb.appSettingDao().getByName("callsign");
+                AppSetting squelchSetting = viewModel.appDb.appSettingDao().getByName("squelch");
+                AppSetting emphasisSetting = viewModel.appDb.appSettingDao().getByName("emphasis");
+                AppSetting highpassSetting = viewModel.appDb.appSettingDao().getByName("highpass");
+                AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
+                AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
+                AppSetting lastMemoryId = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                AppSetting lastFreq = viewModel.appDb.appSettingDao().getByName("lastFreq");
+                AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (callsignSetting != null) {
+                            callsign = callsignSetting.value;
+                        }
+
+                        if (lastGroupSetting != null && !lastGroupSetting.value.equals("")) {
+                            selectMemoryGroup(lastGroupSetting.value);
+                        }
+
+                        if (lastMemoryId != null && !lastMemoryId.value.equals("-1")) {
+                            activeMemoryId = Integer.parseInt(lastMemoryId.value);
+                        } else {
+                            activeMemoryId = -1;
+                            if (lastFreq != null) {
+                                activeFrequencyStr = lastFreq.value;
+                            } else {
+                                activeFrequencyStr = "146.520"; // VHF calling freq
+                            }
+                        }
+
+                        if (squelchSetting != null) {
+                            squelch = Integer.parseInt(squelchSetting.value);
+                            if (activeMemoryId > -1) {
+                                tuneToMemory(activeMemoryId, squelch);
+                            } else {
+                                tuneToFreq(activeFrequencyStr, squelch);
+                            }
+                        }
+
+                        boolean emphasis = false;
+                        boolean highpass = false;
+                        boolean lowpass = false;
+                        if (emphasisSetting != null) {
+                            emphasis = Boolean.parseBoolean(emphasisSetting.value);
+                        }
+
+                        if (highpassSetting != null) {
+                            highpass = Boolean.parseBoolean(highpassSetting.value);
+                        }
+
+                        if (lowpassSetting != null) {
+                            lowpass = Boolean.parseBoolean(lowpassSetting.value);
+                        }
+
+                        final boolean finalEmphasis = emphasis;
+                        final boolean finalHighpass = highpass;
+                        final boolean finalLowpass = lowpass;
+
+                        threadPoolExecutor.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    // Hack to get around radio not being ready to enable filters immediately for some reason.
+                                    Thread.sleep(3000);
+                                } catch (InterruptedException ex) {
+                                    throw new RuntimeException(ex);
+                                }
+                                setRadioFilters(finalEmphasis, finalHighpass, finalLowpass);
+                                mode = MODE_RX;
+                            }
+                        });
+
+                        if (stickyPTTSetting != null) {
+                            stickyPTT = Boolean.parseBoolean(stickyPTTSetting.value);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
+        sendCommandToESP32(ESP32Command.FILTERS, (emphasis ? "1" : "0") + (highpass ? "1" : "0") + (lowpass ? "1" : "0"));
+
+        // Discard any buffered audio which isn't filtered
+        prebufferComplete = false;
+        rxPrebufferIdx = 0;
     }
 
     private void setupTones() {
@@ -254,11 +365,21 @@ public class MainActivity extends AppCompatActivity {
                 boolean touchHandled = false;
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        startPtt();
+                        if (stickyPTT) {
+                            if (mode == MODE_RX) {
+                                startPtt();
+                            } else if (mode == MODE_TX) {
+                                endPtt();
+                            }
+                        } else {
+                            startPtt();
+                        }
                         touchHandled = true;
                         break;
                     case MotionEvent.ACTION_UP:
-                        endPtt();
+                        if (!stickyPTT) {
+                            endPtt();
+                        }
                         touchHandled = true;
                         break;
                 }
@@ -271,7 +392,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                tuneToFreq(activeFrequencyField.getText().toString(), squelchSetting, false);
+                tuneToFreq(activeFrequencyField.getText().toString(), squelch);
                 hideKeyboard();
                 activeFrequencyField.clearFocus();
                 return true;
@@ -320,12 +441,39 @@ public class MainActivity extends AppCompatActivity {
 
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
-    private void tuneToFreq(String frequencyStr, int squelchLevel, boolean immediate) {
+    private void tuneToFreq(String frequencyStr, int squelchLevel) {
         mode = MODE_RX;
         activeFrequencyStr = validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
-        sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
+        if (serialPort != null) {
+            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
+        }
+
+        // Save most recent freq so we can restore it on app restart
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting lastFreqSetting = viewModel.appDb.appSettingDao().getByName("lastFreq");
+                if (lastFreqSetting != null) {
+                    lastFreqSetting.value = frequencyStr;
+                    viewModel.appDb.appSettingDao().update(lastFreqSetting);
+                } else {
+                    lastFreqSetting = new AppSetting("lastFreq", frequencyStr);
+                    viewModel.appDb.appSettingDao().insertAll(lastFreqSetting);
+                }
+
+                // And clear out any saved memory ID, so we restore to a simplex freq on restart.
+                AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                if (lastMemoryIdSetting != null) {
+                    lastMemoryIdSetting.value = "-1";
+                    viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                } else {
+                    lastMemoryIdSetting = new AppSetting("lastMemoryId", "-1");
+                    viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                }
+            }
+        });
 
         showMemoryName("Simplex");
         showFrequency(activeFrequencyStr);
@@ -343,7 +491,24 @@ public class MainActivity extends AppCompatActivity {
         List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
         for (int i = 0; i < channelMemories.size(); i++) {
             if (channelMemories.get(i).memoryId == memoryId) {
-                tuneToMemory(channelMemories.get(i), squelchLevel);
+                if (serialPort != null) {
+                    tuneToMemory(channelMemories.get(i), squelchLevel);
+                }
+
+                // Save most recent memory so we can restore it on app restart
+                threadPoolExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                        if (lastMemoryIdSetting != null) {
+                            lastMemoryIdSetting.value = "" + memoryId;
+                            viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                        } else {
+                            lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
+                            viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                        }
+                    }
+                });
                 return;
             }
         }
@@ -355,8 +520,25 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
 
-        sendCommandToESP32(ESP32Command.TUNE_TO,
-                getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone) + squelchLevel);
+        if (serialPort != null) {
+            sendCommandToESP32(ESP32Command.TUNE_TO,
+                    getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone) + squelchLevel);
+        }
+
+        // Save most recent memory so we can restore it on app restart
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                if (lastMemoryIdSetting != null) {
+                    lastMemoryIdSetting.value = "" + memory.memoryId;
+                    viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                } else {
+                    lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memory.memoryId);
+                    viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                }
+            }
+        });
 
         showMemoryName(memory.name);
         showFrequency(activeFrequencyStr);
@@ -728,9 +910,8 @@ public class MainActivity extends AppCompatActivity {
         prebufferComplete = false;
         rxPrebufferIdx = 0;
 
-        // Always start on VHF calling frequency
-        // TODO instead start on the previous frequency or memory from last use
-        tuneToFreq("146.520", squelchSetting, true);
+        // Tell the radio about any settings the user set.
+        applySettings();
     }
 
     public void scanClicked(View view) {
@@ -743,8 +924,8 @@ public class MainActivity extends AppCompatActivity {
             scanButton.setText("SCAN");
             mode = MODE_RX;
             // If squelch was off before we started scanning, turn it off again
-            if (squelchSetting == 0) {
-                tuneToMemory(activeMemoryId, squelchSetting);
+            if (squelch == 0) {
+                tuneToMemory(activeMemoryId, squelch);
             }
         } else { // Start scanning
             scanButton.setText("STOP SCAN");
@@ -784,7 +965,7 @@ public class MainActivity extends AppCompatActivity {
         consecutiveSilenceBytes = 0;
 
         // debugLog("Scanning to: " + memoryToScanNext.name);
-        tuneToMemory(memoryToScanNext, squelchSetting > 0 ? squelchSetting : 1); // If user turned off squelch, set it to 1 during scan.
+        tuneToMemory(memoryToScanNext, squelch > 0 ? squelch : 1); // If user turned off squelch, set it to 1 during scan.
     }
 
     public void importMemoriesClicked(View view) {
@@ -806,7 +987,10 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
                 for (int i = 0; i < memoryGroups.size(); i++) {
-                    groupsMenu.getMenu().add(memoryGroups.get(i));
+                    String groupName = memoryGroups.get(i);
+                    if (groupName != null && groupName.trim().length() > 0) {
+                        groupsMenu.getMenu().add(memoryGroups.get(i));
+                    }
                 }
 
                 groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
@@ -834,6 +1018,21 @@ public class MainActivity extends AppCompatActivity {
         // Add drop-down arrow to end of selected group to suggest it's tappable
         TextView groupSelector = findViewById(R.id.groupSelector);
         groupSelector.setText(groupName + " ▼");
+
+        // Save most recent group selection so we can restore it on app restart
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
+                if (lastGroupSetting != null) {
+                    lastGroupSetting.value = groupName == null ? "" : groupName;
+                    viewModel.appDb.appSettingDao().update(lastGroupSetting);
+                } else {
+                    lastGroupSetting = new AppSetting("lastGroup", "" + groupName == null ? "" : groupName);
+                    viewModel.appDb.appSettingDao().insertAll(lastGroupSetting);
+                }
+            }
+        });
     }
 
     @Override
@@ -867,7 +1066,7 @@ public class MainActivity extends AppCompatActivity {
                                     for (int i = 0; i < channelMemories.size(); i++) {
                                         if (channelMemories.get(i).memoryId == editedMemoryId) {
                                             viewModel.highlightMemory(channelMemories.get(i));
-                                            tuneToMemory(channelMemories.get(i), squelchSetting);
+                                            tuneToMemory(channelMemories.get(i), squelch);
                                         }
                                     }
                                     viewModel.setCallback(null);
@@ -878,19 +1077,26 @@ public class MainActivity extends AppCompatActivity {
                     viewModel.loadData();
                 }
                 break;
+            case REQUEST_SETTINGS:
+                applySettings();
+                break;
             default:
                 debugLog("Warning: Returned to MainActivity from unexpected request code: " + requestCode);
         }
     }
 
     public void settingsClicked(View view) {
-        // TODO
+        endPtt(); // Be safe, just in case we are somehow transmitting when settings is tapped.
+        Intent intent = new Intent("com.vagell.kv4pht.SETTINGS_ACTION");
+        intent.putExtra("requestCode", REQUEST_SETTINGS);
+        startActivityForResult(intent, REQUEST_SETTINGS);
     }
 
     private enum ESP32Command {
         PTT_DOWN((byte) 1),
         PTT_UP((byte) 2),
-        TUNE_TO((byte) 3); // paramsStr contains freq, offset, tone details
+        TUNE_TO((byte) 3), // paramsStr contains freq, offset, tone details
+        FILTERS((byte) 4); // paramStr contains emphasis, highpass, lowpass (each 0/1)
 
         private byte commandByte;
         ESP32Command(byte commandByte) {
@@ -941,7 +1147,7 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             try {
                 serialPort.close();
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 // Ignore.
             }
             try {
@@ -955,13 +1161,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleESP32Data(byte[] data) {
         // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
-        try {
+        /* try {
             String dataStr = new String(data, "UTF-8");
             if (dataStr.length() < 100 && dataStr.length() > 0)
                 debugLog("Str data from ESP32: " + dataStr);
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
-        }
+        } */
         // debugLog("Num bytes from ESP32: " + data.length);
 
         // Track audio bytes, so we know when we have our next window to send a command.

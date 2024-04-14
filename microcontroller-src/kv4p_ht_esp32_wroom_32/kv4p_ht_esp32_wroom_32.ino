@@ -7,6 +7,7 @@
 const uint8_t COMMAND_PTT_DOWN = 1; // start transmitting audio that Android app will send
 const uint8_t COMMAND_PTT_UP = 2; // stop transmitting audio, go into RX mode
 const uint8_t COMMAND_TUNE_TO = 3; // change the frequency
+const uint8_t COMMAND_FILTERS = 4; // toggle filters on/off
 
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
@@ -89,7 +90,7 @@ void setup() {
     result = dra->handshake(); // Wait for module to start up
   }
   // Serial.println("handshake: " + String(result));
-  tuneTo(146.520, 146.520, 0, 0);
+  // tuneTo(146.520, 146.520, 0, 0);
   result = dra->volume(8);
   // Serial.println("volume: " + String(result));
   result = dra->filters(false, false, false);
@@ -214,6 +215,33 @@ void loop() {
             // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
 
             tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
+          }
+            break;
+          case COMMAND_FILTERS:
+          {
+            int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
+            String paramsStr = "";
+            if (paramBytesMissing > 0) {
+              uint8_t paramPartsBuffer[paramBytesMissing];
+              for (int j = 0; j < paramBytesMissing; j++) {
+                unsigned long waitStart = micros();
+                while (!Serial.available()) { 
+                  // Wait for a byte.
+                  if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
+                    esp_task_wdt_reset();
+                    return;
+                  }
+                }
+                paramPartsBuffer[j] = Serial.read();
+              }
+              paramsStr += String((char *)paramPartsBuffer);
+              paramBytesMissing--;
+            }
+            bool emphasis = (paramsStr.charAt(0) == '1');
+            bool highpass = (paramsStr.charAt(1) == '1');
+            bool lowpass = (paramsStr.charAt(2) == '1');
+
+            dra->filters(emphasis, highpass, lowpass);
           }
             break;
           default:

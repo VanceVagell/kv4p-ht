@@ -4,6 +4,7 @@ import androidx.room.Dao;
 import androidx.room.Delete;
 import androidx.room.Insert;
 import androidx.room.Query;
+import androidx.room.Update;
 
 import java.util.List;
 
@@ -19,5 +20,8 @@ public interface AppSettingDao {
     void insertAll(AppSetting... appSettings);
 
     @Delete
-    void delete(AppSetting appSettings);
+    void delete(AppSetting appSetting);
+
+    @Update
+    void update(AppSetting appSetting);
 }
