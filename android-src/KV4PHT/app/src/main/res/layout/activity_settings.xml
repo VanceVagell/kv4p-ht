@@ -115,6 +115,15 @@
         android:textColor="@color/primary"
         android:layout_marginTop="8dp"/>
 
+    <Switch
+        android:id="@+id/noAnimationsSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Disable animations"
+        android:textSize="18dp"
+        android:textColor="@color/primary"
+        android:layout_marginTop="8dp"/>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

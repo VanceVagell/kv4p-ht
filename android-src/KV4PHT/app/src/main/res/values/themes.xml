@@ -11,6 +11,7 @@
         <item name="colorPrimary">@color/primary</item>
         <item name="colorOnPrimary">@color/primary</item>
         <item name="colorSecondary">@color/primary</item>
+
     </style>
 
     <style name="Theme.KV4PHT" parent="Base.Theme.KV4PHT" />

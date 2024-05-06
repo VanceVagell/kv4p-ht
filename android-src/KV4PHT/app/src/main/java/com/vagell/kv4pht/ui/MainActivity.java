@@ -31,15 +31,18 @@ import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
+import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.google.android.material.snackbar.Snackbar;
@@ -72,6 +75,8 @@ public class MainActivity extends AppCompatActivity {
     // Idx 1 matches https://www.adafruit.com/product/5348
     public static final int[] ESP32_VENDOR_IDS = {4292, 9114};
     public static final int[] ESP32_PRODUCT_IDS = {60000, 33041};
+
+    private static final byte SILENT_BYTE = -128;
 
     // For transmitting audio to ESP32 / radio
     private AudioRecord audioRecord;
@@ -112,6 +117,7 @@ public class MainActivity extends AppCompatActivity {
     private int squelch = 0;
     private String callsign = null;
     private boolean stickyPTT = false;
+    private boolean disableAnimations = false;
 
     // Activity callback values
     public static final int REQUEST_ADD_MEMORY = 0;
@@ -130,6 +136,12 @@ public class MainActivity extends AppCompatActivity {
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
+
+    // Audio visualizers
+    private Visualizer rxAudioVisualizer = null;
+    private static int AUDIO_VISUALIZER_RATE = Visualizer.getMaxCaptureRate();
+    private static int MAX_AUDIO_VIZ_SIZE = 500;
+    private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -203,6 +215,7 @@ public class MainActivity extends AppCompatActivity {
 
         attachListeners();
         initAudioTrack();
+        createRxAudioVisualizer();
 
         setupTones();
 
@@ -214,6 +227,46 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         viewModel.loadData();
+    }
+
+    private void createRxAudioVisualizer() {
+        rxAudioVisualizer = new Visualizer(audioTrack.getAudioSessionId());
+        rxAudioVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
+            @Override
+            public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
+                if (disableAnimations) { return; }
+
+                float rxVolume = ((float) waveform[0] + 128f) / 256; // 0 to 1
+                ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
+                ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
+                layoutParams.width = (int) (MAX_AUDIO_VIZ_SIZE * rxVolume);
+                layoutParams.height = (int) (MAX_AUDIO_VIZ_SIZE * rxVolume);
+                rxAudioView.setLayoutParams(layoutParams);
+            }
+
+            @Override
+            public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) {
+
+            }
+        }, AUDIO_VISUALIZER_RATE, true, false);
+        rxAudioVisualizer.setEnabled(true);
+    }
+
+    private void updateRecordingVisualization(byte audioByte) {
+        if (disableAnimations) { return; }
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                float txVolume = ((float) audioByte + 128f) / 256; // 0 to 1
+                debugLog(("audioByte: " + audioByte));
+                ImageView txAudioView = findViewById(R.id.txAudioCircle);
+                ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
+                layoutParams.width = audioByte == SILENT_BYTE ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+                layoutParams.height = audioByte == SILENT_BYTE ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+                txAudioView.setLayoutParams(layoutParams);
+            }
+        });
     }
 
     private void applySettings() {
@@ -230,6 +283,7 @@ public class MainActivity extends AppCompatActivity {
                 AppSetting highpassSetting = viewModel.appDb.appSettingDao().getByName("highpass");
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
+                AppSetting disableAnimationsSetting = viewModel.appDb.appSettingDao().getByName("disableAnimations");
                 AppSetting lastMemoryId = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
                 AppSetting lastFreq = viewModel.appDb.appSettingDao().getByName("lastFreq");
                 AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
@@ -300,6 +354,21 @@ public class MainActivity extends AppCompatActivity {
 
                         if (stickyPTTSetting != null) {
                             stickyPTT = Boolean.parseBoolean(stickyPTTSetting.value);
+                        }
+
+                        if (disableAnimationsSetting != null) {
+                            disableAnimations = Boolean.parseBoolean(disableAnimationsSetting.value);
+                            if (disableAnimations) {
+                                // Hide the rx audio visualization
+                                ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
+                                ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
+                                layoutParams.width = 0;
+                                layoutParams.height = 0;
+                                rxAudioView.setLayoutParams(layoutParams);
+
+                                // Hide the tx audio visualization
+                                updateRecordingVisualization(SILENT_BYTE);
+                            }
                         }
                     }
                 });
@@ -489,6 +558,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void tuneToMemory(int memoryId, int squelchLevel) {
         List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+        if (channelMemories == null) {
+            return;
+        }
         for (int i = 0; i < channelMemories.size(); i++) {
             if (channelMemories.get(i).memoryId == memoryId) {
                 if (serialPort != null) {
@@ -728,6 +800,9 @@ public class MainActivity extends AppCompatActivity {
             initAudioRecorder();
         }
 
+        ImageButton pttButton = findViewById(R.id.pttButton);
+        pttButton.setBackground(getDrawable(R.drawable.ptt_button_on));
+
         audioRecord.startRecording();
         isRecording = true;
 
@@ -748,6 +823,11 @@ public class MainActivity extends AppCompatActivity {
 
             if (bytesRead > 0) {
                 sendAudioToESP32(Arrays.copyOfRange(audioBuffer, 0, bytesRead));
+                long total = 0;
+                for (int i = 0; i < bytesRead; i++) {
+                    total += audioBuffer[i];
+                }
+                updateRecordingVisualization((byte) (total / bytesRead));
             }
         }
     }
@@ -759,7 +839,11 @@ public class MainActivity extends AppCompatActivity {
             audioRecord.release();
             audioRecord = null;
             recordingThread = null;
+            updateRecordingVisualization(SILENT_BYTE);
         }
+
+        ImageButton pttButton = findViewById(R.id.pttButton);
+        pttButton.setBackground(getDrawable(R.drawable.ptt_button));
     }
 
     private void findESP32Device() {
@@ -912,6 +996,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Tell the radio about any settings the user set.
         applySettings();
+
+        // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
+        setScanning(false);
     }
 
     public void scanClicked(View view) {
@@ -1186,7 +1273,7 @@ public class MainActivity extends AppCompatActivity {
                     if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
                         prebufferComplete = true;
                         //debugLog("Rx prebuffer full, writing to audioTrack.");
-                        if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                        if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                             audioTrack.play();
                         }
                         audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
@@ -1199,7 +1286,7 @@ public class MainActivity extends AppCompatActivity {
             // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
             if (mode == MODE_SCAN) {
                 for (int i = 0; i < data.length; i++) {
-                    if (data[i] == -128) {
+                    if (data[i] == SILENT_BYTE) {
                         consecutiveSilenceBytes++;
                         // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
                         checkScanDueToSilence();

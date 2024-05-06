@@ -6,4 +6,6 @@
     <color name="clear">#00FFFFFF</color>
     <color name="primary_deselected">#CEFFFCEA</color>
     <color name="primary_veryfaint">#0DFFFCEA</color>
+    <color name="accent">#FFAD5642</color>
+    <color name="accent_veryfaint">#55AD5642</color>
 </resources>

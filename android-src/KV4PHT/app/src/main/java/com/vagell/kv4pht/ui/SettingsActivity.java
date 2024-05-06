@@ -48,6 +48,7 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting highpassSetting = MainViewModel.appDb.appSettingDao().getByName("highpass");
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
+                AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -80,6 +81,11 @@ public class SettingsActivity extends AppCompatActivity {
                         if (stickyPTTSetting != null) {
                             Switch stickyPTTSwitch = (Switch) (findViewById(R.id.stickyPTTSwitch));
                             stickyPTTSwitch.setChecked(Boolean.parseBoolean(stickyPTTSetting.value));
+                        }
+
+                        if (disableAnimationsSetting != null) {
+                            Switch noAnimationsSwitch = (Switch) (findViewById(R.id.noAnimationsSwitch));
+                            noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
                         }
                     }
                 });
@@ -151,6 +157,14 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 setStickyPTT(isChecked);
+            }
+        });
+
+        Switch noAnimationsSwitch = findViewById(R.id.noAnimationsSwitch);
+        noAnimationsSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                setNoAnimations(isChecked);
             }
         });
     }
@@ -252,6 +266,23 @@ public class SettingsActivity extends AppCompatActivity {
 
                 if (setting == null) {
                     setting = new AppSetting("stickyPTT", "" + enabled);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = "" + enabled;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    private void setNoAnimations(boolean enabled) {
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
+
+                if (setting == null) {
+                    setting = new AppSetting("disableAnimations", "" + enabled);
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
                     setting.value = "" + enabled;
