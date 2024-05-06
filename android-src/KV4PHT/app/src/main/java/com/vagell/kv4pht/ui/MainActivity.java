@@ -348,7 +348,9 @@ public class MainActivity extends AppCompatActivity {
                                     throw new RuntimeException(ex);
                                 }
                                 setRadioFilters(finalEmphasis, finalHighpass, finalLowpass);
-                                mode = MODE_RX;
+                                if (mode != MODE_SCAN) { // This is needed on first start for some reason to start audio playback, but we don't want it to happen during scan. Not sure why checking for MODE_STARTUP doesn't work here.
+                                    mode = MODE_RX;
+                                }
                             }
                         });
 
@@ -626,7 +628,7 @@ public class MainActivity extends AppCompatActivity {
         // means there is no signal detected on the given frequency) even when there is. I did
         // extensive debugging and even rewrote large portions of the DRA818v library to determine
         // that this was the case. So in lieu of that, we scan using a timing/silence-based system.
-        if (consecutiveSilenceBytes >= (AUDIO_SAMPLE_RATE * SEC_BETWEEN_SCANS)) { // 8kHz*3sec is 24kb (3 seconds of silence)
+        if (consecutiveSilenceBytes >= (AUDIO_SAMPLE_RATE * SEC_BETWEEN_SCANS)) {
             consecutiveSilenceBytes = 0;
             nextScan();
         }
@@ -1174,6 +1176,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void settingsClicked(View view) {
         endPtt(); // Be safe, just in case we are somehow transmitting when settings is tapped.
+        setScanning(false); // Stop scanning when settings brought up, so we don't get in a bad state after.
         Intent intent = new Intent("com.vagell.kv4pht.SETTINGS_ACTION");
         intent.putExtra("requestCode", REQUEST_SETTINGS);
         startActivityForResult(intent, REQUEST_SETTINGS);
