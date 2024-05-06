@@ -236,7 +236,7 @@ public class MainActivity extends AppCompatActivity {
             public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
                 if (disableAnimations) { return; }
 
-                float rxVolume = ((float) waveform[0] + 128f) / 256; // 0 to 1
+                float rxVolume = Math.max(0f, (((float) waveform[0] + 128f) / 256) - 0.4f); // 0 to 1
                 ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
                 ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
                 layoutParams.width = (int) (MAX_AUDIO_VIZ_SIZE * rxVolume);
