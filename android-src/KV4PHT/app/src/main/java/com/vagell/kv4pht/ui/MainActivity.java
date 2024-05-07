@@ -84,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int AUDIO_SAMPLE_RATE = 8000;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2; // Use twice minimum to avoid overruns
+    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 8;
     private Thread recordingThread;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
@@ -142,6 +142,10 @@ public class MainActivity extends AppCompatActivity {
     private static int AUDIO_VISUALIZER_RATE = Visualizer.getMaxCaptureRate();
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
+
+    // Safety constants
+    private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
+    private long startTxTimeSec = -1;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -259,11 +263,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 float txVolume = ((float) audioByte + 128f) / 256; // 0 to 1
-                debugLog(("audioByte: " + audioByte));
                 ImageView txAudioView = findViewById(R.id.txAudioCircle);
                 ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
-                layoutParams.width = audioByte == SILENT_BYTE ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
-                layoutParams.height = audioByte == SILENT_BYTE ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+                layoutParams.width = audioByte == SILENT_BYTE || mode == MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+                layoutParams.height = audioByte == SILENT_BYTE || mode == MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
                 txAudioView.setLayoutParams(layoutParams);
             }
         });
@@ -384,6 +387,12 @@ public class MainActivity extends AppCompatActivity {
         // Discard any buffered audio which isn't filtered
         prebufferComplete = false;
         rxPrebufferIdx = 0;
+
+        // After the radio filters have been set, the PTT button can be used. If it's used before that,
+        // the async setting of the radio filters could conflict with the tx audio stream and cause an
+        // app crash (because of the 3 sec async wait to apply the filters).
+        ImageButton pttButton = findViewById(R.id.pttButton);
+        pttButton.setClickable(true);
     }
 
     private void setupTones() {
@@ -436,6 +445,10 @@ public class MainActivity extends AppCompatActivity {
                 boolean touchHandled = false;
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        if (!((ImageButton) v).isClickable()) {
+                            touchHandled = true;
+                            break;
+                        }
                         if (stickyPTT) {
                             if (mode == MODE_RX) {
                                 startPtt();
@@ -448,6 +461,10 @@ public class MainActivity extends AppCompatActivity {
                         touchHandled = true;
                         break;
                     case MotionEvent.ACTION_UP:
+                        if (!((ImageButton) v).isClickable()) {
+                            touchHandled = true;
+                            break;
+                        }
                         if (!stickyPTT) {
                             endPtt();
                         }
@@ -710,6 +727,29 @@ public class MainActivity extends AppCompatActivity {
         if (mode == MODE_TX) {
             return;
         }
+
+        // Setup runaway tx safety measures.
+        startTxTimeSec = System.currentTimeMillis() / 1000;
+        threadPoolExecutor.execute(new Runnable() {
+               @Override
+               public void run() {
+                   try {
+                       Thread.sleep(RUNAWAY_TX_TIMEOUT_SEC * 1000);
+
+                       if (mode != MODE_TX) {
+                           return;
+                       }
+
+                       long elapsedSec = (System.currentTimeMillis() / 1000) - startTxTimeSec;
+                       if (elapsedSec > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
+                           debugLog("Warning: runaway tx timeout reached, PTT stopped.");
+                           endPtt();
+                       }
+                   } catch (InterruptedException e) {
+                   }
+               }
+           });
+
         mode = MODE_TX;
         sendCommandToESP32(ESP32Command.PTT_DOWN);
         startRecording();
@@ -980,7 +1020,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
         });
-        usbIoManager.setWriteBufferSize(1000); // Must not exceed receive buffer set on ESP32 (so we don't overflow it)
+        usbIoManager.setWriteBufferSize(50000); // Must not exceed receive buffer set on ESP32 (so we don't overflow it)
         usbIoManager.setReadBufferSize(1000); // Must be much larger than ESP32's send buffer (so we never block it)
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
@@ -1010,14 +1050,24 @@ public class MainActivity extends AppCompatActivity {
     private void setScanning(boolean scanning) {
         AppCompatButton scanButton = findViewById(R.id.scanButton);
         if (!scanning) {
-            scanButton.setText("SCAN");
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    scanButton.setText("SCAN");
+                }
+            });
             mode = MODE_RX;
             // If squelch was off before we started scanning, turn it off again
             if (squelch == 0) {
                 tuneToMemory(activeMemoryId, squelch);
             }
         } else { // Start scanning
-            scanButton.setText("STOP SCAN");
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    scanButton.setText("STOP SCAN");
+                }
+            });
             mode = MODE_SCAN;
             nextScan();
         }
@@ -1230,8 +1280,8 @@ public class MainActivity extends AppCompatActivity {
 
     private synchronized void sendBytesToESP32(byte[] newBytes) {
         try {
-            // usbIoManager.writeAsync(newBytes);
-            serialPort.write(newBytes, 200);
+            usbIoManager.writeAsync(newBytes);
+            // serialPort.write(newBytes, 200);
             // debugLog("Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();

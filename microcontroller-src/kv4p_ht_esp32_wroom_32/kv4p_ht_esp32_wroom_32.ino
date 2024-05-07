@@ -60,6 +60,10 @@ int txAudioBufferLen2 = 0;
 // Object used for radio module serial comms
 DRA818* dra = new DRA818(&Serial2, DRA818_VHF);
 
+// Tx runaway detection stuff
+long txStartTime = -1;
+#define RUNAWAY_TX_SEC 200
+
 void setup() {
   // Communication with Android via USB cable
   Serial.begin(921600);
@@ -283,6 +287,14 @@ void loop() {
       }
       Serial.write(rxAudioBufferCopy, bytesToSend);
     } else if (mode == MODE_TX) {
+      // Check for runaway tx
+      int txSeconds = (micros() - txStartTime) / 1000000;
+      if (txSeconds > RUNAWAY_TX_SEC) {
+        setMode(MODE_RX);
+        esp_task_wdt_reset();
+        return;
+      }
+
       // Check for incoming commands or audio from Android
       int bytesRead = 0;
       uint8_t tempBuffer[TX_AUDIO_BUFFER_SIZE];
@@ -298,7 +310,6 @@ void loop() {
             matchedDelimiterTokens = 0;
             switch (command) {
               case COMMAND_PTT_UP: // Only command we can receive in TX mode is PTT_UP
-                // TODO fix bug where PTT never lets up
                 setMode(MODE_RX);
                 break;
             }
@@ -335,6 +346,7 @@ void setMode(int newMode) {
       digitalWrite(PTT_PIN, HIGH);
       break;
     case MODE_TX:
+      txStartTime = micros();
       digitalWrite(LED_PIN, HIGH);
       digitalWrite(PTT_PIN, LOW);
       usingTxBuffer1 = true;

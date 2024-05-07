@@ -240,7 +240,8 @@
                 android:layout_gravity="center"
                 android:layout_marginTop="-148dp"
                 android:elevation="8dp"
-                android:contentDescription="Push to talk" />
+                android:contentDescription="Push to talk"
+                android:clickable="false" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
     </FrameLayout>
