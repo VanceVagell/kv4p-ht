@@ -1,0 +1,20 @@
+
+
+Version:	3.50
+CmdLine:	C:\Users\info\git\javax25\dist\bin\javax25-decoder-pu2lvm.exe --l4j-debug
+JNI:		No
+WOW64:		Yes
+Working dir:	C:\Users\info\git\javax25\dist\bin\.
+Requires JDK:	No
+Requires 64-Bit: No
+Java min ver:	
+Java max ver:	
+Substitute:	JAVA_HOME = C:\Users\info\jdk-11.0.1
+Substitute:	PATH = C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Users\info\apache-maven-3.9.3-bin\bin;C:\Program Files\Microsoft\Azure Functions Core Tools\;C:\Program Files\Git\cmd;C:\Users\info\AppData\Local\Microsoft\WindowsApps;C:\Users\info\.dotnet\tools;C:\Users\info\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\info\AppData\Local\Programs\Azure Data Studio\bin;C:\Users\info\jdk-11.0.1\bin
+JRE paths:	C:\Users\info\jdk-11.0.1;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Users\info\apache-maven-3.9.3-bin\bin;C:\Program Files\Microsoft\Azure Functions Core Tools\;C:\Program Files\Git\cmd;C:\Users\info\AppData\Local\Microsoft\WindowsApps;C:\Users\info\.dotnet\tools;C:\Users\info\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\info\AppData\Local\Programs\Azure Data Studio\bin;C:\Users\info\jdk-11.0.1\bin
+Check launcher:	C:\Users\info\jdk-11.0.1\bin\javaw.exe (OK)
+Version string: 1.011.000_001 / 64-Bit (OK)
+Launcher:	C:\Users\info\jdk-11.0.1\bin\javaw.exe
+Launcher args:	-jar "C:\Users\info\git\javax25\dist\bin\javax25-decoder-pu2lvm.exe"
+Args length:	68/32768 chars
+Exit code:	0
