@@ -45,6 +45,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.snackbar.Snackbar;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -209,6 +210,21 @@ public class MainActivity extends AppCompatActivity {
                 }
                 adapter.setMemoriesList(channelMemories);
                 adapter.notifyDataSetChanged();
+            }
+        });
+
+        // Set up behavior on the bottom nav
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigationView);
+        bottomNav.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
+            @Override
+            public boolean onNavigationItemSelected(@NonNull MenuItem menuItem) {
+                int itemId = menuItem.getItemId();
+                if (itemId == R.id.voice_mode) {
+                    debugLog("voice mode");
+                } else if (itemId == R.id.text_chat_mode) {
+                    debugLog("text mode");
+                }
+                return true;
             }
         });
 
