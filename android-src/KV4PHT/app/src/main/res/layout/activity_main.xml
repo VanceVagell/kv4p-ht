@@ -112,6 +112,7 @@
                     android:inputType="numberDecimal" />
 
                 <androidx.appcompat.widget.LinearLayoutCompat
+                    android:id="@+id/voiceModeLineHolder"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
@@ -166,58 +167,150 @@
 
             </androidx.recyclerview.widget.RecyclerView>
 
-            <View
-                android:layout_width="fill_parent"
-                android:layout_height="1dp"
-                android:layout_marginLeft="24dp"
-                android:layout_marginRight="24dp"
-                android:layout_weight="0"
-                android:background="@color/primary"
-                android:gravity="center_vertical" />
-
             <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/voiceModeBottomControls"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:layout_marginLeft="24dp"
-                android:layout_marginRight="24dp"
-                android:layout_marginTop="8dp">
-
-                <androidx.appcompat.widget.AppCompatButton
-                    android:id="@+id/scanButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SCAN"
-                    android:fontFamily="@font/jost"
-                    android:textSize="20dp"
-                    android:textFontWeight="500"
-                    android:background="?android:attr/selectableItemBackground"
-                    android:layout_weight="0"
-                    android:onClick="scanClicked" />
+                android:orientation="vertical">
 
                 <View
-                    android:layout_weight="1"
+                    android:layout_width="fill_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginLeft="24dp"
+                    android:layout_marginRight="24dp"
+                    android:layout_weight="0"
+                    android:background="@color/primary"
+                    android:gravity="center_vertical" />
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:layout_marginLeft="24dp"
+                    android:layout_marginRight="24dp"
+                    android:layout_marginTop="8dp">
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/scanButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SCAN"
+                        android:fontFamily="@font/jost"
+                        android:textSize="20dp"
+                        android:textFontWeight="500"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:layout_weight="0"
+                        android:onClick="scanClicked" />
+
+                    <View
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_width="fill_parent" />
+
+                    <ImageButton
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="16dp"
+                        android:contentDescription="Import memories file"
+                        android:background="@drawable/ic_folder"
+                        android:layout_marginRight="16dp"
+                        android:onClick="importMemoriesClicked"
+                        android:visibility="invisible"/> <!-- Import not yet implemented -->
+
+                    <ImageButton
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="16dp"
+                        android:contentDescription="Add memory"
+                        android:background="@drawable/ic_add"
+                        android:onClick="addMemoryClicked" />
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/textModeContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/rounded_corners"
+                android:visibility="gone"
+                android:paddingTop="16dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:paddingBottom="12dp"
+                android:layout_marginLeft="24dp"
+                android:layout_marginRight="24dp"
+                android:layout_marginTop="16dp"> <!-- displayed when user taps the bottom nav -->
+
+                <ScrollView
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_width="fill_parent" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <ImageButton
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:padding="16dp"
-                    android:contentDescription="Import memories file"
-                    android:background="@drawable/ic_folder"
-                    android:layout_marginRight="16dp"
-                    android:onClick="importMemoriesClicked"
-                    android:visibility="invisible"/> <!-- Import not yet implemented -->
+                    <TextView
+                        android:id="@+id/textChatLog"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textSize="20dp"
+                        android:textColor="@color/primary"/>
+                </ScrollView>
 
-                <ImageButton
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:padding="16dp"
-                    android:contentDescription="Add memory"
-                    android:background="@drawable/ic_add"
-                    android:onClick="addMemoryClicked" />
+                <View
+                    android:layout_width="fill_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="8dp"
+                    android:layout_weight="0"
+                    android:background="@color/primary_deselected"
+                    android:gravity="center_vertical" />
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <EditText
+                        android:id="@+id/textChatInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/primary"
+                        android:layout_weight="1"
+                        android:textSize="20dp"
+                        android:maxLength="300"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:background="@android:color/transparent"
+                        android:hint="Write your message..."
+                        android:layout_marginRight="16dp"
+                        android:imeOptions="actionSend">
+                    </EditText>
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="0"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <ImageButton
+                            android:id="@+id/sendButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:layout_marginRight="8dp"
+                            android:background="@drawable/ic_send"
+                            android:layout_gravity="right"
+                            android:contentDescription="Send message"
+                            android:onClick="sendTextClicked" />
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
             </androidx.appcompat.widget.LinearLayoutCompat>
 
             <com.google.android.material.bottomnavigation.BottomNavigationView
@@ -230,7 +323,7 @@
                 app:layout_constraintStart_toStartOf="parent"
                 android:orientation="vertical"
                 app:menu="@menu/bottom_nav_menu"
-                android:layout_marginTop="80dp" />
+                android:layout_marginTop="36dp" />
 
             <ImageButton
                 android:id="@+id/pttButton"

@@ -220,9 +220,9 @@ public class MainActivity extends AppCompatActivity {
             public boolean onNavigationItemSelected(@NonNull MenuItem menuItem) {
                 int itemId = menuItem.getItemId();
                 if (itemId == R.id.voice_mode) {
-                    debugLog("voice mode");
+                    setMode(false);
                 } else if (itemId == R.id.text_chat_mode) {
-                    debugLog("text mode");
+                    setMode(true);
                 }
                 return true;
             }
@@ -247,6 +247,22 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         viewModel.loadData();
+    }
+
+    private void setMode(boolean isTextChat) {
+        // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
+        // Controls for voice mode
+        findViewById(R.id.voiceModeLineHolder).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
+        findViewById(R.id.pttButton).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
+        findViewById(R.id.memoriesList).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
+        findViewById(R.id.voiceModeBottomControls).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
+
+        // Controls for text mode
+        findViewById(R.id.textModeContainer).setVisibility(isTextChat ? View.VISIBLE : View.GONE);
+    }
+
+    public void sendTextClicked(View view) {
+        // TODO
     }
 
     private void createRxAudioVisualizer() {
