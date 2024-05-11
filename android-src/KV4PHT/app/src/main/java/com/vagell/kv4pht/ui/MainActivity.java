@@ -1280,8 +1280,8 @@ public class MainActivity extends AppCompatActivity {
 
     private synchronized void sendBytesToESP32(byte[] newBytes) {
         try {
-            usbIoManager.writeAsync(newBytes);
-            // serialPort.write(newBytes, 200);
+            // usbIoManager.writeAsync(newBytes); DO NOT USE writeAsync, or tx audio will stutter at best and fail at worst.
+            serialPort.write(newBytes, 200);
             // debugLog("Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();
