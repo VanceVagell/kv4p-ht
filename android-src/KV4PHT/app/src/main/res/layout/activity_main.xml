@@ -323,7 +323,10 @@
                 app:layout_constraintStart_toStartOf="parent"
                 android:orientation="vertical"
                 app:menu="@menu/bottom_nav_menu"
-                android:layout_marginTop="36dp" />
+                android:layout_marginTop="48dp"
+                app:itemTextColor="@color/bottom_nav_color"
+                app:itemIconTint="@color/bottom_nav_color"
+                app:itemActiveIndicatorStyle="@style/Theme.BottomNavigationView.ActiveIndicator"/>
 
             <ImageButton
                 android:id="@+id/pttButton"
