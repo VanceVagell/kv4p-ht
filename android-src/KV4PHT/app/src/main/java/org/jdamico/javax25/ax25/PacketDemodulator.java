@@ -1,8 +1,8 @@
 /*
- *
- *
+ * 
+ * 
  * Copyright (C) Sivan Toledo, 2012
- *
+ * 
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
  *      the Free Software Foundation; either version 2 of the License, or
@@ -17,15 +17,15 @@
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
+package org.jdamico.javax25.ax25;
 
-package org.jdamico.javax25.soundcard;
+import org.jdamico.javax25.soundcard.SoundcardConsumer;
 
-public interface SoundcardProducer {
+public abstract class PacketDemodulator extends SoundcardConsumer {
+	public PacketDemodulator(int sample_rate) {
+		super(sample_rate);
+	}
 
-    //public void addSamples(float[] s) {
-    //	addSamples(s,s.length);
-    //}
-
-    public abstract float[] getTxSamplesBuffer();
-    public abstract int getSamples();
+	//public void addSamples(float[] s, int n);
+	public abstract boolean dcd();
 }

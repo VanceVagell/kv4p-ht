@@ -54,6 +54,7 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.com.vagell.kv4pht.ax25.Ax25Helper;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
@@ -262,7 +263,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void sendTextClicked(View view) {
-        // TODO
+        String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
+        byte[] outBytes = Ax25Helper.stringToAx25AudioBytes(callsign, "CQCQCQ", outText);
+
+        // TODO this doesn't work right. neither soundmodem nor Ax25Helper itself can decode
+        // the audio this produces. It doesn't seem to be centered around 1700hz as expected (too high).
+        // Try to find an example of how to use the javax25 library? Maybe I'm calling it wrong.
+
+        synchronized (audioTrack) {
+            audioTrack.write(outBytes, 0, outBytes.length); // debug, listen to the encoding
+        }
+
+        Ax25Helper.setMessageHandler(new Ax25Helper.MessageHandler() {
+            @Override
+            protected void handle(String msg) {
+                TextView chatLog = findViewById(R.id.textChatLog);
+                chatLog.append(msg + "\n");
+            }
+        });
+        Ax25Helper.processAx25AudioBytes(outBytes);
     }
 
     private void createRxAudioVisualizer() {
@@ -1349,7 +1368,9 @@ public class MainActivity extends AppCompatActivity {
             // If the prebuffer was already filled and sent to the audio track, we start
             // writing incoming data in realtime to keep the audio track prepped with audio.
             if (prebufferComplete) {
-                audioTrack.write(data, 0, data.length);
+                synchronized (audioTrack) {
+                    audioTrack.write(data, 0, data.length);
+                }
             } else {
                 for (int i = 0; i < data.length; i++) {
                     // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
@@ -1361,7 +1382,9 @@ public class MainActivity extends AppCompatActivity {
                         if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                             audioTrack.play();
                         }
-                        audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
+                        synchronized (audioTrack) {
+                            audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
+                        }
                         rxPrebufferIdx = 0;
                         break; // Might drop a few audio bytes from data[], should be very minimal
                     }
