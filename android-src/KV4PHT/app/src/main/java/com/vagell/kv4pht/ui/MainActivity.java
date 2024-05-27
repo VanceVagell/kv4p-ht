@@ -1,5 +1,7 @@
 package com.vagell.kv4pht.ui;
 
+import static bg.cytec.android.fskmodem.FSKConfig.SOFT_MODEM_MODE_4;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -54,7 +56,6 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.com.vagell.kv4pht.ax25.Ax25Helper;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
@@ -70,6 +71,9 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+
+import bg.cytec.android.fskmodem.FSKConfig;
+import bg.cytec.android.fskmodem.FSKEncoder;
 
 public class MainActivity extends AppCompatActivity {
     // Must match the ESP32 device we support.
@@ -264,24 +268,39 @@ public class MainActivity extends AppCompatActivity {
 
     public void sendTextClicked(View view) {
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
-        byte[] outBytes = Ax25Helper.stringToAx25AudioBytes(callsign, "CQCQCQ", outText);
-
-        // TODO this doesn't work right. neither soundmodem nor Ax25Helper itself can decode
-        // the audio this produces. It doesn't seem to be centered around 1700hz as expected (too high).
-        // Try to find an example of how to use the javax25 library? Maybe I'm calling it wrong.
-
-        synchronized (audioTrack) {
-            audioTrack.write(outBytes, 0, outBytes.length); // debug, listen to the encoding
+        byte[] outBytes;
+        try {
+            outBytes = (callsign + ": " + outText).getBytes("UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
         }
 
-        Ax25Helper.setMessageHandler(new Ax25Helper.MessageHandler() {
-            @Override
-            protected void handle(String msg) {
-                TextView chatLog = findViewById(R.id.textChatLog);
-                chatLog.append(msg + "\n");
-            }
-        });
-        Ax25Helper.processAx25AudioBytes(outBytes);
+        FSKEncoder encoder;
+        try {
+            encoder = new FSKEncoder(
+                    new FSKConfig(FSKConfig.SAMPLE_RATE_22050, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P),
+                    new FSKEncoder.FSKEncoderCallback() {
+                        @Override
+                        public void encoded(byte[] pcm8, short[] pcm16) {
+                            // FOR DEBUG PURPOSES listen to the afsk audio
+
+                            // TODO try changing sample rate to one of those supported by FSKConfig (e.g. 22k or 44k).
+                            // Need to update both the Android app and the ESP32 app, as well as the interrupt timer in ESP32.
+
+                            synchronized (audioTrack) {
+                                audioTrack.write(pcm8, 0, pcm8.length);
+                            }
+                        }
+                    }
+            );
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        encoder.appendData(outBytes); // NOTE: Can only send up to FSKConfig.ENCODER_DATA_BUFFER_SIZE at a time.
+
+        TextView chatLog = findViewById(R.id.textChatLog);
+        chatLog.append(callsign + ": " + outText + "\n");
     }
 
     private void createRxAudioVisualizer() {

@@ -116,8 +116,6 @@ void setup() {
 
 // Transmit audio is very sensitive to the microcontroller not being very precise with
 // when it updates the DAC, so we regulate it based on how much time actually passed.
-#define ADC_DAC_CALL_MICROSECONDS 41 // 41 Found empirically by determining a value that sounded natural.
-#define PROCESSOR_MHZ 240 // TODO: Can we use ESP.getCpuFreqMHz() ?
 unsigned long targetTxBufferEndMicros = micros();
 unsigned long startedTxMicros = micros();
 
@@ -157,11 +155,14 @@ void IRAM_ATTR readWriteAnalog() {
 void setupTimer() {
   // Configure a hardware timer
   hw_timer_t * timer = NULL;
-  timer = timerBegin(0, PROCESSOR_MHZ, true); // Use the first timer, prescale by 240 (for 1MHz counting on 240MHz ESP32), count up
+  timer = timerBegin(0, ESP.getCpuFreqMHz(), true); // Use the first timer, prescale by 240 (for 1MHz counting on 240MHz ESP32), count up
+  // timer = timerBegin(0, 80, true); // 80Mhz instead of 240Mhz because the GPIO bus (called "APB") is locked to 80Mhz despite CPU speed.
 
   // Set the timer to call the readWriteAnalog function
   timerAttachInterrupt(timer, &readWriteAnalog, true);
-  timerAlarmWrite(timer, ADC_DAC_CALL_MICROSECONDS, true);
+  // int microseconds = (1 / AUDIO_SAMPLE_RATE) * 1000000;
+  int microseconds = 41; // Should be 125 (at 8kHz audio) but is divided by 3 due to 80Mhz GPIO bus. Unsure why I can't use 80Mhz divider to do this programatically.
+  timerAlarmWrite(timer, microseconds, true);
   timerAlarmEnable(timer);
 }
 
