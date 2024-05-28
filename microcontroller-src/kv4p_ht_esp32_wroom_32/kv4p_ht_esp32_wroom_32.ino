@@ -1,6 +1,7 @@
+#include <algorithm>
 #include <DRA818.h>
 #include <driver/adc.h>
-#include <algorithm>
+#include <driver/i2s.h>
 #include <esp_task_wdt.h>
 
 // Commands defined here must match the Android app
@@ -64,6 +65,11 @@ DRA818* dra = new DRA818(&Serial2, DRA818_VHF);
 long txStartTime = -1;
 #define RUNAWAY_TX_SEC 200
 
+// I2S audio sampling stuff
+#define I2S_READ_LEN      1024
+#define I2S_ADC_UNIT      ADC_UNIT_1
+#define I2S_ADC_CHANNEL   ADC1_CHANNEL_6
+
 void setup() {
   // Communication with Android via USB cable
   Serial.begin(921600);
@@ -105,13 +111,17 @@ void setup() {
   analogWriteResolution(8);
 
   // Configure the ADC attenuation (off)
-  adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_0);
+  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
 
   // Start in RX mode
   setMode(MODE_RX);
 
   // Start async rx/tx timer
-  setupTimer();
+  //setupTimer();
+
+  // TEMPORARY testing stuff
+  SampleBufferInitI2S();
+  // FillBufferI2S();
 }
 
 // Transmit audio is very sensitive to the microcontroller not being very precise with
@@ -256,6 +266,20 @@ void loop() {
             break;
         }
       }
+
+      // Copy bytes from I2S DMA process into circular buffer (a second cache we can manipulate without disturbing I2S).
+      // TODO remove the circular buffer and associated logic and write this data directly to rxAudioBufferCopy.
+      uint16_t byteBuffer[I2S_READ_LEN];
+      size_t bytesRead = 0;
+      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, (void*) byteBuffer, sizeof(byteBuffer), &bytesRead, portMAX_DELAY));
+      for (int i = 0; i < bytesRead; i++) {
+        *rxBufferTail = (uint8_t) (byteBuffer[i] / 256); // Convert 16 bit to 8 bit
+        rxBufferTail++;
+        if ((rxBufferTail - rxAudioBuffer - RX_AUDIO_BUFFER_SIZE) == 0) {
+          rxBufferTail = &rxAudioBuffer[0]; // loop circular buffer
+        }
+      }
+
       // Don't send every byte as it comes in or it will bog down the processor.
       // Wait for a critical mass of bytes to be ready.
       int bytesToSend = (rxBufferTail < rxBufferHead) ? // has the buffer looped?
@@ -381,5 +405,54 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
         txAudioBufferLen2 = 0;
       }
     }
+  }
+}
+
+void SampleBufferInitI2S() {
+  static const i2s_config_t i2s_config = {
+      .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
+      .sample_rate = AUDIO_SAMPLE_RATE,
+      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+      .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+      .communication_format = I2S_COMM_FORMAT_I2S_MSB,
+      .intr_alloc_flags = 0, // default interrupt priority
+      .dma_buf_count = 8,
+      .dma_buf_len = I2S_READ_LEN,
+      .use_apll = false
+  };
+
+  /* i2s_config_t i2s_config;
+  i2s_config.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN);
+  i2s_config.sample_rate = AUDIO_SAMPLE_RATE;            
+  i2s_config.dma_buf_len = I2S_READ_LEN;                   
+  i2s_config.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
+  i2s_config.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT;  
+  i2s_config.use_apll = false,
+  i2s_config.communication_format = I2S_COMM_FORMAT_I2S_MSB;
+  i2s_config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
+  i2s_config.dma_buf_count = 2; */
+
+  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL));
+  ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
+}
+
+void FillBufferI2S() {
+  uint16_t byteBuffer[I2S_READ_LEN];
+  size_t bytesRead = 0;
+
+  // ESP_ERROR_CHECK(i2s_adc_enable(I2S_NUM_0));
+  ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, (void*) byteBuffer, sizeof(byteBuffer), &bytesRead, portMAX_DELAY));
+  // ESP_ERROR_CHECK(i2s_adc_disable(I2S_NUM_0));
+
+  if (bytesRead != sizeof(byteBuffer)) {
+    Serial.printf("Could only read %u bytes of %u in FillBufferI2S()\n", bytesRead, sizeof(byteBuffer));
+    return;
+  }
+
+  Serial.println("bytesRead: " + String(bytesRead));
+
+  for (int i = 0; i < bytesRead; i++) {
+    uint8_t eightBitByte = (uint8_t) byteBuffer[i]; // chop off top 8 bits
+    Serial.println("byteBuffer[" + String(i) + "]: " + String(eightBitByte));
   }
 }
