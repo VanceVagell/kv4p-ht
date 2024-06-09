@@ -21,14 +21,14 @@ int matchedDelimiterTokens = 0;
 int mode = MODE_RX;
 
 // Audio sampling rate, must match what Android app expects (and sends).
-#define AUDIO_SAMPLE_RATE 8000
+#define AUDIO_SAMPLE_RATE 44100
 
 // Buffer for sample audio bytes from the radio module
 #define RX_AUDIO_BUFFER_SIZE 4000
 uint8_t rxAudioBuffer[RX_AUDIO_BUFFER_SIZE]; // Circular buffer
 uint8_t* rxBufferHead = &rxAudioBuffer[0];
 uint8_t* rxBufferTail = &rxAudioBuffer[0];
-#define AUDIO_SEND_THRESHOLD 64 // minimum bytes in buffer before they'll be sent
+#define AUDIO_SEND_THRESHOLD 500 // minimum bytes in buffer before they'll be sent
 
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_AUDIO_BUFFER_SIZE 1000 // Holds data we already got off of USB serial from Android app
@@ -100,80 +100,52 @@ void setup() {
     result = dra->handshake(); // Wait for module to start up
   }
   // Serial.println("handshake: " + String(result));
-  // tuneTo(146.520, 146.520, 0, 0);
+  // tuneTo(146.700, 146.700, 0, 0);
   result = dra->volume(8);
   // Serial.println("volume: " + String(result));
   result = dra->filters(false, false, false);
   // Serial.println("filters: " + String(result));
 
-  // Configure the ADC and DAC resolution to 8 bits
-  analogReadResolution(8);
-  analogWriteResolution(8);
-
-  // Configure the ADC attenuation (off)
-  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
-
   // Start in RX mode
   setMode(MODE_RX);
 
-  // Start async rx/tx timer
-  //setupTimer();
-
   // TEMPORARY testing stuff
-  SampleBufferInitI2S();
-  // FillBufferI2S();
+  initI2S();
 }
 
-// Transmit audio is very sensitive to the microcontroller not being very precise with
-// when it updates the DAC, so we regulate it based on how much time actually passed.
-unsigned long targetTxBufferEndMicros = micros();
-unsigned long startedTxMicros = micros();
+void initI2S() {
+  // Initialize ADC
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
 
-unsigned long ulmap(unsigned long x, unsigned long in_min, unsigned long in_max, unsigned long out_min, unsigned long out_max) {
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
+  static const i2s_config_t i2s_config = {
+      .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
+      .sample_rate = AUDIO_SAMPLE_RATE,
+      .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+      .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+      .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
+      .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+      .dma_buf_count = 4,
+      .dma_buf_len = I2S_READ_LEN,
+      .use_apll = false,
+      .tx_desc_auto_clear = false,
+      .fixed_mclk = 0
+  };
 
-void IRAM_ATTR readWriteAnalog() {
-  try {
-    // This needs to do as LITTLE processing as possible, or we won't capture
-    // enough audio for it to play back properly.
-    if (mode) { // MODE_RX
-      // TODO consider replacing this with an interpolating approach like is used for MODE_TX below
-      *rxBufferTail = (uint8_t) analogRead(ADC_PIN);
-      rxBufferTail++;
-      if ((rxBufferTail - rxAudioBuffer - RX_AUDIO_BUFFER_SIZE) == 0) {
-        rxBufferTail = &rxAudioBuffer[0]; // loop circular buffer
-      }
-    } else { // MODE_TX
-      unsigned long now = micros();
-      if (now < targetTxBufferEndMicros) {
-        if (usingTxBuffer1) {
-          txAudioBufferIdx1 = ulmap(now, startedTxMicros, targetTxBufferEndMicros, 0, txAudioBufferLen1 - 1); // Advance a number of audio bytes relative to time since last DAC update
-          dacWrite(DAC_PIN, txAudioBuffer1[txAudioBufferIdx1]);          
-        } else {
-          txAudioBufferIdx2 = ulmap(now, startedTxMicros, targetTxBufferEndMicros, 0, txAudioBufferLen2 - 1); // Advance a number of audio bytes relative to time since last DAC update
-          dacWrite(DAC_PIN, txAudioBuffer2[txAudioBufferIdx2]);   
-        }
-      }
-    }
-  } catch (int e) {
-    // Disregard, we don't want to crash. Just pick up at next loop of readWriteAnalog().
-    // Serial.println("Exception in readWriteAnalog(), skipping cycle.");
-  }
-}
+  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL));
+  ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
 
-void setupTimer() {
-  // Configure a hardware timer
-  hw_timer_t * timer = NULL;
-  timer = timerBegin(0, ESP.getCpuFreqMHz(), true); // Use the first timer, prescale by 240 (for 1MHz counting on 240MHz ESP32), count up
-  // timer = timerBegin(0, 80, true); // 80Mhz instead of 240Mhz because the GPIO bus (called "APB") is locked to 80Mhz despite CPU speed.
+  i2s_pin_config_t pin_config = {
+      .bck_io_num = 14,
+      .ws_io_num = 15,
+      .data_out_num = -1,
+      .data_in_num = 34,
+  };
+  ESP_ERROR_CHECK(i2s_set_pin(I2S_NUM_0, &pin_config));
 
-  // Set the timer to call the readWriteAnalog function
-  timerAttachInterrupt(timer, &readWriteAnalog, true);
-  // int microseconds = (1 / AUDIO_SAMPLE_RATE) * 1000000;
-  int microseconds = 41; // Should be 125 (at 8kHz audio) but is divided by 3 due to 80Mhz GPIO bus. Unsure why I can't use 80Mhz divider to do this programatically.
-  timerAlarmWrite(timer, microseconds, true);
-  timerAlarmEnable(timer);
+  // Configure GPIO 34 as an input and disable pull-up/pull-down resistors
+  gpio_pad_select_gpio(GPIO_NUM_34);
+  gpio_set_pull_mode(GPIO_NUM_34, GPIO_FLOATING); // Disable both pull-up and pull-down
 }
 
 void loop() {
@@ -267,50 +239,26 @@ void loop() {
         }
       }
 
-      // Copy bytes from I2S DMA process into circular buffer (a second cache we can manipulate without disturbing I2S).
-      // TODO remove the circular buffer and associated logic and write this data directly to rxAudioBufferCopy.
-      uint16_t byteBuffer[I2S_READ_LEN];
       size_t bytesRead = 0;
-      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, (void*) byteBuffer, sizeof(byteBuffer), &bytesRead, portMAX_DELAY));
-      for (int i = 0; i < bytesRead; i++) {
-        *rxBufferTail = (uint8_t) (byteBuffer[i] / 256); // Convert 16 bit to 8 bit
-        rxBufferTail++;
-        if ((rxBufferTail - rxAudioBuffer - RX_AUDIO_BUFFER_SIZE) == 0) {
-          rxBufferTail = &rxAudioBuffer[0]; // loop circular buffer
+      uint8_t buffer32[I2S_READ_LEN * 4] = {0};
+      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
+      size_t samplesRead = bytesRead / 4;
+
+      // TODO rewrite this to store/send the full 12-bits that we're sampling (right now we're discarding the 4 lowest bits).
+      // This makes the app more complex because we now need to send multiple bytes for each audio sample (we can't assume each byte is a sample).
+      byte buffer8[I2S_READ_LEN] = {0};
+      bool squelched = (digitalRead(SQ_PIN) == HIGH);
+      for (int i = 0; i < samplesRead; i++) {
+        if (!squelched) {
+          // The ADC can only sample at 12-bits, so we extract the 8 most-significant bits of that from the 32-bit value.
+          buffer8[i] = buffer32[i * 4 + 3] << 4; // 4 top bits from last byte of sample
+          buffer8[i] |= buffer32[i * 4 + 2] >> 4; // 4 bottom bits from second to last byte of sample
+        } else {
+          buffer8[i] = 128; // No sound (half of byte, or 0v)
         }
-      }
+      } 
 
-      // Don't send every byte as it comes in or it will bog down the processor.
-      // Wait for a critical mass of bytes to be ready.
-      int bytesToSend = (rxBufferTail < rxBufferHead) ? // has the buffer looped?
-          (rxAudioBuffer + RX_AUDIO_BUFFER_SIZE - rxBufferHead) + (rxBufferTail - rxAudioBuffer) : // buffer has looped
-          (rxBufferTail - rxBufferHead); // buffer has not looped
-      if (bytesToSend < AUDIO_SEND_THRESHOLD) {
-        esp_task_wdt_reset();
-        return;
-      }
-
-      // Make a copy of the audio to send, so the ADC reading doesn't conflict with us reading from the circular
-      // buffer. This copy is very short-lived, just what we need to send right now.
-      uint8_t rxAudioBufferCopy[bytesToSend];
-      if (rxBufferTail < rxBufferHead) { // Tail pointer has looped to start of circular buffer
-        memcpy(rxAudioBufferCopy, rxBufferHead, rxAudioBuffer + RX_AUDIO_BUFFER_SIZE - rxBufferHead); // Unsent data up to end of buffer
-        memcpy(rxAudioBufferCopy + (rxAudioBuffer + RX_AUDIO_BUFFER_SIZE - rxBufferHead), rxAudioBuffer, rxBufferTail - rxAudioBuffer); // Unsent data at start of looped buffer
-      } else { // Buffer has not looped
-        memcpy(rxAudioBufferCopy, rxBufferHead, bytesToSend);
-      }
-      rxBufferHead += bytesToSend;
-      if ((rxBufferHead - rxAudioBuffer - RX_AUDIO_BUFFER_SIZE) > 0) {
-        rxBufferHead -= RX_AUDIO_BUFFER_SIZE; // Loop head pointer back into the circular buffer (it was out of bounds)
-      }
-
-      // If the radio module is indicating that squelch is active, force the audio to quiet (remove background hiss).
-      if (digitalRead(SQ_PIN) == HIGH) {
-        for (int i = 0; i < bytesToSend; i++) {
-          rxAudioBufferCopy[i] = 128; // No sound (half of byte, or 0v)
-        }
-      }
-      Serial.write(rxAudioBufferCopy, bytesToSend);
+      Serial.write(buffer8, samplesRead);
     } else if (mode == MODE_TX) {
       // Check for runaway tx
       int txSeconds = (micros() - txStartTime) / 1000000;
@@ -385,7 +333,7 @@ void setMode(int newMode) {
 
 void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
   // Add this next chunk of audio to the audio buffer
-  if (bytesRead > 0) {
+  /* if (bytesRead > 0) {
     if (usingTxBuffer1) { // Read into tx buffer 2 while buffer 1 is playing
       memcpy(txAudioBuffer2 + txAudioBufferLen2, tempBuffer, std::min(bytesRead, TX_AUDIO_BUFFER_SIZE - txAudioBufferLen2));
       txAudioBufferLen2 += std::min(bytesRead, TX_AUDIO_BUFFER_SIZE - txAudioBufferLen2);
@@ -405,54 +353,5 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
         txAudioBufferLen2 = 0;
       }
     }
-  }
-}
-
-void SampleBufferInitI2S() {
-  static const i2s_config_t i2s_config = {
-      .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-      .sample_rate = AUDIO_SAMPLE_RATE,
-      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-      .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-      .communication_format = I2S_COMM_FORMAT_I2S_MSB,
-      .intr_alloc_flags = 0, // default interrupt priority
-      .dma_buf_count = 8,
-      .dma_buf_len = I2S_READ_LEN,
-      .use_apll = false
-  };
-
-  /* i2s_config_t i2s_config;
-  i2s_config.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN);
-  i2s_config.sample_rate = AUDIO_SAMPLE_RATE;            
-  i2s_config.dma_buf_len = I2S_READ_LEN;                   
-  i2s_config.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
-  i2s_config.channel_format = I2S_CHANNEL_FMT_ONLY_LEFT;  
-  i2s_config.use_apll = false,
-  i2s_config.communication_format = I2S_COMM_FORMAT_I2S_MSB;
-  i2s_config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
-  i2s_config.dma_buf_count = 2; */
-
-  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL));
-  ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
-}
-
-void FillBufferI2S() {
-  uint16_t byteBuffer[I2S_READ_LEN];
-  size_t bytesRead = 0;
-
-  // ESP_ERROR_CHECK(i2s_adc_enable(I2S_NUM_0));
-  ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, (void*) byteBuffer, sizeof(byteBuffer), &bytesRead, portMAX_DELAY));
-  // ESP_ERROR_CHECK(i2s_adc_disable(I2S_NUM_0));
-
-  if (bytesRead != sizeof(byteBuffer)) {
-    Serial.printf("Could only read %u bytes of %u in FillBufferI2S()\n", bytesRead, sizeof(byteBuffer));
-    return;
-  }
-
-  Serial.println("bytesRead: " + String(bytesRead));
-
-  for (int i = 0; i < bytesRead; i++) {
-    uint8_t eightBitByte = (uint8_t) byteBuffer[i]; // chop off top 8 bits
-    Serial.println("byteBuffer[" + String(i) + "]: " + String(eightBitByte));
-  }
+  } */
 }

@@ -87,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
     // For transmitting audio to ESP32 / radio
     private AudioRecord audioRecord;
     private boolean isRecording = false;
-    private static final int AUDIO_SAMPLE_RATE = 8000;
+    private static final int AUDIO_SAMPLE_RATE = 44100;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
     private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 8;
@@ -99,10 +99,6 @@ public class MainActivity extends AppCompatActivity {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 500;
-    private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
-    private int rxPrebufferIdx = 0;
-    private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
 
     // Delimiter must match ESP32 code
@@ -278,7 +274,7 @@ public class MainActivity extends AppCompatActivity {
         FSKEncoder encoder;
         try {
             encoder = new FSKEncoder(
-                    new FSKConfig(FSKConfig.SAMPLE_RATE_22050, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P),
+                    new FSKConfig(FSKConfig.SAMPLE_RATE_44100, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P),
                     new FSKEncoder.FSKEncoderCallback() {
                         @Override
                         public void encoded(byte[] pcm8, short[] pcm16) {
@@ -453,10 +449,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
         sendCommandToESP32(ESP32Command.FILTERS, (emphasis ? "1" : "0") + (highpass ? "1" : "0") + (lowpass ? "1" : "0"));
-
-        // Discard any buffered audio which isn't filtered
-        prebufferComplete = false;
-        rxPrebufferIdx = 0;
 
         // After the radio filters have been set, the PTT button can be used. If it's used before that,
         // the async setting of the radio filters could conflict with the tx audio stream and cause an
@@ -639,10 +631,6 @@ public class MainActivity extends AppCompatActivity {
         // Unhighlight all memory rows, since this is a simplex frequency.
         viewModel.highlightMemory(null);
         adapter.notifyDataSetChanged();
-
-        // Reset audio prebuffer
-        prebufferComplete = false;
-        rxPrebufferIdx = 0;
     }
 
     private void tuneToMemory(int memoryId, int squelchLevel) {
@@ -703,10 +691,6 @@ public class MainActivity extends AppCompatActivity {
 
         showMemoryName(memory.name);
         showFrequency(activeFrequencyStr);
-
-        // Reset audio prebuffer
-        prebufferComplete = false;
-        rxPrebufferIdx = 0;
     }
 
     private void checkScanDueToSilence() {
@@ -834,8 +818,6 @@ public class MainActivity extends AppCompatActivity {
         sendCommandToESP32(ESP32Command.PTT_UP);
         stopRecording();
         audioTrack.flush();
-        prebufferComplete = false;
-        rxPrebufferIdx = 0;
     }
 
     protected void requestAudioPermissions() {
@@ -1102,10 +1084,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initAfterESP32Connected() {
-        // Start by prebuffering some audio
-        prebufferComplete = false;
-        rxPrebufferIdx = 0;
-
         // Tell the radio about any settings the user set.
         applySettings();
 
@@ -1384,29 +1362,10 @@ public class MainActivity extends AppCompatActivity {
         // This is to avoid simultaneous rx/tx with the ESP32-S2 which tends to cause it to
         // lock up given the speed of ADC reading, and CDC-based USB Serial.
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            // If the prebuffer was already filled and sent to the audio track, we start
-            // writing incoming data in realtime to keep the audio track prepped with audio.
-            if (prebufferComplete) {
-                synchronized (audioTrack) {
-                    audioTrack.write(data, 0, data.length);
-                }
-            } else {
-                for (int i = 0; i < data.length; i++) {
-                    // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
-                    // while we're waiting for more bytes.
-                    rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
-                    if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
-                        prebufferComplete = true;
-                        //debugLog("Rx prebuffer full, writing to audioTrack.");
-                        if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                            audioTrack.play();
-                        }
-                        synchronized (audioTrack) {
-                            audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
-                        }
-                        rxPrebufferIdx = 0;
-                        break; // Might drop a few audio bytes from data[], should be very minimal
-                    }
+            synchronized (audioTrack) {
+                audioTrack.write(data, 0, data.length);
+                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                    audioTrack.play();
                 }
             }
 
