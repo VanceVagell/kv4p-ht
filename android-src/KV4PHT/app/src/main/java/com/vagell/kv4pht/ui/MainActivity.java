@@ -90,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int AUDIO_SAMPLE_RATE = 44100;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 24; // Final constant chosen empirically to avoid audio stutter
+    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 50; // Final constant chosen empirically to avoid audio stutter
     private Thread recordingThread;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
@@ -1328,8 +1328,15 @@ public class MainActivity extends AppCompatActivity {
 
     private synchronized void sendBytesToESP32(byte[] newBytes) {
         try {
-            // usbIoManager.writeAsync(newBytes); DO NOT USE writeAsync, or tx audio will stutter at best and fail at worst.
-            serialPort.write(newBytes, 200);
+            // usbIoManager.writeAsync(newBytes); // On MCUs like the ESP32 S2 this causes USB failures with concurrent USB rx/tx.
+            int bytesWritten = 0;
+            int totalBytes = newBytes.length;
+            final int MAX_BYTES_PER_USB_WRITE = 128;
+            do {
+                byte[] arrayPart = Arrays.copyOfRange(newBytes, bytesWritten, Math.min(bytesWritten + MAX_BYTES_PER_USB_WRITE, totalBytes));
+                serialPort.write(arrayPart, 200);
+                bytesWritten += MAX_BYTES_PER_USB_WRITE;
+            } while (bytesWritten < totalBytes);
             // debugLog("Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();
