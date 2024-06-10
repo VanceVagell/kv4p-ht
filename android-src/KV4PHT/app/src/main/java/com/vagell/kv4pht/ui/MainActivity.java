@@ -90,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int AUDIO_SAMPLE_RATE = 44100;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 8;
+    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 24; // Final constant chosen empirically to avoid audio stutter
     private Thread recordingThread;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
