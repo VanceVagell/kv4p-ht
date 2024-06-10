@@ -31,25 +31,15 @@ uint8_t* rxBufferTail = &rxAudioBuffer[0];
 #define AUDIO_SEND_THRESHOLD 500 // minimum bytes in buffer before they'll be sent
 
 // Buffer for outgoing audio bytes to send to radio module
-#define TX_AUDIO_BUFFER_SIZE 1000 // Holds data we already got off of USB serial from Android app
-// TODO change this to a circular buffer too
-uint8_t txAudioBuffer1[TX_AUDIO_BUFFER_SIZE]; // Processed tx audio bytes that will be sent to radio module
-uint8_t txAudioBuffer2[TX_AUDIO_BUFFER_SIZE]; // 2nd tx audio buffer so we can alternate to avoid any gaps due to processing
-bool usingTxBuffer1 = true;
-int txAudioBufferIdx1 = 0;
-int txAudioBufferLen1 = 0;
-int txAudioBufferIdx2 = 0;
-int txAudioBufferLen2 = 0;
+#define TX_AUDIO_BUFFER_SIZE 1024 // Holds data we already got off of USB serial from Android app
 
+// Max data to cache from USB (1024 is ESP32 max)
 #define USB_BUFFER_SIZE 1024
-
-// The number of bytes from the end of any buffer when rx or tx audio is processed (to avoid overrun during async processing)
-#define BYTES_TO_TRIGGER_FROM_BUFFER_END 20
 
 // Connections to radio module
 #define RXD2_PIN 16
 #define TXD2_PIN 17
-#define DAC_PIN 25
+#define DAC_PIN 25 // This constant not used, just here for reference.
 #define ADC_PIN 34 // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
 #define PTT_PIN 18
 #define PD_PIN 19
@@ -65,8 +55,12 @@ DRA818* dra = new DRA818(&Serial2, DRA818_VHF);
 long txStartTime = -1;
 #define RUNAWAY_TX_SEC 200
 
+// have we installed an I2S driver at least once?
+bool i2sStarted = false;
+
 // I2S audio sampling stuff
 #define I2S_READ_LEN      1024
+#define I2S_WRITE_LEN     1024
 #define I2S_ADC_UNIT      ADC_UNIT_1
 #define I2S_ADC_CHANNEL   ADC1_CHANNEL_6
 
@@ -90,7 +84,6 @@ void setup() {
   pinMode(SQ_PIN, INPUT);
   pinMode(PTT_PIN, OUTPUT);
   digitalWrite(PTT_PIN, HIGH); // Rx
-  pinMode(DAC_PIN, OUTPUT);
 
   // Communication with DRA818V radio module via GPIO pins
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
@@ -108,17 +101,20 @@ void setup() {
 
   // Start in RX mode
   setMode(MODE_RX);
-
-  // TEMPORARY testing stuff
-  initI2S();
 }
 
-void initI2S() {
+void initI2SRx() {
+  // Remove any previous driver (rx or tx) that may have been installed.
+  if (i2sStarted) {
+    i2s_driver_uninstall(I2S_NUM_0);
+  }
+  i2sStarted = true;
+
   // Initialize ADC
   adc1_config_width(ADC_WIDTH_BIT_12);
   adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
 
-  static const i2s_config_t i2s_config = {
+  static const i2s_config_t i2sRxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
       .sample_rate = AUDIO_SAMPLE_RATE,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
@@ -132,20 +128,32 @@ void initI2S() {
       .fixed_mclk = 0
   };
 
-  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL));
+  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sRxConfig, 0, NULL));
   ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
+}
 
-  i2s_pin_config_t pin_config = {
-      .bck_io_num = 14,
-      .ws_io_num = 15,
-      .data_out_num = -1,
-      .data_in_num = 34,
+void initI2STx() {
+  // Remove any previous driver (rx or tx) that may have been installed.
+  if (i2sStarted) {
+    i2s_driver_uninstall(I2S_NUM_0);
+  }
+  i2sStarted = true;
+
+  i2s_config_t i2sTxConfig = {
+    .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
+    .sample_rate = AUDIO_SAMPLE_RATE,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_8BIT,
+    .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 4,
+    .dma_buf_len = I2S_WRITE_LEN,
+    .use_apll = false,
+    .tx_desc_auto_clear = false,
+    .fixed_mclk = 0
   };
-  ESP_ERROR_CHECK(i2s_set_pin(I2S_NUM_0, &pin_config));
-
-  // Configure GPIO 34 as an input and disable pull-up/pull-down resistors
-  gpio_pad_select_gpio(GPIO_NUM_34);
-  gpio_set_pull_mode(GPIO_NUM_34, GPIO_FLOATING); // Disable both pull-up and pull-down
+  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sTxConfig, 0, NULL));
+  ESP_ERROR_CHECK(i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN)); // GPIO 25 is the default DAC pin
 }
 
 void loop() {
@@ -245,7 +253,7 @@ void loop() {
       size_t samplesRead = bytesRead / 4;
 
       // TODO rewrite this to store/send the full 12-bits that we're sampling (right now we're discarding the 4 lowest bits).
-      // This makes the app more complex because we now need to send multiple bytes for each audio sample (we can't assume each byte is a sample).
+      // This change would make the app more complex because we could no longer assume each byte is a sample.
       byte buffer8[I2S_READ_LEN] = {0};
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
       for (int i = 0; i < samplesRead; i++) {
@@ -317,41 +325,22 @@ void setMode(int newMode) {
     case MODE_RX:
       digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
+      initI2SRx();
       break;
     case MODE_TX:
       txStartTime = micros();
       digitalWrite(LED_PIN, HIGH);
       digitalWrite(PTT_PIN, LOW);
-      usingTxBuffer1 = true;
-      txAudioBufferIdx1 = 0;
-      txAudioBufferLen1 = 0;
-      txAudioBufferIdx2 = 0;
-      txAudioBufferLen2 = 0;
+      initI2STx();
       break;
   }
 }
 
 void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
-  // Add this next chunk of audio to the audio buffer
-  /* if (bytesRead > 0) {
-    if (usingTxBuffer1) { // Read into tx buffer 2 while buffer 1 is playing
-      memcpy(txAudioBuffer2 + txAudioBufferLen2, tempBuffer, std::min(bytesRead, TX_AUDIO_BUFFER_SIZE - txAudioBufferLen2));
-      txAudioBufferLen2 += std::min(bytesRead, TX_AUDIO_BUFFER_SIZE - txAudioBufferLen2);
-      if (txAudioBufferLen2 >= TX_AUDIO_BUFFER_SIZE - BYTES_TO_TRIGGER_FROM_BUFFER_END) {
-        usingTxBuffer1 = false; // Start playing from buffer 2, it's full.
-        startedTxMicros = micros();
-        targetTxBufferEndMicros = startedTxMicros + (1000000 * txAudioBufferLen2 / TX_AUDIO_BUFFER_SIZE * TX_AUDIO_BUFFER_SIZE / AUDIO_SAMPLE_RATE); // Transmit should be done by this system time, used to regulate DAC playback rate
-        txAudioBufferLen1 = 0;
-      }
-    } else { // Read into tx buffer 1 while buffer 2 is playing
-      memcpy(txAudioBuffer1 + txAudioBufferLen1, tempBuffer, std::min(bytesRead, TX_AUDIO_BUFFER_SIZE - txAudioBufferLen1));
-      txAudioBufferLen1 += std::min(bytesRead, TX_AUDIO_BUFFER_SIZE - txAudioBufferLen1);
-      if (txAudioBufferLen1 >= TX_AUDIO_BUFFER_SIZE - BYTES_TO_TRIGGER_FROM_BUFFER_END) {
-        usingTxBuffer1 = true; // Start playing from buffer 1, it's full.
-        startedTxMicros = micros();
-        targetTxBufferEndMicros = startedTxMicros + (1000000 * txAudioBufferLen1 / TX_AUDIO_BUFFER_SIZE * TX_AUDIO_BUFFER_SIZE / AUDIO_SAMPLE_RATE); // Transmit should be done by this system time, used to regulate DAC playback rate
-        txAudioBufferLen2 = 0;
-      }
-    }
-  } */
+  if (bytesRead == 0) {
+    return;
+  }
+
+  size_t bytesWritten;
+  ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, tempBuffer, bytesRead, &bytesWritten, portMAX_DELAY));
 }

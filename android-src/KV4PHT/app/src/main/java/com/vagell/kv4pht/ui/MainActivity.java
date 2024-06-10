@@ -806,8 +806,8 @@ public class MainActivity extends AppCompatActivity {
 
         mode = MODE_TX;
         sendCommandToESP32(ESP32Command.PTT_DOWN);
-        startRecording();
         audioTrack.stop();
+        startRecording();
     }
 
     protected void endPtt() {
@@ -1072,8 +1072,8 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
         });
-        usbIoManager.setWriteBufferSize(50000); // Must not exceed receive buffer set on ESP32 (so we don't overflow it)
-        usbIoManager.setReadBufferSize(1000); // Must be much larger than ESP32's send buffer (so we never block it)
+        usbIoManager.setWriteBufferSize(512); // Must not exceed receive buffer set on ESP32 (so we don't overflow it)
+        usbIoManager.setReadBufferSize(4096); // Must be much larger than ESP32's send buffer (so we never block it)
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
 
@@ -1358,9 +1358,6 @@ public class MainActivity extends AppCompatActivity {
         } */
         // debugLog("Num bytes from ESP32: " + data.length);
 
-        // Track audio bytes, so we know when we have our next window to send a command.
-        // This is to avoid simultaneous rx/tx with the ESP32-S2 which tends to cause it to
-        // lock up given the speed of ADC reading, and CDC-based USB Serial.
         if (mode == MODE_RX || mode == MODE_SCAN) {
             synchronized (audioTrack) {
                 audioTrack.write(data, 0, data.length);
