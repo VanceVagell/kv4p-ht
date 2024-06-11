@@ -1367,6 +1367,14 @@ public class MainActivity extends AppCompatActivity {
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
             synchronized (audioTrack) {
+                // If the audioTrack is almost out of buffered audio, stop and restart it so
+                // it refills the buffer (we allow a minor stutter to avoid constant stuttering).
+                int playbackHeadPosition = audioTrack.getPlaybackHeadPosition();
+                int bufferLevel = minBufferSize - (playbackHeadPosition % minBufferSize);
+                if (bufferLevel < minBufferSize / 40) {
+                    audioTrack.stop();
+                }
+
                 audioTrack.write(data, 0, data.length);
                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                     audioTrack.play();

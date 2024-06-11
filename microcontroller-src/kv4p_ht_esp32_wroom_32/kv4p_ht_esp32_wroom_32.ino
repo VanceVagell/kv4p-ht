@@ -252,15 +252,13 @@ void loop() {
       ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
       size_t samplesRead = bytesRead / 4;
 
-      // TODO rewrite this to store/send the full 12-bits that we're sampling (right now we're discarding the 4 lowest bits).
-      // This change would make the app more complex because we could no longer assume each byte is a sample.
       byte buffer8[I2S_READ_LEN] = {0};
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
       for (int i = 0; i < samplesRead; i++) {
         if (!squelched) {
           // The ADC can only sample at 12-bits, so we extract the 8 most-significant bits of that from the 32-bit value.
-          buffer8[i] = buffer32[i * 4 + 3] << 4; // 4 top bits from last byte of sample
-          buffer8[i] |= buffer32[i * 4 + 2] >> 4; // 4 bottom bits from second to last byte of sample
+          buffer8[i] = buffer32[i * 4 + 3] << 4; // Get top 4 bits from last byte of sample
+          buffer8[i] |= buffer32[i * 4 + 2] >> 4; // Get bottom 4 bits from second to last byte of sample
         } else {
           buffer8[i] = 128; // No sound (half of byte, or 0v)
         }
@@ -292,7 +290,8 @@ void loop() {
             switch (command) {
               case COMMAND_PTT_UP: // Only command we can receive in TX mode is PTT_UP
                 setMode(MODE_RX);
-                break;
+                esp_task_wdt_reset();
+                return; // Discards remaining bytes from Android app (tx audio remnants which could cause issues now that we're in MODE_RX).
             }
           } else {
             if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
@@ -336,11 +335,13 @@ void setMode(int newMode) {
   }
 }
 
+// TODO simulate receiving bytes here with ESP32 plugged into laptop so I can see if this is crashing somehow.
+// Figure out WHY ESP32 is crashing.
 void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
   if (bytesRead == 0) {
     return;
   }
 
   size_t bytesWritten;
-  ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, tempBuffer, bytesRead, &bytesWritten, portMAX_DELAY));
+  ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, tempBuffer, bytesRead, &bytesWritten, 100));
 }
