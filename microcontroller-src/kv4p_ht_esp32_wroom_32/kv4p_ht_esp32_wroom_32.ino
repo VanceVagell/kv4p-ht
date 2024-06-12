@@ -21,14 +21,7 @@ int matchedDelimiterTokens = 0;
 int mode = MODE_RX;
 
 // Audio sampling rate, must match what Android app expects (and sends).
-#define AUDIO_SAMPLE_RATE 44100
-
-// Buffer for sample audio bytes from the radio module
-#define RX_AUDIO_BUFFER_SIZE 4000
-uint8_t rxAudioBuffer[RX_AUDIO_BUFFER_SIZE]; // Circular buffer
-uint8_t* rxBufferHead = &rxAudioBuffer[0];
-uint8_t* rxBufferTail = &rxAudioBuffer[0];
-#define AUDIO_SEND_THRESHOLD 500 // minimum bytes in buffer before they'll be sent
+#define AUDIO_SAMPLE_RATE 22050
 
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_AUDIO_BUFFER_SIZE 1024 // Holds data we already got off of USB serial from Android app

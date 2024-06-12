@@ -87,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
     // For transmitting audio to ESP32 / radio
     private AudioRecord audioRecord;
     private boolean isRecording = false;
-    private static final int AUDIO_SAMPLE_RATE = 44100;
+    private static final int AUDIO_SAMPLE_RATE = 22050;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
     private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 50; // Final constant chosen empirically to avoid audio stutter
@@ -274,7 +274,7 @@ public class MainActivity extends AppCompatActivity {
         FSKEncoder encoder;
         try {
             encoder = new FSKEncoder(
-                    new FSKConfig(FSKConfig.SAMPLE_RATE_44100, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P),
+                    new FSKConfig(FSKConfig.SAMPLE_RATE_22050, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P),
                     new FSKEncoder.FSKEncoderCallback() {
                         @Override
                         public void encoded(byte[] pcm8, short[] pcm16) {
@@ -1367,14 +1367,6 @@ public class MainActivity extends AppCompatActivity {
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
             synchronized (audioTrack) {
-                // If the audioTrack is almost out of buffered audio, stop and restart it so
-                // it refills the buffer (we allow a minor stutter to avoid constant stuttering).
-                int playbackHeadPosition = audioTrack.getPlaybackHeadPosition();
-                int bufferLevel = minBufferSize - (playbackHeadPosition % minBufferSize);
-                if (bufferLevel < minBufferSize / 40) {
-                    audioTrack.stop();
-                }
-
                 audioTrack.write(data, 0, data.length);
                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                     audioTrack.play();
