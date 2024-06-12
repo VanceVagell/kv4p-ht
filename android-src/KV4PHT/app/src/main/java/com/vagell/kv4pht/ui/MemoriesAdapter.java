@@ -1,5 +1,7 @@
 package com.vagell.kv4pht.ui;
 
+import android.content.Context;
+import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -64,7 +66,8 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
         memoryMenuButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                PopupMenu memoryMenu = new PopupMenu(holder.itemView.getContext(), memoryMenuButton);
+                Context themedContext = new ContextThemeWrapper(holder.itemView.getContext(), R.style.Custom_PopupMenu);
+                PopupMenu memoryMenu = new PopupMenu(themedContext, memoryMenuButton);
                 memoryMenu.inflate(R.menu.memory_row_menu);
                 memoryMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                     @Override

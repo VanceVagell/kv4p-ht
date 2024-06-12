@@ -36,6 +36,7 @@ import android.hardware.usb.UsbManager;
 import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
 import android.view.MenuItem;
 import android.view.MotionEvent;
@@ -1166,7 +1167,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void groupSelectorClicked(View view) {
-        PopupMenu groupsMenu = new PopupMenu(this, view);
+        Context themedContext = new ContextThemeWrapper(this, R.style.Custom_PopupMenu);
+        PopupMenu groupsMenu = new PopupMenu(themedContext, view);
         groupsMenu.inflate(R.menu.groups_menu);
 
         threadPoolExecutor.execute(new Runnable() {
