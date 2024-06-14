@@ -23,6 +23,10 @@ int mode = MODE_RX;
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 44100
 
+// Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
+// But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
+#define SAMPLING_RATE_OFFSET 200
+
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_AUDIO_BUFFER_SIZE 1024 // Holds data we already got off of USB serial from Android app
 
@@ -109,7 +113,7 @@ void initI2SRx() {
 
   static const i2s_config_t i2sRxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-      .sample_rate = AUDIO_SAMPLE_RATE + 1000, // Constant is to make up for fact that sampling is slightly slower than requested in practice, and we don't want underruns.
+      .sample_rate = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
       .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
