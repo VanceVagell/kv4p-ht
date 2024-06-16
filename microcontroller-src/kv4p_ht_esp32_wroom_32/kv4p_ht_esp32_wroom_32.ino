@@ -28,7 +28,7 @@ int mode = MODE_RX;
 #define SAMPLING_RATE_OFFSET 200
 
 // Buffer for outgoing audio bytes to send to radio module
-#define TX_AUDIO_BUFFER_SIZE 1024 // Holds data we already got off of USB serial from Android app
+#define TX_AUDIO_BUFFER_SIZE 4096 // Holds data we already got off of USB serial from Android app
 
 // Max data to cache from USB (1024 is ESP32 max)
 #define USB_BUFFER_SIZE 1024
@@ -36,7 +36,7 @@ int mode = MODE_RX;
 // Connections to radio module
 #define RXD2_PIN 16
 #define TXD2_PIN 17
-#define DAC_PIN 25 // This constant not used, just here for reference.
+#define DAC_PIN 25 // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
 #define ADC_PIN 34 // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
 #define PTT_PIN 18
 #define PD_PIN 19
@@ -120,7 +120,7 @@ void initI2SRx() {
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
       .dma_buf_count = 4,
       .dma_buf_len = I2S_READ_LEN,
-      .use_apll = false,
+      .use_apll = true,
       .tx_desc_auto_clear = false,
       .fixed_mclk = 0
   };
@@ -136,21 +136,19 @@ void initI2STx() {
   }
   i2sStarted = true;
 
-  i2s_config_t i2sTxConfig = {
-    .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
-    .sample_rate = AUDIO_SAMPLE_RATE,
-    .bits_per_sample = I2S_BITS_PER_SAMPLE_8BIT,
-    .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
-    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
-    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count = 4,
-    .dma_buf_len = I2S_WRITE_LEN,
-    .use_apll = false,
-    .tx_desc_auto_clear = false,
-    .fixed_mclk = 0
+  static const i2s_config_t i2s_config = {
+      .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
+      .sample_rate = AUDIO_SAMPLE_RATE,
+      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+      .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+      .intr_alloc_flags = 0,
+      .dma_buf_count = 8,
+      .dma_buf_len = I2S_WRITE_LEN,
+      .use_apll = true
   };
-  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sTxConfig, 0, NULL));
-  ESP_ERROR_CHECK(i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN)); // GPIO 25 is the default DAC pin
+
+  i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+  i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);           
 }
 
 void loop() {
@@ -169,6 +167,8 @@ void loop() {
           case COMMAND_PTT_DOWN:
           {
             setMode(MODE_TX);
+            esp_task_wdt_reset();
+            return;
           }
             break;
           case COMMAND_TUNE_TO:
@@ -278,7 +278,7 @@ void loop() {
       if (bytesAvailable > 0) {
         bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
 
-        for (int i = 0; i < bytesRead; i++) {
+        for (int i = 0; i < bytesRead && i < TX_AUDIO_BUFFER_SIZE; i++) {
           // If we've seen the entire delimiter...
           if (matchedDelimiterTokens == DELIMITER_LENGTH) {
             // Process next byte as a command.
@@ -298,8 +298,8 @@ void loop() {
             }
           }
         }
+        processTxAudio(tempBuffer, bytesRead);
       }
-      processTxAudio(tempBuffer, bytesRead);
     }
 
     // Regularly reset the WDT timer to prevent the device from rebooting (prove we're not locked up).
@@ -332,13 +332,17 @@ void setMode(int newMode) {
   }
 }
 
-// TODO simulate receiving bytes here with ESP32 plugged into laptop so I can see if this is crashing somehow.
-// Figure out WHY ESP32 is crashing.
 void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
   if (bytesRead == 0) {
     return;
   }
 
+  // Convert the 8-bit audio data to 16-bit
+  uint8_t buffer16[bytesRead * 2] = {0};
+  for (int i = 0; i < bytesRead; i++) {
+    buffer16[i * 2 + 1] = tempBuffer[i]; // Move 8-bit audio into top 8 bits of 16-bit byte that I2S expects.
+  }
+
   size_t bytesWritten;
-  ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, tempBuffer, bytesRead, &bytesWritten, 100));
+  ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16, sizeof(buffer16), &bytesWritten, 100));
 }

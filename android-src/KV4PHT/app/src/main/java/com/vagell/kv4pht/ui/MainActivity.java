@@ -33,6 +33,8 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.media.audiofx.Visualizer;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
@@ -48,6 +50,7 @@ import android.widget.TextView;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.snackbar.Snackbar;
+import com.hoho.android.usbserial.driver.SerialTimeoutException;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
@@ -89,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int AUDIO_SAMPLE_RATE = 44100;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 20;
+    private int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
     private Thread recordingThread;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
@@ -136,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
     private MemoriesAdapter adapter;
 
     private static final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
-            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+            10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
@@ -147,6 +150,7 @@ public class MainActivity extends AppCompatActivity {
     private static int AUDIO_VISUALIZER_RATE = Visualizer.getMaxCaptureRate();
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
+    private static int RECORD_ANIM_FPS = 30;
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -325,20 +329,26 @@ public class MainActivity extends AppCompatActivity {
         rxAudioVisualizer.setEnabled(true);
     }
 
-    private void updateRecordingVisualization(byte audioByte) {
+    private void updateRecordingVisualization(int waitMs, byte audioByte) {
         if (disableAnimations) { return; }
 
-        runOnUiThread(new Runnable() {
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                float txVolume = ((float) audioByte + 128f) / 256; // 0 to 1
-                ImageView txAudioView = findViewById(R.id.txAudioCircle);
-                ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
-                layoutParams.width = audioByte == SILENT_BYTE || mode == MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
-                layoutParams.height = audioByte == SILENT_BYTE || mode == MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
-                txAudioView.setLayoutParams(layoutParams);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        float txVolume = ((float) audioByte + 128f) / 256; // 0 to 1
+                        ImageView txAudioView = findViewById(R.id.txAudioCircle);
+                        ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
+                        layoutParams.width = audioByte == SILENT_BYTE || mode == MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+                        layoutParams.height = audioByte == SILENT_BYTE || mode == MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+                        txAudioView.setLayoutParams(layoutParams);
+                    }
+                });
             }
-        });
+        }, waitMs); // waitMs gives us the fps we desire, see RECORD_ANIM_FPS constant.
     }
 
     private void applySettings() {
@@ -441,7 +451,7 @@ public class MainActivity extends AppCompatActivity {
                                 rxAudioView.setLayoutParams(layoutParams);
 
                                 // Hide the tx audio visualization
-                                updateRecordingVisualization(SILENT_BYTE);
+                                updateRecordingVisualization(100, SILENT_BYTE);
                             }
                         }
                     }
@@ -893,6 +903,7 @@ public class MainActivity extends AppCompatActivity {
     private void debugLog(String text) {
         Log.d("DEBUG", text);
     }
+
     private void initAudioRecorder() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestAudioPermissions();
@@ -935,11 +946,20 @@ public class MainActivity extends AppCompatActivity {
 
             if (bytesRead > 0) {
                 sendAudioToESP32(Arrays.copyOfRange(audioBuffer, 0, bytesRead));
-                long total = 0;
+
+                int bytesPerAnimFrame = AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
+                long audioChunkByteTotal = 0;
+                int waitMs = 0;
                 for (int i = 0; i < bytesRead; i++) {
-                    total += audioBuffer[i];
+                    if (i > 0 && i % bytesPerAnimFrame == 0) {
+                        audioChunkByteTotal += audioBuffer[i];
+                        updateRecordingVisualization(waitMs, (byte) (audioChunkByteTotal / bytesPerAnimFrame));
+                        waitMs += (1.0f / RECORD_ANIM_FPS * 1000);
+                        audioChunkByteTotal = 0;
+                    } else {
+                        audioChunkByteTotal += audioBuffer[i];
+                    }
                 }
-                updateRecordingVisualization((byte) (total / bytesRead));
             }
         }
     }
@@ -951,7 +971,7 @@ public class MainActivity extends AppCompatActivity {
             audioRecord.release();
             audioRecord = null;
             recordingThread = null;
-            updateRecordingVisualization(SILENT_BYTE);
+            updateRecordingVisualization(100, SILENT_BYTE);
         }
 
         ImageButton pttButton = findViewById(R.id.pttButton);
@@ -1090,7 +1110,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
         });
-        usbIoManager.setWriteBufferSize(512); // Must not exceed receive buffer set on ESP32 (so we don't overflow it)
+        usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
         usbIoManager.setReadBufferSize(4096); // Must be much larger than ESP32's send buffer (so we never block it)
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
@@ -1354,11 +1374,19 @@ public class MainActivity extends AppCompatActivity {
             int bytesWritten = 0;
             int totalBytes = newBytes.length;
             final int MAX_BYTES_PER_USB_WRITE = 128;
+            int usbRetries = 0;
             do {
-                byte[] arrayPart = Arrays.copyOfRange(newBytes, bytesWritten, Math.min(bytesWritten + MAX_BYTES_PER_USB_WRITE, totalBytes));
-                serialPort.write(arrayPart, 200);
-                bytesWritten += MAX_BYTES_PER_USB_WRITE;
-            } while (bytesWritten < totalBytes);
+                try {
+                    byte[] arrayPart = Arrays.copyOfRange(newBytes, bytesWritten, Math.min(bytesWritten + MAX_BYTES_PER_USB_WRITE, totalBytes));
+                    serialPort.write(arrayPart, 200);
+                    bytesWritten += MAX_BYTES_PER_USB_WRITE;
+                    usbRetries = 0;
+                } catch (SerialTimeoutException ste) {
+                    // Do nothing, we'll try again momentarily. ESP32's serial buffer may be full.
+                    usbRetries++;
+                    // debugLog("usbRetries: " + usbRetries);
+                }
+            } while (bytesWritten < totalBytes && usbRetries < 10);
             // debugLog("Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();
@@ -1414,10 +1442,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             }
-        }
-
-        // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
-        if (mode == MODE_SCAN) {
+        } else if (mode == MODE_SCAN) {
+            // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
             for (int i = 0; i < data.length; i++) {
                 if (data[i] == SILENT_BYTE) {
                     consecutiveSilenceBytes++;
@@ -1427,6 +1453,14 @@ public class MainActivity extends AppCompatActivity {
                     consecutiveSilenceBytes = 0;
                 }
             }
+        } else if (mode == MODE_TX) {
+            // Print any data we get in MODE_TX (we're not expecting any, this is either leftover rx bytes or debug info).
+            /* try {
+                String dataStr = new String(data, "UTF-8");
+                debugLog("Unexpected data from ESP32 during MODE_TX: " + dataStr);
+            } catch (UnsupportedEncodingException e) {
+                throw new RuntimeException(e);
+            } */
         }
     }
 }
