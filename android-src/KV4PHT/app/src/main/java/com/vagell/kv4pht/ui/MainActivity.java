@@ -75,6 +75,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import bg.cytec.android.fskmodem.FSKConfig;
+import bg.cytec.android.fskmodem.FSKDecoder;
 import bg.cytec.android.fskmodem.FSKEncoder;
 
 public class MainActivity extends AppCompatActivity {
@@ -106,6 +107,10 @@ public class MainActivity extends AppCompatActivity {
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
+
+    // AFSK encoder/decoder
+    FSKConfig fskConfig = null;
+    FSKDecoder fskDecoder = null;
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -255,6 +260,30 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         viewModel.loadData();
+
+        initFskDecoder();
+    }
+
+    private void initFskDecoder() {
+        FSKConfig fskConfig = null;
+        try {
+            fskConfig = new FSKConfig(FSKConfig.SAMPLE_RATE_44100, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        fskDecoder = new FSKDecoder(fskConfig, new FSKDecoder.FSKDecoderCallback() {
+                @Override
+                public void decoded(byte[] newData) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            TextView chatLog = findViewById(R.id.textChatLog);
+                            chatLog.append(new String(newData) + "\n");
+                        }
+                    });
+                    // debugLog("Decoded: " + new String(newData));
+                }
+            });
     }
 
     private void setMode(boolean isTextChat) {
@@ -271,6 +300,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void sendTextClicked(View view) {
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
+        ((EditText) findViewById(R.id.textChatInput)).setText("");
         byte[] outBytes;
         try {
             outBytes = (callsign + ": " + outText).getBytes("UTF-8");
@@ -278,29 +308,30 @@ public class MainActivity extends AppCompatActivity {
             throw new RuntimeException(e);
         }
 
-        FSKEncoder encoder;
-        try {
-            encoder = new FSKEncoder(
-                    new FSKConfig(FSKConfig.SAMPLE_RATE_44100, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P),
-                    new FSKEncoder.FSKEncoderCallback() {
-                        @Override
-                        public void encoded(byte[] pcm8, short[] pcm16) {
-                            // FOR DEBUG PURPOSES listen to the afsk audio
-
-                            // TODO try changing sample rate to one of those supported by FSKConfig (e.g. 22k or 44k).
-                            // Need to update both the Android app and the ESP32 app, as well as the interrupt timer in ESP32.
-
-                            synchronized (audioTrack) {
-                                audioTrack.write(pcm8, 0, pcm8.length);
+        // TODO would be great to replace this AFSK library, but it doesn't look like there's anything
+        // better for Java. Maybe need to use a C++ library with JNI? The problem with this one is it
+        // seems to ONLY work with 1200 baud, and it's a bit non-standard (actually 1250 baud with low/high tones). Would be
+        // a lot more useful it was normal AFSK, maybe even AX.25 and APRS because it could be used for
+        // many more applications. But this works for basic text sending and receiving for now.
+        FSKEncoder fskEncoder = new FSKEncoder(
+                fskConfig,
+                new FSKEncoder.FSKEncoderCallback() {
+                    @Override
+                    public void encoded(byte[] pcm8, short[] pcm16) {
+                        sendCommandToESP32(ESP32Command.PTT_DOWN);
+                        final Handler handler = new Handler(Looper.getMainLooper());
+                        handler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                sendAudioToESP32(pcm8);
+                                sendCommandToESP32(ESP32Command.PTT_UP);
                             }
-                        }
+                        }, 1000);
                     }
-            );
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+                }
+        );
 
-        encoder.appendData(outBytes); // NOTE: Can only send up to FSKConfig.ENCODER_DATA_BUFFER_SIZE at a time.
+        fskEncoder.appendData(outBytes); // NOTE: Can only send up to FSKConfig.ENCODER_DATA_BUFFER_SIZE at a time.
 
         TextView chatLog = findViewById(R.id.textChatLog);
         chatLog.append(callsign + ": " + outText + "\n");
@@ -1418,7 +1449,8 @@ public class MainActivity extends AppCompatActivity {
         if (mode == MODE_RX || mode == MODE_SCAN) {
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
-                    audioTrack.write(data, 0, data.length);
+                    audioTrack.write(data, 0, data.length); // Play any audio.
+                    fskDecoder.appendSignal(data); // Extract any AFSK-encoded text.
                     if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                         audioTrack.play();
                     }
