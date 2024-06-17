@@ -1474,7 +1474,9 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             }
-        } else if (mode == MODE_SCAN) {
+        }
+
+        if (mode == MODE_SCAN) {
             // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
             for (int i = 0; i < data.length; i++) {
                 if (data[i] == SILENT_BYTE) {
