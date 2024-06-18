@@ -25,7 +25,7 @@ int mode = MODE_RX;
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
-#define SAMPLING_RATE_OFFSET 500
+#define SAMPLING_RATE_OFFSET 900
 
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_AUDIO_BUFFER_SIZE 4096 // Holds data we already got off of USB serial from Android app

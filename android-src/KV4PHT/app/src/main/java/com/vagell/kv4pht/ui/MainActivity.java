@@ -109,8 +109,8 @@ public class MainActivity extends AppCompatActivity {
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
 
     // AFSK encoder/decoder
-    FSKConfig fskConfig = null;
-    FSKDecoder fskDecoder = null;
+    private FSKConfig fskConfig = null;
+    private FSKDecoder fskDecoder = null;
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -265,7 +265,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initFskDecoder() {
-        FSKConfig fskConfig = null;
         try {
             fskConfig = new FSKConfig(FSKConfig.SAMPLE_RATE_44100, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P);
         } catch (IOException e) {
