@@ -61,6 +61,8 @@ import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
+import com.vagell.kv4pht.encoding.BFSKDecoder;
+import com.vagell.kv4pht.encoding.BFSKEncoder;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -73,10 +75,7 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
-import bg.cytec.android.fskmodem.FSKConfig;
-import bg.cytec.android.fskmodem.FSKDecoder;
-import bg.cytec.android.fskmodem.FSKEncoder;
+import java.util.function.Consumer;
 
 public class MainActivity extends AppCompatActivity {
     // Must match the ESP32 device we support.
@@ -108,9 +107,13 @@ public class MainActivity extends AppCompatActivity {
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
 
-    // AFSK encoder/decoder
-    private FSKConfig fskConfig = null;
-    private FSKDecoder fskDecoder = null;
+    // BFSK encoder/decoder
+    private BFSKEncoder bfskEncoder = null;
+    private BFSKDecoder bfskDecoder = null;
+    private static final int DATA_BAUD_RATE = 300;
+    private static final float DATA_FREQ_ZERO = 1200;
+    private static final float DATA_FREQ_ONE = 2400;
+    private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * 10; // 10 seconds of audio buffer
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -261,28 +264,25 @@ public class MainActivity extends AppCompatActivity {
         });
         viewModel.loadData();
 
-        initFskDecoder();
+        initafskDecoder();
     }
 
-    private void initFskDecoder() {
-        try {
-            fskConfig = new FSKConfig(FSKConfig.SAMPLE_RATE_44100, FSKConfig.PCM_8BIT, FSKConfig.CHANNELS_MONO, FSKConfig.SOFT_MODEM_MODE_4, FSKConfig.THRESHOLD_20P);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        fskDecoder = new FSKDecoder(fskConfig, new FSKDecoder.FSKDecoderCallback() {
-                @Override
-                public void decoded(byte[] newData) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            TextView chatLog = findViewById(R.id.textChatLog);
-                            chatLog.append(new String(newData) + "\n");
-                        }
-                    });
-                    // debugLog("Decoded: " + new String(newData));
-                }
-            });
+    private void initafskDecoder() {
+        bfskDecoder = new BFSKDecoder(AUDIO_SAMPLE_RATE, DATA_BAUD_RATE, DATA_FREQ_ZERO,
+                                      DATA_FREQ_ONE, DATA_BUFFER_SIZE, new Consumer<String>() {
+            @Override
+            public void accept(String s) {
+                debugLog("data: " + s);
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        TextView chatLog = findViewById(R.id.textChatLog);
+                        chatLog.append(s + "\n");
+                    }
+                });
+            }
+        });
     }
 
     private void setMode(boolean isTextChat) {
@@ -300,40 +300,28 @@ public class MainActivity extends AppCompatActivity {
     public void sendTextClicked(View view) {
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
         ((EditText) findViewById(R.id.textChatInput)).setText("");
-        byte[] outBytes;
+
+        bfskEncoder = new BFSKEncoder(AUDIO_SAMPLE_RATE, DATA_BAUD_RATE, DATA_FREQ_ZERO, DATA_FREQ_ONE);
+        final byte[] pcm8;
         try {
-            outBytes = (callsign + ": " + outText).getBytes("UTF-8");
-        } catch (UnsupportedEncodingException e) {
+            pcm8 = bfskEncoder.encode(callsign + ": " + outText);
+            bfskDecoder.feedAudioData(pcm8); // TODO remove this debug line and uncomment the proper code below to transmit the audio
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
-        // TODO would be great to replace this AFSK library, but it doesn't look like there's anything
-        // better for Java. Maybe need to use a C++ library with JNI? The problem with this one is it
-        // seems to ONLY work with 1200 baud, and it's a bit non-standard (actually 1250 baud with low/high tones). Would be
-        // a lot more useful it was normal AFSK, maybe even AX.25 and APRS because it could be used for
-        // many more applications. But this works for basic text sending and receiving for now.
-        FSKEncoder fskEncoder = new FSKEncoder(
-                fskConfig,
-                new FSKEncoder.FSKEncoderCallback() {
-                    @Override
-                    public void encoded(byte[] pcm8, short[] pcm16) {
-                        sendCommandToESP32(ESP32Command.PTT_DOWN);
-                        final Handler handler = new Handler(Looper.getMainLooper());
-                        handler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                sendAudioToESP32(pcm8);
-                                sendCommandToESP32(ESP32Command.PTT_UP);
-                            }
-                        }, 1000);
-                    }
-                }
-        );
-
-        fskEncoder.appendData(outBytes); // NOTE: Can only send up to FSKConfig.ENCODER_DATA_BUFFER_SIZE at a time.
+        /* sendCommandToESP32(ESP32Command.PTT_DOWN);
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                sendAudioToESP32(pcm8);
+                sendCommandToESP32(ESP32Command.PTT_UP);
+            }
+        }, 1000);
 
         TextView chatLog = findViewById(R.id.textChatLog);
-        chatLog.append(callsign + ": " + outText + "\n");
+        chatLog.append(callsign + ": " + outText + "\n"); */
     }
 
     private void createRxAudioVisualizer() {
@@ -1103,7 +1091,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             serialPort.open(connection);
             serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
-        } catch (IOException e) {
+        } catch (Exception e) {
             debugLog("Error: couldn't open USB serial port.");
             showUSBRetrySnackbar();
             return;
@@ -1112,7 +1100,7 @@ public class MainActivity extends AppCompatActivity {
         try { // These settings needed for better data transfer on Adafruit QT Py ESP32-S2
             serialPort.setRTS(true);
             serialPort.setDTR(true);
-        } catch (IOException e) {
+        } catch (Exception e) {
             // Ignore, may not be supported on all devices.
         }
 
@@ -1128,7 +1116,7 @@ public class MainActivity extends AppCompatActivity {
                 connection.close();
                 try {
                     serialPort.close();
-                } catch (IOException ex) {
+                } catch (Exception ex) {
                     // Ignore.
                 }
                 try {
@@ -1449,7 +1437,14 @@ public class MainActivity extends AppCompatActivity {
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
                     audioTrack.write(data, 0, data.length); // Play any audio.
-                    fskDecoder.appendSignal(data); // Extract any AFSK-encoded text.
+
+                    threadPoolExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            bfskDecoder.feedAudioData(data); // Extract any BFSK-encoded text.
+                        }
+                    });
+
                     if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                         audioTrack.play();
                     }

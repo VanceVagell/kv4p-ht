@@ -2,32 +2,6 @@ KV4P-HT uses a number of other open source libraries and materials. This file in
 The main project (KV4P-HT) is licensed under GPL 3.0 but many of the other libraries and materials have
 other licenses. Please see the file LICENSE for GPL 3.0. Other licenses in this project...
 
-############## LICENSE FOR: javAX25 library
-
-/*
- * 
- * 
- * Copyright (C) Sivan Toledo, 2012
- * 
- * The CRC computation code is adapted from soundmodem, Copyright (C) 1999-2000
- * by Thomas Sailer (sailer@ife.ee.ethz.ch). That code is also released under GPL
- * version 2 or later.
- * 
- *      This program is free software; you can redistribute it and/or modify
- *      it under the terms of the GNU General Public License as published by
- *      the Free Software Foundation; either version 2 of the License, or
- *      (at your option) any later version.
- *
- *      This program is distributed in the hope that it will be useful,
- *      but WITHOUT ANY WARRANTY; without even the implied warranty of
- *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *      GNU General Public License for more details.
- *
- *      You should have received a copy of the GNU General Public License
- *      along with this program; if not, write to the Free Software
- *      Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- */
-
 ############## LICENSE FOR: usb-serial-for-android library
 
 MIT License
@@ -317,11 +291,6 @@ whether future versions of the GNU Lesser General Public License shall
 apply, that proxy's public statement of acceptance of any version is
 permanent authorization for you to choose that version for the
 Library.
-
-############## LICENSE FOR: https://github.com/adafruit/Adafruit_NeoPixel
-
-License
-Adafruit_NeoPixel is free software: you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. Adafruit_NeoPixel is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more details. You should have received a copy of the GNU Lesser General Public License along with NeoPixel. If not, see this
 
 ############## LICENSE FOR: https://github.com/mik3y/usb-serial-for-android
 
