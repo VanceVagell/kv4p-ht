@@ -65,7 +65,6 @@ import com.vagell.kv4pht.encoding.BFSKDecoder;
 import com.vagell.kv4pht.encoding.BFSKEncoder;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -110,10 +109,12 @@ public class MainActivity extends AppCompatActivity {
     // BFSK encoder/decoder
     private BFSKEncoder bfskEncoder = null;
     private BFSKDecoder bfskDecoder = null;
-    private static final int DATA_BAUD_RATE = 300;
+    private static final int DATA_BAUD_RATE = 100; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
     private static final float DATA_FREQ_ZERO = 1200;
     private static final float DATA_FREQ_ONE = 2400;
+    private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
     private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * 10; // 10 seconds of audio buffer
+    private static final boolean DEBUG_LOOPBACK_TEST = false; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -264,16 +265,14 @@ public class MainActivity extends AppCompatActivity {
         });
         viewModel.loadData();
 
-        initafskDecoder();
+        initBFSKDecoder();
     }
 
-    private void initafskDecoder() {
+    private void initBFSKDecoder() {
         bfskDecoder = new BFSKDecoder(AUDIO_SAMPLE_RATE, DATA_BAUD_RATE, DATA_FREQ_ZERO,
                                       DATA_FREQ_ONE, DATA_BUFFER_SIZE, new Consumer<String>() {
             @Override
             public void accept(String s) {
-                debugLog("data: " + s);
-
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -305,23 +304,33 @@ public class MainActivity extends AppCompatActivity {
         final byte[] pcm8;
         try {
             pcm8 = bfskEncoder.encode(callsign + ": " + outText);
-            bfskDecoder.feedAudioData(pcm8); // TODO remove this debug line and uncomment the proper code below to transmit the audio
+
+            if (DEBUG_LOOPBACK_TEST) {
+                threadPoolExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        bfskDecoder.feedAudioData(pcm8);
+                    }
+                });
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
-        /* sendCommandToESP32(ESP32Command.PTT_DOWN);
-        final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                sendAudioToESP32(pcm8);
-                sendCommandToESP32(ESP32Command.PTT_UP);
-            }
-        }, 1000);
+        if (!DEBUG_LOOPBACK_TEST) {
+            sendCommandToESP32(ESP32Command.PTT_DOWN);
+            final Handler handler = new Handler(Looper.getMainLooper());
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    sendAudioToESP32(pcm8);
+                    sendCommandToESP32(ESP32Command.PTT_UP);
+                }
+            }, MS_DELAY_BEFORE_DATA_XMIT);
 
-        TextView chatLog = findViewById(R.id.textChatLog);
-        chatLog.append(callsign + ": " + outText + "\n"); */
+            TextView chatLog = findViewById(R.id.textChatLog);
+            chatLog.append(callsign + ": " + outText + "\n");
+        }
     }
 
     private void createRxAudioVisualizer() {
@@ -1438,12 +1447,14 @@ public class MainActivity extends AppCompatActivity {
                 synchronized (audioTrack) {
                     audioTrack.write(data, 0, data.length); // Play any audio.
 
-                    threadPoolExecutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            bfskDecoder.feedAudioData(data); // Extract any BFSK-encoded text.
-                        }
-                    });
+                    if (!DEBUG_LOOPBACK_TEST && bfskDecoder != null) { // Avoid race condition at app start.
+                        threadPoolExecutor.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                bfskDecoder.feedAudioData(data); // Extract any BFSK-encoded text.
+                            }
+                        });
+                    }
 
                     if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                         audioTrack.play();

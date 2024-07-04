@@ -33,7 +33,7 @@ public class CircularBuffer {
     }
 
     public int getSize() {
-        return size;
+        return size > 0 ? size : 0; // TODO figure out why size is sometimes negative (some logic bug?)
     }
 
     public int getCapacity() {

@@ -1,5 +1,7 @@
 package com.vagell.kv4pht.encoding;
 
+import com.vagell.kv4pht.ui.MainActivity;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -25,9 +27,8 @@ public class BFSKEncoder {
 
         ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
 
-        // TODO figure out why adding noise breaks everything. start by implementing bit-by-bit advancing in BFSKDecoder (see TODO there).
-        // Simulated noise
-        /* for (int i = 0; i < 1013; i++) {
+        // Simulated noise (for testing)
+        /* for (int i = 0; i < 10013; i++) {
             byteOutputStream.write(generateTone(Math.random() * 5000, 1));
         } */
 
@@ -37,8 +38,8 @@ public class BFSKEncoder {
         }
         byteOutputStream.write(generateTones(BFSKDecoder.END_OF_DATA_MARKER)); // Write end-of-data marker
 
-        // Simulated noise
-        /* for (int i = 0; i < 237; i++) {
+        // Simulated noise (for testing)
+        /* for (int i = 0; i < 20037; i++) {
             byteOutputStream.write(generateTone(Math.random() * 5000, 1));
         } */
 
