@@ -317,13 +317,21 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (!DEBUG_LOOPBACK_TEST) {
-            sendCommandToESP32(ESP32Command.PTT_DOWN);
+            sendCommandToESP32(ESP32Command.PTT_DOWN); // First press PTT
             final Handler handler = new Handler(Looper.getMainLooper());
             handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    sendAudioToESP32(pcm8);
-                    sendCommandToESP32(ESP32Command.PTT_UP);
+                    sendAudioToESP32(pcm8); // After MS_DELAY_BEFORE_DATA_XMIT, starting sending the data
+
+                    double msToXmitData = ((double) pcm8.length / AUDIO_SAMPLE_RATE) * 1000;
+                    final Handler handler = new Handler(Looper.getMainLooper());
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            sendCommandToESP32(ESP32Command.PTT_UP); // After msToXmitData (based on data length), release PTT
+                        }
+                    }, (int) msToXmitData);
                 }
             }, MS_DELAY_BEFORE_DATA_XMIT);
 
