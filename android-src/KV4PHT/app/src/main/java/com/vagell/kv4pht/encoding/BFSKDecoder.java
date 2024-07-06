@@ -8,7 +8,8 @@ import java.util.stream.IntStream;
 public class BFSKDecoder {
     public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
     public static final byte[] END_OF_DATA_MARKER = new byte[]{0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0};
-    private static final int DATA_PARSE_EVERY_MS = 2000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles constantly looking for data)
+    private static final int DATA_PARSE_EVERY_MS = 1000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles constantly looking for data)
+    private static final int START_MARKER_SEARCH_GRANULARITY = 30; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
     private long lastParseMs = System.currentTimeMillis();
     private final int markerCorrelationThreshold;
     private final float sampleRate;
@@ -75,7 +76,7 @@ public class BFSKDecoder {
         if (totalSamples >= startOfDataLen * samplesPerBit) {
             double zeroCorrelation = 0;
             double oneCorrelation = 0;
-            for (int sampleOffset = 0; sampleOffset <= totalSamples; sampleOffset++) {
+            for (int sampleOffset = 0; sampleOffset <= totalSamples; sampleOffset += START_MARKER_SEARCH_GRANULARITY) {
                 boolean startOfDataMatch = true;
                 for (int j = 0; j < startOfDataLen; j++) {
                     int from = sampleOffset + (j * samplesPerBit);
@@ -94,11 +95,13 @@ public class BFSKDecoder {
                     // Further lock phase synchronization by finding the sampleOffset within the next
                     // 1/2 samplesPerBit where the correlation for this last marker is highest.
                     // We only look ahead this limited amount so we don't cross into the next bit.
+                    // TODO consider using second-to-last part of START_OF_DATA_MARKER to align, since it guarantees subsequent bit differs in value (should align better with sharper edge).
                     byte lastByte = START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 1];
                     double highestCorrelation = lastByte == 1 ? oneCorrelation : zeroCorrelation;
                     int sampleOffsetWithHighestCorellation = sampleOffset;
                     final int stopAt = sampleOffset + (samplesPerBit / 2);
-                    for (int i = sampleOffset; i < stopAt; i++) {
+                    int startAt = Math.max(0, sampleOffset - START_MARKER_SEARCH_GRANULARITY); // Step back a little to make up for low granularity of initial search.
+                    for (int i = startAt; i < stopAt; i++) { // i++ means finest granularity search at this point.
                         int from = i;
                         int to = Math.min(i + samplesPerBit, bufferedAudio.length);
                         if (lastByte == 1) {
