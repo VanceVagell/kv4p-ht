@@ -10,7 +10,6 @@ import androidx.room.Room;
 import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.data.ChannelMemory;
 
-import java.nio.channels.Channel;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;

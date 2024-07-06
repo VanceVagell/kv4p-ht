@@ -1,36 +1,22 @@
 package com.vagell.kv4pht.ui;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.AppCompatButton;
-import androidx.appcompat.widget.PopupMenu;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import androidx.databinding.DataBindingUtil;
-import androidx.lifecycle.Observer;
-import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.annotation.SuppressLint;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
-import android.hardware.usb.UsbDevice;
-import android.hardware.usb.UsbManager;
 import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.os.Handler;
@@ -48,13 +34,26 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatButton;
+import androidx.appcompat.widget.PopupMenu;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.databinding.DataBindingUtil;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.snackbar.Snackbar;
 import com.hoho.android.usbserial.driver.SerialTimeoutException;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
-
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
@@ -113,8 +112,8 @@ public class MainActivity extends AppCompatActivity {
     private static final float DATA_FREQ_ZERO = 1200;
     private static final float DATA_FREQ_ONE = 2400;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
-    private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * 10; // 10 seconds of audio buffer
-    private static final boolean DEBUG_LOOPBACK_TEST = false; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
+    private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * 5; // 5 seconds of audio buffer
+    private static final boolean DEBUG_LOOPBACK_TEST = true; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -1451,7 +1450,9 @@ public class MainActivity extends AppCompatActivity {
                         threadPoolExecutor.execute(new Runnable() {
                             @Override
                             public void run() {
-                                bfskDecoder.feedAudioData(data); // Extract any BFSK-encoded text.
+                                if (mode == MODE_RX || mode == MODE_SCAN) { // To avoid bogging down processor when we're in TX mode but have some threads processing older audio.
+                                    bfskDecoder.feedAudioData(data); // Extract any BFSK-encoded text.
+                                }
                             }
                         });
                     }

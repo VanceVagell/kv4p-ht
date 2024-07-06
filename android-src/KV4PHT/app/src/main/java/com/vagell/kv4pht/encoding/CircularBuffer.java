@@ -9,7 +9,7 @@ public class CircularBuffer {
         buffer = new byte[capacity];
     }
 
-    public void write(byte[] data) {
+    public synchronized void write(byte[] data) {
         for (byte b : data) {
             buffer[writePos] = b;
             writePos = (writePos + 1) % buffer.length;
@@ -19,28 +19,17 @@ public class CircularBuffer {
         }
     }
 
-    public byte[] read(int length) {
-        if (length > size) {
-            length = size;
-        }
-        byte[] result = new byte[length];
+    public synchronized byte[] readAll() {
+        // Unspool the circular buffer out into a linear representation ending at writePos.
+        byte[] result = new byte[size];
         int readPos = (writePos - size + buffer.length) % buffer.length;
-        for (int i = 0; i < length; i++) {
+        for (int i = 0; i < size; i++) {
             result[i] = buffer[(readPos + i) % buffer.length];
         }
-        size -= length;
         return result;
     }
 
-    public int getSize() {
-        return size > 0 ? size : 0; // TODO figure out why size is sometimes negative (some logic bug?)
-    }
-
-    public int getCapacity() {
-        return buffer.length;
-    }
-
-    public void reset() {
+    public synchronized void reset() {
         writePos = 0;
         size = 0;
     }

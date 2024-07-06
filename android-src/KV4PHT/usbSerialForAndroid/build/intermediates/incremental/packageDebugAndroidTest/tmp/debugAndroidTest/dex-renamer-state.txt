@@ -1,4 +1,4 @@
-#Tue Jul 02 20:28:54 EDT 2024
+#Fri Jul 05 21:59:37 EDT 2024
 base.0=C\:\\Users\\vance\\git\\kv4p-ht\\android-src\\KV4PHT\\usbSerialForAndroid\\build\\intermediates\\dex\\debugAndroidTest\\mergeDexDebugAndroidTest\\classes.dex
 path.0=classes.dex
 renamed.0=classes.dex

@@ -1,14 +1,15 @@
 package com.vagell.kv4pht.encoding;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 public class BFSKDecoder {
     public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
     public static final byte[] END_OF_DATA_MARKER = new byte[]{0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0};
-    private static final double FREQ_ALLOWED_DEVIANCE = 100.0; // Allowed frequency deviance in Hz
+    private static final int DATA_PARSE_EVERY_MS = 2000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles constantly looking for data)
+    private long lastParseMs = System.currentTimeMillis();
     private final int markerCorrelationThreshold;
     private final float sampleRate;
     private final int baudRate;
@@ -17,8 +18,9 @@ public class BFSKDecoder {
     private final int samplesPerBit;
     private final CircularBuffer buffer;
     private final Consumer<String> callback;
-    private double[][] sineTablesZero;
-    private double[][] sineTablesOne;
+    private double[] sineTableZero;
+    private double[] sineTableOne;
+    private boolean decoding = false;
 
     public BFSKDecoder(float sampleRate, int baudRate, double freqZero, double freqOne, int bufferSize, Consumer<String> callback) {
         this.sampleRate = sampleRate;
@@ -30,35 +32,45 @@ public class BFSKDecoder {
         this.callback = callback;
         initializeSineTables();
 
-        // TODO adjust this up or down based on baud rate (lower baud can be stricter on threshold).
-        markerCorrelationThreshold = 50;
+        // TODO Dynamically adjust this up (stricter) or down based on baud rate. Lower baud can be stricter on threshold.
+        markerCorrelationThreshold = 1000;
     }
 
-    public synchronized void feedAudioData(byte[] audioData) {
+    public void feedAudioData(byte[] audioData) {
         buffer.write(audioData);
-        byte[] currentBytes = buffer.read(buffer.getSize());
-        int totalBits = currentBytes.length / samplesPerBit;
+        if (decoding) { // Another thread is already decoding, let it finish first.
+            return;
+        }
 
-        if (totalBits > 0) {
-            int startOfData = findStartOfData(currentBytes);
+        // Rate limit how often we try to find data in the audio.
+        long now = System.currentTimeMillis();
+        synchronized (this) {
+            if (decoding || (now - lastParseMs) < DATA_PARSE_EVERY_MS) {
+                return;
+            }
+            lastParseMs = now;
+            decoding = true;
+        }
+
+        byte[] accumulatedAudio = buffer.readAll();
+        int potentialBits = accumulatedAudio.length / samplesPerBit;
+
+        if (potentialBits > 0) {
+            int startOfData = findStartOfData(accumulatedAudio);
             int endOfData = -1;
             if (startOfData != -1) {
-                endOfData = findEndOfData(currentBytes, startOfData);
+                endOfData = findEndOfData(accumulatedAudio, startOfData);
                 if (endOfData != -1) {
-                    decodeData(currentBytes, startOfData, endOfData);
-                    return; // Note that this drops currentBytes from buffer because read() in a circular buffer moves the read head forward.
+                    decodeData(accumulatedAudio, startOfData, endOfData);
                 }
             }
-
-            if (startOfData == -1 || endOfData == -1){
-                buffer.write(currentBytes); // Put unused bytes back, no data found in this audio window yet.
-            }
         }
+        decoding = false;
     }
 
-    private int findStartOfData(byte[] bufferedData) {
+    private int findStartOfData(byte[] bufferedAudio) {
         int startOfDataLen = START_OF_DATA_MARKER.length;
-        int totalSamples = bufferedData.length;
+        int totalSamples = bufferedAudio.length;
 
         if (totalSamples >= startOfDataLen * samplesPerBit) {
             double zeroCorrelation = 0;
@@ -66,15 +78,10 @@ public class BFSKDecoder {
             for (int sampleOffset = 0; sampleOffset <= totalSamples; sampleOffset++) {
                 boolean startOfDataMatch = true;
                 for (int j = 0; j < startOfDataLen; j++) {
-                    // Extract the range of samples starting from sampleOffset + j
-                    byte[] samples;
-                    try {
-                        samples = Arrays.copyOfRange(bufferedData, sampleOffset + (j * samplesPerBit), sampleOffset + (j * samplesPerBit) + samplesPerBit);
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        return -1; // Went outside bufferedData looking for start marker.
-                    }
-                    zeroCorrelation = correlateZero(samples);
-                    oneCorrelation = correlateOne(samples);
+                    int from = sampleOffset + (j * samplesPerBit);
+                    int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
+                    zeroCorrelation = correlateZero(bufferedAudio, from, to);
+                    oneCorrelation = correlateOne(bufferedAudio, from, to);
 
                     if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
                             (START_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
@@ -92,20 +99,16 @@ public class BFSKDecoder {
                     int sampleOffsetWithHighestCorellation = sampleOffset;
                     final int stopAt = sampleOffset + (samplesPerBit / 2);
                     for (int i = sampleOffset; i < stopAt; i++) {
-                        byte[] samples;
-                        try {
-                            samples = Arrays.copyOfRange(bufferedData, i, i + samplesPerBit);
-                        } catch (ArrayIndexOutOfBoundsException e) {
-                            return sampleOffsetWithHighestCorellation;
-                        }
+                        int from = i;
+                        int to = Math.min(i + samplesPerBit, bufferedAudio.length);
                         if (lastByte == 1) {
-                            oneCorrelation = correlateOne(samples);
+                            oneCorrelation = correlateOne(bufferedAudio, from, to);
                             if (oneCorrelation > highestCorrelation) {
                                 highestCorrelation = oneCorrelation;
                                 sampleOffsetWithHighestCorellation = i;
                             }
                         } else { // lastByte == 0
-                            zeroCorrelation = correlateZero(samples);
+                            zeroCorrelation = correlateZero(bufferedAudio, from, to);
                             if (zeroCorrelation > highestCorrelation) {
                                 highestCorrelation = zeroCorrelation;
                                 sampleOffsetWithHighestCorellation = i;
@@ -121,9 +124,9 @@ public class BFSKDecoder {
         return -1;
     }
 
-    private int findEndOfData(byte[] bufferedData, int startOfData) {
+    private int findEndOfData(byte[] bufferedAudio, int startOfData) {
         int endOfDataLen = END_OF_DATA_MARKER.length;
-        int totalSamples = bufferedData.length;
+        int totalSamples = bufferedAudio.length;
 
         if (totalSamples >= (START_OF_DATA_MARKER.length * samplesPerBit) + (endOfDataLen * samplesPerBit)) {
             for (int sampleOffset = (startOfData + START_OF_DATA_MARKER.length * samplesPerBit);
@@ -132,14 +135,10 @@ public class BFSKDecoder {
                 boolean endOfDataMatch = true;
                 for (int j = 0; j < endOfDataLen; j++) {
                     // Extract the range of samples starting from sampleOffset + j
-                    byte[] samples;
-                    try {
-                        samples = Arrays.copyOfRange(bufferedData, sampleOffset + (j * samplesPerBit), sampleOffset + (j * samplesPerBit) + samplesPerBit);
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        return -1; // Went outside bufferedData looking for end marker.
-                    }
-                    double zeroCorrelation = correlateZero(samples);
-                    double oneCorrelation = correlateOne(samples);
+                    int from = sampleOffset + (j * samplesPerBit);
+                    int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
+                    double zeroCorrelation = correlateZero(bufferedAudio, from, to);
+                    double oneCorrelation = correlateOne(bufferedAudio, from, to);
 
                     if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
                             (END_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
@@ -157,7 +156,7 @@ public class BFSKDecoder {
         return -1;
     }
 
-    private void decodeData(byte[] bufferedData, int startOfData, int endOfData) {
+    private void decodeData(byte[] bufferedAudio, int startOfData, int endOfData) {
         int start = startOfData + (START_OF_DATA_MARKER.length * samplesPerBit);
         int length = endOfData - start;
         if (length <= 0) return;
@@ -165,9 +164,10 @@ public class BFSKDecoder {
         byte[] binaryData = new byte[length / samplesPerBit];
 
         for (int i = 0; i < binaryData.length; i++) {
-            byte[] samples = Arrays.copyOfRange(bufferedData, start + (i * samplesPerBit), start + ((i + 1) * samplesPerBit));
-            double zeroCorrelation = correlateZero(samples);
-            double oneCorrelation = correlateOne(samples);
+            int from = start + (i * samplesPerBit);
+            int to = Math.min((start + ((i + 1) * samplesPerBit)), bufferedAudio.length);
+            double zeroCorrelation = correlateZero(bufferedAudio, from, to);
+            double oneCorrelation = correlateOne(bufferedAudio, from, to);
             // Note we just force a decode here, unlike when trying to detect start and end of data, where
             // we also check how high-quality the decode is (via correlation). Since we only get here
             // when we detected strong start/end markers, we KNOW this is a bit so we just do our best
@@ -185,59 +185,34 @@ public class BFSKDecoder {
     // This method precomputes the necessary sine values, because otherwise we'd be calling
     // Math.sin over and over when decoding data and this is a very slow and expensive call.
     private void initializeSineTables() {
-        int devianceSteps = 2; // +1 for above and -1 for below the base frequency
-        sineTablesZero = new double[devianceSteps * 2 + 1][samplesPerBit];
-        sineTablesOne = new double[devianceSteps * 2 + 1][samplesPerBit];
-
+        sineTableZero = new double[samplesPerBit];
+        sineTableOne = new double[samplesPerBit];
         for (int i = 0; i < samplesPerBit; i++) {
-            for (int d = -devianceSteps; d <= devianceSteps; d++) {
-                double deviance = d * FREQ_ALLOWED_DEVIANCE;
-                sineTablesZero[d + devianceSteps][i] = Math.sin(2.0 * Math.PI * i / (sampleRate / (freqZero + deviance)));
-                sineTablesOne[d + devianceSteps][i] = Math.sin(2.0 * Math.PI * i / (sampleRate / (freqOne + deviance)));
-            }
+            sineTableZero[i] = Math.sin(2.0 * Math.PI * i / (sampleRate / freqZero));
+            sineTableOne[i] = Math.sin(2.0 * Math.PI * i / (sampleRate / freqOne));
         }
     }
 
-    private double correlate(byte[] samples, double[][] sineTables) {
-        double maxCorrelation = Double.NEGATIVE_INFINITY;
-        for (double[] sineTable : sineTables) {
-            double sum = 0;
-            for (int i = 0; i < samples.length; i++) {
-                sum += samples[i] * sineTable[i];
-            }
-            if (sum > maxCorrelation) {
-                maxCorrelation = sum;
-            }
+    private double correlate(byte[] samples, double[] sineTable, int from, int to) {
+        double sum = 0;
+        for (int i = from, j = 0; i < to; i++, j++) {
+            sum += samples[i] * sineTable[j];
         }
-        return maxCorrelation;
+        return sum;
     }
 
-    private double correlateZero(byte[] samples) {
-        return correlate(samples, sineTablesZero);
+    // Experimental alternative that multithreads the calculation. However, in my experiments
+    // this actually uses more CPU overall. TODO Worth experimenting more with.
+    /* private double correlate(byte[] samples, double[] sineTable, int from, int to) {
+        return IntStream.range(from, to).parallel().mapToDouble(i -> samples[i] * sineTable[i - from]).sum();
+    } */
+
+    private double correlateZero(byte[] samples, int from, int to) {
+        return correlate(samples, sineTableZero, from, to);
     }
 
-    private double correlateOne(byte[] samples) {
-        return correlate(samples, sineTablesOne);
-    }
-
-    private double[] normalize(byte[] samples) {
-        double[] normalizedSamples = new double[samples.length];
-        double max = 0;
-
-        // Find the maximum absolute value
-        for (byte sample : samples) {
-            double absValue = Math.abs(sample);
-            if (absValue > max) {
-                max = absValue;
-            }
-        }
-
-        // Normalize the samples
-        for (int i = 0; i < samples.length; i++) {
-            normalizedSamples[i] = samples[i] / max;
-        }
-
-        return normalizedSamples;
+    private double correlateOne(byte[] samples, int from, int to) {
+        return correlate(samples, sineTableOne, from, to);
     }
 
     private String convertBinaryToString(byte[] binaryData) {
