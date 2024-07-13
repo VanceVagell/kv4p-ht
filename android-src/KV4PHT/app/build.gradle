@@ -30,11 +30,15 @@ android {
         viewBinding true
         dataBinding true
     }
+    packagingOptions {
+        resources.excludes.add("META-INF/*")
+    }
 }
 
 dependencies {
     implementation project(':usbSerialForAndroid')
     implementation 'androidx.activity:activity:1.8.0'
+    implementation 'org.junit.jupiter:junit-jupiter:5.8.1'
     def room_version = "2.5.0"
     implementation "androidx.room:room-runtime:$room_version"
     annotationProcessor "androidx.room:room-compiler:$room_version"

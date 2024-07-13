@@ -1,15 +1,17 @@
 package com.vagell.kv4pht.encoding;
 
+import android.util.Log;
+
 import java.nio.charset.StandardCharsets;
 import java.util.BitSet;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 public class BFSKDecoder {
-    public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
-    public static final byte[] END_OF_DATA_MARKER = new byte[]{0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0};
+    public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 1, 1, 1, 1, 1, 0, 1}; // Not an alphanumeric ASCII character
+    public static final byte[] END_OF_DATA_MARKER =   new byte[]{0, 0, 0, 0, 0, 0, 1, 0}; // Not an alphanumeric ASCII character
     private static final int DATA_PARSE_EVERY_MS = 1000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles constantly looking for data)
-    private static final int START_MARKER_SEARCH_GRANULARITY = 30; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
+    private static final int START_MARKER_SEARCH_GRANULARITY = 10; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
     private long lastParseMs = System.currentTimeMillis();
     private final int markerCorrelationThreshold;
     private final float sampleRate;
@@ -34,7 +36,11 @@ public class BFSKDecoder {
         initializeSineTables();
 
         // TODO Dynamically adjust this up (stricter) or down based on baud rate. Lower baud can be stricter on threshold.
-        markerCorrelationThreshold = 1000;
+        markerCorrelationThreshold = 3000;
+
+        // Final bits of the data start/end markers must differ for bit alignment to work properly.
+        assert(START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2] != START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 1]);
+        assert(END_OF_DATA_MARKER[END_OF_DATA_MARKER.length - 2] != END_OF_DATA_MARKER[END_OF_DATA_MARKER.length - 1]);
     }
 
     public void feedAudioData(byte[] audioData) {
@@ -69,7 +75,9 @@ public class BFSKDecoder {
         decoding = false;
     }
 
+    // Returns the index in bufferedAudio at which payload data begins (or -1 if no start marker found).
     private int findStartOfData(byte[] bufferedAudio) {
+        Log.d("DEBUG", "================ findStartOfData ================");
         int startOfDataLen = START_OF_DATA_MARKER.length;
         int totalSamples = bufferedAudio.length;
 
@@ -84,33 +92,44 @@ public class BFSKDecoder {
                     zeroCorrelation = correlateZero(bufferedAudio, from, to);
                     oneCorrelation = correlateOne(bufferedAudio, from, to);
 
+                    // TODO remove this debug stuff. Next thing to try is to set the threshold to like -9000 so it's basically off. Is it just a threshold problem?
+                    if (zeroCorrelation > markerCorrelationThreshold) {
+                        //Log.d("DEBUG", "High zeroCorrelation: " + zeroCorrelation + " at idx: " + sampleOffset);
+                    }
+                    if (oneCorrelation > markerCorrelationThreshold) {
+                        //Log.d("DEBUG", "High oneCorrelation: " + oneCorrelation + " at idx: " + sampleOffset);
+                    }
+
                     if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
                             (START_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
                             (START_OF_DATA_MARKER[j] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
                         startOfDataMatch = false;
                         break;
                     }
+
+                    if (j > 3)
+                        Log.d("DEBUG", "Found potential data start[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " @ " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation));
                 }
                 if (startOfDataMatch) {
-                    // Further lock phase synchronization by finding the sampleOffset within the next
-                    // 1/2 samplesPerBit where the correlation for this last marker is highest.
-                    // We only look ahead this limited amount so we don't cross into the next bit.
-                    // TODO consider using second-to-last part of START_OF_DATA_MARKER to align, since it guarantees subsequent bit differs in value (should align better with sharper edge).
-                    byte lastByte = START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 1];
-                    double highestCorrelation = lastByte == 1 ? oneCorrelation : zeroCorrelation;
-                    int sampleOffsetWithHighestCorellation = sampleOffset;
-                    final int stopAt = sampleOffset + (samplesPerBit / 2);
-                    int startAt = Math.max(0, sampleOffset - START_MARKER_SEARCH_GRANULARITY); // Step back a little to make up for low granularity of initial search.
+                    // Revisit the second-to-last bit on the start marker, and use it to phase lock.
+                    // Find the sampleOffset within the next 1/2 samplesPerBit after it where the
+                    // correlation for this bit is highest. We only look ahead this limited amount
+                    // so we don't cross into the next bit.
+                    byte secondToLastBit = START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2];
+                    double highestCorrelation = -999999;
+                    int sampleOffsetWithHighestCorellation = sampleOffset - samplesPerBit;
+                    int startAt = Math.max(0, sampleOffset + (START_OF_DATA_MARKER.length * samplesPerBit)- samplesPerBit - START_MARKER_SEARCH_GRANULARITY); // Slightly before second-to-last bit of start marker.
+                    int stopAt = startAt + (samplesPerBit / 2);
                     for (int i = startAt; i < stopAt; i++) { // i++ means finest granularity search at this point.
                         int from = i;
                         int to = Math.min(i + samplesPerBit, bufferedAudio.length);
-                        if (lastByte == 1) {
+                        if (secondToLastBit == 1) {
                             oneCorrelation = correlateOne(bufferedAudio, from, to);
                             if (oneCorrelation > highestCorrelation) {
                                 highestCorrelation = oneCorrelation;
                                 sampleOffsetWithHighestCorellation = i;
                             }
-                        } else { // lastByte == 0
+                        } else { // secondToLastBit == 0
                             zeroCorrelation = correlateZero(bufferedAudio, from, to);
                             if (zeroCorrelation > highestCorrelation) {
                                 highestCorrelation = zeroCorrelation;
@@ -119,7 +138,8 @@ public class BFSKDecoder {
                         }
                     }
 
-                    return sampleOffsetWithHighestCorellation;
+                    Log.d("DEBUG", "Payload data start: " + (sampleOffsetWithHighestCorellation + samplesPerBit + (samplesPerBit * START_OF_DATA_MARKER.length)));
+                    return Math.max(0, sampleOffsetWithHighestCorellation + samplesPerBit - (samplesPerBit * START_OF_DATA_MARKER.length));
                 }
             }
         }
@@ -127,14 +147,16 @@ public class BFSKDecoder {
         return -1;
     }
 
+    // Returns the index in bufferedAudio at which payload data ends (or -1 if no end marker found).
     private int findEndOfData(byte[] bufferedAudio, int startOfData) {
+        Log.d("DEBUG", "================ findEndOfData ================");
         int endOfDataLen = END_OF_DATA_MARKER.length;
         int totalSamples = bufferedAudio.length;
 
         if (totalSamples >= (START_OF_DATA_MARKER.length * samplesPerBit) + (endOfDataLen * samplesPerBit)) {
-            for (int sampleOffset = (startOfData + START_OF_DATA_MARKER.length * samplesPerBit);
-                     sampleOffset <= totalSamples - endOfDataLen * samplesPerBit;
-                     sampleOffset += samplesPerBit) { // Skip ahead in samplesPerBit increments since findStartOfData already aligned us to bits.
+            for (int sampleOffset = startOfData;
+                     sampleOffset <= totalSamples;
+                     sampleOffset += (samplesPerBit * 8)) { // Skip ahead in one byte increments since findStartOfData already bit-aligned us.
                 boolean endOfDataMatch = true;
                 for (int j = 0; j < endOfDataLen; j++) {
                     // Extract the range of samples starting from sampleOffset + j
@@ -143,14 +165,26 @@ public class BFSKDecoder {
                     double zeroCorrelation = correlateZero(bufferedAudio, from, to);
                     double oneCorrelation = correlateOne(bufferedAudio, from, to);
 
+                    // TODO remove this debug stuff. Next thing to try is to set the threshold to like -9000 so it's basically off. Is it just a threshold problem?
+                    if (zeroCorrelation > markerCorrelationThreshold) {
+                        //Log.d("DEBUG", "High zeroCorrelation: " + zeroCorrelation + " at idx: " + sampleOffset);
+                    }
+                    if (oneCorrelation > markerCorrelationThreshold) {
+                        //Log.d("DEBUG", "High oneCorrelation: " + oneCorrelation + " at idx: " + sampleOffset);
+                    }
+
                     if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
                             (END_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
                             (END_OF_DATA_MARKER[j] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
                         endOfDataMatch = false;
                         break;
                     }
+
+                    if (j > 3)
+                        Log.d("DEBUG", "Found potential data end[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " @ " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation));
                 }
                 if (endOfDataMatch) {
+                    Log.d("DEBUG", "Payload data end: " + sampleOffset);
                     return sampleOffset;
                 }
             }
@@ -160,15 +194,14 @@ public class BFSKDecoder {
     }
 
     private void decodeData(byte[] bufferedAudio, int startOfData, int endOfData) {
-        int start = startOfData + (START_OF_DATA_MARKER.length * samplesPerBit);
-        int length = endOfData - start;
+        int length = endOfData - startOfData;
         if (length <= 0) return;
 
         byte[] binaryData = new byte[length / samplesPerBit];
 
         for (int i = 0; i < binaryData.length; i++) {
-            int from = start + (i * samplesPerBit);
-            int to = Math.min((start + ((i + 1) * samplesPerBit)), bufferedAudio.length);
+            int from = startOfData + (i * samplesPerBit);
+            int to = Math.min((startOfData + ((i + 1) * samplesPerBit)), bufferedAudio.length);
             double zeroCorrelation = correlateZero(bufferedAudio, from, to);
             double oneCorrelation = correlateOne(bufferedAudio, from, to);
             // Note we just force a decode here, unlike when trying to detect start and end of data, where
@@ -226,6 +259,7 @@ public class BFSKDecoder {
             }
         }
         byte[] bytes = bitSet.toByteArray();
-        return new String(bytes, StandardCharsets.UTF_8);
+        return new String(bytes, StandardCharsets.UTF_8)
+                .replaceAll("[^a-zA-Z0-9~`!@#\\$%^&*()\\-_=+\\[\\]{}|;:'\",.<>/?\\\\ ]", ""); // Only allow meaningful chars through.
     }
 }

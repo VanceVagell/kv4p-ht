@@ -21,7 +21,7 @@ public class BFSKEncoder {
     }
 
     public byte[] encode(String data) throws IOException {
-        byte[] binaryData = convertStringToBinary(data);
+        byte[] binaryData = data.getBytes(StandardCharsets.US_ASCII);
 
         ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
 
@@ -31,8 +31,9 @@ public class BFSKEncoder {
         } */
 
         byteOutputStream.write(generateTones(BFSKDecoder.START_OF_DATA_MARKER)); // Write start-of-data marker
-        for (byte b : binaryData) {
-            byteOutputStream.write(generateTone(b == 0 ? freqZero : freqOne, samplesPerBit)); // Write data
+        BitSet bitset = BitSet.valueOf(binaryData);
+        for (int i = 0; i < (binaryData.length * 8); i++) { // Can't use  bitset.length() here because it's not actually the number of bits, a BitSet oddity related to how it stores the bits.
+            byteOutputStream.write(generateTone(bitset.get(i) ? freqOne : freqZero, samplesPerBit)); // Write data
         }
         byteOutputStream.write(generateTones(BFSKDecoder.END_OF_DATA_MARKER)); // Write end-of-data marker
 
@@ -42,17 +43,6 @@ public class BFSKEncoder {
         } */
 
         return byteOutputStream.toByteArray();
-    }
-
-    private byte[] convertStringToBinary(String data) {
-        byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
-        BitSet bitSet = BitSet.valueOf(bytes);
-        byte[] binaryData = new byte[bitSet.length()];
-        for (int i = 0; i < bitSet.length(); i++) {
-            binaryData[i] = (byte) (bitSet.get(i) ? 1 : 0);
-        }
-
-        return binaryData;
     }
 
     private byte[] generateTone(double frequency, int samplesPerBit) {

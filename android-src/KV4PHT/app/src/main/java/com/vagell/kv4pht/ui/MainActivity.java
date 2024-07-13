@@ -108,11 +108,13 @@ public class MainActivity extends AppCompatActivity {
     // BFSK encoder/decoder
     private BFSKEncoder bfskEncoder = null;
     private BFSKDecoder bfskDecoder = null;
-    private static final int DATA_BAUD_RATE = 100; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
+    private static final int DATA_BAUD_RATE = 30; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
     private static final float DATA_FREQ_ZERO = 1200;
-    private static final float DATA_FREQ_ONE = 2400;
+    private static final float DATA_FREQ_ONE = 2200;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
-    private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * 5; // 5 seconds of audio buffer
+    private static final int MS_DELAY_BEFORE_DATA_KEYUP = 500; // NOTE: If this is too short the ESP32 app will repeat unwanted audio still in the DMA buffer.
+    private static final int SEC_AUDIO_BUFFER = 10;
+    private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * SEC_AUDIO_BUFFER;
     private static final boolean DEBUG_LOOPBACK_TEST = false; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
 
     // Delimiter must match ESP32 code
@@ -305,6 +307,8 @@ public class MainActivity extends AppCompatActivity {
             pcm8 = bfskEncoder.encode(callsign + ": " + outText);
 
             if (DEBUG_LOOPBACK_TEST) {
+                debugLog("pcm8.length: " + pcm8.length);
+                audioTrack.write(pcm8, 0, pcm8.length);
                 threadPoolExecutor.execute(new Runnable() {
                     @Override
                     public void run() {
@@ -319,19 +323,27 @@ public class MainActivity extends AppCompatActivity {
         if (!DEBUG_LOOPBACK_TEST) {
             sendCommandToESP32(ESP32Command.PTT_DOWN); // First press PTT
             final Handler handler = new Handler(Looper.getMainLooper());
+
             handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    sendAudioToESP32(pcm8); // After MS_DELAY_BEFORE_DATA_XMIT, starting sending the data
-
-                    double msToXmitData = ((double) pcm8.length / AUDIO_SAMPLE_RATE) * 1000;
-                    final Handler handler = new Handler(Looper.getMainLooper());
+                    // Prpeare to keyup first, because sending the audio takes time and would delay this.
+                    int msToXmitData = (pcm8.length / AUDIO_SAMPLE_RATE * 1000) + MS_DELAY_BEFORE_DATA_KEYUP;
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
                             sendCommandToESP32(ESP32Command.PTT_UP); // After msToXmitData (based on data length), release PTT
                         }
-                    }, (int) msToXmitData);
+                    }, msToXmitData);
+
+                    sendAudioToESP32(pcm8); // After MS_DELAY_BEFORE_DATA_XMIT, starting sending the data
+
+                    // Add some silence before we keyup.
+                    byte[] silenceBeforeKeyup = new byte[AUDIO_SAMPLE_RATE / 1000 * MS_DELAY_BEFORE_DATA_KEYUP];
+                    for (int i = 0; i < silenceBeforeKeyup.length; i++) {
+                        silenceBeforeKeyup[i] = SILENT_BYTE;
+                    }
+                    sendAudioToESP32(silenceBeforeKeyup);
                 }
             }, MS_DELAY_BEFORE_DATA_XMIT);
 
@@ -1452,9 +1464,9 @@ public class MainActivity extends AppCompatActivity {
         if (mode == MODE_RX || mode == MODE_SCAN) {
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
-                    audioTrack.write(data, 0, data.length); // Play any audio.
-
                     if (!DEBUG_LOOPBACK_TEST && bfskDecoder != null) { // Avoid race condition at app start.
+                        audioTrack.write(data, 0, data.length); // Play any audio.
+
                         threadPoolExecutor.execute(new Runnable() {
                             @Override
                             public void run() {
