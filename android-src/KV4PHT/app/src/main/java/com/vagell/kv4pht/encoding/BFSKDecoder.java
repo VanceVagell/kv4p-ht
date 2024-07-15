@@ -1,17 +1,19 @@
 package com.vagell.kv4pht.encoding;
 
+import android.os.Environment;
 import android.util.Log;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.BitSet;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 
 public class BFSKDecoder {
     public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 1, 1, 1, 1, 1, 0, 1}; // Not an alphanumeric ASCII character
     public static final byte[] END_OF_DATA_MARKER =   new byte[]{0, 0, 0, 0, 0, 0, 1, 0}; // Not an alphanumeric ASCII character
     private static final int DATA_PARSE_EVERY_MS = 1000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles constantly looking for data)
-    private static final int START_MARKER_SEARCH_GRANULARITY = 10; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
+    private int startMarkerSearchGranularity; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
     private long lastParseMs = System.currentTimeMillis();
     private final int markerCorrelationThreshold;
     private final float sampleRate;
@@ -24,6 +26,7 @@ public class BFSKDecoder {
     private double[] sineTableZero;
     private double[] sineTableOne;
     private boolean decoding = false;
+    private static final boolean DEBUG_SAVE_AUDIO = false;
 
     public BFSKDecoder(float sampleRate, int baudRate, double freqZero, double freqOne, int bufferSize, Consumer<String> callback) {
         this.sampleRate = sampleRate;
@@ -31,12 +34,13 @@ public class BFSKDecoder {
         this.freqZero = freqZero;
         this.freqOne = freqOne;
         this.samplesPerBit = (int) (sampleRate / baudRate);
+        startMarkerSearchGranularity = samplesPerBit / 30;
         this.buffer = new CircularBuffer(bufferSize);
         this.callback = callback;
         initializeSineTables();
 
         // TODO Dynamically adjust this up (stricter) or down based on baud rate. Lower baud can be stricter on threshold.
-        markerCorrelationThreshold = 3000;
+        markerCorrelationThreshold = 2000;
 
         // Final bits of the data start/end markers must differ for bit alignment to work properly.
         assert(START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2] != START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 1]);
@@ -62,6 +66,12 @@ public class BFSKDecoder {
         byte[] accumulatedAudio = buffer.readAll();
         int potentialBits = accumulatedAudio.length / samplesPerBit;
 
+        if (DEBUG_SAVE_AUDIO) {
+            // Dump audio bytes to storage/emulated/0/Document/rxAudio.pcm.
+            // Can be imported to Audacity as "raw data", 44kHz 8-bit mono.
+            saveAudioFile(accumulatedAudio);
+        }
+
         if (potentialBits > 0) {
             int startOfData = findStartOfData(accumulatedAudio);
             int endOfData = -1;
@@ -84,7 +94,7 @@ public class BFSKDecoder {
         if (totalSamples >= startOfDataLen * samplesPerBit) {
             double zeroCorrelation = 0;
             double oneCorrelation = 0;
-            for (int sampleOffset = 0; sampleOffset <= totalSamples; sampleOffset += START_MARKER_SEARCH_GRANULARITY) {
+            for (int sampleOffset = 0; sampleOffset <= totalSamples; sampleOffset += startMarkerSearchGranularity) {
                 boolean startOfDataMatch = true;
                 for (int j = 0; j < startOfDataLen; j++) {
                     int from = sampleOffset + (j * samplesPerBit);
@@ -107,8 +117,8 @@ public class BFSKDecoder {
                         break;
                     }
 
-                    if (j > 3)
-                        Log.d("DEBUG", "Found potential data start[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " @ " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation));
+                    if (j > 4)
+                        Log.d("DEBUG", "Found potential data start[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " correlation: " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation) + " from: " + from);
                 }
                 if (startOfDataMatch) {
                     // Revisit the second-to-last bit on the start marker, and use it to phase lock.
@@ -117,9 +127,10 @@ public class BFSKDecoder {
                     // so we don't cross into the next bit.
                     byte secondToLastBit = START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2];
                     double highestCorrelation = -999999;
-                    int sampleOffsetWithHighestCorellation = sampleOffset - samplesPerBit;
-                    int startAt = Math.max(0, sampleOffset + (START_OF_DATA_MARKER.length * samplesPerBit)- samplesPerBit - START_MARKER_SEARCH_GRANULARITY); // Slightly before second-to-last bit of start marker.
-                    int stopAt = startAt + (samplesPerBit / 2);
+                    int sampleOffsetWithHighestCorellation = sampleOffset + (6 * samplesPerBit);
+                    int startAt = Math.max(0, sampleOffset + (6 * samplesPerBit) - startMarkerSearchGranularity); // Slightly before second-to-last bit of start marker.
+                    int stopAt = startAt + samplesPerBit;
+                    Log.d("DEBUG", "startAt: " + startAt + " stopAt: " + stopAt);
                     for (int i = startAt; i < stopAt; i++) { // i++ means finest granularity search at this point.
                         int from = i;
                         int to = Math.min(i + samplesPerBit, bufferedAudio.length);
@@ -131,6 +142,7 @@ public class BFSKDecoder {
                             }
                         } else { // secondToLastBit == 0
                             zeroCorrelation = correlateZero(bufferedAudio, from, to);
+                            // Log.d("DEBUG", "Checking secondToLastBit at i: " + i + " zeroCorrelation: " + zeroCorrelation);
                             if (zeroCorrelation > highestCorrelation) {
                                 highestCorrelation = zeroCorrelation;
                                 sampleOffsetWithHighestCorellation = i;
@@ -138,8 +150,9 @@ public class BFSKDecoder {
                         }
                     }
 
-                    Log.d("DEBUG", "Payload data start: " + (sampleOffsetWithHighestCorellation + samplesPerBit + (samplesPerBit * START_OF_DATA_MARKER.length)));
-                    return Math.max(0, sampleOffsetWithHighestCorellation + samplesPerBit - (samplesPerBit * START_OF_DATA_MARKER.length));
+                    Log.d("DEBUG", "Phase aligned with correlation: " + highestCorrelation);
+                    Log.d("DEBUG", "Payload data start: " + (sampleOffsetWithHighestCorellation + (samplesPerBit * 2)));
+                    return (sampleOffsetWithHighestCorellation + (samplesPerBit * 2));
                 }
             }
         }
@@ -180,7 +193,7 @@ public class BFSKDecoder {
                         break;
                     }
 
-                    if (j > 3)
+                    if (j > 4)
                         Log.d("DEBUG", "Found potential data end[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " @ " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation));
                 }
                 if (endOfDataMatch) {
@@ -261,5 +274,27 @@ public class BFSKDecoder {
         byte[] bytes = bitSet.toByteArray();
         return new String(bytes, StandardCharsets.UTF_8)
                 .replaceAll("[^a-zA-Z0-9~`!@#\\$%^&*()\\-_=+\\[\\]{}|;:'\",.<>/?\\\\ ]", ""); // Only allow meaningful chars through.
+    }
+
+    // For debugging audio in circular buffer.
+    private void saveAudioFile(byte[] pcm8) {
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
+        if (!dir.exists()) {
+            dir.mkdir();
+        }
+        File backupFile = new File(dir, "rxAudio.pcm");
+        try {
+            if (!backupFile.exists()) {
+                backupFile.delete();
+            }
+            backupFile.createNewFile();
+
+            FileOutputStream outputStream = new FileOutputStream(backupFile);
+            outputStream.write(pcm8);
+            outputStream.flush();
+            outputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

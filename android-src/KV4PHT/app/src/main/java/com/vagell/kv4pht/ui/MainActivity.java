@@ -19,6 +19,7 @@ import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.media.audiofx.Visualizer;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -63,9 +64,13 @@ import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.encoding.BFSKDecoder;
 import com.vagell.kv4pht.encoding.BFSKEncoder;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -105,14 +110,15 @@ public class MainActivity extends AppCompatActivity {
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
 
-    // BFSK encoder/decoder
+    // BFSK encoder/decoder (software modem)
     private BFSKEncoder bfskEncoder = null;
     private BFSKDecoder bfskDecoder = null;
     private static final int DATA_BAUD_RATE = 30; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
     private static final float DATA_FREQ_ZERO = 1200;
     private static final float DATA_FREQ_ONE = 2200;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
-    private static final int MS_DELAY_BEFORE_DATA_KEYUP = 500; // NOTE: If this is too short the ESP32 app will repeat unwanted audio still in the DMA buffer.
+    private static final int MS_SILENCE_BEFORE_DATA = 150;
+    private static final int MS_SILENCE_AFTER_DATA = 500;
     private static final int SEC_AUDIO_BUFFER = 10;
     private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * SEC_AUDIO_BUFFER;
     private static final boolean DEBUG_LOOPBACK_TEST = false; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
@@ -309,6 +315,7 @@ public class MainActivity extends AppCompatActivity {
             if (DEBUG_LOOPBACK_TEST) {
                 debugLog("pcm8.length: " + pcm8.length);
                 audioTrack.write(pcm8, 0, pcm8.length);
+                // saveAudioFile(pcm8);
                 threadPoolExecutor.execute(new Runnable() {
                     @Override
                     public void run() {
@@ -328,7 +335,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     // Prpeare to keyup first, because sending the audio takes time and would delay this.
-                    int msToXmitData = (pcm8.length / AUDIO_SAMPLE_RATE * 1000) + MS_DELAY_BEFORE_DATA_KEYUP;
+                    int msToXmitData = (pcm8.length / AUDIO_SAMPLE_RATE * 1000) + MS_SILENCE_AFTER_DATA;
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
@@ -336,14 +343,21 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }, msToXmitData);
 
-                    sendAudioToESP32(pcm8); // After MS_DELAY_BEFORE_DATA_XMIT, starting sending the data
-
-                    // Add some silence before we keyup.
-                    byte[] silenceBeforeKeyup = new byte[AUDIO_SAMPLE_RATE / 1000 * MS_DELAY_BEFORE_DATA_KEYUP];
-                    for (int i = 0; i < silenceBeforeKeyup.length; i++) {
-                        silenceBeforeKeyup[i] = SILENT_BYTE;
+                    // Add some silence before and after the data.
+                    int bytesOfLeadInDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA);
+                    int bytesOfTailDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA);
+                    byte[] combinedAudio = new byte[bytesOfLeadInDelay + pcm8.length + bytesOfTailDelay];
+                    for (int i = 0; i < bytesOfLeadInDelay; i++) {
+                        combinedAudio[i] = SILENT_BYTE;
                     }
-                    sendAudioToESP32(silenceBeforeKeyup);
+                    for (int i = 0; i < pcm8.length; i++) {
+                        combinedAudio[i + bytesOfLeadInDelay] = pcm8[i];
+                    }
+                    for (int i = (bytesOfLeadInDelay + pcm8.length); i < combinedAudio.length; i++) {
+                        combinedAudio[i] = SILENT_BYTE;
+                    }
+
+                    sendAudioToESP32(combinedAudio);
                 }
             }, MS_DELAY_BEFORE_DATA_XMIT);
 
@@ -351,6 +365,81 @@ public class MainActivity extends AppCompatActivity {
             chatLog.append(callsign + ": " + outText + "\n");
         }
     }
+
+    // This method is only for debugging purposes (e.g. to test data encoding and decoding).
+    /* private void saveAudioFile(byte[] pcm8) {
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
+        if (!dir.exists()) {
+            dir.mkdir();
+        }
+        File backupFile = new File(dir, "txAudio.pcm");
+        try {
+            if (!backupFile.exists()) {
+                backupFile.createNewFile();
+            }
+            FileOutputStream outputStream = new FileOutputStream(backupFile);
+            outputStream.write(pcm8);
+            outputStream.flush();
+            outputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private FileOutputStream outputStream = null;
+    private ArrayList<byte[]> rxAudioBytes = new ArrayList<>();
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        try {
+            synchronized (rxAudioBytes) {
+                int totalLength = 0;
+                for (byte[] byteArray : rxAudioBytes) {
+                    totalLength += byteArray.length;
+                }
+
+                // Use ByteArrayOutputStream to concatenate all byte arrays
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(totalLength);
+                for (byte[] byteArray : rxAudioBytes) {
+                    baos.write(byteArray);
+                }
+
+                appendToAudioFile(baos.toByteArray());
+                outputStream.flush();
+                outputStream.close();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // TODO remove this and the matching permission in manifest, just for debuggin
+    private void appendToAudioFile(byte[] pcm8) {
+        if (outputStream == null) {
+            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
+            if (!dir.exists()) {
+                dir.mkdir();
+            }
+            File backupFile = new File(dir, "rxAudio.pcm");
+            try {
+                if (!backupFile.exists()) {
+                    backupFile.createNewFile();
+                }
+                outputStream = new FileOutputStream(backupFile, true);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        synchronized (outputStream) {
+            try {
+                outputStream.write(pcm8);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    } */
 
     private void createRxAudioVisualizer() {
         rxAudioVisualizer = new Visualizer(audioTrack.getAudioSessionId());
@@ -1385,7 +1474,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void sendAudioToESP32(byte[] audioBuffer) {
-        sendBytesToESP32(audioBuffer);
+        final int CHUNK_SIZE = 512;
+        if (audioBuffer.length <= CHUNK_SIZE) {
+            sendBytesToESP32(audioBuffer);
+        } else {
+            // If the audio data is fairly long, we need to send it to ESP32 at the same rate
+            // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
+            // be lost.
+            final Handler handler = new Handler(Looper.getMainLooper());
+            final float msToSendOneChunk = (float) CHUNK_SIZE / (float) AUDIO_SAMPLE_RATE * 1000f;
+            float nextSendDelay = 0f;
+            for (int i = 0; i < audioBuffer.length; i += CHUNK_SIZE) {
+                final int chunkStart = i;
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        sendBytesToESP32(Arrays.copyOfRange(audioBuffer, chunkStart,
+                                Math.min(audioBuffer.length, chunkStart + CHUNK_SIZE)));
+                    }
+                }, (int) nextSendDelay);
+
+                nextSendDelay += msToSendOneChunk;
+            }
+        }
     }
 
     private void sendCommandToESP32(ESP32Command command) {
@@ -1466,6 +1577,11 @@ public class MainActivity extends AppCompatActivity {
                 synchronized (audioTrack) {
                     if (!DEBUG_LOOPBACK_TEST && bfskDecoder != null) { // Avoid race condition at app start.
                         audioTrack.write(data, 0, data.length); // Play any audio.
+
+                        // TODO remove this debug stuff and file permission in manifest
+                        /* synchronized (rxAudioBytes) {
+                            rxAudioBytes.add(data);
+                        } */
 
                         threadPoolExecutor.execute(new Runnable() {
                             @Override
