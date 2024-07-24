@@ -326,7 +326,8 @@
                 android:layout_marginTop="48dp"
                 app:itemTextColor="@color/bottom_nav_color"
                 app:itemIconTint="@color/bottom_nav_color"
-                app:itemActiveIndicatorStyle="@style/Theme.BottomNavigationView.ActiveIndicator"/>
+                app:itemActiveIndicatorStyle="@style/Theme.BottomNavigationView.ActiveIndicator"
+                android:background="@color/medium_gray"/>
 
             <ImageButton
                 android:id="@+id/pttButton"

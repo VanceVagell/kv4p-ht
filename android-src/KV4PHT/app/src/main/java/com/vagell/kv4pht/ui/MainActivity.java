@@ -1474,7 +1474,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void sendAudioToESP32(byte[] audioBuffer) {
-        final int CHUNK_SIZE = 512;
+        final int CHUNK_SIZE = 128; // TODO check if this lower value fixes corrupted BFSK audio tx (missing bits).
         if (audioBuffer.length <= CHUNK_SIZE) {
             sendBytesToESP32(audioBuffer);
         } else {
