@@ -252,7 +252,7 @@ void loop() {
       byte buffer8[I2S_READ_LEN] = {0};
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
       for (int i = 0; i < samplesRead; i++) {
-        if (!squelched) {
+        if (!squelched) { 
           // The ADC can only sample at 12-bits, so we extract the 8 most-significant bits of that from the 32-bit value.
           buffer8[i] = buffer32[i * 4 + 3] << 4; // Get top 4 bits from last byte of sample
           buffer8[i] |= buffer32[i * 4 + 2] >> 4; // Get bottom 4 bits from second to last byte of sample
@@ -284,14 +284,14 @@ void loop() {
             // Process next byte as a command.
             uint8_t command = tempBuffer[i];
             matchedDelimiterTokens = 0;
-            switch (command) {
+            switch (command) { // TODO could it be that we're procressing this early even though more tx audio is incoming? we get the audio bytes faster than we can actually send to DAC. IDEA: Hold back the MODE_RX command on Android app until AFTER the full duration of the audio must've passed (don't just append it to last message), to ensure tx is completed. This may be causing the tail of the audio to be messed up right now (it's repeating bad data). IDEA #2: what if the esp32 caches the tx audio during a data transmit (need a new op code), and then transmits it all at once on this side, so it doesn't need to be sent in batches and can be written to DAC at exactly the right pace?
               case COMMAND_PTT_UP: // Only command we can receive in TX mode is PTT_UP
                 setMode(MODE_RX);
                 esp_task_wdt_reset();
                 return; // Discards remaining bytes from Android app (tx audio remnants which could cause issues now that we're in MODE_RX).
             }
           } else {
-            if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
+            if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimitere
               matchedDelimiterTokens++;
             } else { // This byte is not consistent with the command delimiter, reset counter
               matchedDelimiterTokens = 0;

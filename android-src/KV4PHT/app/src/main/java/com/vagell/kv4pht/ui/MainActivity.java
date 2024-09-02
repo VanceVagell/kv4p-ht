@@ -68,6 +68,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -1307,7 +1308,11 @@ public class MainActivity extends AppCompatActivity {
 
         // If we're in simplex, start by scanning to the first memory
         if (activeMemoryId == -1) {
-            memoryToScanNext = channelMemories.get(0);
+            try {
+                memoryToScanNext = channelMemories.get(0);
+            } catch (IndexOutOfBoundsException e) {
+                return; // No memories to scan.
+            }
         }
 
         if (memoryToScanNext == null) {
@@ -1565,7 +1570,7 @@ public class MainActivity extends AppCompatActivity {
         // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
         /* try {
             String dataStr = new String(data, "UTF-8");
-            if (dataStr.length() < 100 && dataStr.length() > 0)
+            //if (dataStr.length() < 100 && dataStr.length() > 0)
                 debugLog("Str data from ESP32: " + dataStr);
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
