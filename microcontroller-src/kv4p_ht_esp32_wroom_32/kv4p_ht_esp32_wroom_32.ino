@@ -25,13 +25,20 @@ int mode = MODE_RX;
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
-#define SAMPLING_RATE_OFFSET 900
+#define SAMPLING_RATE_OFFSET 218
 
 // Buffer for outgoing audio bytes to send to radio module
-#define TX_AUDIO_BUFFER_SIZE 4096 // Holds data we already got off of USB serial from Android app
+#define TX_TEMP_AUDIO_BUFFER_SIZE 4096 // Holds data we already got off of USB serial from Android app
+#define TX_CACHED_AUDIO_BUFFER_SIZE 1024 // MUST be smaller than DMA buffer size specified in i2sTxConfig, because we dump this cache into DMA buffer when full.
+uint8_t txCachedAudioBuffer[TX_CACHED_AUDIO_BUFFER_SIZE] = {0};
+int txCachedAudioBytes = 0;
+boolean isTxCacheSatisfied = false; // Will be true when the DAC has enough cached tx data to avoid any stuttering (i.e. at least TX_CACHED_AUDIO_BUFFER_SIZE bytes).
 
 // Max data to cache from USB (1024 is ESP32 max)
 #define USB_BUFFER_SIZE 1024
+
+// ms to wait before issuing PTT UP after a tx (to allow final audio to go out)
+#define MS_WAIT_BEFORE_PTT_UP 40
 
 // Connections to radio module
 #define RXD2_PIN 16
@@ -136,7 +143,7 @@ void initI2STx() {
   }
   i2sStarted = true;
 
-  static const i2s_config_t i2s_config = {
+  static const i2s_config_t i2sTxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
       .sample_rate = AUDIO_SAMPLE_RATE,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
@@ -147,7 +154,7 @@ void initI2STx() {
       .use_apll = true
   };
 
-  i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+  i2s_driver_install(I2S_NUM_0, &i2sTxConfig, 0, NULL);
   i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);           
 }
 
@@ -273,32 +280,47 @@ void loop() {
 
       // Check for incoming commands or audio from Android
       int bytesRead = 0;
-      uint8_t tempBuffer[TX_AUDIO_BUFFER_SIZE];
+      uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
       int bytesAvailable = Serial.available();
       if (bytesAvailable > 0) {
         bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
 
-        for (int i = 0; i < bytesRead && i < TX_AUDIO_BUFFER_SIZE; i++) {
+        // Pre-cache transmit audio to ensure precise timing (required for any data encoding to work, such as BFSK).
+        if (!isTxCacheSatisfied) {
+          if (txCachedAudioBytes + bytesRead >= TX_CACHED_AUDIO_BUFFER_SIZE) {
+            isTxCacheSatisfied = true;
+            processTxAudio(txCachedAudioBuffer, txCachedAudioBytes); // Process cached bytes
+          } else {
+            memcpy(txCachedAudioBuffer + txCachedAudioBytes, tempBuffer, bytesRead); // Store bytes to cache
+            txCachedAudioBytes += bytesRead;
+          }
+        } 
+
+        if (isTxCacheSatisfied) { // Note that it may have JUST been satisfied above, in which case we processed the cache, and will now process tempBuffer.
+          processTxAudio(tempBuffer, bytesRead);
+        }
+
+        for (int i = 0; i < bytesRead && i < TX_TEMP_AUDIO_BUFFER_SIZE; i++) {
           // If we've seen the entire delimiter...
           if (matchedDelimiterTokens == DELIMITER_LENGTH) {
             // Process next byte as a command.
             uint8_t command = tempBuffer[i];
             matchedDelimiterTokens = 0;
-            switch (command) { // TODO could it be that we're procressing this early even though more tx audio is incoming? we get the audio bytes faster than we can actually send to DAC. IDEA: Hold back the MODE_RX command on Android app until AFTER the full duration of the audio must've passed (don't just append it to last message), to ensure tx is completed. This may be causing the tail of the audio to be messed up right now (it's repeating bad data). IDEA #2: what if the esp32 caches the tx audio during a data transmit (need a new op code), and then transmits it all at once on this side, so it doesn't need to be sent in batches and can be written to DAC at exactly the right pace?
+            switch (command) {
               case COMMAND_PTT_UP: // Only command we can receive in TX mode is PTT_UP
+                delay(MS_WAIT_BEFORE_PTT_UP); // Wait just a moment so final tx audio data in DMA buffer can be transmitted.
                 setMode(MODE_RX);
                 esp_task_wdt_reset();
-                return; // Discards remaining bytes from Android app (tx audio remnants which could cause issues now that we're in MODE_RX).
+                return;
             }
           } else {
-            if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimitere
+            if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
               matchedDelimiterTokens++;
             } else { // This byte is not consistent with the command delimiter, reset counter
               matchedDelimiterTokens = 0;
             }
           }
         }
-        processTxAudio(tempBuffer, bytesRead);
       }
     }
 
@@ -328,6 +350,8 @@ void setMode(int newMode) {
       digitalWrite(LED_PIN, HIGH);
       digitalWrite(PTT_PIN, LOW);
       initI2STx();
+      txCachedAudioBytes = 0;
+      isTxCacheSatisfied = false;
       break;
   }
 }
@@ -343,6 +367,12 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
     buffer16[i * 2 + 1] = tempBuffer[i]; // Move 8-bit audio into top 8 bits of 16-bit byte that I2S expects.
   }
 
+  size_t totalBytesWritten = 0;
   size_t bytesWritten;
-  ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16, sizeof(buffer16), &bytesWritten, 100));
+  size_t bytesToWrite = sizeof(buffer16);
+  do {
+    ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16 + totalBytesWritten, bytesToWrite, &bytesWritten, 100)); 
+    totalBytesWritten += bytesWritten;
+    bytesToWrite -= bytesWritten;
+  } while (bytesToWrite > 0);
 }

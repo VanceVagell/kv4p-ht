@@ -21,6 +21,7 @@ import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -102,6 +103,7 @@ public class MainActivity extends AppCompatActivity {
     private UsbDevice esp32Device;
     private UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
+    private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a signal USB write
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
@@ -116,13 +118,13 @@ public class MainActivity extends AppCompatActivity {
     private BFSKDecoder bfskDecoder = null;
     private static final int DATA_BAUD_RATE = 30; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
     private static final float DATA_FREQ_ZERO = 1200;
-    private static final float DATA_FREQ_ONE = 2200;
+    private static final float DATA_FREQ_ONE = 1600;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
     private static final int MS_SILENCE_BEFORE_DATA = 150;
     private static final int MS_SILENCE_AFTER_DATA = 500;
     private static final int SEC_AUDIO_BUFFER = 10;
     private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * SEC_AUDIO_BUFFER;
-    private static final boolean DEBUG_LOOPBACK_TEST = false; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
+    private static final boolean DEBUG_LOOPBACK_TEST = true; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -1479,23 +1481,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void sendAudioToESP32(byte[] audioBuffer) {
-        final int CHUNK_SIZE = 128; // TODO check if this lower value fixes corrupted BFSK audio tx (missing bits).
-        if (audioBuffer.length <= CHUNK_SIZE) {
+        if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
             sendBytesToESP32(audioBuffer);
         } else {
             // If the audio data is fairly long, we need to send it to ESP32 at the same rate
             // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
             // be lost.
             final Handler handler = new Handler(Looper.getMainLooper());
-            final float msToSendOneChunk = (float) CHUNK_SIZE / (float) AUDIO_SAMPLE_RATE * 1000f;
+            final float msToSendOneChunk = (float) TX_AUDIO_CHUNK_SIZE / (float) AUDIO_SAMPLE_RATE * 1000f;
             float nextSendDelay = 0f;
-            for (int i = 0; i < audioBuffer.length; i += CHUNK_SIZE) {
+            for (int i = 0; i < audioBuffer.length; i += TX_AUDIO_CHUNK_SIZE) {
                 final int chunkStart = i;
                 handler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
+                        android.os.Process.setThreadPriority(
+                                android.os.Process.THREAD_PRIORITY_BACKGROUND +
+                                android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
                         sendBytesToESP32(Arrays.copyOfRange(audioBuffer, chunkStart,
-                                Math.min(audioBuffer.length, chunkStart + CHUNK_SIZE)));
+                                Math.min(audioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
                     }
                 }, (int) nextSendDelay);
 
