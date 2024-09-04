@@ -124,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int MS_SILENCE_AFTER_DATA = 500;
     private static final int SEC_AUDIO_BUFFER = 10;
     private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * SEC_AUDIO_BUFFER;
-    private static final boolean DEBUG_LOOPBACK_TEST = true; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
+    private static final boolean DEBUG_LOOPBACK_TEST = false; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
