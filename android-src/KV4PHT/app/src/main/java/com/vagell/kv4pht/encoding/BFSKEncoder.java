@@ -26,7 +26,7 @@ public class BFSKEncoder {
         ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
 
         // Simulated noise (for testing)
-        /* for (int i = 0; i < 10013; i++) {
+        /* for (int i = 0; i < 80657; i++) {
             byteOutputStream.write(generateTone(Math.random() * 5000, 1));
         } */
 

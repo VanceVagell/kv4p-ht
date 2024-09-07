@@ -40,7 +40,7 @@ public class BFSKDecoder {
         initializeSineTables();
 
         // TODO Dynamically adjust this up (stricter) or down based on baud rate. Lower baud can be stricter on threshold.
-        markerCorrelationThreshold = 5000;
+        markerCorrelationThreshold = 10000;
 
         // Final bits of the data start/end markers must differ for bit alignment to work properly.
         assert(START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2] != START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 1]);
@@ -73,10 +73,9 @@ public class BFSKDecoder {
         }
 
         if (potentialBits > 0) {
-            int startOfData = findStartOfData(accumulatedAudio);
-            int endOfData = -1;
+            int startOfData = findStartOfData(accumulatedAudio, 0);
             if (startOfData != -1) {
-                endOfData = findEndOfData(accumulatedAudio, startOfData);
+                int endOfData = findEndOfData(accumulatedAudio, startOfData);
                 if (endOfData != -1) {
                     decodeData(accumulatedAudio, startOfData, endOfData);
                 }
@@ -86,29 +85,21 @@ public class BFSKDecoder {
     }
 
     // Returns the index in bufferedAudio at which payload data begins (or -1 if no start marker found).
-    private int findStartOfData(byte[] bufferedAudio) {
-        Log.d("DEBUG", "================ findStartOfData ================");
+    private int findStartOfData(byte[] bufferedAudio, int lookFrom) {
+        Log.d("DEBUG", "================ findStartOfData from " + lookFrom + " ================");
         int startOfDataLen = START_OF_DATA_MARKER.length;
         int totalSamples = bufferedAudio.length;
 
         if (totalSamples >= startOfDataLen * samplesPerBit) {
             double zeroCorrelation = 0;
             double oneCorrelation = 0;
-            for (int sampleOffset = 0; sampleOffset <= totalSamples; sampleOffset += startMarkerSearchGranularity) {
+            for (int sampleOffset = lookFrom; sampleOffset <= totalSamples; sampleOffset += startMarkerSearchGranularity) {
                 boolean startOfDataMatch = true;
                 for (int j = 0; j < startOfDataLen; j++) {
                     int from = sampleOffset + (j * samplesPerBit);
                     int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
                     zeroCorrelation = correlateZero(bufferedAudio, from, to);
                     oneCorrelation = correlateOne(bufferedAudio, from, to);
-
-                    // TODO remove this debug stuff. Next thing to try is to set the threshold to like -9000 so it's basically off. Is it just a threshold problem?
-                    if (zeroCorrelation > markerCorrelationThreshold) {
-                        //Log.d("DEBUG", "High zeroCorrelation: " + zeroCorrelation + " at idx: " + sampleOffset);
-                    }
-                    if (oneCorrelation > markerCorrelationThreshold) {
-                        //Log.d("DEBUG", "High oneCorrelation: " + oneCorrelation + " at idx: " + sampleOffset);
-                    }
 
                     if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
                             (START_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
@@ -151,8 +142,32 @@ public class BFSKDecoder {
                     }
 
                     Log.d("DEBUG", "Phase aligned with correlation: " + highestCorrelation);
-                    Log.d("DEBUG", "Payload data start: " + (sampleOffsetWithHighestCorellation + (samplesPerBit * 2)));
-                    return (sampleOffsetWithHighestCorellation + (samplesPerBit * 2));
+                    int likelyDataStart = (sampleOffsetWithHighestCorellation + (samplesPerBit * 2));
+                    int likelyMarkerStart = likelyDataStart - (samplesPerBit * startOfDataLen);
+                    Log.d("DEBUG", "Likely payload data start: " + likelyDataStart);
+
+                    // Double check all start marker bits now that we're phase aligned. If this fails,
+                    // we didn't really find the start marker.
+                    for (int k = 0; k < startOfDataLen; k++) {
+                        int from = likelyMarkerStart + (k * samplesPerBit);
+                        int to = Math.min(from + samplesPerBit, bufferedAudio.length);
+                        zeroCorrelation = correlateZero(bufferedAudio, from, to);
+                        oneCorrelation = correlateOne(bufferedAudio, from, to);
+
+                        Log.d("DEBUG", "Re-verifying position [" + k + "], zeroCorrelation: " + zeroCorrelation + " oneCorrelation: " + oneCorrelation);
+
+                        if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
+                                (START_OF_DATA_MARKER[k] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
+                                (START_OF_DATA_MARKER[k] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
+                            // This bit of marker DID NOT match
+                            Log.d("DEBUG", "After phase alignment, start marker could not be re-verified, data NOT found.");
+
+                            return findStartOfData(bufferedAudio, likelyDataStart); // Recursive.
+                        }
+                    }
+
+                    Log.d("DEBUG", "Re-verified payload data start: " + likelyDataStart);
+                    return likelyDataStart;
                 }
             }
         }
@@ -162,7 +177,7 @@ public class BFSKDecoder {
 
     // Returns the index in bufferedAudio at which payload data ends (or -1 if no end marker found).
     private int findEndOfData(byte[] bufferedAudio, int startOfData) {
-        Log.d("DEBUG", "================ findEndOfData ================");
+        Log.d("DEBUG", "================ findEndOfData from " + startOfData + " ================");
         int endOfDataLen = END_OF_DATA_MARKER.length;
         int totalSamples = bufferedAudio.length;
 
@@ -175,16 +190,11 @@ public class BFSKDecoder {
                     // Extract the range of samples starting from sampleOffset + j
                     int from = sampleOffset + (j * samplesPerBit);
                     int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
+                    if ((to - from) < samplesPerBit) {
+                        return -1; // Too close to end of audio buffer, couldn't be any  bits here.
+                    }
                     double zeroCorrelation = correlateZero(bufferedAudio, from, to);
                     double oneCorrelation = correlateOne(bufferedAudio, from, to);
-
-                    // TODO remove this debug stuff. Next thing to try is to set the threshold to like -9000 so it's basically off. Is it just a threshold problem?
-                    if (zeroCorrelation > markerCorrelationThreshold) {
-                        //Log.d("DEBUG", "High zeroCorrelation: " + zeroCorrelation + " at idx: " + sampleOffset);
-                    }
-                    if (oneCorrelation > markerCorrelationThreshold) {
-                        //Log.d("DEBUG", "High oneCorrelation: " + oneCorrelation + " at idx: " + sampleOffset);
-                    }
 
                     if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
                             (END_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
@@ -197,6 +207,10 @@ public class BFSKDecoder {
                         Log.d("DEBUG", "Found potential data end[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " @ " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation));
                 }
                 if (endOfDataMatch) {
+                    // TODO would be even better to also phase-lock the end marker (see start marker phase lock code above),
+                    // and then use that to determine the actual samples-per-bit used in this transmission, in the case that
+                    // the transmitter was slightly slow or fast for some reason.
+
                     Log.d("DEBUG", "Payload data end: " + sampleOffset);
                     return sampleOffset;
                 }
@@ -247,7 +261,7 @@ public class BFSKDecoder {
         for (int i = from, j = 0; i < to; i++, j++) {
             sum += samples[i] * sineTable[j];
         }
-        return sum;
+        return Math.abs(sum); // TODO is abs() correct here? I think so since the tables have negative values.
     }
 
     // Experimental alternative that multithreads the calculation. However, in my experiments

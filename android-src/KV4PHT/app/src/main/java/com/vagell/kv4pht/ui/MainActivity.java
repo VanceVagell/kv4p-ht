@@ -118,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
     private BFSKDecoder bfskDecoder = null;
     private static final int DATA_BAUD_RATE = 30; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
     private static final float DATA_FREQ_ZERO = 1200;
-    private static final float DATA_FREQ_ONE = 1600;
+    private static final float DATA_FREQ_ONE = 2200;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
     private static final int MS_SILENCE_BEFORE_DATA = 150;
     private static final int MS_SILENCE_AFTER_DATA = 500;
