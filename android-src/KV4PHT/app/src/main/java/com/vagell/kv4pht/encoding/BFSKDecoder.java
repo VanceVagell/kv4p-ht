@@ -48,7 +48,7 @@ public class BFSKDecoder {
         initializeSineTables();
 
         // TODO Dynamically adjust this up (stricter) or down based on baud rate. Lower baud can be stricter on threshold.
-        markerCorrelationThreshold = 10000;
+        markerCorrelationThreshold = 1000;
 
         // Final bits of the data start/end markers must differ for bit alignment to work properly.
         assert(START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2] != START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 1]);
