@@ -3,6 +3,9 @@ package com.vagell.kv4pht.encoding;
 import android.os.Environment;
 import android.util.Log;
 
+import com.google.zxing.common.reedsolomon.GenericGF;
+import com.google.zxing.common.reedsolomon.ReedSolomonDecoder;
+
 import org.apache.commons.math3.complex.Complex;
 import org.apache.commons.math3.transform.DftNormalization;
 import org.apache.commons.math3.transform.FastFourierTransformer;
@@ -368,7 +371,45 @@ public class BFSKDecoder {
 
     private String convertBinaryToString(byte[] binaryData) {
         byte[] bytes = convertBitsToBytes(binaryData);
+
+        // Resolve any errors with FEC.
+        try {
+            bytes = decodeWithFEC(bytes);
+        } catch (Exception e) {
+            Log.d("DEBUG", "FEC decoding failed, using raw data.");
+
+            // FEC parity bytes are added at the end of the original data
+            int rawDataLength = bytes.length - BFSKEncoder.NUM_PARITY_BYTES;  // The original data length without parity bytes
+            byte[] rawBytes = new byte[rawDataLength];
+
+            // Copy the raw data without the parity bytes
+            System.arraycopy(bytes, 0, rawBytes, 0, rawDataLength);
+            bytes = rawBytes;
+        }
+
         return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    public byte[] decodeWithFEC(byte[] receivedData) throws Exception {
+        // Initialize Reed-Solomon Decoder
+        ReedSolomonDecoder decoder = new ReedSolomonDecoder(GenericGF.DATA_MATRIX_FIELD_256);
+
+        // Convert receivedData into int array
+        int[] receivedInts = new int[receivedData.length];
+        for (int i = 0; i < receivedData.length; i++) {
+            receivedInts[i] = receivedData[i] & 0xFF;
+        }
+
+        // Attempt to decode (with error correction)
+        decoder.decode(receivedInts, BFSKEncoder.NUM_PARITY_BYTES);
+
+        // Convert int array back to byte array (remove parity bytes)
+        byte[] correctedData = new byte[receivedInts.length - BFSKEncoder.NUM_PARITY_BYTES]; // Original data without parity
+        for (int i = 0; i < correctedData.length; i++) {
+            correctedData[i] = (byte) receivedInts[i];
+        }
+
+        return correctedData;  // Return the corrected data
     }
 
     // For debugging audio in circular buffer.

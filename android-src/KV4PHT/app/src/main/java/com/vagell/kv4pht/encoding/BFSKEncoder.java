@@ -1,11 +1,15 @@
 package com.vagell.kv4pht.encoding;
 
+import com.google.zxing.common.reedsolomon.GenericGF;
+import com.google.zxing.common.reedsolomon.ReedSolomonEncoder;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.BitSet;
 
 public class BFSKEncoder {
+    public static final int NUM_PARITY_BYTES = 20;
+
     private final float sampleRate;
     private final int baudRate;
     private final double freqZero;
@@ -20,8 +24,8 @@ public class BFSKEncoder {
         this.samplesPerBit = (int) (sampleRate / baudRate);
     }
 
-    public byte[] encode(String data) throws IOException {
-        byte[] binaryData = data.getBytes(StandardCharsets.UTF_8);  // Convert to UTF-8 bytes
+   public byte[] encode(String data) throws IOException {
+        byte[] binaryData = encodeWithFEC(data);
         ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
 
         byteOutputStream.write(generateTones(BFSKDecoder.START_OF_DATA_MARKER)); // Start marker
@@ -39,6 +43,33 @@ public class BFSKEncoder {
 
         byteOutputStream.write(generateTones(BFSKDecoder.END_OF_DATA_MARKER)); // End marker
         return byteOutputStream.toByteArray();
+    }
+
+    public byte[] encodeWithFEC(String data) throws IOException {
+        // Convert the string to UTF-8 bytes
+        byte[] binaryData = data.getBytes(StandardCharsets.UTF_8);
+
+        // Initialize Reed-Solomon Encoder
+        ReedSolomonEncoder encoder = new ReedSolomonEncoder(GenericGF.DATA_MATRIX_FIELD_256);
+
+        // Convert binaryData into int array (Reed-Solomon operates on int arrays)
+        int[] dataInts = new int[binaryData.length];
+        for (int i = 0; i < binaryData.length; i++) {
+            dataInts[i] = binaryData[i] & 0xFF;  // Convert byte to unsigned int
+        }
+
+        // Add FEC parity (e.g., 5 parity bytes)
+        int[] paddedData = new int[dataInts.length + NUM_PARITY_BYTES];
+        System.arraycopy(dataInts, 0, paddedData, 0, dataInts.length);
+        encoder.encode(paddedData, NUM_PARITY_BYTES);
+
+        // Convert int array back to byte array for transmission
+        byte[] fecData = new byte[paddedData.length];
+        for (int i = 0; i < paddedData.length; i++) {
+            fecData[i] = (byte) paddedData[i];
+        }
+
+        return fecData;  // Return the FEC-encoded data
     }
 
     private double generateTone(double frequency, int samplesPerBit, double initialPhase, byte[] tone) {
