@@ -21,18 +21,20 @@ public class BFSKEncoder {
     }
 
     public byte[] encode(String data) throws IOException {
-        byte[] binaryData = data.getBytes(StandardCharsets.US_ASCII);
+        byte[] binaryData = data.getBytes(StandardCharsets.UTF_8);  // Convert to UTF-8 bytes
         ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
 
         byteOutputStream.write(generateTones(BFSKDecoder.START_OF_DATA_MARKER)); // Start marker
 
-        BitSet bitset = BitSet.valueOf(binaryData);
         double phase = 0.0;
         byte[] toneBuffer = new byte[samplesPerBit];
-        for (int i = 0; i < (binaryData.length * 8); i++) {
-            double freq = bitset.get(i) ? freqOne : freqZero;
-            phase = generateTone(freq, samplesPerBit, phase, toneBuffer); // Maintain phase continuity
-            byteOutputStream.write(toneBuffer);
+
+        for (byte b : binaryData) {
+            for (int i = 7; i >= 0; i--) {  // Transmit bits of each byte from MSB to LSB
+                double freq = ((b >> i) & 1) == 1 ? freqOne : freqZero;  // Determine frequency for 1 or 0
+                phase = generateTone(freq, samplesPerBit, phase, toneBuffer); // Maintain phase continuity
+                byteOutputStream.write(toneBuffer);  // Write tone for the bit
+            }
         }
 
         byteOutputStream.write(generateTones(BFSKDecoder.END_OF_DATA_MARKER)); // End marker

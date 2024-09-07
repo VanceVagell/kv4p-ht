@@ -48,6 +48,7 @@ public class BFSKDecoder {
         initializeSineTables();
 
         // TODO Dynamically adjust this up (stricter) or down based on baud rate. Lower baud can be stricter on threshold.
+        // Empirically, 10000 works at 30 baud, and 1000 works at 300 baud. Need to do more tests to figure out a function.
         markerCorrelationThreshold = 1000;
 
         // Final bits of the data start/end markers must differ for bit alignment to work properly.
@@ -350,16 +351,24 @@ public class BFSKDecoder {
         return correlate(samples, sineTableOne, cosineTableOne, from, to);
     }
 
-    private String convertBinaryToString(byte[] binaryData) {
-        BitSet bitSet = new BitSet(binaryData.length);
+    private byte[] convertBitsToBytes(byte[] binaryData) {
+        int byteCount = (binaryData.length + 7) / 8;
+        byte[] bytes = new byte[byteCount];
+
         for (int i = 0; i < binaryData.length; i++) {
+            int byteIndex = i / 8;
+            int bitIndex = i % 8;
             if (binaryData[i] == 1) {
-                bitSet.set(i);
+                bytes[byteIndex] |= (1 << (7 - bitIndex)); // Set the appropriate bit in the byte
             }
         }
-        byte[] bytes = bitSet.toByteArray();
-        return new String(bytes, StandardCharsets.UTF_8)
-                .replaceAll("[^a-zA-Z0-9~`!@#\\$%^&*()\\-_=+\\[\\]{}|;:'\",.<>/?\\\\ ]", ""); // Only allow meaningful chars through.
+
+        return bytes;
+    }
+
+    private String convertBinaryToString(byte[] binaryData) {
+        byte[] bytes = convertBitsToBytes(binaryData);
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     // For debugging audio in circular buffer.
