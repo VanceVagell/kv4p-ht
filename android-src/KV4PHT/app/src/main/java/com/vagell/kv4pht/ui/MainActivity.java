@@ -34,6 +34,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -117,8 +118,8 @@ public class MainActivity extends AppCompatActivity {
     private BFSKEncoder bfskEncoder = null;
     private BFSKDecoder bfskDecoder = null;
     private static final int DATA_BAUD_RATE = 30; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
-    private static final float DATA_FREQ_ZERO = 1200;
-    private static final float DATA_FREQ_ONE = 2200;
+    private static final float DATA_FREQ_ZERO = 1300;
+    private static final float DATA_FREQ_ONE = 2100;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
     private static final int MS_SILENCE_BEFORE_DATA = 150;
     private static final int MS_SILENCE_AFTER_DATA = 500;
@@ -288,6 +289,9 @@ public class MainActivity extends AppCompatActivity {
                     public void run() {
                         TextView chatLog = findViewById(R.id.textChatLog);
                         chatLog.append(s + "\n");
+
+                        ScrollView textChatScrollView = findViewById(R.id.textChatScrollView);
+                        textChatScrollView.fullScroll(View.FOCUS_DOWN);
                     }
                 });
             }
@@ -331,21 +335,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (!DEBUG_LOOPBACK_TEST) {
-            sendCommandToESP32(ESP32Command.PTT_DOWN); // First press PTT
+            startPtt(true);
             final Handler handler = new Handler(Looper.getMainLooper());
 
             handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    // Prpeare to keyup first, because sending the audio takes time and would delay this.
-                    int msToXmitData = (pcm8.length / AUDIO_SAMPLE_RATE * 1000) + MS_SILENCE_AFTER_DATA;
-                    handler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            sendCommandToESP32(ESP32Command.PTT_UP); // After msToXmitData (based on data length), release PTT
-                        }
-                    }, msToXmitData);
-
                     // Add some silence before and after the data.
                     int bytesOfLeadInDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA);
                     int bytesOfTailDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA);
@@ -360,12 +355,16 @@ public class MainActivity extends AppCompatActivity {
                         combinedAudio[i] = SILENT_BYTE;
                     }
 
-                    sendAudioToESP32(combinedAudio);
+                    // saveAudioFile(combinedAudio); // FOR DEBUG, TODO remove when done
+                    sendAudioToESP32(combinedAudio, true);
                 }
             }, MS_DELAY_BEFORE_DATA_XMIT);
 
             TextView chatLog = findViewById(R.id.textChatLog);
             chatLog.append(callsign + ": " + outText + "\n");
+
+            ScrollView scrollView = findViewById(R.id.textChatScrollView);
+            scrollView.fullScroll(View.FOCUS_DOWN);
         }
     }
 
@@ -417,7 +416,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // TODO remove this and the matching permission in manifest, just for debuggin
+    // TODO remove this and the matching permission in manifest, just for debugging
     private void appendToAudioFile(byte[] pcm8) {
         if (outputStream == null) {
             File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
@@ -672,12 +671,12 @@ public class MainActivity extends AppCompatActivity {
                         }
                         if (stickyPTT) {
                             if (mode == MODE_RX) {
-                                startPtt();
+                                startPtt(false);
                             } else if (mode == MODE_TX) {
                                 endPtt();
                             }
                         } else {
-                            startPtt();
+                            startPtt(false);
                         }
                         touchHandled = true;
                         break;
@@ -942,7 +941,7 @@ public class MainActivity extends AppCompatActivity {
                 .build();
     }
 
-    protected void startPtt() {
+    protected void startPtt(boolean dataMode) {
         if (mode == MODE_TX) {
             return;
         }
@@ -972,7 +971,10 @@ public class MainActivity extends AppCompatActivity {
         mode = MODE_TX;
         sendCommandToESP32(ESP32Command.PTT_DOWN);
         audioTrack.stop();
-        startRecording();
+
+        if (!dataMode) {
+            startRecording();
+        }
     }
 
     protected void endPtt() {
@@ -1083,7 +1085,7 @@ public class MainActivity extends AppCompatActivity {
             bytesRead = audioRecord.read(audioBuffer, 0, minBufferSize);
 
             if (bytesRead > 0) {
-                sendAudioToESP32(Arrays.copyOfRange(audioBuffer, 0, bytesRead));
+                sendAudioToESP32(Arrays.copyOfRange(audioBuffer, 0, bytesRead), false);
 
                 int bytesPerAnimFrame = AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
                 long audioChunkByteTotal = 0;
@@ -1480,11 +1482,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void sendAudioToESP32(byte[] audioBuffer) {
+    private void sendAudioToESP32(byte[] audioBuffer, boolean dataMode) {
         if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
             sendBytesToESP32(audioBuffer);
         } else {
-            // If the audio data is fairly long, we need to send it to ESP32 at the same rate
+            // If the audio is fairly long, we need to send it to ESP32 at the same rate
             // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
             // be lost.
             final Handler handler = new Handler(Looper.getMainLooper());
@@ -1504,6 +1506,19 @@ public class MainActivity extends AppCompatActivity {
                 }, (int) nextSendDelay);
 
                 nextSendDelay += msToSendOneChunk;
+            }
+
+            // In data mode, also schedule PTT up after last audio chunk goes out.
+            if (dataMode) {
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        android.os.Process.setThreadPriority(
+                                android.os.Process.THREAD_PRIORITY_BACKGROUND +
+                                        android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
+                        endPtt();
+                    }
+                }, (int) nextSendDelay);
             }
         }
     }

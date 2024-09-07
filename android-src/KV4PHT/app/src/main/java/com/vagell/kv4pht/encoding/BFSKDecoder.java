@@ -3,6 +3,11 @@ package com.vagell.kv4pht.encoding;
 import android.os.Environment;
 import android.util.Log;
 
+import org.apache.commons.math3.complex.Complex;
+import org.apache.commons.math3.transform.DftNormalization;
+import org.apache.commons.math3.transform.FastFourierTransformer;
+import org.apache.commons.math3.transform.TransformType;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -10,10 +15,10 @@ import java.util.BitSet;
 import java.util.function.Consumer;
 
 public class BFSKDecoder {
-    public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 1, 1, 1, 1, 1, 0, 1}; // Not an alphanumeric ASCII character
-    public static final byte[] END_OF_DATA_MARKER =   new byte[]{0, 0, 0, 0, 0, 0, 1, 0}; // Not an alphanumeric ASCII character
-    private static final int DATA_PARSE_EVERY_MS = 1000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles constantly looking for data)
-    private int startMarkerSearchGranularity; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
+    public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0}; // 2x pattern that's not an alphanumeric ASCII character
+    public static final byte[] END_OF_DATA_MARKER =   new byte[]{1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1}; // 2x pattern that's not an alphanumeric ASCII character
+    private static final int DATA_PARSE_EVERY_MS = 1000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles & battery constantly looking for data)
+    private int markerSearchGranularity; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
     private long lastParseMs = System.currentTimeMillis();
     private final int markerCorrelationThreshold;
     private final float sampleRate;
@@ -25,8 +30,11 @@ public class BFSKDecoder {
     private final Consumer<String> callback;
     private double[] sineTableZero;
     private double[] sineTableOne;
+    private double[] cosineTableZero;
+    private double[] cosineTableOne;
     private boolean decoding = false;
     private static final boolean DEBUG_SAVE_AUDIO = false;
+    private static final boolean VERBOSE_DECODE_DEBUG = false;
 
     public BFSKDecoder(float sampleRate, int baudRate, double freqZero, double freqOne, int bufferSize, Consumer<String> callback) {
         this.sampleRate = sampleRate;
@@ -34,7 +42,7 @@ public class BFSKDecoder {
         this.freqZero = freqZero;
         this.freqOne = freqOne;
         this.samplesPerBit = (int) (sampleRate / baudRate);
-        startMarkerSearchGranularity = samplesPerBit / 30;
+        markerSearchGranularity = samplesPerBit / 30;
         this.buffer = new CircularBuffer(bufferSize);
         this.callback = callback;
         initializeSineTables();
@@ -73,10 +81,19 @@ public class BFSKDecoder {
         }
 
         if (potentialBits > 0) {
-            int startOfData = findStartOfData(accumulatedAudio, 0);
-            if (startOfData != -1) {
-                int endOfData = findEndOfData(accumulatedAudio, startOfData);
+            // Remove noise above and below the frequencies of interest to improve decode.
+            accumulatedAudio = bandpassFilter(this.freqZero - 100, this.freqOne + 100, accumulatedAudio, sampleRate);
+
+            // Attempt decode.
+            int startMarker = findMarker(accumulatedAudio, 0, START_OF_DATA_MARKER);
+            if (startMarker != -1) {
+                int startOfData = startMarker + (START_OF_DATA_MARKER.length * samplesPerBit);
+                Log.d("DEBUG", "startOfData: " + startOfData);
+
+                int endOfData = findMarker(accumulatedAudio, startOfData, END_OF_DATA_MARKER);
                 if (endOfData != -1) {
+                    Log.d("DEBUG", "endOfData: " + endOfData);
+
                     decodeData(accumulatedAudio, startOfData, endOfData);
                 }
             }
@@ -84,135 +101,176 @@ public class BFSKDecoder {
         decoding = false;
     }
 
-    // Returns the index in bufferedAudio at which payload data begins (or -1 if no start marker found).
-    private int findStartOfData(byte[] bufferedAudio, int lookFrom) {
-        Log.d("DEBUG", "================ findStartOfData from " + lookFrom + " ================");
-        int startOfDataLen = START_OF_DATA_MARKER.length;
-        int totalSamples = bufferedAudio.length;
+    // Bandpass filter method that filters out frequencies below 'low' and above 'high'.
+    public byte[] bandpassFilter(double low, double high, byte[] data, double sampleRate) {
+        int n = data.length;
 
-        if (totalSamples >= startOfDataLen * samplesPerBit) {
-            double zeroCorrelation = 0;
-            double oneCorrelation = 0;
-            for (int sampleOffset = lookFrom; sampleOffset <= totalSamples; sampleOffset += startMarkerSearchGranularity) {
-                boolean startOfDataMatch = true;
-                for (int j = 0; j < startOfDataLen; j++) {
-                    int from = sampleOffset + (j * samplesPerBit);
-                    int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
-                    zeroCorrelation = correlateZero(bufferedAudio, from, to);
-                    oneCorrelation = correlateOne(bufferedAudio, from, to);
+        // Find the next power of 2 greater than or equal to the length of the data.
+        int paddedLength = nextPowerOf2(n);
 
-                    if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
-                            (START_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
-                            (START_OF_DATA_MARKER[j] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
-                        startOfDataMatch = false;
-                        break;
-                    }
+        // FFT transformer
+        FastFourierTransformer fft = new FastFourierTransformer(DftNormalization.STANDARD);
 
-                    if (j > 4)
-                        Log.d("DEBUG", "Found potential data start[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " correlation: " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation) + " from: " + from);
-                }
-                if (startOfDataMatch) {
-                    // Revisit the second-to-last bit on the start marker, and use it to phase lock.
-                    // Find the sampleOffset within the next 1/2 samplesPerBit after it where the
-                    // correlation for this bit is highest. We only look ahead this limited amount
-                    // so we don't cross into the next bit.
-                    byte secondToLastBit = START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2];
-                    double highestCorrelation = -999999;
-                    int sampleOffsetWithHighestCorellation = sampleOffset + (6 * samplesPerBit);
-                    int startAt = Math.max(0, sampleOffset + (6 * samplesPerBit) - startMarkerSearchGranularity); // Slightly before second-to-last bit of start marker.
-                    int stopAt = startAt + samplesPerBit;
-                    Log.d("DEBUG", "startAt: " + startAt + " stopAt: " + stopAt);
-                    for (int i = startAt; i < stopAt; i++) { // i++ means finest granularity search at this point.
-                        int from = i;
-                        int to = Math.min(i + samplesPerBit, bufferedAudio.length);
-                        if (secondToLastBit == 1) {
-                            oneCorrelation = correlateOne(bufferedAudio, from, to);
-                            if (oneCorrelation > highestCorrelation) {
-                                highestCorrelation = oneCorrelation;
-                                sampleOffsetWithHighestCorellation = i;
-                            }
-                        } else { // secondToLastBit == 0
-                            zeroCorrelation = correlateZero(bufferedAudio, from, to);
-                            // Log.d("DEBUG", "Checking secondToLastBit at i: " + i + " zeroCorrelation: " + zeroCorrelation);
-                            if (zeroCorrelation > highestCorrelation) {
-                                highestCorrelation = zeroCorrelation;
-                                sampleOffsetWithHighestCorellation = i;
-                            }
-                        }
-                    }
+        // Convert the byte array into a double array (FFT requires double input) and pad with zeros.
+        double[] audioDoubleData = new double[paddedLength];
+        for (int i = 0; i < n; i++) {
+            audioDoubleData[i] = data[i];
+        }
 
-                    Log.d("DEBUG", "Phase aligned with correlation: " + highestCorrelation);
-                    int likelyDataStart = (sampleOffsetWithHighestCorellation + (samplesPerBit * 2));
-                    int likelyMarkerStart = likelyDataStart - (samplesPerBit * startOfDataLen);
-                    Log.d("DEBUG", "Likely payload data start: " + likelyDataStart);
+        // Perform the FFT to get the frequency components.
+        Complex[] transformed = fft.transform(audioDoubleData, TransformType.FORWARD);
 
-                    // Double check all start marker bits now that we're phase aligned. If this fails,
-                    // we didn't really find the start marker.
-                    for (int k = 0; k < startOfDataLen; k++) {
-                        int from = likelyMarkerStart + (k * samplesPerBit);
-                        int to = Math.min(from + samplesPerBit, bufferedAudio.length);
-                        zeroCorrelation = correlateZero(bufferedAudio, from, to);
-                        oneCorrelation = correlateOne(bufferedAudio, from, to);
+        // Determine the frequency resolution.
+        double frequencyResolution = sampleRate / paddedLength;
 
-                        Log.d("DEBUG", "Re-verifying position [" + k + "], zeroCorrelation: " + zeroCorrelation + " oneCorrelation: " + oneCorrelation);
+        // Apply the bandpass filter.
+        for (int i = 0; i < transformed.length / 2; i++) {
+            double frequency = i * frequencyResolution;
 
-                        if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
-                                (START_OF_DATA_MARKER[k] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
-                                (START_OF_DATA_MARKER[k] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
-                            // This bit of marker DID NOT match
-                            Log.d("DEBUG", "After phase alignment, start marker could not be re-verified, data NOT found.");
-
-                            return findStartOfData(bufferedAudio, likelyDataStart); // Recursive.
-                        }
-                    }
-
-                    Log.d("DEBUG", "Re-verified payload data start: " + likelyDataStart);
-                    return likelyDataStart;
-                }
+            // Zero out frequencies outside the specified range.
+            if (frequency < low || frequency > high) {
+                transformed[i] = Complex.ZERO;  // Zero out this frequency component.
+                transformed[transformed.length - i - 1] = Complex.ZERO;  // Mirror frequency for the negative side.
             }
         }
 
-        return -1;
+        // Perform the inverse FFT to convert the filtered signal back into the time domain.
+        Complex[] inverseTransformed = fft.transform(transformed, TransformType.INVERSE);
+
+        // Convert the Complex array back into real data (taking the real part) and truncate to original size.
+        byte[] filteredAudioData = new byte[n]; // Original size, not the padded size
+        for (int i = 0; i < n; i++) {
+            filteredAudioData[i] = (byte) Math.round(inverseTransformed[i].getReal());
+        }
+
+        return filteredAudioData;
     }
 
-    // Returns the index in bufferedAudio at which payload data ends (or -1 if no end marker found).
-    private int findEndOfData(byte[] bufferedAudio, int startOfData) {
-        Log.d("DEBUG", "================ findEndOfData from " + startOfData + " ================");
-        int endOfDataLen = END_OF_DATA_MARKER.length;
+    // Helper method to find the next power of 2 greater than or equal to the given number
+    private int nextPowerOf2(int num) {
+        return (int) Math.pow(2, Math.ceil(Math.log(num) / Math.log(2)));
+    }
+
+    // Returns the first index at which the given marker appears in bufferAudio, or -1 if not found.
+    private int findMarker(byte[] bufferedAudio, int lookFrom, byte[] marker) {
+        if (VERBOSE_DECODE_DEBUG)
+            Log.d("DEBUG", "================ findMarker from " + lookFrom + " ================");
+        int markerLen = marker.length;
         int totalSamples = bufferedAudio.length;
 
-        if (totalSamples >= (START_OF_DATA_MARKER.length * samplesPerBit) + (endOfDataLen * samplesPerBit)) {
-            for (int sampleOffset = startOfData;
-                     sampleOffset <= totalSamples;
-                     sampleOffset += (samplesPerBit * 8)) { // Skip ahead in one byte increments since findStartOfData already bit-aligned us.
-                boolean endOfDataMatch = true;
-                for (int j = 0; j < endOfDataLen; j++) {
-                    // Extract the range of samples starting from sampleOffset + j
+        if ((bufferedAudio.length - lookFrom) >= markerLen * samplesPerBit) {
+            double zeroCorrelation = 0;
+            double oneCorrelation = 0;
+            for (int sampleOffset = lookFrom; sampleOffset <= totalSamples; sampleOffset += markerSearchGranularity) {
+                boolean markerMatch = true;
+                for (int j = 0; j < markerLen; j++) {
                     int from = sampleOffset + (j * samplesPerBit);
                     int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
-                    if ((to - from) < samplesPerBit) {
-                        return -1; // Too close to end of audio buffer, couldn't be any  bits here.
-                    }
-                    double zeroCorrelation = correlateZero(bufferedAudio, from, to);
-                    double oneCorrelation = correlateOne(bufferedAudio, from, to);
 
-                    if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
-                            (END_OF_DATA_MARKER[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
-                            (END_OF_DATA_MARKER[j] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
-                        endOfDataMatch = false;
+                    if (from >= to) {
                         break;
                     }
 
-                    if (j > 4)
-                        Log.d("DEBUG", "Found potential data end[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " @ " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation));
-                }
-                if (endOfDataMatch) {
-                    // TODO would be even better to also phase-lock the end marker (see start marker phase lock code above),
-                    // and then use that to determine the actual samples-per-bit used in this transmission, in the case that
-                    // the transmitter was slightly slow or fast for some reason.
+                    zeroCorrelation = correlateZero(bufferedAudio, from, to);
+                    oneCorrelation = correlateOne(bufferedAudio, from, to);
 
-                    Log.d("DEBUG", "Payload data end: " + sampleOffset);
-                    return sampleOffset;
+                    // Note we don't check threshold at this point, just coarsely looking at relative correlations.
+                    // We apply threshold when we verify later.
+                    if ((marker[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
+                        (marker[j] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
+                        markerMatch = false;
+                        break;
+                    }
+
+                    if (VERBOSE_DECODE_DEBUG && j > (markerLen / 2))
+                        Log.d("DEBUG", "Found potential marker[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " correlation: " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation) + " from: " + from);
+                }
+                if (markerMatch) {
+                    // Revisit the second-to-last bit on the marker, and use it to phase lock.
+                    // Find the sampleOffset within the next 1/2 samplesPerBit after it where the
+                    // correlation for this bit is highest. We only look ahead this limited amount
+                    // so we don't cross into the next bit.
+                    double highestCorrelation = -999999;
+                    int sampleOffsetWithHighestCorellation = sampleOffset + ((markerLen - 2) * samplesPerBit);
+                    int startAt = Math.max(0, sampleOffset + ((markerLen - 2) * samplesPerBit) - markerSearchGranularity); // Slightly before second-to-last bit of marker.
+                    int stopAt = startAt + samplesPerBit;
+                    for (int i = startAt; i < stopAt; i++) { // i++ means finest granularity search at this point.
+                        int from = i;
+                        int to = Math.min(i + samplesPerBit, bufferedAudio.length);
+
+                        if (from >= to) {
+                            break;
+                        }
+
+                        double meanCorrelation = 0;
+
+                        // Find and average the correlation of the last 3 bits (to avoid finding a local maxima correlation for a single bit).
+                        try {
+                            double firstCorrelation = marker[marker.length - 3] == 1 ?
+                                    correlateOne(bufferedAudio, from - samplesPerBit, to - samplesPerBit) :
+                                    correlateZero(bufferedAudio, from - samplesPerBit, to - samplesPerBit);
+                            double secondCorrelation = marker[marker.length - 2] == 1 ?
+                                    correlateOne(bufferedAudio, from, to) :
+                                    correlateZero(bufferedAudio, from, to);
+                            double thirdCorrelation = marker[marker.length - 1] == 1 ?
+                                    correlateOne(bufferedAudio, from + samplesPerBit, to + samplesPerBit) :
+                                    correlateZero(bufferedAudio, from + samplesPerBit, to + samplesPerBit);
+                            meanCorrelation = (firstCorrelation + secondCorrelation + thirdCorrelation) / 3;
+                        } catch (IndexOutOfBoundsException ioobe) {
+                            continue;
+                        }
+
+                        if (meanCorrelation > highestCorrelation) {
+                            highestCorrelation = meanCorrelation;
+                            sampleOffsetWithHighestCorellation = i;
+                        }
+                    }
+                    if (VERBOSE_DECODE_DEBUG)
+                        Log.d("DEBUG", "Phase aligned with MEAN correlation: " + highestCorrelation);
+
+                    int likelyMarkerStart = (sampleOffsetWithHighestCorellation + (samplesPerBit * 2)) - (samplesPerBit * markerLen);
+
+                    if (VERBOSE_DECODE_DEBUG)
+                        Log.d("DEBUG", "Likely marker start: " + likelyMarkerStart);
+
+                    // Double check all marker bits now that we're phase aligned. If this fails,
+                    // we didn't really find the marker.
+                    boolean verified = true;
+                    for (int k = 0; k < markerLen; k++) {
+                        int from = likelyMarkerStart + (k * samplesPerBit);
+                        int to = Math.min(from + samplesPerBit, bufferedAudio.length);
+
+                        if (from >= to) {
+                            if (VERBOSE_DECODE_DEBUG)
+                                Log.d("DEBUG", "After phase alignment, marker could NOT be re-verified (reached audio end before verifying).");
+
+                            verified = false;
+                            break;
+                        }
+
+                        zeroCorrelation = correlateZero(bufferedAudio, from, to);
+                        oneCorrelation = correlateOne(bufferedAudio, from, to);
+
+                        if (VERBOSE_DECODE_DEBUG)
+                            Log.d("DEBUG", "Re-verifying position [" + k + "], from: " + from + " to: " + to + " zeroCorrelation: " + zeroCorrelation + " oneCorrelation: " + oneCorrelation);
+
+                        if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
+                                (marker[k] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
+                                (marker[k] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
+                            // This bit of marker DID NOT match
+                            if (VERBOSE_DECODE_DEBUG)
+                                Log.d("DEBUG", "After phase alignment, marker could NOT be re-verified.");
+
+                            verified = false;
+                            break;
+                        }
+                    }
+
+                    if (verified) {
+                        if (VERBOSE_DECODE_DEBUG)
+                            Log.d("DEBUG", "Re-verified marker start: " + likelyMarkerStart);
+                        return likelyMarkerStart;
+                    }
                 }
             }
         }
@@ -228,9 +286,10 @@ public class BFSKDecoder {
 
         for (int i = 0; i < binaryData.length; i++) {
             int from = startOfData + (i * samplesPerBit);
-            int to = Math.min((startOfData + ((i + 1) * samplesPerBit)), bufferedAudio.length);
+            int to = Math.min(from + samplesPerBit, bufferedAudio.length);
             double zeroCorrelation = correlateZero(bufferedAudio, from, to);
             double oneCorrelation = correlateOne(bufferedAudio, from, to);
+
             // Note we just force a decode here, unlike when trying to detect start and end of data, where
             // we also check how high-quality the decode is (via correlation). Since we only get here
             // when we detected strong start/end markers, we KNOW this is a bit so we just do our best
@@ -242,26 +301,39 @@ public class BFSKDecoder {
         if (!decodedString.isEmpty()) {
             callback.accept(decodedString);
         }
-        buffer.reset();
+
+        if (!DEBUG_SAVE_AUDIO)
+            buffer.reset();
     }
 
-    // This method precomputes the necessary sine values, because otherwise we'd be calling
-    // Math.sin over and over when decoding data and this is a very slow and expensive call.
+    // This method precomputes the necessary sine and cosine values, because otherwise we'd be calling
+    // Math.sin/cos over and over when decoding data and this is a very slow and expensive call.
     private void initializeSineTables() {
         sineTableZero = new double[samplesPerBit];
         sineTableOne = new double[samplesPerBit];
+        cosineTableZero = new double[samplesPerBit];
+        cosineTableOne = new double[samplesPerBit];
+
         for (int i = 0; i < samplesPerBit; i++) {
             sineTableZero[i] = Math.sin(2.0 * Math.PI * i / (sampleRate / freqZero));
+            cosineTableZero[i] = Math.cos(2.0 * Math.PI * i / (sampleRate / freqZero));
+
             sineTableOne[i] = Math.sin(2.0 * Math.PI * i / (sampleRate / freqOne));
+            cosineTableOne[i] = Math.cos(2.0 * Math.PI * i / (sampleRate / freqOne));
         }
     }
 
-    private double correlate(byte[] samples, double[] sineTable, int from, int to) {
-        double sum = 0;
+    private double correlate(byte[] samples, double[] sineTable, double[] cosineTable, int from, int to) {
+        double sineSum = 0;
+        double cosineSum = 0;
+
         for (int i = from, j = 0; i < to; i++, j++) {
-            sum += samples[i] * sineTable[j];
+            sineSum += samples[i] * sineTable[j];
+            cosineSum += samples[i] * cosineTable[j];
         }
-        return Math.abs(sum); // TODO is abs() correct here? I think so since the tables have negative values.
+
+        // Return the magnitude of the correlation (in-phase and quadrature components combined)
+        return Math.sqrt(sineSum * sineSum + cosineSum * cosineSum);
     }
 
     // Experimental alternative that multithreads the calculation. However, in my experiments
@@ -271,11 +343,11 @@ public class BFSKDecoder {
     } */
 
     private double correlateZero(byte[] samples, int from, int to) {
-        return correlate(samples, sineTableZero, from, to);
+        return correlate(samples, sineTableZero, cosineTableZero, from, to);
     }
 
     private double correlateOne(byte[] samples, int from, int to) {
-        return correlate(samples, sineTableOne, from, to);
+        return correlate(samples, sineTableOne, cosineTableOne, from, to);
     }
 
     private String convertBinaryToString(byte[] binaryData) {

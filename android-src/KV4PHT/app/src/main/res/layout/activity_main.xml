@@ -246,6 +246,7 @@
                 android:layout_marginTop="16dp"> <!-- displayed when user taps the bottom nav -->
 
                 <ScrollView
+                    android:id="@+id/textChatScrollView"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
