@@ -85,12 +85,12 @@ public class BFSKDecoder {
             accumulatedAudio = bandpassFilter(this.freqZero - 100, this.freqOne + 100, accumulatedAudio, sampleRate);
 
             // Attempt decode.
-            int startMarker = findMarker(accumulatedAudio, 0, START_OF_DATA_MARKER);
+            int startMarker = findMarker(accumulatedAudio, accumulatedAudio.length - samplesPerBit - 1, START_OF_DATA_MARKER, true); // Look backwards b/c marker will appear at end of circular audio buffer, no sense in parsing the front.
             if (startMarker != -1) {
                 int startOfData = startMarker + (START_OF_DATA_MARKER.length * samplesPerBit);
                 Log.d("DEBUG", "startOfData: " + startOfData);
 
-                int endOfData = findMarker(accumulatedAudio, startOfData, END_OF_DATA_MARKER);
+                int endOfData = findMarker(accumulatedAudio, startOfData, END_OF_DATA_MARKER, false); // For end marker, look forward from the start marker, we know it must be after it.
                 if (endOfData != -1) {
                     Log.d("DEBUG", "endOfData: " + endOfData);
 
@@ -152,125 +152,125 @@ public class BFSKDecoder {
     }
 
     // Returns the first index at which the given marker appears in bufferAudio, or -1 if not found.
-    private int findMarker(byte[] bufferedAudio, int lookFrom, byte[] marker) {
+    private int findMarker(byte[] bufferedAudio, int lookFrom, byte[] marker, boolean lookBackwards) {
         if (VERBOSE_DECODE_DEBUG)
-            Log.d("DEBUG", "================ findMarker from " + lookFrom + " ================");
+            Log.d("DEBUG", "================ findMarker from " + lookFrom + (lookBackwards ? " backwards " : " forwards ") + "================");
+
         int markerLen = marker.length;
         int totalSamples = bufferedAudio.length;
+        double zeroCorrelation = 0;
+        double oneCorrelation = 0;
 
-        if ((bufferedAudio.length - lookFrom) >= markerLen * samplesPerBit) {
-            double zeroCorrelation = 0;
-            double oneCorrelation = 0;
-            for (int sampleOffset = lookFrom; sampleOffset <= totalSamples; sampleOffset += markerSearchGranularity) {
-                boolean markerMatch = true;
-                for (int j = 0; j < markerLen; j++) {
-                    int from = sampleOffset + (j * samplesPerBit);
-                    int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
+        int directionalSearchGranularity = lookBackwards ? 0 - markerSearchGranularity : markerSearchGranularity;
+        for (int sampleOffset = lookFrom; sampleOffset <= totalSamples && sampleOffset >= 0; sampleOffset += directionalSearchGranularity) {
+            boolean markerMatch = true;
+            for (int j = 0; j < markerLen; j++) {
+                int from = sampleOffset + (j * samplesPerBit);
+                int to = Math.min((sampleOffset + (j * samplesPerBit) + samplesPerBit), bufferedAudio.length);
+
+                if (from >= to) {
+                    break;
+                }
+
+                zeroCorrelation = correlateZero(bufferedAudio, from, to);
+                oneCorrelation = correlateOne(bufferedAudio, from, to);
+
+                // Note we don't check threshold at this point, just coarsely looking at relative correlations.
+                // We apply threshold when we verify later.
+                if ((marker[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
+                    (marker[j] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
+                    markerMatch = false;
+                    break;
+                }
+
+                if (VERBOSE_DECODE_DEBUG && j > (markerLen / 2))
+                    Log.d("DEBUG", "Found potential marker[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " correlation: " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation) + " from: " + from);
+            }
+            if (markerMatch) {
+                // Revisit the second-to-last bit on the marker, and use it to phase lock.
+                // Find the sampleOffset within the next 1/2 samplesPerBit after it where the
+                // correlation for this bit is highest. We only look ahead this limited amount
+                // so we don't cross into the next bit.
+                double highestCorrelation = -999999;
+                int sampleOffsetWithHighestCorellation = sampleOffset + ((markerLen - 2) * samplesPerBit);
+                int startAt = Math.max(0, sampleOffset + ((markerLen - 2) * samplesPerBit) - markerSearchGranularity); // Slightly before second-to-last bit of marker.
+                int stopAt = startAt + samplesPerBit;
+                for (int i = startAt; i < stopAt; i++) { // i++ means finest granularity search at this point.
+                    int from = i;
+                    int to = Math.min(i + samplesPerBit, bufferedAudio.length);
 
                     if (from >= to) {
+                        break;
+                    }
+
+                    double meanCorrelation = 0;
+
+                    // Find and average the correlation of the last 3 bits (to avoid finding a local maxima correlation for a single bit).
+                    try {
+                        double firstCorrelation = marker[marker.length - 3] == 1 ?
+                                correlateOne(bufferedAudio, from - samplesPerBit, to - samplesPerBit) :
+                                correlateZero(bufferedAudio, from - samplesPerBit, to - samplesPerBit);
+                        double secondCorrelation = marker[marker.length - 2] == 1 ?
+                                correlateOne(bufferedAudio, from, to) :
+                                correlateZero(bufferedAudio, from, to);
+                        double thirdCorrelation = marker[marker.length - 1] == 1 ?
+                                correlateOne(bufferedAudio, from + samplesPerBit, to + samplesPerBit) :
+                                correlateZero(bufferedAudio, from + samplesPerBit, to + samplesPerBit);
+                        meanCorrelation = (firstCorrelation + secondCorrelation + thirdCorrelation) / 3;
+                    } catch (IndexOutOfBoundsException ioobe) {
+                        continue;
+                    }
+
+                    if (meanCorrelation > highestCorrelation) {
+                        highestCorrelation = meanCorrelation;
+                        sampleOffsetWithHighestCorellation = i;
+                    }
+                }
+                if (VERBOSE_DECODE_DEBUG)
+                    Log.d("DEBUG", "Phase aligned with MEAN correlation: " + highestCorrelation);
+
+                int likelyMarkerStart = (sampleOffsetWithHighestCorellation + (samplesPerBit * 2)) - (samplesPerBit * markerLen);
+
+                if (VERBOSE_DECODE_DEBUG)
+                    Log.d("DEBUG", "Likely marker start: " + likelyMarkerStart);
+
+                // Double check all marker bits now that we're phase aligned. If this fails,
+                // we didn't really find the marker.
+                boolean verified = true;
+                for (int k = 0; k < markerLen; k++) {
+                    int from = likelyMarkerStart + (k * samplesPerBit);
+                    int to = Math.min(from + samplesPerBit, bufferedAudio.length);
+
+                    if (from >= to) {
+                        if (VERBOSE_DECODE_DEBUG)
+                            Log.d("DEBUG", "After phase alignment, marker could NOT be re-verified (reached audio end before verifying).");
+
+                        verified = false;
                         break;
                     }
 
                     zeroCorrelation = correlateZero(bufferedAudio, from, to);
                     oneCorrelation = correlateOne(bufferedAudio, from, to);
 
-                    // Note we don't check threshold at this point, just coarsely looking at relative correlations.
-                    // We apply threshold when we verify later.
-                    if ((marker[j] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
-                        (marker[j] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
-                        markerMatch = false;
+                    if (VERBOSE_DECODE_DEBUG)
+                        Log.d("DEBUG", "Re-verifying position [" + k + "], from: " + from + " to: " + to + " zeroCorrelation: " + zeroCorrelation + " oneCorrelation: " + oneCorrelation);
+
+                    if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
+                            (marker[k] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
+                            (marker[k] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
+                        // This bit of marker DID NOT match
+                        if (VERBOSE_DECODE_DEBUG)
+                            Log.d("DEBUG", "After phase alignment, marker could NOT be re-verified.");
+
+                        verified = false;
                         break;
                     }
-
-                    if (VERBOSE_DECODE_DEBUG && j > (markerLen / 2))
-                        Log.d("DEBUG", "Found potential marker[" + j + "]: " + (oneCorrelation > zeroCorrelation ? 1 : 0) + " correlation: " + (oneCorrelation > zeroCorrelation ? oneCorrelation : zeroCorrelation) + " from: " + from);
                 }
-                if (markerMatch) {
-                    // Revisit the second-to-last bit on the marker, and use it to phase lock.
-                    // Find the sampleOffset within the next 1/2 samplesPerBit after it where the
-                    // correlation for this bit is highest. We only look ahead this limited amount
-                    // so we don't cross into the next bit.
-                    double highestCorrelation = -999999;
-                    int sampleOffsetWithHighestCorellation = sampleOffset + ((markerLen - 2) * samplesPerBit);
-                    int startAt = Math.max(0, sampleOffset + ((markerLen - 2) * samplesPerBit) - markerSearchGranularity); // Slightly before second-to-last bit of marker.
-                    int stopAt = startAt + samplesPerBit;
-                    for (int i = startAt; i < stopAt; i++) { // i++ means finest granularity search at this point.
-                        int from = i;
-                        int to = Math.min(i + samplesPerBit, bufferedAudio.length);
 
-                        if (from >= to) {
-                            break;
-                        }
-
-                        double meanCorrelation = 0;
-
-                        // Find and average the correlation of the last 3 bits (to avoid finding a local maxima correlation for a single bit).
-                        try {
-                            double firstCorrelation = marker[marker.length - 3] == 1 ?
-                                    correlateOne(bufferedAudio, from - samplesPerBit, to - samplesPerBit) :
-                                    correlateZero(bufferedAudio, from - samplesPerBit, to - samplesPerBit);
-                            double secondCorrelation = marker[marker.length - 2] == 1 ?
-                                    correlateOne(bufferedAudio, from, to) :
-                                    correlateZero(bufferedAudio, from, to);
-                            double thirdCorrelation = marker[marker.length - 1] == 1 ?
-                                    correlateOne(bufferedAudio, from + samplesPerBit, to + samplesPerBit) :
-                                    correlateZero(bufferedAudio, from + samplesPerBit, to + samplesPerBit);
-                            meanCorrelation = (firstCorrelation + secondCorrelation + thirdCorrelation) / 3;
-                        } catch (IndexOutOfBoundsException ioobe) {
-                            continue;
-                        }
-
-                        if (meanCorrelation > highestCorrelation) {
-                            highestCorrelation = meanCorrelation;
-                            sampleOffsetWithHighestCorellation = i;
-                        }
-                    }
+                if (verified) {
                     if (VERBOSE_DECODE_DEBUG)
-                        Log.d("DEBUG", "Phase aligned with MEAN correlation: " + highestCorrelation);
-
-                    int likelyMarkerStart = (sampleOffsetWithHighestCorellation + (samplesPerBit * 2)) - (samplesPerBit * markerLen);
-
-                    if (VERBOSE_DECODE_DEBUG)
-                        Log.d("DEBUG", "Likely marker start: " + likelyMarkerStart);
-
-                    // Double check all marker bits now that we're phase aligned. If this fails,
-                    // we didn't really find the marker.
-                    boolean verified = true;
-                    for (int k = 0; k < markerLen; k++) {
-                        int from = likelyMarkerStart + (k * samplesPerBit);
-                        int to = Math.min(from + samplesPerBit, bufferedAudio.length);
-
-                        if (from >= to) {
-                            if (VERBOSE_DECODE_DEBUG)
-                                Log.d("DEBUG", "After phase alignment, marker could NOT be re-verified (reached audio end before verifying).");
-
-                            verified = false;
-                            break;
-                        }
-
-                        zeroCorrelation = correlateZero(bufferedAudio, from, to);
-                        oneCorrelation = correlateOne(bufferedAudio, from, to);
-
-                        if (VERBOSE_DECODE_DEBUG)
-                            Log.d("DEBUG", "Re-verifying position [" + k + "], from: " + from + " to: " + to + " zeroCorrelation: " + zeroCorrelation + " oneCorrelation: " + oneCorrelation);
-
-                        if ((zeroCorrelation < markerCorrelationThreshold && oneCorrelation < markerCorrelationThreshold) || // Poor match altogether? e.g. noisy audio or sampleOffset is poorly aligned to bits
-                                (marker[k] == 0 && oneCorrelation > zeroCorrelation) || // This bit of marker is 0 and doesn't match?
-                                (marker[k] == 1 && zeroCorrelation > oneCorrelation)) { // This bit of marker is 1 and doesn't match?
-                            // This bit of marker DID NOT match
-                            if (VERBOSE_DECODE_DEBUG)
-                                Log.d("DEBUG", "After phase alignment, marker could NOT be re-verified.");
-
-                            verified = false;
-                            break;
-                        }
-                    }
-
-                    if (verified) {
-                        if (VERBOSE_DECODE_DEBUG)
-                            Log.d("DEBUG", "Re-verified marker start: " + likelyMarkerStart);
-                        return likelyMarkerStart;
-                    }
+                        Log.d("DEBUG", "Re-verified marker start: " + likelyMarkerStart);
+                    return likelyMarkerStart;
                 }
             }
         }
