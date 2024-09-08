@@ -136,8 +136,8 @@ public class MainActivity extends AppCompatActivity {
     private Afsk1200Modulator afskModulator = null;
     private PacketDemodulator afskDemodulator = null;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
-    private static final int MS_SILENCE_BEFORE_DATA = 500;
-    private static final int MS_SILENCE_AFTER_DATA = 1000;
+    private static final int MS_SILENCE_BEFORE_DATA = 300;
+    private static final int MS_SILENCE_AFTER_DATA = 700;
 
     // Radio params and related settings
     private String activeFrequencyStr = "144.0000";
