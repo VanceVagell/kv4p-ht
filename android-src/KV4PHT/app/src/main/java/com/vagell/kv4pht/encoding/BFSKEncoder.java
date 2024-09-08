@@ -84,24 +84,14 @@ public class BFSKEncoder {
     private byte[] generateTones(byte[] binarySequence) {
         ByteArrayOutputStream tones = new ByteArrayOutputStream();
         double phase = 0.0; // Start with an initial phase of 0
-        byte[] previousTone = new byte[samplesPerBit];
         byte[] currentTone = new byte[samplesPerBit];
 
-        // Initialize with the first bit's tone
-        double initialFreq = binarySequence[0] == 0 ? freqZero : freqOne;
-        phase = generateTone(initialFreq, samplesPerBit, phase, previousTone);
-        tones.write(previousTone, 0, samplesPerBit);
-
-        // For each subsequent bit, generate tone and apply crossfade
-        for (int i = 1; i < binarySequence.length; i++) {
+        for (int i = 0; i < binarySequence.length; i++) {
             double freq = binarySequence[i] == 0 ? freqZero : freqOne;
             phase = generateTone(freq, samplesPerBit, phase, currentTone);
 
             // Write the current tone to the output
             tones.write(currentTone, 0, samplesPerBit);
-
-            // Copy currentTone to previousTone for the next iteration
-            System.arraycopy(currentTone, 0, previousTone, 0, samplesPerBit);
         }
 
         return tones.toByteArray();
