@@ -8,7 +8,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 public class BFSKEncoder {
-    public static final int NUM_PARITY_BYTES = 10;
+    public static final int NUM_PARITY_BYTES = 10; // TODO make this an init param to constructor
+    public static final boolean USE_FEC = true; // Disabling this is useful for debugging data audio stream.
 
     private final float sampleRate;
     private final int baudRate;
@@ -24,8 +25,13 @@ public class BFSKEncoder {
         this.samplesPerBit = (int) (sampleRate / baudRate);
     }
 
-   public byte[] encode(String data) throws IOException {
-        byte[] binaryData = encodeWithFEC(data);
+   public byte[] encode(String text) throws IOException {
+        byte[] binaryData = text.getBytes(StandardCharsets.UTF_8);
+
+        if (USE_FEC) {
+            binaryData = encodeWithFEC(binaryData);
+        }
+
         ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
 
         byteOutputStream.write(generateTones(BFSKDecoder.START_OF_DATA_MARKER)); // Start marker
@@ -45,10 +51,7 @@ public class BFSKEncoder {
         return byteOutputStream.toByteArray();
     }
 
-    public byte[] encodeWithFEC(String data) throws IOException {
-        // Convert the string to UTF-8 bytes
-        byte[] binaryData = data.getBytes(StandardCharsets.UTF_8);
-
+    public byte[] encodeWithFEC(byte[] binaryData) throws IOException {
         // Initialize Reed-Solomon Encoder
         ReedSolomonEncoder encoder = new ReedSolomonEncoder(GenericGF.DATA_MATRIX_FIELD_256);
 

@@ -372,19 +372,21 @@ public class BFSKDecoder {
     private String convertBinaryToString(byte[] binaryData) {
         byte[] bytes = convertBitsToBytes(binaryData);
 
-        // Resolve any errors with FEC.
-        try {
-            bytes = decodeWithFEC(bytes);
-        } catch (Exception e) {
-            Log.d("DEBUG", "FEC decoding failed, using raw data.");
+        if (BFSKEncoder.USE_FEC) {
+            // Resolve any errors with FEC.
+            try {
+                bytes = decodeWithFEC(bytes);
+            } catch (Exception e) {
+                Log.d("DEBUG", "FEC decoding failed, using raw data.");
 
-            // FEC parity bytes are added at the end of the original data
-            int rawDataLength = bytes.length - BFSKEncoder.NUM_PARITY_BYTES;  // The original data length without parity bytes
-            byte[] rawBytes = new byte[rawDataLength];
+                // FEC parity bytes are added at the end of the original data
+                int rawDataLength = bytes.length - BFSKEncoder.NUM_PARITY_BYTES;  // The original data length without parity bytes
+                byte[] rawBytes = new byte[rawDataLength];
 
-            // Copy the raw data without the parity bytes
-            System.arraycopy(bytes, 0, rawBytes, 0, rawDataLength);
-            bytes = rawBytes;
+                // Copy the raw data without the parity bytes
+                System.arraycopy(bytes, 0, rawBytes, 0, rawDataLength);
+                bytes = rawBytes;
+            }
         }
 
         return new String(bytes, StandardCharsets.UTF_8);
