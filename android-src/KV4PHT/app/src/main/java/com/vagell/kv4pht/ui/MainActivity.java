@@ -60,6 +60,11 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.aprs.parser.APRSPacket;
+import com.vagell.kv4pht.aprs.parser.Digipeater;
+import com.vagell.kv4pht.aprs.parser.InformationField;
+import com.vagell.kv4pht.aprs.parser.MessagePacket;
+import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
@@ -282,11 +287,24 @@ public class MainActivity extends AppCompatActivity {
         PacketHandler packetHandler = new PacketHandler() {
             @Override
             public void handlePacket(byte[] data) {
-                String packetStr = Packet.format(data);
+                APRSPacket aprsPacket;
+                try {
+                    aprsPacket = Parser.parseAX25(data);
+                } catch (Exception e) {
+                    debugLog("Unable to parse an APRSPacket, skipping.");
+                    return;
+                }
+
+                final String finalString;
 
                 // Reformat the packet to be more human readable.
-                packetStr = packetStr.replaceAll(">APRS,WIDE1-1,WIDE2-2:", ": ");
-                final String finalString = packetStr;
+                InformationField infoField = aprsPacket.getAprsInformation();
+                if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
+                    MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
+                    finalString = aprsPacket.getSourceCall() + ": " + messagePacket.getMessageBody();
+                } else { // Raw APRS packet. Useful for things like monitoring 144.39 for misc APRS traffic.
+                    finalString = aprsPacket.toString();
+                }
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -325,19 +343,19 @@ public class MainActivity extends AppCompatActivity {
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
         ((EditText) findViewById(R.id.textChatInput)).setText("");
 
-        // TODO Adjust APRS settings here to be more appropriate (look into them).
-        Packet packet = new Packet("APRS",
-                callsign,
-                new String[] {"WIDE1-1", "WIDE2-2"},
-                Packet.AX25_CONTROL_APRS,
-                Packet.AX25_PROTOCOL_NO_LAYER_3,
-                outText.getBytes());
+        // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
+        MessagePacket msgPacket = new MessagePacket("CQ", outText, "1"); // TODO increment messageNumber each time, store in Android app DB.
+        ArrayList<Digipeater> digipeaters = new ArrayList<>();
+        digipeaters.add(new Digipeater("WIDE1*"));
+        digipeaters.add(new Digipeater("WIDE2-1"));
+        APRSPacket aprsPacket = new APRSPacket(callsign, "CQ", digipeaters, msgPacket.getRawBytes());
+        Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
 
-        afskModulator.prepareToTransmit(packet);
+        // This strange approach to getting bytes seems to be a state machine in the AFSK library.
+        afskModulator.prepareToTransmit(ax25Packet);
         float[] txSamples = afskModulator.getTxSamplesBuffer();
         int n;
         ArrayList<Byte> audioBytes = new ArrayList<Byte>();
-        // This strange approach to getting bytes seems to be a state machine in the AFSK library.
         while ((n = afskModulator.getSamples()) > 0) {
             for (int i = 0; i < n; i++) {
                 byte audioByte = convertFloatToPCM8(txSamples[i]);

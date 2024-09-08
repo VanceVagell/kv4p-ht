@@ -283,11 +283,11 @@
                         android:textColor="@color/primary"
                         android:layout_weight="1"
                         android:textSize="20dp"
-                        android:maxLength="43"
+                        android:maxLength="67"
                         android:maxLines="1"
                         android:singleLine="true"
                         android:background="@android:color/transparent"
-                        android:hint="Write up to 43 chars..."
+                        android:hint="Write up to 67 chars..."
                         android:layout_marginRight="16dp"
                         android:imeOptions="actionSend">
                     </EditText>
