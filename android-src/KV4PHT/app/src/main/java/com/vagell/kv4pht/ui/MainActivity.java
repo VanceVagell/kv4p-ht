@@ -63,8 +63,13 @@ import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
-import com.vagell.kv4pht.encoding.BFSKDecoder;
-import com.vagell.kv4pht.encoding.BFSKEncoder;
+import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
+import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
+import com.vagell.kv4pht.javAX25.ax25.Packet;
+import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
+import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
+
+import org.apache.commons.lang3.ArrayUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -114,19 +119,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
 
-    // BFSK encoder/decoder (software modem)
-    private BFSKEncoder bfskEncoder = null;
-    private BFSKDecoder bfskDecoder = null;
-    private static final int DATA_BAUD_RATE = 30; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
-    private static final float DATA_FREQ_ZERO = 1300;
-    private static final float DATA_FREQ_ONE = 2100;
-    private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
-    private static final int MS_SILENCE_BEFORE_DATA = 150;
-    private static final int MS_SILENCE_AFTER_DATA = 500;
-    private static final int SEC_AUDIO_BUFFER = 10;
-    private static final int DATA_BUFFER_SIZE = AUDIO_SAMPLE_RATE * SEC_AUDIO_BUFFER;
-    private static final boolean DEBUG_LOOPBACK_TEST = false; // Set to true for a loopback test of encode/decode without radio in the loop. For code debugging only.
-
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
 
@@ -139,6 +131,13 @@ public class MainActivity extends AppCompatActivity {
     private static final int MODE_TX = 1;
     private static final int MODE_SCAN = 2;
     private int mode = MODE_STARTUP;
+
+    // AFSK modem
+    private Afsk1200Modulator afskModulator = null;
+    private PacketDemodulator afskDemodulator = null;
+    private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
+    private static final int MS_SILENCE_BEFORE_DATA = 500;
+    private static final int MS_SILENCE_AFTER_DATA = 1000;
 
     // Radio params and related settings
     private String activeFrequencyStr = "144.0000";
@@ -276,26 +275,38 @@ public class MainActivity extends AppCompatActivity {
         });
         viewModel.loadData();
 
-        initBFSKDecoder();
+        initAFSKModem();
     }
 
-    private void initBFSKDecoder() {
-        bfskDecoder = new BFSKDecoder(AUDIO_SAMPLE_RATE, DATA_BAUD_RATE, DATA_FREQ_ZERO,
-                                      DATA_FREQ_ONE, DATA_BUFFER_SIZE, new Consumer<String>() {
+    private void initAFSKModem() {
+        PacketHandler packetHandler = new PacketHandler() {
             @Override
-            public void accept(String s) {
+            public void handlePacket(byte[] data) {
+                String packetStr = Packet.format(data);
+
+                // Reformat the packet to be more human readable.
+                packetStr = packetStr.replaceAll(">APRS,WIDE1-1,WIDE2-2:", ": ");
+                final String finalString = packetStr;
+
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         TextView chatLog = findViewById(R.id.textChatLog);
-                        chatLog.append(s + "\n");
+                        chatLog.append(finalString + "\n");
 
                         ScrollView textChatScrollView = findViewById(R.id.textChatScrollView);
                         textChatScrollView.fullScroll(View.FOCUS_DOWN);
                     }
                 });
             }
-        });
+        };
+
+        try {
+            afskDemodulator = new Afsk1200MultiDemodulator(AUDIO_SAMPLE_RATE, packetHandler);
+            afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
+        } catch (Exception e) {
+            Log.d("DEBUG", "Unable to create AFSK modem objects.");
+        }
     }
 
     private void setMode(boolean isTextChat) {
@@ -314,60 +325,57 @@ public class MainActivity extends AppCompatActivity {
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
         ((EditText) findViewById(R.id.textChatInput)).setText("");
 
-        bfskEncoder = new BFSKEncoder(AUDIO_SAMPLE_RATE, DATA_BAUD_RATE, DATA_FREQ_ZERO, DATA_FREQ_ONE);
-        final byte[] pcm8;
-        try {
-            pcm8 = bfskEncoder.encode(callsign + ": " + outText);
+        // TODO Adjust APRS settings here to be more appropriate (look into them).
+        Packet packet = new Packet("APRS",
+                callsign,
+                new String[] {"WIDE1-1", "WIDE2-2"},
+                Packet.AX25_CONTROL_APRS,
+                Packet.AX25_PROTOCOL_NO_LAYER_3,
+                outText.getBytes());
 
-            if (DEBUG_LOOPBACK_TEST) {
-                debugLog("pcm8.length: " + pcm8.length);
-                audioTrack.write(pcm8, 0, pcm8.length);
-                // saveAudioFile(pcm8);
-                threadPoolExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        bfskDecoder.feedAudioData(pcm8);
-                    }
-                });
+        afskModulator.prepareToTransmit(packet);
+        float[] txSamples = afskModulator.getTxSamplesBuffer();
+        int n;
+        ArrayList<Byte> audioBytes = new ArrayList<Byte>();
+        // This strange approach to getting bytes seems to be a state machine in the AFSK library.
+        while ((n = afskModulator.getSamples()) > 0) {
+            for (int i = 0; i < n; i++) {
+                byte audioByte = convertFloatToPCM8(txSamples[i]);
+                audioBytes.add(audioByte);
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
         }
+        byte[] simpleAudioBytes = ArrayUtils.toPrimitive(audioBytes.toArray(new Byte[0]));
 
-        if (!DEBUG_LOOPBACK_TEST) {
-            startPtt(true);
-            final Handler handler = new Handler(Looper.getMainLooper());
-
-            handler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    // Add some silence before and after the data.
-                    int bytesOfLeadInDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA);
-                    int bytesOfTailDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA);
-                    byte[] combinedAudio = new byte[bytesOfLeadInDelay + pcm8.length + bytesOfTailDelay];
-                    for (int i = 0; i < bytesOfLeadInDelay; i++) {
-                        combinedAudio[i] = SILENT_BYTE;
-                    }
-                    for (int i = 0; i < pcm8.length; i++) {
-                        combinedAudio[i + bytesOfLeadInDelay] = pcm8[i];
-                    }
-                    for (int i = (bytesOfLeadInDelay + pcm8.length); i < combinedAudio.length; i++) {
-                        combinedAudio[i] = SILENT_BYTE;
-                    }
-
-                    // saveAudioFile(combinedAudio); // FOR DEBUG, TODO remove when done
-                    sendAudioToESP32(combinedAudio, true);
+        startPtt(true);
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // Add some silence before and after the data.
+                int bytesOfLeadInDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA);
+                int bytesOfTailDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA);
+                byte[] combinedAudio = new byte[bytesOfLeadInDelay + simpleAudioBytes.length + bytesOfTailDelay];
+                for (int i = 0; i < bytesOfLeadInDelay; i++) {
+                    combinedAudio[i] = SILENT_BYTE;
                 }
-            }, MS_DELAY_BEFORE_DATA_XMIT);
+                for (int i = 0; i < simpleAudioBytes.length; i++) {
+                    combinedAudio[i + bytesOfLeadInDelay] = simpleAudioBytes[i];
+                }
+                for (int i = (bytesOfLeadInDelay + simpleAudioBytes.length); i < combinedAudio.length; i++) {
+                    combinedAudio[i] = SILENT_BYTE;
+                }
 
-            TextView chatLog = findViewById(R.id.textChatLog);
-            chatLog.append(callsign + ": " + outText + "\n");
+                sendAudioToESP32(combinedAudio, true);
+            }
+        }, MS_DELAY_BEFORE_DATA_XMIT);
 
-            ScrollView scrollView = findViewById(R.id.textChatScrollView);
-            scrollView.fullScroll(View.FOCUS_DOWN);
+        TextView chatLog = findViewById(R.id.textChatLog);
+        chatLog.append(callsign + ": " + outText + "\n");
 
-            findViewById(R.id.textChatInput).requestFocus();
-        }
+        ScrollView scrollView = findViewById(R.id.textChatScrollView);
+        scrollView.fullScroll(View.FOCUS_DOWN);
+
+        findViewById(R.id.textChatInput).requestFocus();
     }
 
     // This method is only for debugging purposes (e.g. to test data encoding and decoding).
@@ -1601,17 +1609,13 @@ public class MainActivity extends AppCompatActivity {
         if (mode == MODE_RX || mode == MODE_SCAN) {
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
-                    if (!DEBUG_LOOPBACK_TEST && bfskDecoder != null) { // Avoid race condition at app start.
-                        audioTrack.write(data, 0, data.length); // Play any audio.
+                    if (afskDemodulator != null) { // Avoid race condition at app start.
+                        // Play the audio.
+                        audioTrack.write(data, 0, data.length);
 
-                        threadPoolExecutor.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (mode == MODE_RX || mode == MODE_SCAN) { // To avoid bogging down processor when we're in TX mode but have some threads processing older audio.
-                                    bfskDecoder.feedAudioData(data); // Extract any BFSK-encoded text.
-                                }
-                            }
-                        });
+                        // Add the audio samples to the AFSK demodulator.
+                        float[] audioAsFloats = convertPCM8ToFloatArray(data);
+                        afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
                     }
 
                     if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
@@ -1659,5 +1663,32 @@ public class MainActivity extends AppCompatActivity {
                 throw new RuntimeException(e);
             } */
         }
+    }
+
+    private float[] convertPCM8ToFloatArray(byte[] pcm8Data) {
+        // Create a float array of the same length as the input byte array
+        float[] floatData = new float[pcm8Data.length];
+
+        // Iterate through the byte array and convert each sample
+        for (int i = 0; i < pcm8Data.length; i++) {
+            // Convert unsigned 8-bit PCM to signed 8-bit value
+            int signedValue = (pcm8Data[i] & 0xFF) - 128;
+
+            // Normalize the signed 8-bit value to the range [-1.0, 1.0]
+            floatData[i] = signedValue / 128.0f;
+        }
+
+        return floatData;
+    }
+
+    private byte convertFloatToPCM8(float floatValue) {
+        // Clamp the float value to the range [-1.0, 1.0] to prevent overflow
+        float clampedValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
+
+        // Convert float value in range [-1.0, 1.0] to signed 8-bit value
+        int signedValue = Math.round(clampedValue * 128);
+
+        // Convert signed 8-bit value to unsigned 8-bit PCM (range 0 to 255)
+        return (byte) (signedValue + 128);
     }
 }
