@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 public class BFSKDecoder {
     public static final byte[] START_OF_DATA_MARKER = new byte[]{1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0}; // 2x pattern that's not an alphanumeric ASCII character
     public static final byte[] END_OF_DATA_MARKER =   new byte[]{1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1}; // 2x pattern that's not an alphanumeric ASCII character
-    private static final int DATA_PARSE_EVERY_MS = 1000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles & battery constantly looking for data)
+    private static final int DATA_PARSE_EVERY_MS = 2000; // milliseconds to wait before parsing data again (to avoid wasted CPU cycles & battery constantly looking for data)
     private int markerSearchGranularity; // Bytes to skip while searching for start marker in audio data (higher risks missing, lower increases CPU use)
     private long lastParseMs = System.currentTimeMillis();
     private final int markerCorrelationThreshold;
@@ -38,6 +38,13 @@ public class BFSKDecoder {
     private boolean decoding = false;
     private static final boolean DEBUG_SAVE_AUDIO = false;
     private static final boolean VERBOSE_DECODE_DEBUG = false;
+    private static final boolean USE_BANDPASS_FILTER = true; // TODO make this a param to the constructor
+
+    // Variables for filtering
+    private double[] audioDoubleData;  // Reusable array to avoid GC thrashing
+    private Complex[] transformed;
+    private Complex[] inverseTransformed;
+    private static final Complex ZERO = new Complex(0, 0);
 
     public BFSKDecoder(float sampleRate, int baudRate, double freqZero, double freqOne, int bufferSize, Consumer<String> callback) {
         this.sampleRate = sampleRate;
@@ -53,6 +60,12 @@ public class BFSKDecoder {
         // TODO Dynamically adjust this up (stricter) or down based on baud rate. Lower baud can be stricter on threshold.
         // Empirically, 10000 works at 30 baud, and 1000 works at 300 baud. Need to do more tests to figure out a function.
         markerCorrelationThreshold = 1000;
+
+        // Preallocate bandpass filter arrays for reuse
+        int paddedLength = nextPowerOf2(bufferSize);
+        audioDoubleData = new double[paddedLength];
+        transformed = new Complex[paddedLength];
+        inverseTransformed = new Complex[paddedLength];
 
         // Final bits of the data start/end markers must differ for bit alignment to work properly.
         assert(START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 2] != START_OF_DATA_MARKER[START_OF_DATA_MARKER.length - 1]);
@@ -78,15 +91,17 @@ public class BFSKDecoder {
         byte[] accumulatedAudio = buffer.readAll();
         int potentialBits = accumulatedAudio.length / samplesPerBit;
 
-        if (DEBUG_SAVE_AUDIO) {
-            // Dump audio bytes to storage/emulated/0/Document/rxAudio.pcm.
-            // Can be imported to Audacity as "raw data", 44kHz 8-bit mono.
-            saveAudioFile(accumulatedAudio);
-        }
-
         if (potentialBits > 0) {
-            // Remove noise above and below the frequencies of interest to improve decode.
-            accumulatedAudio = bandpassFilter(this.freqZero - 100, this.freqOne + 100, accumulatedAudio, sampleRate);
+            if (USE_BANDPASS_FILTER) {
+                // Remove noise above and below the frequencies of interest to improve decode.
+                accumulatedAudio = bandpassFilter(this.freqZero - 100, this.freqOne + 100, accumulatedAudio);
+            }
+
+            if (DEBUG_SAVE_AUDIO) {
+                // Dump audio bytes to storage/emulated/0/Document/rxAudio.pcm.
+                // Can be imported to Audacity as "raw data", 44kHz 8-bit mono.
+                saveAudioFile(accumulatedAudio);
+            }
 
             // Attempt decode.
             int startMarker = findMarker(accumulatedAudio, accumulatedAudio.length - samplesPerBit - 1, START_OF_DATA_MARKER, true); // Look backwards b/c marker will appear at end of circular audio buffer, no sense in parsing the front.
@@ -106,43 +121,34 @@ public class BFSKDecoder {
     }
 
     // Bandpass filter method that filters out frequencies below 'low' and above 'high'.
-    public byte[] bandpassFilter(double low, double high, byte[] data, double sampleRate) {
+    public byte[] bandpassFilter(double low, double high, byte[] data) {
         int n = data.length;
-
-        // Find the next power of 2 greater than or equal to the length of the data.
         int paddedLength = nextPowerOf2(n);
 
-        // FFT transformer
-        FastFourierTransformer fft = new FastFourierTransformer(DftNormalization.STANDARD);
-
-        // Convert the byte array into a double array (FFT requires double input) and pad with zeros.
-        double[] audioDoubleData = new double[paddedLength];
+        // Convert byte array to double and reuse preallocated array
         for (int i = 0; i < n; i++) {
             audioDoubleData[i] = data[i];
         }
 
-        // Perform the FFT to get the frequency components.
-        Complex[] transformed = fft.transform(audioDoubleData, TransformType.FORWARD);
+        // Perform the FFT
+        FastFourierTransformer fft = new FastFourierTransformer(DftNormalization.STANDARD);
+        transformed = fft.transform(audioDoubleData, TransformType.FORWARD);
 
-        // Determine the frequency resolution.
+        // Calculate the frequency resolution
         double frequencyResolution = sampleRate / paddedLength;
 
-        // Apply the bandpass filter.
+        // Apply bandpass filter
         for (int i = 0; i < transformed.length / 2; i++) {
             double frequency = i * frequencyResolution;
-
-            // Zero out frequencies outside the specified range.
             if (frequency < low || frequency > high) {
-                transformed[i] = Complex.ZERO;  // Zero out this frequency component.
-                transformed[transformed.length - i - 1] = Complex.ZERO;  // Mirror frequency for the negative side.
+                transformed[i] = ZERO;
+                transformed[transformed.length - i - 1] = ZERO;
             }
         }
 
-        // Perform the inverse FFT to convert the filtered signal back into the time domain.
-        Complex[] inverseTransformed = fft.transform(transformed, TransformType.INVERSE);
-
-        // Convert the Complex array back into real data (taking the real part) and truncate to original size.
-        byte[] filteredAudioData = new byte[n]; // Original size, not the padded size
+        // Perform the inverse FFT and truncate to original size
+        inverseTransformed = fft.transform(transformed, TransformType.INVERSE);
+        byte[] filteredAudioData = new byte[n];
         for (int i = 0; i < n; i++) {
             filteredAudioData[i] = (byte) Math.round(inverseTransformed[i].getReal());
         }

@@ -117,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
     // BFSK encoder/decoder (software modem)
     private BFSKEncoder bfskEncoder = null;
     private BFSKDecoder bfskDecoder = null;
-    private static final int DATA_BAUD_RATE = 300; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
+    private static final int DATA_BAUD_RATE = 30; // AUDIO_SAMPLE_RATE must be evenly divisible by this or data will corrupt or not decode.
     private static final float DATA_FREQ_ZERO = 1300;
     private static final float DATA_FREQ_ONE = 2100;
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;

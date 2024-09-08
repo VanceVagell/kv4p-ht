@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 
 public class BFSKEncoder {
     public static final int NUM_PARITY_BYTES = 10; // TODO make this an init param to constructor
-    public static final boolean USE_FEC = true; // Disabling this is useful for debugging data audio stream.
+    public static final boolean USE_FEC = false; // Disabling this is useful for debugging data audio stream.
 
     private final float sampleRate;
     private final int baudRate;
