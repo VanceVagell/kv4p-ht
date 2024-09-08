@@ -28,14 +28,18 @@
         android:layout_height="wrap_content"
         android:layout_weight="0"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:hint="Memory name">
+        android:hint="Memory name"
+        app:hintTextColor="@color/primary_deselected"
+        app:boxStrokeColor="@color/primary"
+        android:textColorHint="@color/primary_deselected">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/editNameTextInputEditText"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:textSize="20dp">
+            android:textSize="20dp"
+            android:textColor="@color/primary">
         </com.google.android.material.textfield.TextInputEditText>
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -45,14 +49,18 @@
         android:layout_weight="0"
         android:layout_marginTop="8dp"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-        android:hint="Memory group (optional)">
+        android:hint="Memory group (optional)"
+        app:hintTextColor="@color/primary_deselected"
+        app:boxStrokeColor="@color/primary"
+        android:textColorHint="@color/primary_deselected">
 
         <AutoCompleteTextView
             android:id="@+id/editMemoryGroupTextInputEditText"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:textSize="20dp"/>
+            android:textSize="20dp"
+            android:textColor="@color/primary"/>
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
@@ -61,7 +69,10 @@
         android:layout_weight="0"
         android:layout_marginTop="8dp"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:hint="Frequency">
+        android:hint="Frequency"
+        app:hintTextColor="@color/primary_deselected"
+        app:boxStrokeColor="@color/primary"
+        android:textColorHint="@color/primary_deselected">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/editFrequencyTextInputEditText"
@@ -69,7 +80,8 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:textSize="20dp"
-            android:inputType="numberDecimal">
+            android:inputType="numberDecimal"
+            android:textColor="@color/primary">
         </com.google.android.material.textfield.TextInputEditText>
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -79,7 +91,10 @@
         android:layout_weight="0"
         android:layout_marginTop="8dp"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-        android:hint="Offset">
+        android:hint="Offset"
+        app:hintTextColor="@color/primary_deselected"
+        app:boxStrokeColor="@color/primary"
+        android:textColorHint="@color/primary_deselected">
 
         <AutoCompleteTextView
             android:id="@+id/editOffsetTextView"
@@ -88,7 +103,8 @@
             android:layout_weight="1"
             android:inputType="none"
             android:text="None"
-            android:textSize="20dp"/>
+            android:textSize="20dp"
+            android:textColor="@color/primary"/>
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
@@ -97,7 +113,10 @@
         android:layout_weight="0"
         android:layout_marginTop="8dp"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-        android:hint="Tone">
+        android:hint="Tone"
+        app:hintTextColor="@color/primary_deselected"
+        app:boxStrokeColor="@color/primary"
+        android:textColorHint="@color/primary_deselected">
 
         <AutoCompleteTextView
             android:id="@+id/editToneTextView"
@@ -106,7 +125,8 @@
             android:layout_weight="1"
             android:inputType="none"
             android:text="None"
-            android:textSize="20dp"/>
+            android:textSize="20dp"
+            android:textColor="@color/primary"/>
     </com.google.android.material.textfield.TextInputLayout>
 
     <LinearLayout

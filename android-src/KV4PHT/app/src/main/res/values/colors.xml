@@ -9,4 +9,5 @@
     <color name="primary_veryfaint">#0DFFFCEA</color>
     <color name="accent">#FFAD5642</color>
     <color name="accent_veryfaint">#55AD5642</color>
+    <color name="mtrl_textinput_default_box_stroke_color">#CEFFFCEA</color>
 </resources>

@@ -303,6 +303,7 @@ public class MainActivity extends AppCompatActivity {
                     MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
                     finalString = aprsPacket.getSourceCall() + ": " + messagePacket.getMessageBody();
                 } else { // Raw APRS packet. Useful for things like monitoring 144.39 for misc APRS traffic.
+                    // TODO add better implementation of other message types (especially Location and Object, which are common on 144.390MHz).
                     finalString = aprsPacket.toString();
                 }
 

@@ -195,6 +195,7 @@
                         android:id="@+id/scanButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:textColor="@color/primary"
                         android:text="SCAN"
                         android:fontFamily="@font/jost"
                         android:textSize="20dp"
@@ -287,6 +288,7 @@
                         android:maxLines="1"
                         android:singleLine="true"
                         android:background="@android:color/transparent"
+                        android:textColorHint="@color/primary_deselected"
                         android:hint="Write up to 67 chars..."
                         android:layout_marginRight="16dp"
                         android:imeOptions="actionSend">
