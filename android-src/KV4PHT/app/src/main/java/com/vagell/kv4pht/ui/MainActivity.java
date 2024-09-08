@@ -560,11 +560,11 @@ public class MainActivity extends AppCompatActivity {
 
                         if (squelchSetting != null) {
                             squelch = Integer.parseInt(squelchSetting.value);
-                            if (activeMemoryId > -1) {
-                                tuneToMemory(activeMemoryId, squelch);
-                            } else {
-                                tuneToFreq(activeFrequencyStr, squelch);
-                            }
+                        }
+                        if (activeMemoryId > -1) {
+                            tuneToMemory(activeMemoryId, squelch);
+                        } else {
+                            tuneToFreq(activeFrequencyStr, squelch);
                         }
 
                         boolean emphasis = false;
