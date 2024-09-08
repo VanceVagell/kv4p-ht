@@ -1602,11 +1602,6 @@ public class MainActivity extends AppCompatActivity {
                     if (!DEBUG_LOOPBACK_TEST && bfskDecoder != null) { // Avoid race condition at app start.
                         audioTrack.write(data, 0, data.length); // Play any audio.
 
-                        // TODO remove this debug stuff and file permission in manifest
-                        /* synchronized (rxAudioBytes) {
-                            rxAudioBytes.add(data);
-                        } */
-
                         threadPoolExecutor.execute(new Runnable() {
                             @Override
                             public void run() {
