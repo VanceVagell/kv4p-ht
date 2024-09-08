@@ -365,6 +365,8 @@ public class MainActivity extends AppCompatActivity {
 
             ScrollView scrollView = findViewById(R.id.textChatScrollView);
             scrollView.fullScroll(View.FOCUS_DOWN);
+
+            findViewById(R.id.textChatInput).requestFocus();
         }
     }
 

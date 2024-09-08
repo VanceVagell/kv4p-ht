@@ -8,7 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 public class BFSKEncoder {
-    public static final int NUM_PARITY_BYTES = 20;
+    public static final int NUM_PARITY_BYTES = 10;
 
     private final float sampleRate;
     private final int baudRate;

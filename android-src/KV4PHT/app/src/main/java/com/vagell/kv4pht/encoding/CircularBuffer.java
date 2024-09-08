@@ -36,6 +36,10 @@ public class CircularBuffer {
                             Byte[] byteObjs = incomingBytes.poll();
                             byte[] bytes = ArrayUtils.toPrimitive(byteObjs);
 
+                            if (bytes == null) {
+                                continue;
+                            }
+
                             synchronized (circularBuffer) {
                                 for (byte b : bytes) {
                                     buffer[writePos] = b;

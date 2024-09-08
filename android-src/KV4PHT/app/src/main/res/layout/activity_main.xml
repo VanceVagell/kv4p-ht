@@ -257,7 +257,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:textSize="20dp"
-                        android:textColor="@color/primary"/>
+                        android:textColor="@color/primary"
+                        android:textIsSelectable="true"/>
                 </ScrollView>
 
                 <View
