@@ -117,6 +117,16 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             @Override
             public void run() {
                 List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
+
+                // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
+                for (int i = 0; i < memoryGroups.size(); i++) {
+                    String name = memoryGroups.get(i);
+                    if (name == null || name.trim().length() == 0) {
+                        memoryGroups.remove(i);
+                        i--;
+                    }
+                }
+
                 activity.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
