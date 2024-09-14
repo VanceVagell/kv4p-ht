@@ -21,6 +21,7 @@ import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Vibrator;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
@@ -625,11 +626,14 @@ public class MainActivity extends AppCompatActivity {
                         }
                         if (stickyPTT) {
                             if (mode == MODE_RX) {
+                                ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                                 startPtt(false);
                             } else if (mode == MODE_TX) {
+                                ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                                 endPtt();
                             }
                         } else {
+                            ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                             startPtt(false);
                         }
                         touchHandled = true;
