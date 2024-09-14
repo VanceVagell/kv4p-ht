@@ -244,9 +244,9 @@ public class MainActivity extends AppCompatActivity {
             public boolean onNavigationItemSelected(@NonNull MenuItem menuItem) {
                 int itemId = menuItem.getItemId();
                 if (itemId == R.id.voice_mode) {
-                    setMode(false);
+                    setVisibleScreen(false);
                 } else if (itemId == R.id.text_chat_mode) {
-                    setMode(true);
+                    setVisibleScreen(true);
                 }
                 return true;
             }
@@ -320,7 +320,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void setMode(boolean isTextChat) {
+    /**
+     * Specifies whether the voice or text chat screen should be visible.
+     * @param isTextChat true to show the text chat screen, false to show the voice screen.
+     */
+    private void setVisibleScreen(boolean isTextChat) {
         // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
         // Controls for voice mode
         findViewById(R.id.voiceModeLineHolder).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
@@ -608,6 +612,10 @@ public class MainActivity extends AppCompatActivity {
         pttButton.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
+                // If the user tries to transmit, stop scanning so we don't
+                // move to a different frequency during or after the tx.
+                setScanning(false, false);
+
                 boolean touchHandled = false;
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
@@ -1236,7 +1244,7 @@ public class MainActivity extends AppCompatActivity {
         setScanning(mode != MODE_SCAN); // Toggle scanning on/off
     }
 
-    private void setScanning(boolean scanning) {
+    private void setScanning(boolean scanning, boolean goToRxMode) {
         AppCompatButton scanButton = findViewById(R.id.scanButton);
         if (!scanning) {
             runOnUiThread(new Runnable() {
@@ -1245,10 +1253,14 @@ public class MainActivity extends AppCompatActivity {
                     scanButton.setText("SCAN");
                 }
             });
-            mode = MODE_RX;
+
             // If squelch was off before we started scanning, turn it off again
             if (squelch == 0) {
                 tuneToMemory(activeMemoryId, squelch);
+            }
+
+            if (goToRxMode) {
+                mode = MODE_RX;
             }
         } else { // Start scanning
             runOnUiThread(new Runnable() {
@@ -1260,6 +1272,10 @@ public class MainActivity extends AppCompatActivity {
             mode = MODE_SCAN;
             nextScan();
         }
+    }
+
+    private void setScanning(boolean scanning) {
+        setScanning(scanning, true);
     }
 
     private void nextScan() {
