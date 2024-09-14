@@ -294,7 +294,12 @@ public class MainActivity extends AppCompatActivity {
                 InformationField infoField = aprsPacket.getAprsInformation();
                 if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
                     MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
-                    finalString = aprsPacket.getSourceCall() + ": " + messagePacket.getMessageBody();
+                    finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
+
+                    if (messagePacket.getTargetCallsign().equals(callsign)) {
+                        // Notify the user they got a message.
+                        // TODO
+                    }
                 } else { // Raw APRS packet. Useful for things like monitoring 144.39 for misc APRS traffic.
                     // TODO add better implementation of other message types (especially Location and Object, which are common on 144.390MHz).
                     finalString = aprsPacket.toString();
@@ -338,11 +343,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void sendTextClicked(View view) {
+        String targetCallsign = ((EditText) findViewById(R.id.textChatTo)).getText().toString().trim();
+        if (targetCallsign.length() == 0) {
+            targetCallsign = "CQ";
+        } else {
+            targetCallsign = targetCallsign.toUpperCase();
+        }
+        ((EditText) findViewById(R.id.textChatTo)).setText(targetCallsign);
+
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
+        if (outText.length() == 0) {
+            return; // Nothing to send.
+        }
         ((EditText) findViewById(R.id.textChatInput)).setText("");
 
         // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
-        MessagePacket msgPacket = new MessagePacket("CQ", outText, "1"); // TODO increment messageNumber each time, store in Android app DB.
+        MessagePacket msgPacket = new MessagePacket(targetCallsign, outText, "1"); // TODO increment messageNumber each time, store in Android app DB.
         ArrayList<Digipeater> digipeaters = new ArrayList<>();
         digipeaters.add(new Digipeater("WIDE1*"));
         digipeaters.add(new Digipeater("WIDE2-1"));
@@ -386,7 +402,7 @@ public class MainActivity extends AppCompatActivity {
         }, MS_DELAY_BEFORE_DATA_XMIT);
 
         TextView chatLog = findViewById(R.id.textChatLog);
-        chatLog.append(callsign + ": " + outText + "\n");
+        chatLog.append(callsign + " to " + targetCallsign + ": " + outText + "\n");
 
         ScrollView scrollView = findViewById(R.id.textChatScrollView);
         scrollView.fullScroll(View.FOCUS_DOWN);
