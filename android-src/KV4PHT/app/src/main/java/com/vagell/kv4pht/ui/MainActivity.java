@@ -397,6 +397,7 @@ public class MainActivity extends AppCompatActivity {
                 .setContentTitle(title)
                 .setContentText(message)
                 .setContentIntent(pendingIntent)
+                .setAutoCancel(true) // Dismiss on tap
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT);
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.notify(notificationTypeId, builder.build());
