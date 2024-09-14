@@ -3,6 +3,9 @@ package com.vagell.kv4pht.ui;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -43,6 +46,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.lifecycle.Observer;
@@ -121,6 +125,7 @@ public class MainActivity extends AppCompatActivity {
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
 
     private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
+    private static final int REQUEST_NOTIFICATIONS_PERMISSION_CODE = 2;
 
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
@@ -173,10 +178,17 @@ public class MainActivity extends AppCompatActivity {
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
     private long startTxTimeSec = -1;
 
+    // Notification stuff
+    private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
+    private static int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
+    private static String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
+
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        createNotificationChannels();
 
         // Bind data to the UI via the MainViewModel class
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
@@ -256,6 +268,7 @@ public class MainActivity extends AppCompatActivity {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
         requestAudioPermissions();
+        requestNotificationPermissions(); // TODO store a boolean in our DB so we only ask for this once (in case they say no)
         findESP32Device();
 
         attachListeners();
@@ -276,7 +289,40 @@ public class MainActivity extends AppCompatActivity {
         initAFSKModem();
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        // Really important to release audio recording objects, or we can exhaust recording
+        // ability for other apps on the system.
+        if (audioRecord != null) {
+            audioRecord.stop();
+            audioRecord.release();
+        }
+    }
+
+    private void createNotificationChannels() {
+        // Notification channel for APRS text chat messages
+        NotificationChannel channel = new NotificationChannel(MESSAGE_NOTIFICATION_CHANNEL_ID,
+                "Chat messages", NotificationManager.IMPORTANCE_DEFAULT);
+        channel.setDescription("APRS text chat messages addressed to you");
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        notificationManager.createNotificationChannel(channel);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+
+        // If we arrived here from an APRS text chat notification, open text chat.
+        if (intent != null && intent.getAction().equals(INTENT_OPEN_CHAT)) {
+            setVisibleScreen(true);
+        }
+    }
+
     private void initAFSKModem() {
+        final Context activity = this;
+
         PacketHandler packetHandler = new PacketHandler() {
             @Override
             public void handlePacket(byte[] data) {
@@ -296,9 +342,10 @@ public class MainActivity extends AppCompatActivity {
                     MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
                     finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
 
-                    if (messagePacket.getTargetCallsign().equals(callsign)) {
-                        // Notify the user they got a message.
-                        // TODO
+                    // If the message was addressed to us, notify the user.
+                    if (messagePacket.getTargetCallsign().toUpperCase().equals(callsign.toUpperCase())) {
+                        showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
+                                aprsPacket.getSourceCall() + " messaged you", messagePacket.getMessageBody(), INTENT_OPEN_CHAT);
                     }
                 } else { // Raw APRS packet. Useful for things like monitoring 144.39 for misc APRS traffic.
                     // TODO add better implementation of other message types (especially Location and Object, which are common on 144.390MHz).
@@ -324,6 +371,35 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.d("DEBUG", "Unable to create AFSK modem objects.");
         }
+    }
+
+    private void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
+        if (notificationChannelId == null || title == null || message == null) {
+            Log.d("DEBUG", "Unexpected null in showNotification.");
+            return;
+        }
+
+        // Has the user disallowed notifications?
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        // If they tap the notification when doing something else, come back to this app
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setAction(tapIntentName);
+        intent.addCategory(Intent.CATEGORY_DEFAULT);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        // Notify the user they got a message.
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, notificationChannelId)
+                .setSmallIcon(R.drawable.ic_chat_notification)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        notificationManager.notify(notificationTypeId, builder.build());
     }
 
     /**
@@ -460,7 +536,7 @@ public class MainActivity extends AppCompatActivity {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
 
-        threadPoolExecutor.execute(new Runnable() {
+        threadPoolExecutor.execute(new Runnable() { // TODOV
             @Override
             public void run() {
                 AppSetting callsignSetting = viewModel.appDb.appSettingDao().getByName("callsign");
@@ -985,7 +1061,7 @@ public class MainActivity extends AppCompatActivity {
                     Manifest.permission.RECORD_AUDIO)) {
 
                 new AlertDialog.Builder(this)
-                        .setTitle("Permission Needed")
+                        .setTitle("Permission needed")
                         .setMessage("This app needs the audio recording permission")
                         .setPositiveButton("OK", new DialogInterface.OnClickListener() {
                             @Override
@@ -1008,6 +1084,38 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    protected void requestNotificationPermissions() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.POST_NOTIFICATIONS)) {
+
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission needed")
+                        .setMessage("This app needs to be able to send notifications")
+                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                ActivityCompat.requestPermissions(MainActivity.this,
+                                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                                        REQUEST_NOTIFICATIONS_PERMISSION_CODE);
+                            }
+                        })
+                        .create()
+                        .show();
+
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        REQUEST_NOTIFICATIONS_PERMISSION_CODE);
+            }
+        } else {
+            // Permission has already been granted
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -1022,6 +1130,16 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     // Permission denied, things will just be broken.
                     debugLog("Error: Need audio permission");
+                }
+                return;
+            }
+            case REQUEST_NOTIFICATIONS_PERMISSION_CODE: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted.
+                } else {
+                    // Permission denied
+                    debugLog("Warning: Need notifications permission to be able to send APRS chat message notifications");
                 }
                 return;
             }
