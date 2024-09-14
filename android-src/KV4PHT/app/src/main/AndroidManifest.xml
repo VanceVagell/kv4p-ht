@@ -34,7 +34,7 @@
             android:name=".ui.AddEditMemoryActivity"
             android:exported="true"
             android:theme="@style/Theme.KV4PHT"
-            android:windowSoftInputMode="stateVisible">
+            android:windowSoftInputMode="stateVisible|adjustResize"> <!-- There's an issue where fields are not scrollable, likely caused by an Android bug not honoring adjustResize on fullscreen apps, see similar bug in another project: https://github.com/dotnet/maui/issues/14281 -->
             <intent-filter>
                 <action android:name="com.vagell.kv4pht.ADD_MEMORY_ACTION" />
                 <action android:name="com.vagell.kv4pht.EDIT_MEMORY_ACTION" />

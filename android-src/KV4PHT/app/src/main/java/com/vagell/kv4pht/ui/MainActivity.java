@@ -19,9 +19,7 @@ import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.media.audiofx.Visualizer;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -76,11 +74,6 @@ import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
 
 import org.apache.commons.lang3.ArrayUtils;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -91,7 +84,6 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 public class MainActivity extends AppCompatActivity {
     // Must match the ESP32 device we support.
@@ -145,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int MS_SILENCE_AFTER_DATA = 700;
 
     // Radio params and related settings
-    private String activeFrequencyStr = "144.0000";
+    private String activeFrequencyStr = "144.000";
     private int squelch = 0;
     private String callsign = null;
     private boolean stickyPTT = false;
@@ -745,13 +737,14 @@ public class MainActivity extends AppCompatActivity {
     // Reformats the given frequency as "xxx.xxx" and ensures it's the 2m US amateur band.
     // If the given frequency is unsalvageable, returns activeFrequencyStr.
     private String validateFrequency(String tempFrequency) {
-        String newFrequency = padFrequency(tempFrequency);
+        String newFrequency = formatFrequency(tempFrequency);
 
         // Resort to the old frequency, the one the user inputted is unsalvageable.
         return newFrequency == null ? activeFrequencyStr : newFrequency;
     }
 
-    private String padFrequency(String tempFrequency) {
+    // TODO extract this to a utility class, shouldn't be in an Activity
+    public static String formatFrequency(String tempFrequency) {
         tempFrequency = tempFrequency.trim();
 
         // Pad any missing zeroes to match format expected by radio module.
@@ -952,7 +945,7 @@ public class MainActivity extends AppCompatActivity {
         freq = Math.max(freq, 144.0f);
 
         strFreq = String.format(java.util.Locale.US,"%.3f", freq);
-        strFreq = padFrequency(strFreq);
+        strFreq = formatFrequency(strFreq);
 
         return strFreq;
     }

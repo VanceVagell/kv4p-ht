@@ -208,19 +208,41 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
     public void saveButtonClicked(View view) {
         TextInputEditText editNameTextInputEditText = findViewById(R.id.editNameTextInputEditText);
-        String name = editNameTextInputEditText.getText().toString();
+        String name = editNameTextInputEditText.getText().toString().trim();
 
         AutoCompleteTextView editMemoryGroupTextInputEditText = findViewById(R.id.editMemoryGroupTextInputEditText);
-        String group = editMemoryGroupTextInputEditText.getText().toString();
+        String group = editMemoryGroupTextInputEditText.getText().toString().trim();
 
         TextInputEditText editFrequencyTextInputEditText = findViewById(R.id.editFrequencyTextInputEditText);
-        String frequency = editFrequencyTextInputEditText.getText().toString();
+        String frequency = editFrequencyTextInputEditText.getText().toString().trim();
 
         AutoCompleteTextView editOffsetTextView = findViewById(R.id.editOffsetTextView);
-        String offset = editOffsetTextView.getText().toString();
+        String offset = editOffsetTextView.getText().toString().trim();
 
         AutoCompleteTextView editToneTextView = findViewById(R.id.editToneTextView);
-        String tone = editToneTextView.getText().toString();
+        String tone = editToneTextView.getText().toString().trim();
+
+        // Validate form fields
+        if (name.length() == 0) {
+            editNameTextInputEditText.setError("Name this memory");
+            editNameTextInputEditText.requestFocus();
+            return;
+        }
+
+        if (frequency.length() == 0) {
+            editFrequencyTextInputEditText.setError("Enter a frequency");
+            editFrequencyTextInputEditText.requestFocus();
+            return;
+        } else {
+            String formattedFrequency = MainActivity.formatFrequency(frequency);
+            if (formattedFrequency == null) {
+                editFrequencyTextInputEditText.setError("Enter a frequency like 144.000");
+                editFrequencyTextInputEditText.requestFocus();
+                return;
+            } else {
+                frequency = formattedFrequency;
+            }
+        }
 
         ChannelMemory memory = null;
         if (isAdd) {
