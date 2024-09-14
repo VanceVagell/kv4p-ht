@@ -853,6 +853,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private String getMemoryGroupStr(int memoryId) {
+        List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+        if (channelMemories == null) {
+            return null;
+        }
+        for (int i = 0; i < channelMemories.size(); i++) {
+            if (channelMemories.get(i).memoryId == memoryId) {
+                return channelMemories.get(i).group;
+            }
+        }
+        return null;
+    }
+
     private void tuneToMemory(ChannelMemory memory, int squelchLevel) {
         // TODO if user tapped on a memory explicitly during scan, stop scan and enter RX mode.
 
@@ -1376,6 +1389,9 @@ public class MainActivity extends AppCompatActivity {
     public void addMemoryClicked(View view) {
         Intent intent = new Intent("com.vagell.kv4pht.ADD_MEMORY_ACTION");
         intent.putExtra("requestCode", REQUEST_ADD_MEMORY);
+        intent.putExtra("activeFrequencyStr", activeFrequencyStr);
+        intent.putExtra("selectedMemoryGroup", selectedMemoryGroup);
+
         startActivityForResult(intent, REQUEST_ADD_MEMORY);
     }
 

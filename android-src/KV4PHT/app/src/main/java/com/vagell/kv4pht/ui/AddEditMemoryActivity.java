@@ -78,7 +78,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         Bundle extras = getIntent().getExtras();
         if (extras != null) {
             isAdd = (extras.getInt("requestCode") == MainActivity.REQUEST_ADD_MEMORY);
-            if (!isAdd) {
+            if (!isAdd) { // Edit
                 mMemoryId = extras.getInt("memoryId");
                 threadPoolExecutor.execute(new Runnable() {
                        @Override
@@ -87,8 +87,20 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                            populateOriginalValues();
                        }
                 });
-            } else {
+            } else { // Add
                 mMemoryId = -1; // This ID is never used, just to help with debugging.
+
+                String activeFrequencyStr = extras.getString("activeFrequencyStr");
+                if (activeFrequencyStr != null) {
+                    TextInputEditText editFrequencyTextInputEditText = findViewById(R.id.editFrequencyTextInputEditText);
+                    editFrequencyTextInputEditText.setText(activeFrequencyStr);
+                }
+
+                String selectedMemoryGroup = extras.getString("selectedMemoryGroup");
+                if (selectedMemoryGroup != null) {
+                    AutoCompleteTextView editMemoryGroupTextInputEditText = findViewById(R.id.editMemoryGroupTextInputEditText);
+                    editMemoryGroupTextInputEditText.setText(selectedMemoryGroup, false);
+                }
             }
         }
 
