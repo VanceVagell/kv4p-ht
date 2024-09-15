@@ -324,15 +324,27 @@
                         android:orientation="vertical"
                         android:gravity="center">
 
-                        <ImageButton
-                            android:id="@+id/sendButton"
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:layout_marginRight="8dp"
-                            android:background="@drawable/ic_send"
-                            android:layout_gravity="right"
-                            android:contentDescription="Send message"
-                            android:onClick="sendTextClicked" />
+                        <FrameLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content">
+
+                            <ImageButton
+                                android:id="@+id/sendButton"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:layout_marginRight="8dp"
+                                android:background="@drawable/ic_send"
+                                android:layout_gravity="right"
+                                android:contentDescription="Send message"
+                                android:onClick="sendTextClicked"/>
+
+                            <View
+                                android:id="@+id/sendButtonOverlay"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="@android:color/transparent"
+                                android:onClick="sendButtonOverlayClicked"/>
+                        </FrameLayout>
 
                     </androidx.appcompat.widget.LinearLayoutCompat>
 

@@ -111,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
     private UsbDevice esp32Device;
     private UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
-    private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a signal USB write
+    private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a single USB write
     private Snackbar usbSnackbar = null;
 
     // For receiving audio from ESP32 / radio
@@ -500,12 +500,14 @@ public class MainActivity extends AppCompatActivity {
                 showCallsignSnackbar();
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(false);
+                findViewById(R.id.sendButtonOverlay).setVisibility(View.VISIBLE);
             } else {
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(true);
                 if (callsignSnackbar != null) {
                     callsignSnackbar.dismiss();
                 }
+                findViewById(R.id.sendButtonOverlay).setVisibility(View.GONE);
             }
         } else {
             if (callsignSnackbar != null) {
@@ -516,13 +518,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void showCallsignSnackbar() {
         CharSequence snackbarMsg = "Set your callsign to send text chat";
-        callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+        callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
                 .setAction("Set now", new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
                         settingsClicked(null);
                     }
-                });
+                })
+                .setBackgroundTint(getResources().getColor(R.color.primary))
+                .setTextColor(getResources().getColor(R.color.medium_gray))
+                .setActionTextColor(getResources().getColor(R.color.black))
+                .setAnchorView(findViewById(R.id.textChatInput));
 
         // Make the text of the snackbar larger.
         TextView snackbarActionTextView = (TextView) callsignSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
@@ -531,6 +537,14 @@ public class MainActivity extends AppCompatActivity {
         snackbarTextView.setTextSize(20);
 
         callsignSnackbar.show();
+    }
+
+    public void sendButtonOverlayClicked(View view) {
+        if (callsign.length() == 0) {
+            showCallsignSnackbar();
+            ImageButton sendButton = findViewById(R.id.sendButton);
+            sendButton.setEnabled(false);
+        }
     }
 
     public void sendTextClicked(View view) {
@@ -670,6 +684,15 @@ public class MainActivity extends AppCompatActivity {
                     public void run() {
                         if (callsignSetting != null) {
                             callsign = callsignSetting.value;
+
+                            // Enable or prevent APRS texting depending on if callsign was set.
+                            if (callsign.length() == 0) {
+                                findViewById(R.id.sendButton).setEnabled(false);
+                                findViewById(R.id.sendButtonOverlay).setVisibility(View.VISIBLE);
+                            } else {
+                                findViewById(R.id.sendButton).setEnabled(true);
+                                findViewById(R.id.sendButtonOverlay).setVisibility(View.GONE);
+                            }
                         }
 
                         if (lastGroupSetting != null && !lastGroupSetting.value.equals("")) {
