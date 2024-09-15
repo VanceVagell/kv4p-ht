@@ -36,10 +36,11 @@ public class MainViewModel extends ViewModel {
         this.activity = activity;
     }
 
-    // Example method to populate the list (replace with your actual data source logic)
     public void loadData() {
-        appDb = Room.databaseBuilder(activity.getApplicationContext(),
-                AppDatabase.class, "kv4pht-db").build();
+        if (appDb == null) {
+            appDb = Room.databaseBuilder(activity.getApplicationContext(),
+                    AppDatabase.class, "kv4pht-db").build();
+        }
 
         // Channel memories
         Executor executor = Executors.newSingleThreadExecutor();
@@ -52,7 +53,6 @@ public class MainViewModel extends ViewModel {
         });
     }
 
-    // Getter for the LiveData
     public LiveData<List<ChannelMemory>> getChannelMemories() {
         return channelMemories;
     }

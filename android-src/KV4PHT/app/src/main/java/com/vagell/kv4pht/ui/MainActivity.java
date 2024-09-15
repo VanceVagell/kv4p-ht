@@ -537,7 +537,7 @@ public class MainActivity extends AppCompatActivity {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
 
-        threadPoolExecutor.execute(new Runnable() { // TODOV
+        threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
                 AppSetting callsignSetting = viewModel.appDb.appSettingDao().getByName("callsign");
@@ -1373,7 +1373,14 @@ public class MainActivity extends AppCompatActivity {
         restartAudioPrebuffer();
 
         // Tell the radio about any settings the user set.
-        applySettings();
+        viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
+            @Override
+            public void onLoadDataDone() {
+                applySettings();
+                viewModel.setCallback(null);
+            }
+        });
+        viewModel.loadData();
 
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
@@ -1569,7 +1576,14 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
             case REQUEST_SETTINGS:
-                applySettings();
+                viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
+                    @Override
+                    public void onLoadDataDone() {
+                        applySettings();
+                        viewModel.setCallback(null);
+                    }
+                });
+                viewModel.loadData();
                 break;
             default:
                 debugLog("Warning: Returned to MainActivity from unexpected request code: " + requestCode);
