@@ -94,9 +94,8 @@ import java.util.concurrent.TimeUnit;
 public class MainActivity extends AppCompatActivity {
     // Must match the ESP32 device we support.
     // Idx 0 matches https://www.amazon.com/gp/product/B08D5ZD528
-    // Idx 1 matches https://www.adafruit.com/product/5348
-    public static final int[] ESP32_VENDOR_IDS = {4292, 9114};
-    public static final int[] ESP32_PRODUCT_IDS = {60000, 33041};
+    public static final int[] ESP32_VENDOR_IDS = {4292};
+    public static final int[] ESP32_PRODUCT_IDS = {60000};
 
     private static final byte SILENT_BYTE = -128;
 
