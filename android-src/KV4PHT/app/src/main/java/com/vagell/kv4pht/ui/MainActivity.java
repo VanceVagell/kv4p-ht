@@ -160,8 +160,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private MemoriesAdapter adapter;
 
-    private static final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
-            10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+    private ThreadPoolExecutor threadPoolExecutor = null;
 
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
@@ -187,6 +186,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        threadPoolExecutor = new ThreadPoolExecutor(2,
+                10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         createNotificationChannels();
 
@@ -273,7 +275,6 @@ public class MainActivity extends AppCompatActivity {
 
         attachListeners();
         initAudioTrack();
-        createRxAudioVisualizer();
 
         setupTones();
 
@@ -299,6 +300,54 @@ public class MainActivity extends AppCompatActivity {
             audioRecord.stop();
             audioRecord.release();
         }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        Log.d("DEBUG", "onPause");
+
+        audioTrack.stop();
+        audioTrack.release();
+        audioTrack = null;
+
+        if (audioRecord != null) {
+            audioRecord.stop();
+            audioRecord.release();
+            audioRecord = null;
+        }
+
+        threadPoolExecutor.shutdownNow();
+        threadPoolExecutor = null;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        Log.d("DEBUG", "onResume");
+
+        // TODO unclear why threadPoolExecutor sometimes breaks when we start another activity, but
+        // we recreate it here as a workaround. I think it would be MUCH better fixed by moving all
+        // audio and data handling to a Service and extract ALL those objects and code out of
+        // MainActivity into that. Right now, we're really overloadnig MainActivity for way too much,
+        // and it's Activity lifecycle changes are probably breaking things unexpectedly.
+        threadPoolExecutor = new ThreadPoolExecutor(2,
+                10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+
+        initAudioTrack();
+        restartAudioPrebuffer();
+        initAudioRecorder();
+
+        viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
+            @Override
+            public void onLoadDataDone() {
+                applySettings();
+                viewModel.setCallback(null);
+            }
+        });
+        viewModel.loadData();
     }
 
     private void createNotificationChannels() {
@@ -533,7 +582,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applySettings() {
-        if (viewModel.appDb == null) {
+        if (viewModel.appDb == null || threadPoolExecutor == null) {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
 
@@ -604,14 +653,8 @@ public class MainActivity extends AppCompatActivity {
                         threadPoolExecutor.execute(new Runnable() {
                             @Override
                             public void run() {
-                                try {
-                                    // Hack to get around radio not being ready to enable filters immediately for some reason.
-                                    Thread.sleep(2300);
-                                } catch (InterruptedException ex) {
-                                    throw new RuntimeException(ex);
-                                }
                                 setRadioFilters(finalEmphasis, finalHighpass, finalLowpass);
-                                if (mode != MODE_SCAN) { // This is needed on first start for some reason to start audio playback, but we don't want it to happen during scan. Not sure why checking for MODE_STARTUP doesn't work here.
+                                if (mode != MODE_SCAN) {
                                     mode = MODE_RX;
                                 }
                             }
@@ -1004,6 +1047,8 @@ public class MainActivity extends AppCompatActivity {
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .setBufferSizeInBytes(minBufferSize)
                 .build();
+
+        createRxAudioVisualizer();
     }
 
     protected void startPtt(boolean dataMode) {
@@ -1576,14 +1621,8 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
             case REQUEST_SETTINGS:
-                viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
-                    @Override
-                    public void onLoadDataDone() {
-                        applySettings();
-                        viewModel.setCallback(null);
-                    }
-                });
-                viewModel.loadData();
+                // Actually don't need to do anything here, since settings are always re-checked
+                // in onResume.
                 break;
             default:
                 debugLog("Warning: Returned to MainActivity from unexpected request code: " + requestCode);
@@ -1718,7 +1757,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleESP32Data(byte[] data) {
-        // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
+        try {
+            // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
         /* try {
             String dataStr = new String(data, "UTF-8");
             //if (dataStr.length() < 100 && dataStr.length() > 0)
@@ -1726,64 +1766,72 @@ public class MainActivity extends AppCompatActivity {
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         } */
-        // debugLog("Num bytes from ESP32: " + data.length);
+            // debugLog("Num bytes from ESP32: " + data.length);
 
-        if (mode == MODE_RX || mode == MODE_SCAN) {
-            if (prebufferComplete && audioTrack != null) {
-                synchronized (audioTrack) {
-                    if (afskDemodulator != null) { // Avoid race condition at app start.
-                        // Play the audio.
-                        audioTrack.write(data, 0, data.length);
+            if (mode == MODE_RX || mode == MODE_SCAN) {
+                if (prebufferComplete && audioTrack != null) {
+                    synchronized (audioTrack) {
+                        if (afskDemodulator != null) { // Avoid race condition at app start.
+                            // Play the audio.
+                            audioTrack.write(data, 0, data.length);
 
-                        // Add the audio samples to the AFSK demodulator.
-                        float[] audioAsFloats = convertPCM8ToFloatArray(data);
-                        afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
-                    }
+                            // Add the audio samples to the AFSK demodulator.
+                            float[] audioAsFloats = convertPCM8ToFloatArray(data);
+                            afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
+                        }
 
-                    if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                        audioTrack.play();
-                    }
-                }
-            } else {
-                for (int i = 0; i < data.length; i++) {
-                    // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
-                    // while we're waiting for more bytes.
-                    rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
-                    if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
-                        prebufferComplete = true;
-                        //debugLog("Rx prebuffer full, writing to audioTrack.");
                         if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                             audioTrack.play();
                         }
-                        synchronized (audioTrack) {
-                            audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
+                    }
+                } else {
+                    for (int i = 0; i < data.length; i++) {
+                        // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
+                        // while we're waiting for more bytes.
+                        rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
+                        if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
+                            prebufferComplete = true;
+                            //debugLog("Rx prebuffer full, writing to audioTrack.");
+                            if (audioTrack != null) {
+                                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                                    audioTrack.play();
+                                }
+                                synchronized (audioTrack) {
+                                    audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
+                                }
+                            }
+
+                            rxPrebufferIdx = 0;
+                            break; // Might drop a few audio bytes from data[], should be very minimal
                         }
-                        rxPrebufferIdx = 0;
-                        break; // Might drop a few audio bytes from data[], should be very minimal
                     }
                 }
             }
-        }
 
-        if (mode == MODE_SCAN) {
-            // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
-            for (int i = 0; i < data.length; i++) {
-                if (data[i] == SILENT_BYTE) {
-                    consecutiveSilenceBytes++;
-                    // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
-                    checkScanDueToSilence();
-                } else {
-                    consecutiveSilenceBytes = 0;
+            if (mode == MODE_SCAN) {
+                // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
+                for (int i = 0; i < data.length; i++) {
+                    if (data[i] == SILENT_BYTE) {
+                        consecutiveSilenceBytes++;
+                        // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
+                        checkScanDueToSilence();
+                    } else {
+                        consecutiveSilenceBytes = 0;
+                    }
                 }
-            }
-        } else if (mode == MODE_TX) {
-            // Print any data we get in MODE_TX (we're not expecting any, this is either leftover rx bytes or debug info).
+            } else if (mode == MODE_TX) {
+                // Print any data we get in MODE_TX (we're not expecting any, this is either leftover rx bytes or debug info).
             /* try {
                 String dataStr = new String(data, "UTF-8");
                 debugLog("Unexpected data from ESP32 during MODE_TX: " + dataStr);
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             } */
+            }
+        } catch (Exception e) {
+            // Eat the exception. Whenever MainActivity is paused, this method may be called async
+            // one or more times, and break in unexpected ways.
+            // TODO fix this properly by extracting all the data and audio logic to a Service.
         }
     }
 

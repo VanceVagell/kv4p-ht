@@ -23,8 +23,7 @@ import java.util.concurrent.TimeUnit;
 public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isAdd = true; // false means we're editing a memory, not adding
     private List<String> mTones;
-    private static final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
-            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+    private ThreadPoolExecutor threadPoolExecutor = null;
     private int mMemoryId;
     private ChannelMemory mMemory;
 
@@ -32,6 +31,9 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_edit_memory);
+
+        threadPoolExecutor = new ThreadPoolExecutor(2,
+                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         // Set up the list of supported CTCSS tones.
         mTones = new ArrayList<>();
@@ -118,9 +120,20 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
+        threadPoolExecutor = new ThreadPoolExecutor(2,
+                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+
         // Put the cursor in the name field by default
         EditText nameEditText = findViewById(R.id.editNameTextInputEditText);
         nameEditText.requestFocus();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        threadPoolExecutor.shutdownNow();
+        threadPoolExecutor = null;
     }
 
     private void populateMemoryGroups() {

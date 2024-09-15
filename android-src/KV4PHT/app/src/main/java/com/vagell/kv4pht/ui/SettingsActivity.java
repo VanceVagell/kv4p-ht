@@ -24,16 +24,32 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class SettingsActivity extends AppCompatActivity {
-    private static  final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
-            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+    private ThreadPoolExecutor threadPoolExecutor = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
 
+        threadPoolExecutor = new ThreadPoolExecutor(2,
+                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+
         populateOriginalValues();
         attachListeners();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        threadPoolExecutor.shutdownNow();
+        threadPoolExecutor = null;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        threadPoolExecutor = new ThreadPoolExecutor(2,
+                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
     private void populateOriginalValues() {
