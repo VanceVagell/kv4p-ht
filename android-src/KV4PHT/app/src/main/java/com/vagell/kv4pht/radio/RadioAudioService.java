@@ -33,8 +33,6 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
-import com.vagell.kv4pht.aprs.parser.InformationField;
-import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
@@ -92,6 +90,11 @@ public class RadioAudioService extends Service {
 
     private static final byte SILENT_BYTE = -128;
 
+    // Callbacks to the Activity that started us
+    private RadioMissingCallback radioMissingCallback = null;
+    private RadioConnectedCallback radioConnectedCallback = null;
+    private AprsCallback aprsCallback = null;
+
     // For transmitting audio to ESP32 / radio
     public static final int AUDIO_SAMPLE_RATE = 44100;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
@@ -112,6 +115,9 @@ public class RadioAudioService extends Service {
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
+    private boolean emphasisFilter = false;
+    private boolean highpassFilter = false;
+    private boolean lowpassFilter = false;
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -127,9 +133,7 @@ public class RadioAudioService extends Service {
     private String activeFrequencyStr = "144.000";
     private int squelch = 0;
     private String callsign = null;
-    private boolean stickyPTT = false;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
-    private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
 
     // Safety constants
@@ -154,12 +158,59 @@ public class RadioAudioService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        // Retrieve necessary parameters from the intent, which the activity owns the lifecycle of.
+        // Retrieve necessary parameters from the intent.
         Bundle bundle = intent.getExtras();
-        // BluetoothDevice device = (BluetoothDevice) b.getParcelable("data");
-        // TODO figure out what we should receive here. Maybe just the settings values like callsign, etc.?
+        callsign = bundle.getString("callsign");
+        squelch = bundle.getInt("squelch");
+        emphasisFilter = bundle.getBoolean("emphasisFilter");
+        highpassFilter = bundle.getBoolean("highpassFilter");
+        lowpassFilter = bundle.getBoolean("lowpassFilter");
+        activeMemoryId = bundle.getInt("activeMemoryId");
+        activeFrequencyStr = bundle.getString("activeFrequencyStr");
 
         return binder;
+    }
+
+    public void setCallsign(String callsign) {
+        this.callsign = callsign;
+    }
+
+    public void setSquelch(int squelch) {
+        this.squelch = squelch;
+
+        if (activeMemoryId > -1) {
+            tuneToMemory(activeMemoryId, squelch);
+        } else {
+            tuneToFreq(activeFrequencyStr, squelch);
+        }
+    }
+
+    public void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
+        this.emphasisFilter = emphasis;
+        this.highpassFilter = highpass;
+        this.lowpassFilter = lowpass;
+
+        setRadioFilters(emphasis, highpass, lowpass);
+    }
+
+    public void setActiveMemoryId(int activeMemoryId) {
+        this.activeMemoryId = activeMemoryId;
+
+        if (activeMemoryId > -1) {
+            tuneToMemory(activeMemoryId, squelch);
+        } else {
+            tuneToFreq(activeFrequencyStr, squelch);
+        }
+    }
+
+    public void setActiveFrequencyStr(String activeFrequencyStr) {
+        this.activeFrequencyStr = activeFrequencyStr;
+
+        if (activeMemoryId > -1) {
+            tuneToMemory(activeMemoryId, squelch);
+        } else {
+            tuneToFreq(activeFrequencyStr, squelch);
+        }
     }
 
     @Override
@@ -180,10 +231,27 @@ public class RadioAudioService extends Service {
 
     /**
      * This must be set before any method that requires channels (like scanning or tuning to a
-     * memory) is access, or they will just report an error.
+     * memory) is access, or they will just report an error. And it should also be called whenever
+     * the active memories have changed (e.g. user selected a different memory group).
      */
     public void setChannelMemories(LiveData<List<ChannelMemory>> channelMemoriesLiveData) {
         this.channelMemoriesLiveData = channelMemoriesLiveData;
+    }
+
+    public interface RadioMissingCallback {
+        public void radioMissing();
+    }
+
+    public void setRadioMissingCallback(RadioMissingCallback callback) {
+        radioMissingCallback = callback;
+    }
+
+    public interface RadioConnectedCallback {
+        public void radioConnected();
+    }
+
+    public void setRadioConnectedCallback(RadioConnectedCallback callback) {
+        radioConnectedCallback = callback;
     }
 
     @Override
@@ -457,8 +525,9 @@ public class RadioAudioService extends Service {
 
         if (esp32Device == null) {
             Log.d("DEBUG", "No ESP32 detected");
-            // TODO callback to bound Activity so they can show snackbar
-            // showUSBSnackbar();
+            if (radioMissingCallback != null) {
+                radioMissingCallback.radioMissing();
+            }
         } else {
             Log.d("DEBUG", "Found ESP32.");
             setupSerialConnection();
@@ -487,8 +556,9 @@ public class RadioAudioService extends Service {
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
             Log.d("DEBUG", "Error: no available USB drivers.");
-            // TODO callback to bound Activity so they can show snackbar
-            // showUSBSnackbar();
+            if (radioMissingCallback != null) {
+                radioMissingCallback.radioMissing();
+            }
             return;
         }
 
@@ -497,8 +567,9 @@ public class RadioAudioService extends Service {
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
             Log.d("DEBUG", "Error: couldn't open USB device.");
-            // TODO callback to bound Activity so they can show snackbar
-            // showUSBSnackbar();
+            if (radioMissingCallback != null) {
+                radioMissingCallback.radioMissing();
+            }
             return;
         }
 
@@ -509,8 +580,9 @@ public class RadioAudioService extends Service {
             serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.d("DEBUG", "Error: couldn't open USB serial port.");
-            // TODO callback to bound Activity so they can show snackbar
-            // showUSBSnackbar();
+            if (radioMissingCallback != null) {
+                radioMissingCallback.radioMissing();
+            }
             return;
         }
 
@@ -563,13 +635,20 @@ public class RadioAudioService extends Service {
     }
 
     private void initAfterESP32Connected() {
-        // TODO Callback to bound Activity so it knows USB is connected (and can hide any snackbar).
+        if (radioConnectedCallback != null) {
+            radioConnectedCallback.radioConnected();
+        }
 
         // Start by prebuffering some audio
         restartAudioPrebuffer();
 
         // Tell the radio about any settings the user set.
-        // TODO use settings from the bound intent, not the viewModel
+        setRadioFilters(emphasisFilter, highpassFilter, lowpassFilter);
+        if (activeMemoryId > -1) {
+            tuneToMemory(activeMemoryId, squelch);
+        } else {
+            tuneToFreq(activeFrequencyStr, squelch);
+        }
 
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
@@ -577,8 +656,6 @@ public class RadioAudioService extends Service {
 
     public void setScanning(boolean scanning, boolean goToRxMode) {
         if (!scanning) {
-            // TODO notify bound Action that scanning has stopped
-
             // If squelch was off before we started scanning, turn it off again
             if (squelch == 0) {
                 tuneToMemory(activeMemoryId, squelch);
@@ -588,7 +665,6 @@ public class RadioAudioService extends Service {
                 mode = MODE_RX;
             }
         } else { // Start scanning
-            // TODO notify bound Action that scanning has started
             mode = MODE_SCAN;
             nextScan();
         }
@@ -839,6 +915,14 @@ public class RadioAudioService extends Service {
         return (byte) (signedValue + 128);
     }
 
+    public interface AprsCallback {
+        public void packetReceived();
+    }
+
+    public void setAprsCallback(AprsCallback aprsCallback) {
+        this.aprsCallback = aprsCallback;
+    }
+
     private void initAFSKModem() {
         final Context activity = this;
 
@@ -853,25 +937,9 @@ public class RadioAudioService extends Service {
                     return;
                 }
 
-                final String finalString;
-
-                // Reformat the packet to be more human readable.
-                InformationField infoField = aprsPacket.getAprsInformation();
-                if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
-                    MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
-                    finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
-
-                    // If the message was addressed to us, notify the user.
-                    if (messagePacket.getTargetCallsign().toUpperCase().equals(callsign.toUpperCase())) {
-                        showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
-                                aprsPacket.getSourceCall() + " messaged you", messagePacket.getMessageBody(), MainActivity.INTENT_OPEN_CHAT);
-                    }
-                } else { // Raw APRS packet. Useful for things like monitoring 144.39 for misc APRS traffic.
-                    // TODO add better implementation of other message types (especially Location and Object, which are common on 144.390MHz).
-                    finalString = aprsPacket.toString();
+                if (aprsCallback != null) {
+                    aprsCallback.packetReceived(aprsPacket);
                 }
-
-                // TODO callback to bound Activity with the chat message, so it can display it and scroll to it.
             }
         };
 
