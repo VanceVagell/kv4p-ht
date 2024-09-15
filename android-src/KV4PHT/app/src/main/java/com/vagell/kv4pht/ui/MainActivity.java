@@ -32,6 +32,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -112,6 +113,7 @@ public class MainActivity extends AppCompatActivity {
     private UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
     private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a signal USB write
+    private Snackbar usbSnackbar = null;
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
@@ -186,6 +188,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Keep the screen on
+        // TODO This is a hack to keep app running (i.e. audio playing) and not be paused,
+        // need to replace this with a Service so screen can be turned off.
+        // Here is a starter for how to build the Service: https://developer.android.com/media/platform/mediaplayer#mpandservices
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
@@ -278,6 +286,8 @@ public class MainActivity extends AppCompatActivity {
 
         setupTones();
 
+        initAFSKModem();
+
         viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
             @Override
             public void onLoadDataDone() {
@@ -286,19 +296,27 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         viewModel.loadData();
-
-        initAFSKModem();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
 
-        // Really important to release audio recording objects, or we can exhaust recording
-        // ability for other apps on the system.
+        if (audioTrack != null) {
+            audioTrack.stop();
+            audioTrack.release();
+            audioTrack = null;
+        }
+
         if (audioRecord != null) {
             audioRecord.stop();
             audioRecord.release();
+            audioRecord = null;
+        }
+
+        if (threadPoolExecutor != null) {
+            threadPoolExecutor.shutdownNow();
+            threadPoolExecutor = null;
         }
     }
 
@@ -308,9 +326,11 @@ public class MainActivity extends AppCompatActivity {
 
         Log.d("DEBUG", "onPause");
 
-        audioTrack.stop();
-        audioTrack.release();
-        audioTrack = null;
+        if (audioTrack != null) {
+            audioTrack.stop();
+            audioTrack.release();
+            audioTrack = null;
+        }
 
         if (audioRecord != null) {
             audioRecord.stop();
@@ -318,8 +338,10 @@ public class MainActivity extends AppCompatActivity {
             audioRecord = null;
         }
 
-        threadPoolExecutor.shutdownNow();
-        threadPoolExecutor = null;
+        if (threadPoolExecutor != null) {
+            threadPoolExecutor.shutdownNow();
+            threadPoolExecutor = null;
+        }
     }
 
     @Override
@@ -337,7 +359,6 @@ public class MainActivity extends AppCompatActivity {
                 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         initAudioTrack();
-        restartAudioPrebuffer();
         initAudioRecorder();
 
         viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
@@ -466,6 +487,13 @@ public class MainActivity extends AppCompatActivity {
 
         // Controls for text mode
         findViewById(R.id.textModeContainer).setVisibility(isTextChat ? View.VISIBLE : View.GONE);
+
+        if (isTextChat) {
+            // Stop scanning when we enter chat mode, we don't want to tx data on an unexpected
+            // frequency. User must set it manually (or select it before coming to chat mode, but
+            // can't be scanning).
+            setScanning(false, true);
+        }
     }
 
     public void sendTextClicked(View view) {
@@ -933,8 +961,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void tuneToMemory(ChannelMemory memory, int squelchLevel) {
-        // TODO if user tapped on a memory explicitly during scan, stop scan and enter RX mode.
-
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
 
@@ -1049,6 +1075,7 @@ public class MainActivity extends AppCompatActivity {
                 .build();
 
         createRxAudioVisualizer();
+        restartAudioPrebuffer();
     }
 
     protected void startPtt(boolean dataMode) {
@@ -1285,31 +1312,25 @@ public class MainActivity extends AppCompatActivity {
 
         if (esp32Device == null) {
             debugLog("No ESP32 detected");
-            showUSBRetrySnackbar();
+            showUSBSnackbar();
         } else {
             debugLog("Found ESP32.");
             setupSerialConnection();
         }
     }
 
-    private void showUSBRetrySnackbar() {
+    private void showUSBSnackbar() {
         CharSequence snackbarMsg = "KV4P-HT radio not found, plugged in?";
-        CharSequence buttonLabel = "RETRY";
-        Snackbar snackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-                .setAction(buttonLabel, new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        findESP32Device();
-                    }
-                }).setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+        usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+            .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
 
         // Make the text of the snackbar larger.
-        TextView snackbarActionTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        TextView snackbarActionTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
         snackbarActionTextView.setTextSize(20);
-        TextView snackbarTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        TextView snackbarTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
-        snackbar.show();
+        usbSnackbar.show();
     }
 
     private boolean isESP32Device(UsbDevice device) {
@@ -1347,7 +1368,7 @@ public class MainActivity extends AppCompatActivity {
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
             debugLog("Error: no available USB drivers.");
-            showUSBRetrySnackbar();
+            showUSBSnackbar();
             return;
         }
 
@@ -1356,7 +1377,7 @@ public class MainActivity extends AppCompatActivity {
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
             debugLog("Error: couldn't open USB device.");
-            showUSBRetrySnackbar();
+            showUSBSnackbar();
             return;
         }
 
@@ -1367,7 +1388,7 @@ public class MainActivity extends AppCompatActivity {
             serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             debugLog("Error: couldn't open USB serial port.");
-            showUSBRetrySnackbar();
+            showUSBSnackbar();
             return;
         }
 
@@ -1409,11 +1430,22 @@ public class MainActivity extends AppCompatActivity {
 
         debugLog("Connected to ESP32.");
 
-        // Do things with the ESP32 that we were waiting to do.
-        initAfterESP32Connected();
+        // After a brief pause (to let it boot), do things with the ESP32 that we were waiting to do.
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        initAfterESP32Connected();
+                    }
+                }, 3000);
     }
 
     private void initAfterESP32Connected() {
+        if (usbSnackbar != null) {
+            usbSnackbar.dismiss();
+            usbSnackbar = null;
+        }
+
         // Start by prebuffering some audio
         restartAudioPrebuffer();
 
@@ -1505,10 +1537,6 @@ public class MainActivity extends AppCompatActivity {
 
         // debugLog("Scanning to: " + memoryToScanNext.name);
         tuneToMemory(memoryToScanNext, squelch > 0 ? squelch : 1); // If user turned off squelch, set it to 1 during scan.
-    }
-
-    public void importMemoriesClicked(View view) {
-        // TODO let user select CSV file from Repeater Book to import
     }
 
     public void addMemoryClicked(View view) {
@@ -1791,7 +1819,7 @@ public class MainActivity extends AppCompatActivity {
                         rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
                         if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
                             prebufferComplete = true;
-                            //debugLog("Rx prebuffer full, writing to audioTrack.");
+                            // debugLog("Rx prebuffer full, writing to audioTrack.");
                             if (audioTrack != null) {
                                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                                     audioTrack.play();
