@@ -178,6 +178,7 @@ public class MainActivity extends AppCompatActivity {
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
     private long startTxTimeSec = -1;
+    private Snackbar callsignSnackbar = null;
 
     // Notification stuff
     private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
@@ -493,7 +494,44 @@ public class MainActivity extends AppCompatActivity {
             // frequency. User must set it manually (or select it before coming to chat mode, but
             // can't be scanning).
             setScanning(false, true);
+
+            // If their callsign is not set, display a snackbar asking them to set it before they
+            // can transmit.
+            if (callsign.length() == 0) {
+                showCallsignSnackbar();
+                ImageButton sendButton = findViewById(R.id.sendButton);
+                sendButton.setEnabled(false);
+            } else {
+                ImageButton sendButton = findViewById(R.id.sendButton);
+                sendButton.setEnabled(true);
+                if (callsignSnackbar != null) {
+                    callsignSnackbar.dismiss();
+                }
+            }
+        } else {
+            if (callsignSnackbar != null) {
+                callsignSnackbar.dismiss();
+            }
         }
+    }
+
+    private void showCallsignSnackbar() {
+        CharSequence snackbarMsg = "Set your callsign to send text chat";
+        callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+                .setAction("Set now", new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        settingsClicked(null);
+                    }
+                });
+
+        // Make the text of the snackbar larger.
+        TextView snackbarActionTextView = (TextView) callsignSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        snackbarActionTextView.setTextSize(20);
+        TextView snackbarTextView = (TextView) callsignSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        callsignSnackbar.show();
     }
 
     public void sendTextClicked(View view) {
