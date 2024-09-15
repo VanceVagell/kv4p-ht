@@ -50,6 +50,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
+import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -182,7 +183,7 @@ public class MainActivity extends AppCompatActivity {
     // Notification stuff
     private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
-    private static String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
+    public static String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -267,9 +268,9 @@ public class MainActivity extends AppCompatActivity {
             public boolean onNavigationItemSelected(@NonNull MenuItem menuItem) {
                 int itemId = menuItem.getItemId();
                 if (itemId == R.id.voice_mode) {
-                    setVisibleScreen(false);
+                    showScreen(ScreenType.SCREEN_VOICE);
                 } else if (itemId == R.id.text_chat_mode) {
-                    setVisibleScreen(true);
+                    showScreen(ScreenType.SCREEN_CHAT);
                 }
                 return true;
             }
@@ -386,7 +387,7 @@ public class MainActivity extends AppCompatActivity {
 
         // If we arrived here from an APRS text chat notification, open text chat.
         if (intent != null && intent.getAction().equals(INTENT_OPEN_CHAT)) {
-            setVisibleScreen(true);
+            showScreen(ScreenType.SCREEN_CHAT);
         }
     }
 
@@ -400,7 +401,7 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     aprsPacket = Parser.parseAX25(data);
                 } catch (Exception e) {
-                    debugLog("Unable to parse an APRSPacket, skipping.");
+                    Log.d("DEBUG", "Unable to parse an APRSPacket, skipping.");
                     return;
                 }
 
@@ -473,22 +474,23 @@ public class MainActivity extends AppCompatActivity {
         notificationManager.notify(notificationTypeId, builder.build());
     }
 
-    /**
-     * Specifies whether the voice or text chat screen should be visible.
-     * @param isTextChat true to show the text chat screen, false to show the voice screen.
-     */
-    private void setVisibleScreen(boolean isTextChat) {
+    private enum ScreenType {
+        SCREEN_VOICE,
+        SCREEN_CHAT
+    };
+
+    private void showScreen(ScreenType screenType) {
         // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
         // Controls for voice mode
-        findViewById(R.id.voiceModeLineHolder).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
-        findViewById(R.id.pttButton).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
-        findViewById(R.id.memoriesList).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
-        findViewById(R.id.voiceModeBottomControls).setVisibility(isTextChat ? View.GONE : View.VISIBLE);
+        findViewById(R.id.voiceModeLineHolder).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
+        findViewById(R.id.pttButton).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
+        findViewById(R.id.memoriesList).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
+        findViewById(R.id.voiceModeBottomControls).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
 
         // Controls for text mode
-        findViewById(R.id.textModeContainer).setVisibility(isTextChat ? View.VISIBLE : View.GONE);
+        findViewById(R.id.textModeContainer).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.VISIBLE : View.GONE);
 
-        if (isTextChat) {
+        if (screenType == ScreenType.SCREEN_CHAT) {
             // Stop scanning when we enter chat mode, we don't want to tx data on an unexpected
             // frequency. User must set it manually (or select it before coming to chat mode, but
             // can't be scanning).
@@ -509,7 +511,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 findViewById(R.id.sendButtonOverlay).setVisibility(View.GONE);
             }
-        } else {
+        } else if (screenType == ScreenType.SCREEN_VOICE){
             if (callsignSnackbar != null) {
                 callsignSnackbar.dismiss();
             }
@@ -1157,7 +1159,7 @@ public class MainActivity extends AppCompatActivity {
 
                        long elapsedSec = (System.currentTimeMillis() / 1000) - startTxTimeSec;
                        if (elapsedSec > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
-                           debugLog("Warning: runaway tx timeout reached, PTT stopped.");
+                           Log.d("DEBUG", "Warning: runaway tx timeout reached, PTT stopped.");
                            endPtt();
                        }
                    } catch (InterruptedException e) {
@@ -1262,7 +1264,7 @@ public class MainActivity extends AppCompatActivity {
                     initAudioRecorder();
                 } else {
                     // Permission denied, things will just be broken.
-                    debugLog("Error: Need audio permission");
+                    Log.d("DEBUG", "Error: Need audio permission");
                 }
                 return;
             }
@@ -1272,15 +1274,11 @@ public class MainActivity extends AppCompatActivity {
                     // Permission granted.
                 } else {
                     // Permission denied
-                    debugLog("Warning: Need notifications permission to be able to send APRS chat message notifications");
+                    Log.d("DEBUG", "Warning: Need notifications permission to be able to send APRS chat message notifications");
                 }
                 return;
             }
         }
-    }
-
-    private void debugLog(String text) {
-        Log.d("DEBUG", text);
     }
 
     private void initAudioRecorder() {
@@ -1293,7 +1291,7 @@ public class MainActivity extends AppCompatActivity {
                 audioFormat, minBufferSize);
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
-            debugLog("Audio init error");
+            Log.d("DEBUG", "Audio init error");
         }
     }
 
@@ -1358,7 +1356,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void findESP32Device() {
-        debugLog("findESP32Device()");
+        Log.d("DEBUG", "findESP32Device()");
 
         HashMap<String, UsbDevice> usbDevices = usbManager.getDeviceList();
 
@@ -1371,10 +1369,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (esp32Device == null) {
-            debugLog("No ESP32 detected");
+            Log.d("DEBUG", "No ESP32 detected");
             showUSBSnackbar();
         } else {
-            debugLog("Found ESP32.");
+            Log.d("DEBUG", "Found ESP32.");
             setupSerialConnection();
         }
     }
@@ -1394,11 +1392,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isESP32Device(UsbDevice device) {
-        debugLog("isESP32Device()");
+        Log.d("DEBUG", "isESP32Device()");
 
         int vendorId = device.getVendorId();
         int productId = device.getProductId();
-        debugLog("vendorId: " + vendorId + " productId: " + productId + " name: " + device.getDeviceName());
+        Log.d("DEBUG", "vendorId: " + vendorId + " productId: " + productId + " name: " + device.getDeviceName());
         for (int i = 0; i < ESP32_VENDOR_IDS.length; i++) {
             if ((vendorId == ESP32_VENDOR_IDS[i]) && (productId == ESP32_PRODUCT_IDS[i])) {
                 return true;
@@ -1409,7 +1407,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
-            debugLog("usbReceiver.onReceive()");
+            Log.d("DEBUG", "usbReceiver.onReceive()");
 
             String action = intent.getAction();
             if (ACTION_USB_PERMISSION.equals(action)) {
@@ -1421,13 +1419,13 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private void setupSerialConnection() {
-        debugLog("setupSerialConnection()");
+        Log.d("DEBUG", "setupSerialConnection()");
 
         // Find all available drivers from attached devices.
         UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
-            debugLog("Error: no available USB drivers.");
+            Log.d("DEBUG", "Error: no available USB drivers.");
             showUSBSnackbar();
             return;
         }
@@ -1436,18 +1434,18 @@ public class MainActivity extends AppCompatActivity {
         UsbSerialDriver driver = availableDrivers.get(0);
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
-            debugLog("Error: couldn't open USB device.");
+            Log.d("DEBUG", "Error: couldn't open USB device.");
             showUSBSnackbar();
             return;
         }
 
         serialPort = driver.getPorts().get(0); // Most devices have just one port (port 0)
-        debugLog("serialPort: " + serialPort);
+        Log.d("DEBUG", "serialPort: " + serialPort);
         try {
             serialPort.open(connection);
             serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
-            debugLog("Error: couldn't open USB serial port.");
+            Log.d("DEBUG", "Error: couldn't open USB serial port.");
             showUSBSnackbar();
             return;
         }
@@ -1467,7 +1465,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onRunError(Exception e) {
-                debugLog("Error reading from ESP32.");
+                Log.d("DEBUG", "Error reading from ESP32.");
                 connection.close();
                 try {
                     serialPort.close();
@@ -1488,7 +1486,7 @@ public class MainActivity extends AppCompatActivity {
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
 
-        debugLog("Connected to ESP32.");
+        Log.d("DEBUG", "Connected to ESP32.");
 
         // After a brief pause (to let it boot), do things with the ESP32 that we were waiting to do.
         final Handler handler = new Handler(Looper.getMainLooper());
@@ -1595,7 +1593,7 @@ public class MainActivity extends AppCompatActivity {
 
         consecutiveSilenceBytes = 0;
 
-        // debugLog("Scanning to: " + memoryToScanNext.name);
+        // Log.d("DEBUG", "Scanning to: " + memoryToScanNext.name);
         tuneToMemory(memoryToScanNext, squelch > 0 ? squelch : 1); // If user turned off squelch, set it to 1 during scan.
     }
 
@@ -1713,7 +1711,7 @@ public class MainActivity extends AppCompatActivity {
                 // in onResume.
                 break;
             default:
-                debugLog("Warning: Returned to MainActivity from unexpected request code: " + requestCode);
+                Log.d("DEBUG", "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
         }
     }
 
@@ -1787,7 +1785,7 @@ public class MainActivity extends AppCompatActivity {
                 COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
                 COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
         sendBytesToESP32(commandArray);
-        debugLog("Sent command: " + command);
+        Log.d("DEBUG", "Sent command: " + command);
     }
 
     private void sendCommandToESP32(ESP32Command command, String paramsStr) {
@@ -1805,7 +1803,7 @@ public class MainActivity extends AppCompatActivity {
         // buffer size on mcu.
         // TODO implement a more robust way (in mcu code) of ensuring params are received by mcu
         sendBytesToESP32(combined);
-        debugLog("Sent command: " + command + " params: " + paramsStr);
+        Log.d("DEBUG", "Sent command: " + command + " params: " + paramsStr);
     }
 
     private synchronized void sendBytesToESP32(byte[] newBytes) {
@@ -1824,10 +1822,10 @@ public class MainActivity extends AppCompatActivity {
                 } catch (SerialTimeoutException ste) {
                     // Do nothing, we'll try again momentarily. ESP32's serial buffer may be full.
                     usbRetries++;
-                    // debugLog("usbRetries: " + usbRetries);
+                    // Log.d("DEBUG", "usbRetries: " + usbRetries);
                 }
             } while (bytesWritten < totalBytes && usbRetries < 10);
-            // debugLog("Wrote data: " + Arrays.toString(newBytes));
+            // Log.d("DEBUG", "Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();
             try {
@@ -1846,15 +1844,15 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleESP32Data(byte[] data) {
         try {
-            // debugLog("Got bytes from ESP32: " + Arrays.toString(data));
+            // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
         /* try {
             String dataStr = new String(data, "UTF-8");
             //if (dataStr.length() < 100 && dataStr.length() > 0)
-                debugLog("Str data from ESP32: " + dataStr);
+                Log.d("DEBUG", "Str data from ESP32: " + dataStr);
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException(e);
         } */
-            // debugLog("Num bytes from ESP32: " + data.length);
+            // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
 
             if (mode == MODE_RX || mode == MODE_SCAN) {
                 if (prebufferComplete && audioTrack != null) {
@@ -1879,7 +1877,7 @@ public class MainActivity extends AppCompatActivity {
                         rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
                         if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
                             prebufferComplete = true;
-                            // debugLog("Rx prebuffer full, writing to audioTrack.");
+                            // Log.d("DEBUG", "Rx prebuffer full, writing to audioTrack.");
                             if (audioTrack != null) {
                                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                                     audioTrack.play();
@@ -1901,7 +1899,7 @@ public class MainActivity extends AppCompatActivity {
                 for (int i = 0; i < data.length; i++) {
                     if (data[i] == SILENT_BYTE) {
                         consecutiveSilenceBytes++;
-                        // debugLog("consecutiveSilenceBytes: " + consecutiveSilenceBytes);
+                        // Log.d("DEBUG", "consecutiveSilenceBytes: " + consecutiveSilenceBytes);
                         checkScanDueToSilence();
                     } else {
                         consecutiveSilenceBytes = 0;
@@ -1911,7 +1909,7 @@ public class MainActivity extends AppCompatActivity {
                 // Print any data we get in MODE_TX (we're not expecting any, this is either leftover rx bytes or debug info).
             /* try {
                 String dataStr = new String(data, "UTF-8");
-                debugLog("Unexpected data from ESP32 during MODE_TX: " + dataStr);
+                Log.d("DEBUG", "Unexpected data from ESP32 during MODE_TX: " + dataStr);
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             } */
