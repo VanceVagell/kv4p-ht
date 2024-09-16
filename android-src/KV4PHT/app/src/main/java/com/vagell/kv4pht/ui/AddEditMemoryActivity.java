@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -247,7 +248,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             editFrequencyTextInputEditText.requestFocus();
             return;
         } else {
-            String formattedFrequency = MainActivity.formatFrequency(frequency);
+            String formattedFrequency = RadioAudioService.formatFrequency(frequency);
             if (formattedFrequency == null) {
                 editFrequencyTextInputEditText.setError("Enter a frequency like 144.000");
                 editFrequencyTextInputEditText.requestFocus();

@@ -33,16 +33,23 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
+import com.vagell.kv4pht.aprs.parser.Digipeater;
+import com.vagell.kv4pht.aprs.parser.InformationField;
+import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
+import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
 import com.vagell.kv4pht.ui.MainActivity;
 
+import org.apache.commons.lang3.ArrayUtils;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -66,10 +73,10 @@ public class RadioAudioService extends Service {
     public static final int[] ESP32_VENDOR_IDS = {4292};
     public static final int[] ESP32_PRODUCT_IDS = {60000};
 
-    private static final int MODE_STARTUP = -1;
-    private static final int MODE_RX = 0;
-    private static final int MODE_TX = 1;
-    private static final int MODE_SCAN = 2;
+    public static final int MODE_STARTUP = -1;
+    public static final int MODE_RX = 0;
+    public static final int MODE_TX = 1;
+    public static final int MODE_SCAN = 2;
     private int mode = MODE_STARTUP;
 
     private enum ESP32Command {
@@ -88,12 +95,10 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private static final byte SILENT_BYTE = -128;
+    public static final byte SILENT_BYTE = -128;
 
     // Callbacks to the Activity that started us
-    private RadioMissingCallback radioMissingCallback = null;
-    private RadioConnectedCallback radioConnectedCallback = null;
-    private AprsCallback aprsCallback = null;
+    private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
     public static final int AUDIO_SAMPLE_RATE = 44100;
@@ -115,9 +120,6 @@ public class RadioAudioService extends Service {
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
-    private boolean emphasisFilter = false;
-    private boolean highpassFilter = false;
-    private boolean lowpassFilter = false;
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
@@ -150,7 +152,7 @@ public class RadioAudioService extends Service {
      * Class used for the client Binder. This service always runs in the same process as its clients.
      */
     public class RadioBinder extends Binder {
-        RadioAudioService getService() {
+        public RadioAudioService getService() {
             // Return this instance of RadioService so clients can call public methods.
             return RadioAudioService.this;
         }
@@ -162,9 +164,6 @@ public class RadioAudioService extends Service {
         Bundle bundle = intent.getExtras();
         callsign = bundle.getString("callsign");
         squelch = bundle.getInt("squelch");
-        emphasisFilter = bundle.getBoolean("emphasisFilter");
-        highpassFilter = bundle.getBoolean("highpassFilter");
-        lowpassFilter = bundle.getBoolean("lowpassFilter");
         activeMemoryId = bundle.getInt("activeMemoryId");
         activeFrequencyStr = bundle.getString("activeFrequencyStr");
 
@@ -175,29 +174,27 @@ public class RadioAudioService extends Service {
         this.callsign = callsign;
     }
 
-    public void setSquelch(int squelch) {
-        this.squelch = squelch;
-
-        if (activeMemoryId > -1) {
-            tuneToMemory(activeMemoryId, squelch);
-        } else {
-            tuneToFreq(activeFrequencyStr, squelch);
-        }
+    public void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
+        setRadioFilters(emphasis, highpass, lowpass);
     }
 
-    public void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        this.emphasisFilter = emphasis;
-        this.highpassFilter = highpass;
-        this.lowpassFilter = lowpass;
+    public void setMode(int mode) {
+        this.mode = mode;
+    }
 
-        setRadioFilters(emphasis, highpass, lowpass);
+    public void setSquelch(int squelch) {
+        this.squelch = squelch;
+    }
+
+    public int getMode() {
+        return mode;
     }
 
     public void setActiveMemoryId(int activeMemoryId) {
         this.activeMemoryId = activeMemoryId;
 
         if (activeMemoryId > -1) {
-            tuneToMemory(activeMemoryId, squelch);
+            tuneToMemory(activeMemoryId, squelch, false);
         } else {
             tuneToFreq(activeFrequencyStr, squelch);
         }
@@ -207,7 +204,7 @@ public class RadioAudioService extends Service {
         this.activeFrequencyStr = activeFrequencyStr;
 
         if (activeMemoryId > -1) {
-            tuneToMemory(activeMemoryId, squelch);
+            tuneToMemory(activeMemoryId, squelch, false);
         } else {
             tuneToFreq(activeFrequencyStr, squelch);
         }
@@ -219,7 +216,13 @@ public class RadioAudioService extends Service {
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+    }
 
+    /**
+     * Bound activities should call this when they're done providing any data (via setters),
+     * including the several necessary callback handlers.
+     */
+    public void start() {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
         createNotificationChannels();
@@ -238,20 +241,16 @@ public class RadioAudioService extends Service {
         this.channelMemoriesLiveData = channelMemoriesLiveData;
     }
 
-    public interface RadioMissingCallback {
+    public interface RadioAudioServiceCallbacks {
         public void radioMissing();
-    }
-
-    public void setRadioMissingCallback(RadioMissingCallback callback) {
-        radioMissingCallback = callback;
-    }
-
-    public interface RadioConnectedCallback {
         public void radioConnected();
+        public void audioTrackCreated();
+        public void packetReceived(APRSPacket aprsPacket);
+        public void scannedToMemory(int memoryId);
     }
 
-    public void setRadioConnectedCallback(RadioConnectedCallback callback) {
-        radioConnectedCallback = callback;
+    public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
+        this.callbacks = callbacks;
     }
 
     @Override
@@ -326,7 +325,7 @@ public class RadioAudioService extends Service {
         rxPrebufferIdx = 0;
     }
 
-    public void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
+    private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
         sendCommandToESP32(ESP32Command.FILTERS, (emphasis ? "1" : "0") + (highpass ? "1" : "0") + (lowpass ? "1" : "0"));
     }
 
@@ -334,6 +333,13 @@ public class RadioAudioService extends Service {
     // in the style the radio module expects.
     public void tuneToFreq(String frequencyStr, int squelchLevel) {
         mode = MODE_RX;
+
+        if (activeFrequencyStr.equals(frequencyStr) && squelch == squelchLevel) {
+            return; // Already tuned to this frequency with this squelch level.
+        }
+
+        activeFrequencyStr = frequencyStr;
+        squelch = squelchLevel;
 
         if (serialPort != null) {
             sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
@@ -379,14 +385,18 @@ public class RadioAudioService extends Service {
         return null;
     }
 
-    private String validateFrequency(String tempFrequency) {
+    public String validateFrequency(String tempFrequency) {
         String newFrequency = formatFrequency(tempFrequency);
 
         // Resort to the old frequency, the one the user inputted is unsalvageable.
         return newFrequency == null ? activeFrequencyStr : newFrequency;
     }
 
-    private void tuneToMemory(int memoryId, int squelchLevel) {
+    public void tuneToMemory(int memoryId, int squelchLevel, boolean forceTune) {
+        if (!forceTune && activeMemoryId == memoryId && squelch == squelchLevel) {
+            return; // Already tuned to this memory, with this squelch.
+        }
+
         if (channelMemoriesLiveData == null) {
             Log.d("DEBUG", "Error: attempted tuneToMemory() but channelMemories was never set.");
             return;
@@ -395,13 +405,17 @@ public class RadioAudioService extends Service {
         for (int i = 0; i < channelMemories.size(); i++) {
             if (channelMemories.get(i).memoryId == memoryId) {
                 if (serialPort != null) {
-                    tuneToMemory(channelMemories.get(i), squelchLevel);
+                    tuneToMemory(channelMemories.get(i), squelchLevel, forceTune);
                 }
             }
         }
     }
 
-    public void tuneToMemory(ChannelMemory memory, int squelchLevel) {
+    public void tuneToMemory(ChannelMemory memory, int squelchLevel, boolean forceTune) {
+        if (!forceTune && activeMemoryId == memory.memoryId && squelch == squelchLevel) {
+            return; // Already tuned to this memory, with this squelch.
+        }
+
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
 
@@ -466,12 +480,14 @@ public class RadioAudioService extends Service {
                 .build();
 
         restartAudioPrebuffer();
+
+        if (callbacks != null) {
+            callbacks.audioTrackCreated();
+        }
     }
 
     public void startPtt(boolean dataMode) {
-        if (mode == MODE_TX) {
-            return;
-        }
+        mode = MODE_TX;
 
         // Setup runaway tx safety measures.
         startTxTimeSec = System.currentTimeMillis() / 1000;
@@ -495,7 +511,6 @@ public class RadioAudioService extends Service {
             }
         });
 
-        mode = MODE_TX;
         sendCommandToESP32(ESP32Command.PTT_DOWN);
         audioTrack.stop();
     }
@@ -525,8 +540,8 @@ public class RadioAudioService extends Service {
 
         if (esp32Device == null) {
             Log.d("DEBUG", "No ESP32 detected");
-            if (radioMissingCallback != null) {
-                radioMissingCallback.radioMissing();
+            if (callbacks != null) {
+                callbacks.radioMissing();
             }
         } else {
             Log.d("DEBUG", "Found ESP32.");
@@ -556,8 +571,8 @@ public class RadioAudioService extends Service {
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
             Log.d("DEBUG", "Error: no available USB drivers.");
-            if (radioMissingCallback != null) {
-                radioMissingCallback.radioMissing();
+            if (callbacks != null) {
+                callbacks.radioMissing();
             }
             return;
         }
@@ -567,8 +582,8 @@ public class RadioAudioService extends Service {
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
             Log.d("DEBUG", "Error: couldn't open USB device.");
-            if (radioMissingCallback != null) {
-                radioMissingCallback.radioMissing();
+            if (callbacks != null) {
+                callbacks.radioMissing();
             }
             return;
         }
@@ -580,8 +595,8 @@ public class RadioAudioService extends Service {
             serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.d("DEBUG", "Error: couldn't open USB serial port.");
-            if (radioMissingCallback != null) {
-                radioMissingCallback.radioMissing();
+            if (callbacks != null) {
+                callbacks.radioMissing();
             }
             return;
         }
@@ -635,30 +650,33 @@ public class RadioAudioService extends Service {
     }
 
     private void initAfterESP32Connected() {
-        if (radioConnectedCallback != null) {
-            radioConnectedCallback.radioConnected();
-        }
-
         // Start by prebuffering some audio
         restartAudioPrebuffer();
 
         // Tell the radio about any settings the user set.
-        setRadioFilters(emphasisFilter, highpassFilter, lowpassFilter);
         if (activeMemoryId > -1) {
-            tuneToMemory(activeMemoryId, squelch);
+            tuneToMemory(activeMemoryId, squelch, false);
         } else {
             tuneToFreq(activeFrequencyStr, squelch);
         }
 
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
+
+        if (callbacks != null) {
+            callbacks.radioConnected();
+        }
     }
 
     public void setScanning(boolean scanning, boolean goToRxMode) {
+        if (!scanning && mode != MODE_SCAN) {
+            return;
+        }
+
         if (!scanning) {
             // If squelch was off before we started scanning, turn it off again
             if (squelch == 0) {
-                tuneToMemory(activeMemoryId, squelch);
+                tuneToMemory(activeMemoryId, squelch, true);
             }
 
             if (goToRxMode) {
@@ -674,7 +692,7 @@ public class RadioAudioService extends Service {
         setScanning(scanning, true);
     }
 
-    private void nextScan() {
+    public void nextScan() {
         if (mode != MODE_SCAN) {
             return;
         }
@@ -709,7 +727,10 @@ public class RadioAudioService extends Service {
         consecutiveSilenceBytes = 0;
 
         // Log.d("DEBUG", "Scanning to: " + memoryToScanNext.name);
-        tuneToMemory(memoryToScanNext, squelch > 0 ? squelch : 1); // If user turned off squelch, set it to 1 during scan.
+        tuneToMemory(memoryToScanNext, squelch > 0 ? squelch : 1, true); // If user turned off squelch, set it to 1 during scan.
+        if (callbacks != null) {
+            callbacks.scannedToMemory(memoryToScanNext.memoryId);
+        }
     }
 
     public void sendAudioToESP32(byte[] audioBuffer, boolean dataMode) {
@@ -915,14 +936,6 @@ public class RadioAudioService extends Service {
         return (byte) (signedValue + 128);
     }
 
-    public interface AprsCallback {
-        public void packetReceived();
-    }
-
-    public void setAprsCallback(AprsCallback aprsCallback) {
-        this.aprsCallback = aprsCallback;
-    }
-
     private void initAFSKModem() {
         final Context activity = this;
 
@@ -932,13 +945,29 @@ public class RadioAudioService extends Service {
                 APRSPacket aprsPacket;
                 try {
                     aprsPacket = Parser.parseAX25(data);
+
+                    final String finalString;
+
+                    // Reformat the packet to be more human readable.
+                    InformationField infoField = aprsPacket.getAprsInformation();
+                    if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
+                        MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
+                        finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
+
+                        // If the message was addressed to us, notify the user.
+                        if (messagePacket.getTargetCallsign().toUpperCase().equals(callsign.toUpperCase())) {
+                            showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
+                                    aprsPacket.getSourceCall() + " messaged you", messagePacket.getMessageBody(), MainActivity.INTENT_OPEN_CHAT);
+                        }
+                    }
                 } catch (Exception e) {
                     Log.d("DEBUG", "Unable to parse an APRSPacket, skipping.");
                     return;
                 }
 
-                if (aprsCallback != null) {
-                    aprsCallback.packetReceived(aprsPacket);
+                // Let our parent Activity know about the packet, so it can display chat.
+                if (callbacks != null) {
+                    callbacks.packetReceived(aprsPacket);
                 }
             }
         };
@@ -949,6 +978,56 @@ public class RadioAudioService extends Service {
         } catch (Exception e) {
             Log.d("DEBUG", "Unable to create AFSK modem objects.");
         }
+    }
+
+    public void sendChatMessage(String targetCallsign, String outText) {
+        // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
+        MessagePacket msgPacket = new MessagePacket(targetCallsign, outText, "1"); // TODO increment messageNumber each time, store in Android app DB.
+        ArrayList<Digipeater> digipeaters = new ArrayList<>();
+        digipeaters.add(new Digipeater("WIDE1*"));
+        digipeaters.add(new Digipeater("WIDE2-1"));
+        APRSPacket aprsPacket = new APRSPacket(callsign, "CQ", digipeaters, msgPacket.getRawBytes());
+        Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
+
+        // This strange approach to getting bytes seems to be a state machine in the AFSK library.
+        afskModulator.prepareToTransmit(ax25Packet);
+        float[] txSamples = afskModulator.getTxSamplesBuffer();
+        int n;
+        ArrayList<Byte> audioBytes = new ArrayList<Byte>();
+        while ((n = afskModulator.getSamples()) > 0) {
+            for (int i = 0; i < n; i++) {
+                byte audioByte = convertFloatToPCM8(txSamples[i]);
+                audioBytes.add(audioByte);
+            }
+        }
+        byte[] simpleAudioBytes = ArrayUtils.toPrimitive(audioBytes.toArray(new Byte[0]));
+
+        startPtt(true);
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // Add some silence before and after the data.
+                int bytesOfLeadInDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA);
+                int bytesOfTailDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA);
+                byte[] combinedAudio = new byte[bytesOfLeadInDelay + simpleAudioBytes.length + bytesOfTailDelay];
+                for (int i = 0; i < bytesOfLeadInDelay; i++) {
+                    combinedAudio[i] = SILENT_BYTE;
+                }
+                for (int i = 0; i < simpleAudioBytes.length; i++) {
+                    combinedAudio[i + bytesOfLeadInDelay] = simpleAudioBytes[i];
+                }
+                for (int i = (bytesOfLeadInDelay + simpleAudioBytes.length); i < combinedAudio.length; i++) {
+                    combinedAudio[i] = SILENT_BYTE;
+                }
+
+                sendAudioToESP32(combinedAudio, true);
+            }
+        }, MS_DELAY_BEFORE_DATA_XMIT);
+    }
+
+    public AudioTrack getAudioTrack() {
+        return audioTrack;
     }
 
     private void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
