@@ -624,7 +624,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                         if (activeMemoryId > -1) {
                             if (radioAudioService != null) {
-                                radioAudioService.tuneToMemory(activeMemoryId, squelch, true);
+                                radioAudioService.tuneToMemory(activeMemoryId, squelch, false);
                                 tuneToMemoryUi(activeMemoryId);
                             }
                         } else {
@@ -1235,7 +1235,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
             case REQUEST_SETTINGS:
-                applySettings();
+                // Don't need to do anything here, since settings are applied in onResume() anyway.
                 break;
             default:
                 Log.d("DEBUG", "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
@@ -1244,8 +1244,8 @@ public class MainActivity extends AppCompatActivity {
 
     public void settingsClicked(View view) {
         if (radioAudioService != null) {
-            radioAudioService.endPtt(); // Be safe, just in case we are somehow transmitting when settings is tapped.
             radioAudioService.setScanning(false); // Stop scanning when settings brought up, so we don't get in a bad state after.
+            radioAudioService.endPtt(); // Be safe, just in case we are somehow transmitting when settings is tapped.
         }
         endPttUi();
         setScanningUi(false);
