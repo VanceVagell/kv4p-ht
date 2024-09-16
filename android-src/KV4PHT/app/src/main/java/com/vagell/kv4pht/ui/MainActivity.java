@@ -624,7 +624,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                         if (activeMemoryId > -1) {
                             if (radioAudioService != null) {
-                                radioAudioService.tuneToMemory(activeMemoryId, squelch, false);
+                                radioAudioService.tuneToMemory(activeMemoryId, squelch, true);
                                 tuneToMemoryUi(activeMemoryId);
                             }
                         } else {
@@ -656,17 +656,19 @@ public class MainActivity extends AppCompatActivity {
                         final boolean finalHighpass = highpass;
                         final boolean finalLowpass = lowpass;
 
-                        threadPoolExecutor.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (radioAudioService != null) {
-                                    radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
-                                    if (radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
-                                        radioAudioService.setMode(RadioAudioService.MODE_RX);
+                        if (threadPoolExecutor != null) { // Could be null if app is in background, and user is just listening to scanning.
+                            threadPoolExecutor.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (radioAudioService != null) {
+                                        if (radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
+                                            radioAudioService.setMode(RadioAudioService.MODE_RX);
+                                            radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
+                                        }
                                     }
                                 }
-                            }
-                        });
+                            });
+                        }
 
                         if (stickyPTTSetting != null) {
                             stickyPTT = Boolean.parseBoolean(stickyPTTSetting.value);
@@ -833,19 +835,21 @@ public class MainActivity extends AppCompatActivity {
                 showFrequency(activeFrequencyStr);
 
                 // Save most recent memory so we can restore it on app restart
-                threadPoolExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
-                        if (lastMemoryIdSetting != null) {
-                            lastMemoryIdSetting.value = "" + memoryId;
-                            viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
-                        } else {
-                            lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
-                            viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                if (threadPoolExecutor != null) { // Could be null if user is just listening to scan in another app, etc.
+                    threadPoolExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                            if (lastMemoryIdSetting != null) {
+                                lastMemoryIdSetting.value = "" + memoryId;
+                                viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                            } else {
+                                lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
+                                viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                            }
                         }
-                    }
-                });
+                    });
+                }
                 return;
             }
         }
@@ -1231,8 +1235,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
             case REQUEST_SETTINGS:
-                // Actually don't need to do anything here, since settings are always re-checked
-                // in onResume.
+                applySettings();
                 break;
             default:
                 Log.d("DEBUG", "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
