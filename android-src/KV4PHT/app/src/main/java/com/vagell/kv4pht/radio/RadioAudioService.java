@@ -78,6 +78,7 @@ public class RadioAudioService extends Service {
     public static final int MODE_TX = 1;
     public static final int MODE_SCAN = 2;
     private int mode = MODE_STARTUP;
+    private int messageNumber = 0;
 
     private enum ESP32Command {
         PTT_DOWN((byte) 1),
@@ -216,6 +217,8 @@ public class RadioAudioService extends Service {
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+
+        messageNumber = (int) (Math.random() * 100000); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
     /**
@@ -955,12 +958,18 @@ public class RadioAudioService extends Service {
                     InformationField infoField = aprsPacket.getAprsInformation();
                     if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
                         MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
+                        if (messagePacket.isAck()) { // Don't list ACKs in chat log, or notify about them.
+                            // TODO in the future, when chat log isn't just plain text, we can add a checkmark to ACK'd messages we sent.
+                            Log.d("DEBUG", "Received ACK: " + messagePacket.toString());
+                            return;
+                        }
                         finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
 
-                        // If the message was addressed to us, notify the user.
+                        // If the message was addressed to us, notify the user and ACK the message to the sender.
                         if (messagePacket.getTargetCallsign().toUpperCase().equals(callsign.toUpperCase())) {
                             showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
                                     aprsPacket.getSourceCall() + " messaged you", messagePacket.getMessageBody(), MainActivity.INTENT_OPEN_CHAT);
+                            sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), messagePacket.getMessageNumber());
                         }
                     }
                 } catch (Exception e) {
@@ -983,14 +992,38 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public void sendChatMessage(String targetCallsign, String outText) {
+    public void sendAckMessage(String targetCallsign, String remoteMessageNum) {
         // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
-        MessagePacket msgPacket = new MessagePacket(targetCallsign, outText, "1"); // TODO increment messageNumber each time, store in Android app DB.
+        MessagePacket msgPacket = new MessagePacket(targetCallsign, "ack" + remoteMessageNum, remoteMessageNum);
         ArrayList<Digipeater> digipeaters = new ArrayList<>();
         digipeaters.add(new Digipeater("WIDE1*"));
         digipeaters.add(new Digipeater("WIDE2-1"));
-        APRSPacket aprsPacket = new APRSPacket(callsign, "CQ", digipeaters, msgPacket.getRawBytes());
+        APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
         Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
+
+        txAX25Packet(ax25Packet);
+    }
+
+    public void sendChatMessage(String targetCallsign, String outText) {
+        // Remove reserved APRS characters.
+        outText = outText.replace('|', ' ');
+        outText = outText.replace('~', ' ');
+        outText = outText.replace('{', ' ');
+
+        // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
+        MessagePacket msgPacket = new MessagePacket(targetCallsign, outText, "" + (messageNumber++));
+        ArrayList<Digipeater> digipeaters = new ArrayList<>();
+        digipeaters.add(new Digipeater("WIDE1*"));
+        digipeaters.add(new Digipeater("WIDE2-1"));
+        APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
+        Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
+
+        // TODO start a timer to re-send this packet (up to a few times) if we don't receive an ACK for it.
+        txAX25Packet(ax25Packet);
+    }
+
+    private void txAX25Packet(Packet ax25Packet) {
+        Log.d("DEBUG", "Sending AX25 packet: " + ax25Packet.toString());
 
         // This strange approach to getting bytes seems to be a state machine in the AFSK library.
         afskModulator.prepareToTransmit(ax25Packet);
