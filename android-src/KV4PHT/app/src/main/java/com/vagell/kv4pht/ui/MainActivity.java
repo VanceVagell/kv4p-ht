@@ -1084,11 +1084,16 @@ public class MainActivity extends AppCompatActivity {
             Log.d("DEBUG", "usbReceiver.onReceive()");
 
             String action = intent.getAction();
-            if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
-                synchronized (this) {
+            synchronized (this) {
+                if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                     if (radioAudioService != null) {
                         radioAudioService.reconnectViaUSB();
                     }
+                } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+                    if (radioAudioService != null) {
+                        radioAudioService.setScanning(false, true);
+                    }
+                    setScanningUi(false);
                 }
             }
         }
