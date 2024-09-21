@@ -68,6 +68,14 @@ bool i2sStarted = false;
 #define I2S_ADC_UNIT      ADC_UNIT_1
 #define I2S_ADC_CHANNEL   ADC1_CHANNEL_6
 
+// Squelch parameters (for graceful fade to silence)
+#define FADE_SAMPLES 256 // Must be a power of two
+#define ATTENUATION_MAX 256
+int fadeCounter = 0;
+int fadeDirection = 0; // 0: no fade, 1: fade in, -1: fade out
+int attenuation = ATTENUATION_MAX; // Full volume
+bool lastSquelched = false;
+
 void setup() {
   // Communication with Android via USB cable
   Serial.begin(921600);
@@ -258,15 +266,45 @@ void loop() {
 
       byte buffer8[I2S_READ_LEN] = {0};
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
-      for (int i = 0; i < samplesRead; i++) {
-        if (!squelched) { 
-          // The ADC can only sample at 12-bits, so we extract the 8 most-significant bits of that from the 32-bit value.
-          buffer8[i] = buffer32[i * 4 + 3] << 4; // Get top 4 bits from last byte of sample
-          buffer8[i] |= buffer32[i * 4 + 2] >> 4; // Get bottom 4 bits from second to last byte of sample
+
+      // Check for squelch status change
+      if (squelched != lastSquelched) {
+        if (squelched) {
+          // Start fade-out
+          fadeCounter = FADE_SAMPLES;
+          fadeDirection = -1;
         } else {
-          buffer8[i] = 128; // No sound (half of byte, or 0v)
+          // Start fade-in
+          fadeCounter = FADE_SAMPLES;
+          fadeDirection = 1;
         }
-      } 
+      }
+      lastSquelched = squelched;
+
+      int attenuationIncrement = ATTENUATION_MAX / FADE_SAMPLES;
+
+      for (int i = 0; i < samplesRead; i++) {
+        uint8_t sampleValue;
+
+        // Extract 8-bit sample from 32-bit buffer
+        sampleValue = buffer32[i * 4 + 3] << 4;
+        sampleValue |= buffer32[i * 4 + 2] >> 4;
+
+        // Adjust attenuation during fade
+        if (fadeCounter > 0) {
+          fadeCounter--;
+          attenuation += fadeDirection * attenuationIncrement;
+          attenuation = max(0, min(attenuation, ATTENUATION_MAX));
+        } else {
+          attenuation = squelched ? 0 : ATTENUATION_MAX;
+          fadeDirection = 0;
+        }
+
+        // Apply attenuation to the sample
+        int adjustedSample = (((int)sampleValue - 128) * attenuation) >> 8;
+        adjustedSample += 128;
+        buffer8[i] = (uint8_t)adjustedSample;
+      }
 
       Serial.write(buffer8, samplesRead);
     } else if (mode == MODE_TX) {
