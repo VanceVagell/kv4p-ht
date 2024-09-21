@@ -637,9 +637,9 @@ public class MainActivity extends AppCompatActivity {
                             radioAudioService.setSquelch(squelch); // We do this after tuning, so tuneToMemory and tuneToFreq will apply a new squelch if it was changed.
                         }
 
-                        boolean emphasis = false;
-                        boolean highpass = false;
-                        boolean lowpass = false;
+                        boolean emphasis = true; // Default all filters to on first time app is installed (best audio experience for most users).
+                        boolean highpass = true;
+                        boolean lowpass = true;
                         if (emphasisSetting != null) {
                             emphasis = Boolean.parseBoolean(emphasisSetting.value);
                         }
