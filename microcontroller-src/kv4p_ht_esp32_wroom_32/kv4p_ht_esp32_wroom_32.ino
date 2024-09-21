@@ -4,11 +4,16 @@
 #include <driver/i2s.h>
 #include <esp_task_wdt.h>
 
+const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '1'}; // Should be 8 characters representing a zero-padded version, like 00000001.
+const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
+
 // Commands defined here must match the Android app
 const uint8_t COMMAND_PTT_DOWN = 1; // start transmitting audio that Android app will send
 const uint8_t COMMAND_PTT_UP = 2; // stop transmitting audio, go into RX mode
 const uint8_t COMMAND_TUNE_TO = 3; // change the frequency
 const uint8_t COMMAND_FILTERS = 4; // toggle filters on/off
+const uint8_t COMMAND_STOP = 5; // stop everything, just wait for next command
+const uint8_t COMMAND_GET_FIRMWARE_VER = 6; // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
 
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
@@ -18,7 +23,8 @@ int matchedDelimiterTokens = 0;
 // Mode of the app, which is essentially a state machine
 #define MODE_TX 0
 #define MODE_RX 1
-int mode = MODE_RX;
+#define MODE_STOPPED 2
+int mode = MODE_STOPPED;
 
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 44100
@@ -111,8 +117,8 @@ void setup() {
   result = dra->filters(false, false, false);
   // Serial.println("filters: " + String(result));
 
-  // Start in RX mode
-  setMode(MODE_RX);
+  // Begin in STOPPED mode
+  setMode(MODE_STOPPED);
 }
 
 void initI2SRx() {
@@ -168,7 +174,104 @@ void initI2STx() {
 
 void loop() {
   try {
-    if (mode == MODE_RX) {
+    if (mode == MODE_STOPPED) {
+      // Read a command from Android app
+      uint8_t tempBuffer[100]; // Big enough for a command and params, won't hold audio data
+      int bytesRead = 0;
+
+      while (bytesRead < (DELIMITER_LENGTH + 1)) { // Read the delimiter and the command byte only (no params yet)
+        if (Serial.available()) {
+          tempBuffer[bytesRead++] = Serial.read();
+        }
+      }
+      switch (tempBuffer[DELIMITER_LENGTH]) {
+        case COMMAND_STOP:
+        { 
+          Serial.flush();
+        }
+          break;
+        case COMMAND_GET_FIRMWARE_VER: 
+        {
+          Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));
+          Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));
+          Serial.flush();
+          esp_task_wdt_reset();
+          return;
+        }
+          break;
+        // TODO get rid of the code duplication here and in MODE_RX below to handle COMMAND_TUNE_TO and COMMAND_FILTERS.
+        // Should probably just have one standardized way to read any incoming bytes from Android app here, and handle
+        // commands appropriately. Or at least extract the business logic from them to avoid that duplication.
+        case COMMAND_TUNE_TO:
+        {
+          // Example:
+          // 145.450144.850061
+          // 7 chars for tx, 7 chars for rx, 2 chars for tone, 1 char for squelch (17 bytes total for params)
+          setMode(MODE_RX);
+
+          // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
+          // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
+          // putting them in there. If so, we take byte-by-byte until we get the full params.
+          int paramBytesMissing = 17;
+          String paramsStr = "";
+          if (paramBytesMissing > 0) {
+            uint8_t paramPartsBuffer[paramBytesMissing];
+            for (int j = 0; j < paramBytesMissing; j++) {
+              unsigned long waitStart = micros();
+              while (!Serial.available()) { 
+                // Wait for a byte.
+                if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
+                  esp_task_wdt_reset();
+                  return;
+                }
+              }
+              paramPartsBuffer[j] = Serial.read();
+            }
+            paramsStr += String((char *)paramPartsBuffer);
+            paramBytesMissing--;
+          }
+          float freqTxFloat = paramsStr.substring(0, 8).toFloat();
+          float freqRxFloat = paramsStr.substring(7, 15).toFloat();
+          int toneInt = paramsStr.substring(14, 16).toInt();
+          int squelchInt = paramsStr.substring(16, 17).toInt();
+
+          // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
+
+          tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
+        }
+          break;
+        case COMMAND_FILTERS:
+        {
+          int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
+          String paramsStr = "";
+          if (paramBytesMissing > 0) {
+            uint8_t paramPartsBuffer[paramBytesMissing];
+            for (int j = 0; j < paramBytesMissing; j++) {
+              unsigned long waitStart = micros();
+              while (!Serial.available()) { 
+                // Wait for a byte.
+                if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
+                  esp_task_wdt_reset();
+                  return;
+                }
+              }
+              paramPartsBuffer[j] = Serial.read();
+            }
+            paramsStr += String((char *)paramPartsBuffer);
+            paramBytesMissing--;
+          }
+          bool emphasis = (paramsStr.charAt(0) == '1');
+          bool highpass = (paramsStr.charAt(1) == '1');
+          bool lowpass = (paramsStr.charAt(2) == '1');
+
+          dra->filters(emphasis, highpass, lowpass);
+        }
+          break;
+      }
+
+      esp_task_wdt_reset();
+      return;
+    } else if (mode == MODE_RX) {
       if (Serial.available()) {
         // Read a command from Android app
         uint8_t tempBuffer[100]; // Big enough for a command and params, won't hold audio data
@@ -176,9 +279,16 @@ void loop() {
 
         while (bytesRead < (DELIMITER_LENGTH + 1)) { // Read the delimiter and the command byte only (no params yet)
           tempBuffer[bytesRead++] = Serial.read();
-          // while (bytesRead < (DELIMITER_LENGTH + 1) && !Serial.available()) { } // If we need more bytes, wait for a byte.
         }
         switch (tempBuffer[DELIMITER_LENGTH]) {
+          case COMMAND_STOP: 
+          {
+            setMode(MODE_STOPPED);
+            Serial.flush();
+            esp_task_wdt_reset();
+            return;
+          }
+            break;
           case COMMAND_PTT_DOWN:
           {
             setMode(MODE_TX);
@@ -345,11 +455,22 @@ void loop() {
             uint8_t command = tempBuffer[i];
             matchedDelimiterTokens = 0;
             switch (command) {
-              case COMMAND_PTT_UP: // Only command we can receive in TX mode is PTT_UP
+              case COMMAND_STOP:
+              {
+                delay(MS_WAIT_BEFORE_PTT_UP); // Wait just a moment so final tx audio data in DMA buffer can be transmitted.
+                setMode(MODE_STOPPED);
+                esp_task_wdt_reset();
+                return;
+              }
+                break;
+              case COMMAND_PTT_UP:
+              {
                 delay(MS_WAIT_BEFORE_PTT_UP); // Wait just a moment so final tx audio data in DMA buffer can be transmitted.
                 setMode(MODE_RX);
                 esp_task_wdt_reset();
                 return;
+              }
+                break;
             }
           } else {
             if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
@@ -378,6 +499,10 @@ void tuneTo(float freqTx, float freqRx, int tone, int squelch) {
 void setMode(int newMode) {
   mode = newMode;
   switch (mode) {
+    case MODE_STOPPED:
+      digitalWrite(LED_PIN, LOW);
+      digitalWrite(PTT_PIN, HIGH);
+      break;
     case MODE_RX:
       digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);

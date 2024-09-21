@@ -3,21 +3,16 @@ package com.vagell.kv4pht.ui;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.hardware.usb.UsbDevice;
-import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
-import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
@@ -28,7 +23,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Vibrator;
-import android.provider.MediaStore;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
@@ -36,9 +30,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -52,10 +44,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
-import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -63,37 +53,19 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.snackbar.Snackbar;
-import com.hoho.android.usbserial.driver.SerialTimeoutException;
-import com.hoho.android.usbserial.driver.UsbSerialDriver;
-import com.hoho.android.usbserial.driver.UsbSerialPort;
-import com.hoho.android.usbserial.driver.UsbSerialProber;
-import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
-import com.vagell.kv4pht.aprs.parser.Digipeater;
 import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
-import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
-import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
-import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
-import com.vagell.kv4pht.javAX25.ax25.Packet;
-import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
-import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
-import org.apache.commons.lang3.ArrayUtils;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -110,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
     // Snackbars
     private Snackbar usbSnackbar = null;
     private Snackbar callsignSnackbar = null;
+    private Snackbar versionSnackbar = null;
 
     // Android permission stuff
     private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
@@ -245,6 +218,11 @@ public class MainActivity extends AppCompatActivity {
         requestNotificationPermissions(); // TODO store a boolean in our DB so we only ask for this once (in case they say no)
         attachListeners();
 
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        registerReceiver(usbReceiver, filter);
+
         viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
             @Override
             public void onLoadDataDone() {
@@ -277,6 +255,10 @@ public class MainActivity extends AppCompatActivity {
                         usbSnackbar.dismiss();
                         usbSnackbar = null;
                     }
+                    if (versionSnackbar != null) {
+                        versionSnackbar.dismiss();
+                        versionSnackbar = null;
+                    }
                     applySettings();
                     findViewById(R.id.pttButton).setClickable(true);
                 }
@@ -294,6 +276,11 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void scannedToMemory(int memoryId) {
                     tuneToMemoryUi(memoryId);
+                }
+
+                @Override
+                public void unsupportedFirmware(int firmwareVer) {
+                    showVersionSnackbar(firmwareVer);
                 }
             };
 
@@ -328,15 +315,19 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
 
-        if (threadPoolExecutor != null) {
-            threadPoolExecutor.shutdownNow();
-            threadPoolExecutor = null;
-        }
+        try {
+            if (threadPoolExecutor != null) {
+                threadPoolExecutor.shutdownNow();
+                threadPoolExecutor = null;
+            }
+        } catch (Exception e) { }
 
-        if (radioAudioService != null) {
-            radioAudioService.unbindService(connection);
-            radioAudioService = null;
-        }
+        try {
+            if (radioAudioService != null) {
+                radioAudioService.unbindService(connection);
+                radioAudioService = null;
+            }
+        } catch (Exception e) { }
     }
 
     @Override
@@ -624,7 +615,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                         if (activeMemoryId > -1) {
                             if (radioAudioService != null) {
-                                radioAudioService.tuneToMemory(activeMemoryId, squelch, false);
+                                radioAudioService.tuneToMemory(activeMemoryId, squelch, radioAudioService.getMode() == RadioAudioService.MODE_RX);
                                 tuneToMemoryUi(activeMemoryId);
                             }
                         } else {
@@ -661,7 +652,8 @@ public class MainActivity extends AppCompatActivity {
                                 @Override
                                 public void run() {
                                     if (radioAudioService != null) {
-                                        if (radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
+                                        if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP &&
+                                                radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
                                             radioAudioService.setMode(RadioAudioService.MODE_RX);
                                             radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
                                         }
@@ -785,6 +777,9 @@ public class MainActivity extends AppCompatActivity {
         activeMemoryId = -1;
 
         // Save most recent freq so we can restore it on app restart
+        if (threadPoolExecutor == null) {
+            return;
+        }
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -1070,15 +1065,29 @@ public class MainActivity extends AppCompatActivity {
         usbSnackbar.show();
     }
 
+    private void showVersionSnackbar(int firmwareVer) {
+        CharSequence snackbarMsg = "Unsupported KV4P-HT firmware version (" + firmwareVer + "), please update.";
+        versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+
+        // Make the text of the snackbar larger.
+        TextView snackbarActionTextView = (TextView) versionSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        snackbarActionTextView.setTextSize(20);
+        TextView snackbarTextView = (TextView) versionSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        versionSnackbar.show();
+    }
+
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             Log.d("DEBUG", "usbReceiver.onReceive()");
 
             String action = intent.getAction();
-            if (ACTION_USB_PERMISSION.equals(action)) {
+            if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                 synchronized (this) {
                     if (radioAudioService != null) {
-                        radioAudioService.setupSerialConnection();
+                        radioAudioService.reconnectViaUSB();
                     }
                 }
             }
@@ -1134,6 +1143,10 @@ public class MainActivity extends AppCompatActivity {
         PopupMenu groupsMenu = new PopupMenu(themedContext, view);
         groupsMenu.inflate(R.menu.groups_menu);
 
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -1172,6 +1185,9 @@ public class MainActivity extends AppCompatActivity {
         groupSelector.setText(groupName + " ▼");
 
         // Save most recent group selection so we can restore it on app restart
+        if (threadPoolExecutor == null) {
+            return;
+        }
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {

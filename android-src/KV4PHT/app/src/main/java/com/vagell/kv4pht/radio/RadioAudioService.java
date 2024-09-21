@@ -47,6 +47,7 @@ import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -70,8 +71,16 @@ public class RadioAudioService extends Service {
 
     // Must match the ESP32 device we support.
     // Idx 0 matches https://www.amazon.com/gp/product/B08D5ZD528
-    public static final int[] ESP32_VENDOR_IDS = {4292};
-    public static final int[] ESP32_PRODUCT_IDS = {60000};
+    private static final int[] ESP32_VENDOR_IDS = {4292};
+    private static final int[] ESP32_PRODUCT_IDS = {60000};
+
+    // Minimum Arduino (ESP32) app firmware version this Android app can communicate with.
+    // Should be incremented whenever there's a message format change, new data rate,
+    // new commands, etc.
+    private static final int MIN_FIRMWARE_VER = 1;
+    private static final String VERSION_PREFIX = "VERSION";
+    private static String versionStrBuffer = "";
+    private static final int VERSION_LENGTH = 8; // Chars in the version string from ESP32 app.
 
     public static final int MODE_STARTUP = -1;
     public static final int MODE_RX = 0;
@@ -84,7 +93,9 @@ public class RadioAudioService extends Service {
         PTT_DOWN((byte) 1),
         PTT_UP((byte) 2),
         TUNE_TO((byte) 3), // paramsStr contains freq, offset, tone details
-        FILTERS((byte) 4); // paramStr contains emphasis, highpass, lowpass (each 0/1)
+        FILTERS((byte) 4), // paramStr contains emphasis, highpass, lowpass (each 0/1)
+        STOP((byte) 5),
+        GET_FIRMWARE_VER((byte) 6);
 
         private byte commandByte;
         ESP32Command(byte commandByte) {
@@ -250,6 +261,7 @@ public class RadioAudioService extends Service {
         public void audioTrackCreated();
         public void packetReceived(APRSPacket aprsPacket);
         public void scannedToMemory(int memoryId);
+        public void unsupportedFirmware(int firmwareVer);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -335,7 +347,7 @@ public class RadioAudioService extends Service {
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
     public void tuneToFreq(String frequencyStr, int squelchLevel) {
-        mode = MODE_RX;
+        setMode(MODE_RX);
 
         if (activeFrequencyStr.equals(frequencyStr) && squelch == squelchLevel) {
             return; // Already tuned to this frequency with this squelch level.
@@ -493,7 +505,7 @@ public class RadioAudioService extends Service {
     }
 
     public void startPtt(boolean dataMode) {
-        mode = MODE_TX;
+        setMode(MODE_TX);
 
         // Setup runaway tx safety measures.
         startTxTimeSec = System.currentTimeMillis() / 1000;
@@ -525,14 +537,21 @@ public class RadioAudioService extends Service {
         if (mode == MODE_RX) {
             return;
         }
-        mode = MODE_RX;
+        setMode(MODE_RX);
         sendCommandToESP32(ESP32Command.PTT_UP);
         audioTrack.flush();
         restartAudioPrebuffer();
     }
 
+    public void reconnectViaUSB() {
+        findESP32Device();
+    }
+
     private void findESP32Device() {
         Log.d("DEBUG", "findESP32Device()");
+
+        setMode(MODE_STARTUP);
+        esp32Device = null;
 
         HashMap<String, UsbDevice> usbDevices = usbManager.getDeviceList();
 
@@ -635,7 +654,6 @@ public class RadioAudioService extends Service {
                     throw new RuntimeException(ex);
                 }
                 findESP32Device(); // Attempt to reconnect after the brief pause above.
-                return;
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
@@ -650,21 +668,31 @@ public class RadioAudioService extends Service {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                initAfterESP32Connected();
+                checkFirmwareVersion();
             }
         }, 3000);
     }
 
+    private void checkFirmwareVersion() {
+        // Verify that the firmware of the ESP32 app is supported.
+        setMode(MODE_STARTUP);
+        sendCommandToESP32(ESP32Command.STOP); // Tell ESP32 app to stop whatever it's doing.
+        sendCommandToESP32(ESP32Command.GET_FIRMWARE_VER); // Ask for firmware ver.
+        // The version is actually evaluated in handleESP32Data().
+    }
+
     private void initAfterESP32Connected() {
+        setMode(MODE_RX);
+
         // Start by prebuffering some audio
         restartAudioPrebuffer();
 
         // Tell the radio about any settings the user set.
-        if (activeMemoryId > -1) {
+/*        if (activeMemoryId > -1) {
             tuneToMemory(activeMemoryId, squelch, false);
         } else {
             tuneToFreq(activeFrequencyStr, squelch);
-        }
+        } */
 
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
@@ -686,10 +714,10 @@ public class RadioAudioService extends Service {
             }
 
             if (goToRxMode) {
-                mode = MODE_RX;
+                setMode(MODE_RX);
             }
         } else { // Start scanning
-            mode = MODE_SCAN;
+            setMode(MODE_SCAN);
             nextScan();
         }
     }
@@ -852,6 +880,37 @@ public class RadioAudioService extends Service {
                 throw new RuntimeException(e);
             } */
             // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
+
+        if (mode == MODE_STARTUP) {
+            try {
+                String dataStr = new String(data, "UTF-8");
+                versionStrBuffer += dataStr;
+                if (versionStrBuffer.contains(VERSION_PREFIX)) {
+                    int startIdx = versionStrBuffer.indexOf(VERSION_PREFIX) + VERSION_PREFIX.length();
+                    String verStr = "";
+                    try {
+                        verStr = versionStrBuffer.substring(startIdx, startIdx + VERSION_LENGTH);
+                    } catch (IndexOutOfBoundsException iobe) {
+                        return; // Version string not yet fully received.
+                    }
+                    int verInt = Integer.parseInt(verStr);
+                    if (verInt < MIN_FIRMWARE_VER) {
+                        Log.d("DEBUG", "Error: ESP32 app firmware is " + verInt + " but Android app requires at least " + MIN_FIRMWARE_VER);
+                        if (callbacks != null) {
+                            callbacks.unsupportedFirmware(verInt);
+                            versionStrBuffer = "";
+                        }
+                    } else {
+                        Log.d("DEBUG", "Supported ESP32 app firmware version detected (" + verInt + " >= " + MIN_FIRMWARE_VER + ").");
+                        versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
+                        initAfterESP32Connected();
+                    }
+                    return;
+                }
+            } catch (UnsupportedEncodingException e) {
+                throw new RuntimeException(e);
+            }
+        }
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
             if (prebufferComplete && audioTrack != null) {
