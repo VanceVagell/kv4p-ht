@@ -351,6 +351,9 @@ public class RadioAudioService extends Service {
 
     public static String makeSafe2MFreq(String strFreq) {
         Float freq = Float.parseFloat(strFreq);
+        while (freq > 148.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
+            freq /= 10;
+        }
         freq = Math.min(freq, 148.0f);
         freq = Math.max(freq, 144.0f);
 
