@@ -1,5 +1,5 @@
 /*
-KV4P-HT (see http://kv4p.com)
+kv4p HT (see http://kv4p.com)
 Copyright (C) 2024 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
@@ -220,13 +220,17 @@ public class RadioAudioService extends Service {
         return mode;
     }
 
+    public String getActiveFrequencyStr() {
+        return activeFrequencyStr;
+    }
+
     public void setActiveMemoryId(int activeMemoryId) {
         this.activeMemoryId = activeMemoryId;
 
         if (activeMemoryId > -1) {
             tuneToMemory(activeMemoryId, squelch, false);
         } else {
-            tuneToFreq(activeFrequencyStr, squelch);
+            tuneToFreq(activeFrequencyStr, squelch, false);
         }
     }
 
@@ -236,7 +240,7 @@ public class RadioAudioService extends Service {
         if (activeMemoryId > -1) {
             tuneToMemory(activeMemoryId, squelch, false);
         } else {
-            tuneToFreq(activeFrequencyStr, squelch);
+            tuneToFreq(activeFrequencyStr, squelch, false);
         }
     }
 
@@ -364,10 +368,10 @@ public class RadioAudioService extends Service {
 
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
-    public void tuneToFreq(String frequencyStr, int squelchLevel) {
+    public void tuneToFreq(String frequencyStr, int squelchLevel, boolean forceTune) {
         setMode(MODE_RX);
 
-        if (activeFrequencyStr.equals(frequencyStr) && squelch == squelchLevel) {
+        if (!forceTune && activeFrequencyStr.equals(frequencyStr) && squelch == squelchLevel) {
             return; // Already tuned to this frequency with this squelch level.
         }
 

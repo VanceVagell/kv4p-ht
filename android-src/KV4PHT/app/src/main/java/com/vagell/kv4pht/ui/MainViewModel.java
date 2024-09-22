@@ -1,5 +1,5 @@
 /*
-KV4P-HT (see http://kv4p.com)
+kv4p HT (see http://kv4p.com)
 Copyright (C) 2024 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify

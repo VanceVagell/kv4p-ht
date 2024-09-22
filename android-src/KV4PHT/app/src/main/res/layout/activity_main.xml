@@ -91,9 +91,10 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/jost"
                     android:gravity="center"
-                    android:text="Simplex"
+                    android:text="Welcome to"
                     android:textColor="@color/primary"
-                    android:textSize="24dp" />
+                    android:textSize="24dp"
+                    android:maxLines="1"/>
 
 
                 <EditText
@@ -102,9 +103,9 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/jost"
                     android:gravity="center"
-                    android:text="146.520"
                     android:textColor="@color/primary"
                     android:textSize="64dp"
+                    android:text="kv4p HT"
                     android:background="@color/clear"
                     android:maxLength="7"
                     android:maxLines="1"

@@ -1,5 +1,5 @@
 /*
-KV4P-HT (see http://kv4p.com)
+kv4p HT (see http://kv4p.com)
 Copyright (C) 2024 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
@@ -185,7 +185,7 @@ public class MainActivity extends AppCompatActivity {
                 adapter.notifyDataSetChanged();
 
                 if (radioAudioService != null) {
-                    radioAudioService.tuneToFreq(freq, squelch); // Stay on the same freq as the now-deleted memory
+                    radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
                     tuneToFreqUi(freq);
                 }
             }
@@ -638,7 +638,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         } else {
                             if (radioAudioService != null) {
-                                radioAudioService.tuneToFreq(activeFrequencyStr, squelch);
+                                radioAudioService.tuneToFreq(activeFrequencyStr, squelch, radioAudioService.getMode() == RadioAudioService.MODE_RX);
                                 tuneToFreqUi(activeFrequencyStr);
                             }
                         }
@@ -770,8 +770,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (radioAudioService != null) {
-                    radioAudioService.tuneToFreq(activeFrequencyField.getText().toString(), squelch);
-                    tuneToFreqUi(activeFrequencyField.getText().toString());
+                    radioAudioService.tuneToFreq(activeFrequencyField.getText().toString(), squelch, false);
+                    tuneToFreqUi(RadioAudioService.makeSafe2MFreq(activeFrequencyField.getText().toString())); // Fixes any invalid freq user may have entered.
                 }
 
                 hideKeyboard();
@@ -1070,7 +1070,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showUSBSnackbar() {
-        CharSequence snackbarMsg = "KV4P-HT radio not found, plugged in?";
+        CharSequence snackbarMsg = "kv4p HT radio not found, plugged in?";
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
             .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
 
@@ -1084,7 +1084,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showVersionSnackbar(int firmwareVer) {
-        CharSequence snackbarMsg = "Unsupported KV4P-HT firmware version (" + firmwareVer + "), please update.";
+        CharSequence snackbarMsg = "Unsupported kv4p HT firmware version (" + firmwareVer + "), please update.";
         versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
 
