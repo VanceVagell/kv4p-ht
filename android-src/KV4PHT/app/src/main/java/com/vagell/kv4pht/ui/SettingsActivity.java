@@ -71,6 +71,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void populateOriginalValues() {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -206,6 +210,10 @@ public class SettingsActivity extends AppCompatActivity {
             return;
         }
 
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -223,6 +231,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setSquelch(int squelch) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -240,6 +252,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setEmphasisFilter(boolean enabled) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -257,6 +273,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setHighpassFilter(boolean enabled) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -274,6 +294,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setLowpassFilter(boolean enabled) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -291,6 +315,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setStickyPTT(boolean enabled) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -308,6 +336,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setNoAnimations(boolean enabled) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
