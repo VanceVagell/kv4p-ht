@@ -10,7 +10,8 @@
     android:paddingTop="64dp"
     android:paddingRight="24dp"
     android:paddingBottom="24dp"
-    android:paddingLeft="24dp">
+    android:paddingLeft="24dp"
+    android:id="@+id/settingsTopLevelView">
 
     <TextView
         android:id="@+id/settingsToolbarTitle"

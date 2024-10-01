@@ -137,7 +137,7 @@ public class SettingsActivity extends AppCompatActivity {
             startActivity(new Intent("com.android.settings.action.live_caption"));
         } catch (ActivityNotFoundException anfe) {
             CharSequence snackbarMsg = "This phone model doesn't support closed captions";
-            Snackbar ccSnackbar = Snackbar.make(getApplicationContext(), findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
+            Snackbar ccSnackbar = Snackbar.make(findViewById(R.id.settingsTopLevelView), snackbarMsg, Snackbar.LENGTH_LONG)
                     .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
 
             // Make the text of the snackbar larger.
