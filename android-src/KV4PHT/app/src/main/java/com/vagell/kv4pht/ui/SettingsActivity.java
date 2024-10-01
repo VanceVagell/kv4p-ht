@@ -20,7 +20,9 @@ package com.vagell.kv4pht.ui;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -28,11 +30,13 @@ import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Switch;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.slider.Slider;
+import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
@@ -129,7 +133,21 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     public void closedCaptionsButtonClicked(View view) {
-        startActivity(new Intent("com.android.settings.action.live_caption"));
+        try {
+            startActivity(new Intent("com.android.settings.action.live_caption"));
+        } catch (ActivityNotFoundException anfe) {
+            CharSequence snackbarMsg = "This phone model doesn't support closed captions";
+            Snackbar ccSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
+                    .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+
+            // Make the text of the snackbar larger.
+            TextView snackbarActionTextView = (TextView) ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+            snackbarActionTextView.setTextSize(20);
+            TextView snackbarTextView = (TextView) ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+            snackbarTextView.setTextSize(20);
+
+            ccSnackbar.show();
+        }
     }
 
     public void doneButtonClicked(View view) {

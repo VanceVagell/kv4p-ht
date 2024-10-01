@@ -881,12 +881,12 @@ public class RadioAudioService extends Service {
             try {
                 serialPort.close();
             } catch (Exception ex) {
-                // Ignore.
+                // Ignore. We did our best to close it!
             }
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException ex) {
-                throw new RuntimeException(ex);
+                // Ignore. This should only happen if the app is paused in this brief moment between USB retries, not a serious issue.
             }
             findESP32Device(); // Attempt to reconnect after the brief pause above.
         }
