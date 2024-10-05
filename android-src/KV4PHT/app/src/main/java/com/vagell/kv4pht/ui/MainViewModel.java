@@ -44,6 +44,7 @@ public class MainViewModel extends ViewModel {
 
     public static class MainViewModelCallback {
         public void onLoadDataDone() { };
+        public void onDeleteMemoryDone() { };
     }
 
     public void setCallback(MainViewModelCallback callback) {
@@ -90,6 +91,9 @@ public class MainViewModel extends ViewModel {
         Executor executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             appDb.channelMemoryDao().delete(memory);
+            if (callback != null) {
+                callback.onDeleteMemoryDone();
+            }
         });
     }
 

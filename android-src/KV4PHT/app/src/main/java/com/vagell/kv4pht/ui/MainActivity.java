@@ -180,14 +180,26 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onMemoryDelete(ChannelMemory memory) {
                 String freq = memory.frequency;
-                viewModel.deleteMemory(memory);
-                viewModel.loadData();
-                adapter.notifyDataSetChanged();
+                viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
+                    @Override
+                    public void onDeleteMemoryDone() {
+                        viewModel.loadData();
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                adapter.notifyDataSetChanged();
 
-                if (radioAudioService != null) {
-                    radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
-                    tuneToFreqUi(freq);
-                }
+                                if (radioAudioService != null) {
+                                    radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
+                                    tuneToFreqUi(freq);
+                                }
+
+                                viewModel.setCallback(null);
+                            }
+                        });
+                    }
+                });
+                viewModel.deleteMemory(memory);
             }
 
             @Override

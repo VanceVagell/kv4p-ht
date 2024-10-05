@@ -369,6 +369,10 @@ public class RadioAudioService extends Service {
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
     public void tuneToFreq(String frequencyStr, int squelchLevel, boolean forceTune) {
+        if (mode == MODE_STARTUP) {
+            return; // Not fully loaded and initialized yet, don't tune.
+        }
+
         setMode(MODE_RX);
 
         if (!forceTune && activeFrequencyStr.equals(frequencyStr) && squelch == squelchLevel) {
@@ -437,6 +441,10 @@ public class RadioAudioService extends Service {
             return; // Already tuned to this memory, with this squelch.
         }
 
+        if (mode == MODE_STARTUP) {
+            return; // Not fully loaded and initialized yet, don't tune.
+        }
+
         if (channelMemoriesLiveData == null) {
             Log.d("DEBUG", "Error: attempted tuneToMemory() but channelMemories was never set.");
             return;
@@ -454,6 +462,10 @@ public class RadioAudioService extends Service {
     public void tuneToMemory(ChannelMemory memory, int squelchLevel, boolean forceTune) {
         if (!forceTune && activeMemoryId == memory.memoryId && squelch == squelchLevel) {
             return; // Already tuned to this memory, with this squelch.
+        }
+
+        if (mode == MODE_STARTUP) {
+            return; // Not fully loaded and initialized yet, don't tune.
         }
 
         activeFrequencyStr = validateFrequency(memory.frequency);
@@ -708,13 +720,6 @@ public class RadioAudioService extends Service {
 
         // Start by prebuffering some audio
         restartAudioPrebuffer();
-
-        // Tell the radio about any settings the user set.
-/*        if (activeMemoryId > -1) {
-            tuneToMemory(activeMemoryId, squelch, false);
-        } else {
-            tuneToFreq(activeFrequencyStr, squelch);
-        } */
 
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
