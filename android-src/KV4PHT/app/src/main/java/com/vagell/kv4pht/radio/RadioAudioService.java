@@ -780,7 +780,7 @@ public class RadioAudioService extends Service {
             }
         }
 
-        if (memoryToScanNext == null) {
+        if (memoryToScanNext == null && channelMemories.size() > 0) {
             // If we hit the end of memories, go back to scanning from the start
             memoryToScanNext = channelMemories.get(0);
         }

@@ -451,7 +451,7 @@ public class MainActivity extends AppCompatActivity {
 
             // If their callsign is not set, display a snackbar asking them to set it before they
             // can transmit.
-            if (callsign.length() == 0) {
+            if (callsign == null || callsign.length() == 0) {
                 showCallsignSnackbar();
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(false);
