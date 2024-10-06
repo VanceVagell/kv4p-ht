@@ -468,6 +468,10 @@ public class RadioAudioService extends Service {
             return; // Not fully loaded and initialized yet, don't tune.
         }
 
+        if (memory == null) {
+            return;
+        }
+
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
 

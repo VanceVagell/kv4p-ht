@@ -495,7 +495,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void sendButtonOverlayClicked(View view) {
-        if (callsign.length() == 0) {
+        if (callsign == null || callsign.length() == 0) {
             showCallsignSnackbar();
             ImageButton sendButton = findViewById(R.id.sendButton);
             sendButton.setEnabled(false);
