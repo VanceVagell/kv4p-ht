@@ -6,8 +6,8 @@
 	(paper "A4")
 	(title_block
 		(title "kv4P HT")
-		(date "2024-10-16")
-		(rev "1.6")
+		(date "2024-10-18")
+		(rev "1.8-DP")
 		(company "VanceVagell")
 		(comment 1 "https://github.com/VanceVagell/kv4p-ht")
 		(comment 2 "KiCAD translation - DefProc")
@@ -2749,7 +2749,7 @@
 				)
 			)
 		)
-		(property "Value" "56nH"
+		(property "Value" "75nH"
 			(at 204.47 88.9 90)
 			(effects
 				(font
@@ -2810,7 +2810,7 @@
 		(fields_autoplaced yes)
 		(uuid "13635954-d22a-4885-baf7-8250cf82c203")
 		(property "Reference" "C1"
-			(at 210.82 96.5135 0)
+			(at 210.6041 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2818,8 +2818,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "36pF"
-			(at 210.82 99.0535 0)
+		(property "Value" "47pF"
+			(at 210.6041 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2940,7 +2940,7 @@
 				)
 			)
 		)
-		(property "Value" "56nH"
+		(property "Value" "75nH"
 			(at 222.25 88.9 90)
 			(effects
 				(font
@@ -3067,7 +3067,7 @@
 		(fields_autoplaced yes)
 		(uuid "40c9781a-57ae-460a-875d-463bad84e781")
 		(property "Reference" "C5"
-			(at 200.66 96.5135 0)
+			(at 200.4441 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3075,8 +3075,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "20pF"
-			(at 200.66 99.0535 0)
+		(property "Value" "24pF"
+			(at 200.4441 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3384,7 +3384,7 @@
 				)
 			)
 		)
-		(property "Value" "68nH"
+		(property "Value" "82nH"
 			(at 213.36 88.9 90)
 			(effects
 				(font
@@ -3914,7 +3914,7 @@
 		(fields_autoplaced yes)
 		(uuid "9edff599-fb7e-45dd-8d11-6cddab40fe11")
 		(property "Reference" "C4"
-			(at 220.98 96.5135 0)
+			(at 220.7641 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3922,8 +3922,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "36pF"
-			(at 220.98 99.0535 0)
+		(property "Value" "47pF"
+			(at 220.7641 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4250,7 +4250,7 @@
 		(fields_autoplaced yes)
 		(uuid "d490311b-b4f6-4bbb-9717-064b7d6892fb")
 		(property "Reference" "C6"
-			(at 231.14 96.5135 0)
+			(at 230.9241 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4258,8 +4258,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "20pF"
-			(at 231.14 99.0535 0)
+		(property "Value" "24pF"
+			(at 230.9241 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
