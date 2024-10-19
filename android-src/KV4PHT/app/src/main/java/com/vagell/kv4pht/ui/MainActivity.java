@@ -785,6 +785,32 @@ public class MainActivity extends AppCompatActivity {
                 return touchHandled;
             }
         });
+        pttButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // This click handler is only for TalkBack users who also have stickyPTT enabled.
+                // It's so they can use the typical quick double-tap to toggle PTT on and off. So
+                // if stickyPTT isn't being used, don't handle a click on the PTT button (they need
+                // to hold since it's not sticky).
+                if (!stickyPTT) {
+                    return;
+                }
+
+                if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
+                    ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
+                    if (radioAudioService != null) {
+                        radioAudioService.startPtt(false);
+                    }
+                    startPttUi(false);
+                } else if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_TX) {
+                    ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
+                    if (radioAudioService != null) {
+                        radioAudioService.endPtt();
+                    }
+                    endPttUi();
+                }
+            }
+        });
 
         EditText activeFrequencyField = findViewById(R.id.activeFrequency);
         activeFrequencyField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
