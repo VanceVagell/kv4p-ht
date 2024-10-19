@@ -295,7 +295,9 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void audioTrackCreated() {
-                    createRxAudioVisualizer(radioAudioService.getAudioTrack());
+                    if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        createRxAudioVisualizer(radioAudioService.getAudioTrack());
+                    }
                 }
 
                 @Override
@@ -985,6 +987,12 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
+                    if (radioAudioService != null) {
+                        AudioTrack audioTrack = radioAudioService.getAudioTrack();
+                        if (audioTrack != null) {
+                            createRxAudioVisualizer(audioTrack); // Visualizer requires RECORD_AUDIO permission (even if not visualizing the mic input).
+                        }
+                    }
                     initAudioRecorder();
                 } else {
                     // Permission denied, things will just be broken.

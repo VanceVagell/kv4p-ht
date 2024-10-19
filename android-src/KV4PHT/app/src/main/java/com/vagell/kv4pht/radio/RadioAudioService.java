@@ -391,7 +391,13 @@ public class RadioAudioService extends Service {
     }
 
     public static String makeSafe2MFreq(String strFreq) {
-        Float freq = Float.parseFloat(strFreq);
+        Float freq;
+        try {
+            freq = Float.parseFloat(strFreq);
+        } catch (NumberFormatException nfe) { // Not sure how some people are breaking this, but default to FM calling frequency if we can't understand strFreq.
+            nfe.printStackTrace();
+            return "146.520";
+        }
         while (freq > 148.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
         }
