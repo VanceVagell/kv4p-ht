@@ -30,6 +30,7 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.hardware.usb.UsbManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
@@ -48,6 +49,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -96,6 +98,9 @@ public class MainActivity extends AppCompatActivity {
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
     private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
     private Thread recordingThread;
+
+    // Active screen type (e.g. voice or chat)
+    private ScreenType activeScreenType = ScreenType.SCREEN_VOICE;
 
     // Snackbars
     private Snackbar usbSnackbar = null;
@@ -471,6 +476,8 @@ public class MainActivity extends AppCompatActivity {
                 callsignSnackbar.dismiss();
             }
         }
+
+        activeScreenType = screenType;
     }
 
     private void showCallsignSnackbar() {
@@ -791,6 +798,46 @@ public class MainActivity extends AppCompatActivity {
                 hideKeyboard();
                 activeFrequencyField.clearFocus();
                 return true;
+            }
+        });
+
+        final View rootView = findViewById(android.R.id.content);
+        final View frequencyView = findViewById(R.id.frequencyContainer);
+        final EditText activeFrequencyEditText = findViewById(R.id.activeFrequency);
+
+        // Track if keyboard is likely visible (and/or screen got short for some reason), so we can
+        // make room for critical UI components that must be visible.
+        rootView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                // When in chat, we need enough vertical space for the user to see their text
+                // input box, and any prior chat message they may be replying to. Not necessary in
+                // voice mode.
+                if (activeScreenType != ScreenType.SCREEN_CHAT) {
+                    return;
+                }
+
+                // If they're editing the frequency, don't change the layout (they need to see it).
+                if (activeFrequencyEditText.hasFocus()) {
+                    return;
+                }
+
+                // Get the height of the visible display area
+                Rect r = new Rect();
+                rootView.getWindowVisibleDisplayFrame(r);
+                int screenHeight = rootView.getRootView().getHeight();
+                int visibleHeight = r.height();
+
+                // Check if the keyboard is likely visible
+                int heightDiff = screenHeight - visibleHeight;
+
+                if (heightDiff > screenHeight * 0.25) { // If more than 25% of the screen height is reduced
+                    // Keyboard is visible, hide the top view
+                    frequencyView.setVisibility(View.GONE);
+                } else {
+                    // Keyboard is hidden, show the top view
+                    frequencyView.setVisibility(View.VISIBLE);
+                }
             }
         });
     }
