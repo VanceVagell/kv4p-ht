@@ -7,8 +7,8 @@ plugins {
 
 sonar {
   properties {
-    property "sonar.projectKey", "wsciaroni_kv4p-ht"
-    property "sonar.organization", "wsciaroni"
+    property "sonar.projectKey", "kv4p_kv40-ht"
+    property "sonar.organization", "kv4p"
     property "sonar.host.url", "https://sonarcloud.io"
   }
 }
