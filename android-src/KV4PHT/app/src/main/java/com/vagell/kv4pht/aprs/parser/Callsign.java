@@ -96,9 +96,10 @@ public class Callsign implements Serializable {
         byte[] ax25 = new byte[7];
 	// shift " " by one
 	java.util.Arrays.fill(ax25, (byte)0x40);
-	if (callbytes.length > 6)
+	if (callbytes.length > 6) {
 		throw new IllegalArgumentException("Callsign " + callsign + " is too long for AX.25!");
-        for (int i = 0; i < callbytes.length; i++) {
+	}
+	for (int i = 0; i < callbytes.length; i++) {
 		ax25[i] = (byte)(callbytes[i] << 1);
 	}
 	int ssidval = 0;
