@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "Espressif")(type "KiCad")(uri "${KIPRJMOD}/libraries/kicad-libraries/symbols/Espressif.kicad_sym")(options "")(descr ""))
+  (lib (name "DRA818V")(type "KiCad")(uri "${KIPRJMOD}/lib/DRA818V.kicad_sym")(options "")(descr ""))
+)
