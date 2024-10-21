@@ -160,6 +160,7 @@ public class RadioAudioService extends Service {
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
     private static final int MS_SILENCE_BEFORE_DATA = 300;
     private static final int MS_SILENCE_AFTER_DATA = 700;
+    private static final int APRS_MAX_MESSAGE_NUM =  99999;
 
     // Radio params and related settings
     private String activeFrequencyStr = "144.000";
@@ -251,7 +252,7 @@ public class RadioAudioService extends Service {
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
-        messageNumber = (int) (Math.random() * 100000); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
+        messageNumber = (int) (Math.random() * APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
     /**
@@ -1108,6 +1109,9 @@ public class RadioAudioService extends Service {
 
         // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
         MessagePacket msgPacket = new MessagePacket(targetCallsign, outText, "" + (messageNumber++));
+        if (messageNumber > APRS_MAX_MESSAGE_NUM) {
+            messageNumber = 0;
+        }
         ArrayList<Digipeater> digipeaters = new ArrayList<>();
         digipeaters.add(new Digipeater("WIDE1*"));
         digipeaters.add(new Digipeater("WIDE2-1"));
