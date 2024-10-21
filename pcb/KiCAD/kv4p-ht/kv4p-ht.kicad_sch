@@ -6,8 +6,8 @@
 	(paper "A4")
 	(title_block
 		(title "kv4P HT")
-		(date "2024-10-16")
-		(rev "1.6")
+		(date "2024-10-21")
+		(rev "1.5")
 		(company "VanceVagell")
 		(comment 1 "https://github.com/VanceVagell/kv4p-ht")
 		(comment 2 "KiCAD translation - DefProc")
