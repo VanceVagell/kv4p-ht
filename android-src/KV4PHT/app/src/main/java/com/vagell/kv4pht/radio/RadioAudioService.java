@@ -160,6 +160,7 @@ public class RadioAudioService extends Service {
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
     private static final int MS_SILENCE_BEFORE_DATA = 300;
     private static final int MS_SILENCE_AFTER_DATA = 700;
+    private static final int APRS_MAX_MESSAGE_NUM =  99999;
 
     // Radio params and related settings
     private String activeFrequencyStr = "144.000";
@@ -251,7 +252,7 @@ public class RadioAudioService extends Service {
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
-        messageNumber = (int) (Math.random() * 100000); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
+        messageNumber = (int) (Math.random() * APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
     /**
@@ -391,7 +392,13 @@ public class RadioAudioService extends Service {
     }
 
     public static String makeSafe2MFreq(String strFreq) {
-        Float freq = Float.parseFloat(strFreq);
+        Float freq;
+        try {
+            freq = Float.parseFloat(strFreq);
+        } catch (NumberFormatException nfe) { // Not sure how some people are breaking this, but default to FM calling frequency if we can't understand strFreq.
+            nfe.printStackTrace();
+            return "146.520";
+        }
         while (freq > 148.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
         }
@@ -1102,6 +1109,9 @@ public class RadioAudioService extends Service {
 
         // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
         MessagePacket msgPacket = new MessagePacket(targetCallsign, outText, "" + (messageNumber++));
+        if (messageNumber > APRS_MAX_MESSAGE_NUM) {
+            messageNumber = 0;
+        }
         ArrayList<Digipeater> digipeaters = new ArrayList<>();
         digipeaters.add(new Digipeater("WIDE1*"));
         digipeaters.add(new Digipeater("WIDE2-1"));

@@ -2,4 +2,13 @@
 plugins {
     id 'com.android.application' version '8.3.0' apply false
     id 'com.android.library' version '8.3.0' apply false
+    id "org.sonarqube" version "5.1.0.4882"
+}
+
+sonar {
+  properties {
+    property "sonar.projectKey", "VanceVagell_kv4p-ht"
+    property "sonar.organization", "vancevagell"
+    property "sonar.host.url", "https://sonarcloud.io"
+  }
 }

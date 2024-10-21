@@ -28,7 +28,9 @@
                 android:layout_height="0dp"
                 android:layout_width="0dp"
                 android:layout_gravity="center_horizontal"
-                android:src="@drawable/circle_rx"/>
+                android:src="@drawable/circle_rx"
+                android:focusable="false"
+                android:importantForAccessibility="no"/>
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -49,7 +51,9 @@
                     android:contentDescription="Visualization of current transmit audio volume"
                     android:layout_height="0dp"
                     android:layout_width="0dp"
-                    android:src="@drawable/circle_tx"/>
+                    android:src="@drawable/circle_tx"
+                    android:focusable="false"
+                    android:importantForAccessibility="no"/>
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -81,6 +85,7 @@
             </androidx.appcompat.widget.LinearLayoutCompat>
 
             <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/frequencyContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
