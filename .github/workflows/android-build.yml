@@ -1,4 +1,4 @@
-name: Android Build And SonarCloud Analysis
+name: Android Build
 on:
   push:
     branches:
@@ -11,6 +11,9 @@ jobs:
   build:
     name: Build and analyze
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-src/KV4PHT
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,13 +36,14 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
           restore-keys: ${{ runner.os }}-gradle
       - name: Grant execute permission for gradlew
-        run: chmod +x ./android-src/KV4PHT/gradlew
+        run: chmod +x ./gradlew
       - name: Build and analyze
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew build sonar --info
-        working-directory: android-src/KV4PHT
+        run: ./gradlew check --stacktrace
+      - name: 'Prepare Sonar analysis'
+        uses: evaristegalois11/sonar-fork-analysis@v1.2.0
       - name: Upload APK
         if: startsWith(github.ref, 'refs/tags')
         uses: AButler/upload-release-assets@v3.0
