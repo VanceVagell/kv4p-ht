@@ -22,5 +22,5 @@ jobs:
           java-version: 17
           github-token: ${{ secrets.GITHUB_TOKEN }}
           sonar-token: ${{ secrets.SONAR_TOKEN }}
-          project-key: VanceVagell_kv4p-ht
+          project-key: wsciaroni_kv4p-ht
           working-directory: ./android-src/KV4PHT/
