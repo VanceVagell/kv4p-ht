@@ -6,7 +6,7 @@
 	(paper "A4")
 	(title_block
 		(title "kv4P HT")
-		(date "2024-10-18")
+		(date "2024-10-22")
 		(rev "1.8-DP")
 		(company "VanceVagell")
 		(comment 1 "https://github.com/VanceVagell/kv4p-ht")
@@ -2757,7 +2757,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:L0805"
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
 			(at 204.47 91.44 0)
 			(effects
 				(font
@@ -2827,7 +2827,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0603"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 208.28 97.79 0)
 			(effects
 				(font
@@ -2948,7 +2948,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:L0805"
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
 			(at 222.25 91.44 0)
 			(effects
 				(font
@@ -3084,7 +3084,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0805"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 198.12 97.79 0)
 			(effects
 				(font
@@ -3392,7 +3392,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:L0805"
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
 			(at 213.36 91.44 0)
 			(effects
 				(font
@@ -3729,7 +3729,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:CON-SMA-RA"
+		(property "Footprint" "Connector_Coaxial:SMA_Amphenol_901-143_Horizontal"
 			(at 190.5 91.44 0)
 			(effects
 				(font
@@ -3931,7 +3931,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0603"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 218.44 97.79 0)
 			(effects
 				(font
@@ -4197,7 +4197,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:R0805"
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
 			(at 132.08 96.52 0)
 			(effects
 				(font
@@ -4267,7 +4267,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0805"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 228.6 97.79 0)
 			(effects
 				(font
