@@ -1,0 +1,26 @@
+name: 'Sonar'
+on:
+  workflow_run:
+    workflows: [ 'Android Build' ]
+    types:
+      - completed
+jobs:
+  sonar:
+    name: 'Sonar analysis'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-src/KV4PHT
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      actions: read # Required to download artifacts
+    steps:
+      - name: 'Sonar analysis'
+        uses: wsciaroni/sonar-fork-analysis@v1.2.1-rc
+        with:
+          distribution: 'zulu'
+          java-version: 17
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          project-key: VanceVagell_kv4p-ht
+          working-directory: ./android-src/KV4PHT/
