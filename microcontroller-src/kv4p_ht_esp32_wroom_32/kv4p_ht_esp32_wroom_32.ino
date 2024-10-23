@@ -257,9 +257,6 @@ void handleStoppedMode()
     return;
   }
   break;
-  // TODO get rid of the code duplication here and in MODE_RX below to handle COMMAND_TUNE_TO and COMMAND_FILTERS.
-  // Should probably just have one standardized way to read any incoming bytes from Android app here, and handle
-  // commands appropriately. Or at least extract the business logic from them to avoid that duplication.
   case COMMAND_TUNE_TO:
   {
     handleTuneToCommand();
