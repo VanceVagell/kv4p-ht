@@ -27,14 +27,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '1'}; // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};    // Must match RadioAudioService.VERSION_PREFIX in Android app.
 
-// Commands defined here must match the Android app
-const uint8_t COMMAND_PTT_DOWN = 1;         // start transmitting audio that Android app will send
-const uint8_t COMMAND_PTT_UP = 2;           // stop transmitting audio, go into RX mode
-const uint8_t COMMAND_TUNE_TO = 3;          // change the frequency
-const uint8_t COMMAND_FILTERS = 4;          // toggle filters on/off
-const uint8_t COMMAND_STOP = 5;             // stop everything, just wait for next command
-const uint8_t COMMAND_GET_FIRMWARE_VER = 6; // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
-
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
 const uint8_t delimiter[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};

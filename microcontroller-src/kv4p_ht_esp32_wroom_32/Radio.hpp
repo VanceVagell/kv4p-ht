@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#include "CommandEnum.h"
+
 class Radio
 {
 public:
@@ -101,7 +103,8 @@ void Radio::processCommands()
             }
         }
 
-        commandProcessor_.processCommand(tempBuffer[DELIMITER_LENGTH]);
+        const CommandEnum command = tempBuffer[DELIMITER_LENGTH];
+        commandProcessor_.processCommand(command);
     }
 }
 
@@ -155,7 +158,7 @@ void Radio::handleTx()
             if (matchedDelimiterTokens == DELIMITER_LENGTH)
             {
                 // Process next byte as a command.
-                uint8_t command = tempBuffer[i];
+                CommandEnum command = tempBuffer[i];
                 matchedDelimiterTokens = 0;
 
                 commandProcessor_.processCommand(command);
