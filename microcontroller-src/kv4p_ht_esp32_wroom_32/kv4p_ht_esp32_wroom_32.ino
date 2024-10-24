@@ -23,76 +23,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <esp_task_wdt.h>
 
 #include "Radio.hpp"
+#include "Constants.hpp"
+#include "Globals.hpp"
 
-const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '1'}; // Should be 8 characters representing a zero-padded version, like 00000001.
-const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};    // Must match RadioAudioService.VERSION_PREFIX in Android app.
-
-// Delimeter must also match Android app
-#define DELIMITER_LENGTH 8
-const uint8_t delimiter[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
-int matchedDelimiterTokens = 0;
-
-// Mode of the app, which is essentially a state machine
-#define MODE_TX 0
-#define MODE_RX 1
-#define MODE_STOPPED 2
-int mode = MODE_STOPPED;
-
-// Audio sampling rate, must match what Android app expects (and sends).
-#define AUDIO_SAMPLE_RATE 44100
-
-// Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
-// But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
-#define SAMPLING_RATE_OFFSET 218
-
-// Buffer for outgoing audio bytes to send to radio module
-#define TX_TEMP_AUDIO_BUFFER_SIZE 4096   // Holds data we already got off of USB serial from Android app
-#define TX_CACHED_AUDIO_BUFFER_SIZE 1024 // MUST be smaller than DMA buffer size specified in i2sTxConfig, because we dump this cache into DMA buffer when full.
-uint8_t txCachedAudioBuffer[TX_CACHED_AUDIO_BUFFER_SIZE] = {0};
-int txCachedAudioBytes = 0;
-boolean isTxCacheSatisfied = false; // Will be true when the DAC has enough cached tx data to avoid any stuttering (i.e. at least TX_CACHED_AUDIO_BUFFER_SIZE bytes).
-
-// Max data to cache from USB (1024 is ESP32 max)
-#define USB_BUFFER_SIZE 1024
-
-// ms to wait before issuing PTT UP after a tx (to allow final audio to go out)
-#define MS_WAIT_BEFORE_PTT_UP 40
-
-// Connections to radio module
-#define RXD2_PIN 16
-#define TXD2_PIN 17
-#define DAC_PIN 25 // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
-#define ADC_PIN 34 // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
-#define PTT_PIN 18
-#define PD_PIN 19
-#define SQ_PIN 32
-
-// Built in LED
-#define LED_PIN 2
-
-// Object used for radio module serial comms
-DRA818 *dra = new DRA818(&Serial2, DRA818_VHF);
-
-// Tx runaway detection stuff
-long txStartTime = -1;
-#define RUNAWAY_TX_SEC 200
-
-// have we installed an I2S driver at least once?
-bool i2sStarted = false;
-
-// I2S audio sampling stuff
-#define I2S_READ_LEN 1024
-#define I2S_WRITE_LEN 1024
-#define I2S_ADC_UNIT ADC_UNIT_1
-#define I2S_ADC_CHANNEL ADC1_CHANNEL_6
-
-// Squelch parameters (for graceful fade to silence)
-#define FADE_SAMPLES 256 // Must be a power of two
-#define ATTENUATION_MAX 256
-int fadeCounter = 0;
-int fadeDirection = 0;             // 0: no fade, 1: fade in, -1: fade out
-int attenuation = ATTENUATION_MAX; // Full volume
-bool lastSquelched = false;
+// int fadeDirection = 0;             // 0: no fade, 1: fade in, -1: fade out
+// int attenuation = ATTENUATION_MAX; // Full volume
+// bool lastSquelched = false;
 
 Radio radio;
 
@@ -132,71 +68,7 @@ void setup()
   // Serial.println("volume: " + String(result));
   result = dra->filters(false, false, false);
   // Serial.println("filters: " + String(result));
-
-  // Begin in STOPPED mode
-  setMode(MODE_STOPPED);
 }
-
-void initI2SRx()
-{
-  // Remove any previous driver (rx or tx) that may have been installed.
-  if (i2sStarted)
-  {
-    i2s_driver_uninstall(I2S_NUM_0);
-  }
-  i2sStarted = true;
-
-  // Initialize ADC
-  adc1_config_width(ADC_WIDTH_BIT_12);
-  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
-
-  static const i2s_config_t i2sRxConfig = {
-      .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-      .sample_rate = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
-      .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
-      .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-      .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
-      .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-      .dma_buf_count = 4,
-      .dma_buf_len = I2S_READ_LEN,
-      .use_apll = true,
-      .tx_desc_auto_clear = false,
-      .fixed_mclk = 0};
-
-  ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sRxConfig, 0, NULL));
-  ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
-}
-
-void initI2STx()
-{
-  // Remove any previous driver (rx or tx) that may have been installed.
-  if (i2sStarted)
-  {
-    i2s_driver_uninstall(I2S_NUM_0);
-  }
-  i2sStarted = true;
-
-  static const i2s_config_t i2sTxConfig = {
-      .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
-      .sample_rate = AUDIO_SAMPLE_RATE,
-      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-      .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
-      .intr_alloc_flags = 0,
-      .dma_buf_count = 8,
-      .dma_buf_len = I2S_WRITE_LEN,
-      .use_apll = true};
-
-  i2s_driver_install(I2S_NUM_0, &i2sTxConfig, 0, NULL);
-  i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
-}
-
-void handleStoppedMode();
-void handleRxMode();
-void handleTxMode();
-
-void handleTuneToCommand();
-void handleFiltersCommand();
-void handleStopCommand();
 
 void loop()
 {

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cstdint>
+#include <Arduino.h>
 
 /// @brief Commands defined here must match the Android app
-enum class CommandEnum uint8_t
+enum class CommandEnum : uint8_t
 {
     COMMAND_PTT_DOWN = 1,        // start transmitting audio that Android app will send
     COMMAND_PTT_UP = 2,          // stop transmitting audio, go into RX mode

@@ -2,12 +2,17 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+// #include <DRA818.h>
+#include <driver/i2s.h>
 
 #include "Radio.hpp"
+#include "IAudioProcessor.hpp"
+
+#include "Constants.hpp"
 
 // ... (your other includes and definitions, like I2S_NUM_0, SQ_PIN, etc.)
 
-class AudioProcessor
+class AudioProcessor : public IAudioProcessor
 {
 public:
     AudioProcessor(Radio &radio) : radio_(radio) {}

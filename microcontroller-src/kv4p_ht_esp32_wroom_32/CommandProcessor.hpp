@@ -1,9 +1,14 @@
+#pragma once
+
 #include <Arduino.h>
 #include "Radio.hpp"
 
 #include "CommandEnum.hpp"
+#include "ICommandProcessor.hpp"
 
-class CommandProcessor
+#include "Constants.hpp"
+
+class CommandProcessor : public ICommandProcessor
 {
 public:
     CommandProcessor(Radio &radio) : radio_(radio) {}
@@ -17,7 +22,7 @@ public:
             break;
         case CommandEnum::COMMAND_TUNE_TO:
         {
-            char paramsStr[MAX_COMMAND_PARAMS_LENGTH + 1] = {0};
+            char paramsStr[MAX_COMMAND_PARAMS_LENGTH] = {0};
             if (radio_.readCommandParams(paramsStr, MAX_COMMAND_PARAMS_LENGTH))
             {
                 radio_.handleTuneToCommand(String(paramsStr));
@@ -26,7 +31,7 @@ public:
         }
         case CommandEnum::COMMAND_FILTERS:
         {
-            char paramsStr[FILTERS_PARAMS_LENGTH + 1] = {0};
+            char paramsStr[FILTERS_PARAMS_LENGTH] = {0};
             if (radio_.readCommandParams(paramsStr, FILTERS_PARAMS_LENGTH))
             {
                 radio_.handleFiltersCommand(String(paramsStr));
