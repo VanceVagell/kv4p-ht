@@ -279,7 +279,7 @@ void handleRxMode()
   {
     // Read a command from Android app
     uint8_t tempBuffer[100]; // Big enough for a command and params, won't hold audio data
-    int bytesRead = 0;
+    size_t bytesRead = 0;
 
     while (bytesRead < (DELIMITER_LENGTH + 1))
     { // Read the delimiter and the command byte only (no params yet)
@@ -309,7 +309,7 @@ void handleRxMode()
     }
     }
 
-    size_t bytesRead = 0;
+    bytesRead = 0;
     uint8_t buffer32[I2S_READ_LEN * 4] = {0};
     ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
     size_t samplesRead = bytesRead / 4;
@@ -366,218 +366,218 @@ void handleRxMode()
 
     Serial.write(buffer8, samplesRead);
   }
+}
+void handleTxMode()
+{
 
-  void handleTxMode()
+  // Check for runaway tx
+  int txSeconds = (micros() - txStartTime) / 1000000;
+  if (txSeconds > RUNAWAY_TX_SEC)
   {
-
-    // Check for runaway tx
-    int txSeconds = (micros() - txStartTime) / 1000000;
-    if (txSeconds > RUNAWAY_TX_SEC)
-    {
-      setMode(MODE_RX);
-      esp_task_wdt_reset();
-      return;
-    }
-
-    // Check for incoming commands or audio from Android
-    int bytesRead = 0;
-    uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
-    int bytesAvailable = Serial.available();
-    if (bytesAvailable > 0)
-    {
-      bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
-
-      // Pre-cache transmit audio to ensure precise timing (required for any data encoding to work, such as BFSK).
-      if (!isTxCacheSatisfied)
-      {
-        if (txCachedAudioBytes + bytesRead >= TX_CACHED_AUDIO_BUFFER_SIZE)
-        {
-          isTxCacheSatisfied = true;
-          processTxAudio(txCachedAudioBuffer, txCachedAudioBytes); // Process cached bytes
-        }
-        else
-        {
-          memcpy(txCachedAudioBuffer + txCachedAudioBytes, tempBuffer, bytesRead); // Store bytes to cache
-          txCachedAudioBytes += bytesRead;
-        }
-      }
-
-      if (isTxCacheSatisfied)
-      { // Note that it may have JUST been satisfied above, in which case we processed the cache, and will now process tempBuffer.
-        processTxAudio(tempBuffer, bytesRead);
-      }
-
-      for (int i = 0; i < bytesRead && i < TX_TEMP_AUDIO_BUFFER_SIZE; i++)
-      {
-        // If we've seen the entire delimiter...
-        if (matchedDelimiterTokens == DELIMITER_LENGTH)
-        {
-          // Process next byte as a command.
-          uint8_t command = tempBuffer[i];
-          matchedDelimiterTokens = 0;
-          switch (command)
-          {
-          case COMMAND_STOP:
-            handleStopCommand();
-            break;
-          case COMMAND_PTT_UP:
-          {
-            delay(MS_WAIT_BEFORE_PTT_UP); // Wait just a moment so final tx audio data in DMA buffer can be transmitted.
-            setMode(MODE_RX);
-            esp_task_wdt_reset();
-            return;
-          }
-          break;
-          }
-        }
-        else
-        {
-          if (tempBuffer[i] == delimiter[matchedDelimiterTokens])
-          { // This byte may be part of the delimiter
-            matchedDelimiterTokens++;
-          }
-          else
-          { // This byte is not consistent with the command delimiter, reset counter
-            matchedDelimiterTokens = 0;
-          }
-        }
-      }
-    }
-  }
-
-  void handleTuneToCommand()
-  {
-    // Example:
-    // 145.450144.850061
-    // 7 chars for tx, 7 chars for rx, 2 chars for tone, 1 char for squelch (17 bytes total for params)
     setMode(MODE_RX);
-
-    // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
-    // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
-    // putting them in there. If so, we take byte-by-byte until we get the full params.
-    int paramBytesMissing = 17;
-    String paramsStr = "";
-    if (paramBytesMissing > 0)
-    {
-      uint8_t paramPartsBuffer[paramBytesMissing];
-      for (int j = 0; j < paramBytesMissing; j++)
-      {
-        unsigned long waitStart = micros();
-        while (!Serial.available())
-        {
-          // Wait for a byte.
-          if ((micros() - waitStart) > 500000)
-          { // Give the Android app 0.5 second max before giving up on the command
-            esp_task_wdt_reset();
-            return;
-          }
-        }
-        paramPartsBuffer[j] = Serial.read();
-      }
-      paramsStr += String((char *)paramPartsBuffer);
-      paramBytesMissing--;
-    }
-    float freqTxFloat = paramsStr.substring(0, 8).toFloat();
-    float freqRxFloat = paramsStr.substring(7, 15).toFloat();
-    int toneInt = paramsStr.substring(14, 16).toInt();
-    int squelchInt = paramsStr.substring(16, 17).toInt();
-
-    // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
-
-    tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
-  }
-
-  void handleFiltersCommand()
-  {
-
-    int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
-    String paramsStr = "";
-    if (paramBytesMissing > 0)
-    {
-      uint8_t paramPartsBuffer[paramBytesMissing];
-      for (int j = 0; j < paramBytesMissing; j++)
-      {
-        unsigned long waitStart = micros();
-        while (!Serial.available())
-        {
-          // Wait for a byte.
-          if ((micros() - waitStart) > 500000)
-          { // Give the Android app 0.5 second max before giving up on the command
-            esp_task_wdt_reset();
-            return;
-          }
-        }
-        paramPartsBuffer[j] = Serial.read();
-      }
-      paramsStr += String((char *)paramPartsBuffer);
-      paramBytesMissing--;
-    }
-    bool emphasis = (paramsStr.charAt(0) == '1');
-    bool highpass = (paramsStr.charAt(1) == '1');
-    bool lowpass = (paramsStr.charAt(2) == '1');
-
-    dra->filters(emphasis, highpass, lowpass);
-  }
-
-  void handleStopCommand()
-  {
-    setMode(MODE_STOPPED);
-    Serial.flush();
     esp_task_wdt_reset();
+    return;
   }
 
-  void tuneTo(float freqTx, float freqRx, int tone, int squelch)
+  // Check for incoming commands or audio from Android
+  int bytesRead = 0;
+  uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
+  int bytesAvailable = Serial.available();
+  if (bytesAvailable > 0)
   {
-    int result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
-    // Serial.println("tuneTo: " + String(result));
-  }
+    bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
 
-  void setMode(int newMode)
-  {
-    mode = newMode;
-    switch (mode)
+    // Pre-cache transmit audio to ensure precise timing (required for any data encoding to work, such as BFSK).
+    if (!isTxCacheSatisfied)
     {
-    case MODE_STOPPED:
-      digitalWrite(LED_PIN, LOW);
-      digitalWrite(PTT_PIN, HIGH);
-      break;
-    case MODE_RX:
-      digitalWrite(LED_PIN, LOW);
-      digitalWrite(PTT_PIN, HIGH);
-      initI2SRx();
-      break;
-    case MODE_TX:
-      txStartTime = micros();
-      digitalWrite(LED_PIN, HIGH);
-      digitalWrite(PTT_PIN, LOW);
-      initI2STx();
-      txCachedAudioBytes = 0;
-      isTxCacheSatisfied = false;
-      break;
-    }
-  }
-
-  void processTxAudio(uint8_t tempBuffer[], int bytesRead)
-  {
-    if (bytesRead == 0)
-    {
-      return;
+      if (txCachedAudioBytes + bytesRead >= TX_CACHED_AUDIO_BUFFER_SIZE)
+      {
+        isTxCacheSatisfied = true;
+        processTxAudio(txCachedAudioBuffer, txCachedAudioBytes); // Process cached bytes
+      }
+      else
+      {
+        memcpy(txCachedAudioBuffer + txCachedAudioBytes, tempBuffer, bytesRead); // Store bytes to cache
+        txCachedAudioBytes += bytesRead;
+      }
     }
 
-    // Convert the 8-bit audio data to 16-bit
-    uint8_t buffer16[bytesRead * 2] = {0};
-    for (int i = 0; i < bytesRead; i++)
-    {
-      buffer16[i * 2 + 1] = tempBuffer[i]; // Move 8-bit audio into top 8 bits of 16-bit byte that I2S expects.
+    if (isTxCacheSatisfied)
+    { // Note that it may have JUST been satisfied above, in which case we processed the cache, and will now process tempBuffer.
+      processTxAudio(tempBuffer, bytesRead);
     }
 
-    size_t totalBytesWritten = 0;
-    size_t bytesWritten;
-    size_t bytesToWrite = sizeof(buffer16);
-    do
+    for (int i = 0; i < bytesRead && i < TX_TEMP_AUDIO_BUFFER_SIZE; i++)
     {
-      ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16 + totalBytesWritten, bytesToWrite, &bytesWritten, 100));
-      totalBytesWritten += bytesWritten;
-      bytesToWrite -= bytesWritten;
-    } while (bytesToWrite > 0);
+      // If we've seen the entire delimiter...
+      if (matchedDelimiterTokens == DELIMITER_LENGTH)
+      {
+        // Process next byte as a command.
+        uint8_t command = tempBuffer[i];
+        matchedDelimiterTokens = 0;
+        switch (command)
+        {
+        case COMMAND_STOP:
+          handleStopCommand();
+          break;
+        case COMMAND_PTT_UP:
+        {
+          delay(MS_WAIT_BEFORE_PTT_UP); // Wait just a moment so final tx audio data in DMA buffer can be transmitted.
+          setMode(MODE_RX);
+          esp_task_wdt_reset();
+          return;
+        }
+        break;
+        }
+      }
+      else
+      {
+        if (tempBuffer[i] == delimiter[matchedDelimiterTokens])
+        { // This byte may be part of the delimiter
+          matchedDelimiterTokens++;
+        }
+        else
+        { // This byte is not consistent with the command delimiter, reset counter
+          matchedDelimiterTokens = 0;
+        }
+      }
+    }
   }
+}
+
+void handleTuneToCommand()
+{
+  // Example:
+  // 145.450144.850061
+  // 7 chars for tx, 7 chars for rx, 2 chars for tone, 1 char for squelch (17 bytes total for params)
+  setMode(MODE_RX);
+
+  // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
+  // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
+  // putting them in there. If so, we take byte-by-byte until we get the full params.
+  int paramBytesMissing = 17;
+  String paramsStr = "";
+  if (paramBytesMissing > 0)
+  {
+    uint8_t paramPartsBuffer[paramBytesMissing];
+    for (int j = 0; j < paramBytesMissing; j++)
+    {
+      unsigned long waitStart = micros();
+      while (!Serial.available())
+      {
+        // Wait for a byte.
+        if ((micros() - waitStart) > 500000)
+        { // Give the Android app 0.5 second max before giving up on the command
+          esp_task_wdt_reset();
+          return;
+        }
+      }
+      paramPartsBuffer[j] = Serial.read();
+    }
+    paramsStr += String((char *)paramPartsBuffer);
+    paramBytesMissing--;
+  }
+  float freqTxFloat = paramsStr.substring(0, 8).toFloat();
+  float freqRxFloat = paramsStr.substring(7, 15).toFloat();
+  int toneInt = paramsStr.substring(14, 16).toInt();
+  int squelchInt = paramsStr.substring(16, 17).toInt();
+
+  // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
+
+  tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
+}
+
+void handleFiltersCommand()
+{
+
+  int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
+  String paramsStr = "";
+  if (paramBytesMissing > 0)
+  {
+    uint8_t paramPartsBuffer[paramBytesMissing];
+    for (int j = 0; j < paramBytesMissing; j++)
+    {
+      unsigned long waitStart = micros();
+      while (!Serial.available())
+      {
+        // Wait for a byte.
+        if ((micros() - waitStart) > 500000)
+        { // Give the Android app 0.5 second max before giving up on the command
+          esp_task_wdt_reset();
+          return;
+        }
+      }
+      paramPartsBuffer[j] = Serial.read();
+    }
+    paramsStr += String((char *)paramPartsBuffer);
+    paramBytesMissing--;
+  }
+  bool emphasis = (paramsStr.charAt(0) == '1');
+  bool highpass = (paramsStr.charAt(1) == '1');
+  bool lowpass = (paramsStr.charAt(2) == '1');
+
+  dra->filters(emphasis, highpass, lowpass);
+}
+
+void handleStopCommand()
+{
+  setMode(MODE_STOPPED);
+  Serial.flush();
+  esp_task_wdt_reset();
+}
+
+void tuneTo(float freqTx, float freqRx, int tone, int squelch)
+{
+  int result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
+  // Serial.println("tuneTo: " + String(result));
+}
+
+void setMode(int newMode)
+{
+  mode = newMode;
+  switch (mode)
+  {
+  case MODE_STOPPED:
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(PTT_PIN, HIGH);
+    break;
+  case MODE_RX:
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(PTT_PIN, HIGH);
+    initI2SRx();
+    break;
+  case MODE_TX:
+    txStartTime = micros();
+    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(PTT_PIN, LOW);
+    initI2STx();
+    txCachedAudioBytes = 0;
+    isTxCacheSatisfied = false;
+    break;
+  }
+}
+
+void processTxAudio(uint8_t tempBuffer[], int bytesRead)
+{
+  if (bytesRead == 0)
+  {
+    return;
+  }
+
+  // Convert the 8-bit audio data to 16-bit
+  uint8_t buffer16[bytesRead * 2] = {0};
+  for (int i = 0; i < bytesRead; i++)
+  {
+    buffer16[i * 2 + 1] = tempBuffer[i]; // Move 8-bit audio into top 8 bits of 16-bit byte that I2S expects.
+  }
+
+  size_t totalBytesWritten = 0;
+  size_t bytesWritten;
+  size_t bytesToWrite = sizeof(buffer16);
+  do
+  {
+    ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16 + totalBytesWritten, bytesToWrite, &bytesWritten, 100));
+    totalBytesWritten += bytesWritten;
+    bytesToWrite -= bytesWritten;
+  } while (bytesToWrite > 0);
+}
