@@ -1,0 +1,34 @@
+name: Compile Sketches
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+  release:
+    types: [created]
+
+jobs:
+  compile-sketches:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # See: https://github.com/arduino/compile-sketches#readme
+      - name: Compile sketches
+        uses: arduino/compile-sketches@v1.1.2
+        with:
+          fqbn: esp32:esp32:esp32:EventsCore=0
+          platforms: |
+            - name: "esp32:esp32"
+              version: "2.0.17"
+          sketch-paths: |
+            - microcontroller-src/kv4p_ht_esp32_wroom_32
+          libraries: |
+            - name: EspSoftwareSerial
+              version: 8.1.0
+            - source-url: https://github.com/fatpat/arduino-dra818/archive/refs/tags/v1.0.1.zip
+          verbose: true
