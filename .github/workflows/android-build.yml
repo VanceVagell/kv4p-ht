@@ -37,11 +37,13 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
-      - name: Build and analyze
+      - name: Gradle Check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: ./gradlew check --stacktrace
+      - name: 'Gradle Build'
+        run: ./gradlew build
       - name: 'Find Apk'
         run: find . -name *.apk
       - name: 'Prepare Sonar analysis'
