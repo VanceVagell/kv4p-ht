@@ -6,8 +6,8 @@
 	(paper "A4")
 	(title_block
 		(title "kv4P HT")
-		(date "2024-10-21")
-		(rev "1.5")
+		(date "2024-10-22")
+		(rev "1.8-DP")
 		(company "VanceVagell")
 		(comment 1 "https://github.com/VanceVagell/kv4p-ht")
 		(comment 2 "KiCAD translation - DefProc")
@@ -2749,7 +2749,7 @@
 				)
 			)
 		)
-		(property "Value" "56nH"
+		(property "Value" "75nH"
 			(at 204.47 88.9 90)
 			(effects
 				(font
@@ -2757,7 +2757,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:L0805"
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
 			(at 204.47 91.44 0)
 			(effects
 				(font
@@ -2810,7 +2810,7 @@
 		(fields_autoplaced yes)
 		(uuid "13635954-d22a-4885-baf7-8250cf82c203")
 		(property "Reference" "C1"
-			(at 210.82 96.5135 0)
+			(at 210.6041 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2818,8 +2818,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "36pF"
-			(at 210.82 99.0535 0)
+		(property "Value" "47pF"
+			(at 210.6041 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2827,7 +2827,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0603"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 208.28 97.79 0)
 			(effects
 				(font
@@ -2940,7 +2940,7 @@
 				)
 			)
 		)
-		(property "Value" "56nH"
+		(property "Value" "75nH"
 			(at 222.25 88.9 90)
 			(effects
 				(font
@@ -2948,7 +2948,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:L0805"
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
 			(at 222.25 91.44 0)
 			(effects
 				(font
@@ -3067,7 +3067,7 @@
 		(fields_autoplaced yes)
 		(uuid "40c9781a-57ae-460a-875d-463bad84e781")
 		(property "Reference" "C5"
-			(at 200.66 96.5135 0)
+			(at 200.4441 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3075,8 +3075,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "20pF"
-			(at 200.66 99.0535 0)
+		(property "Value" "24pF"
+			(at 200.4441 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3084,7 +3084,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0805"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 198.12 97.79 0)
 			(effects
 				(font
@@ -3384,7 +3384,7 @@
 				)
 			)
 		)
-		(property "Value" "68nH"
+		(property "Value" "82nH"
 			(at 213.36 88.9 90)
 			(effects
 				(font
@@ -3392,7 +3392,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:L0805"
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
 			(at 213.36 91.44 0)
 			(effects
 				(font
@@ -3729,7 +3729,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:CON-SMA-RA"
+		(property "Footprint" "Connector_Coaxial:SMA_Amphenol_901-143_Horizontal"
 			(at 190.5 91.44 0)
 			(effects
 				(font
@@ -3914,7 +3914,7 @@
 		(fields_autoplaced yes)
 		(uuid "9edff599-fb7e-45dd-8d11-6cddab40fe11")
 		(property "Reference" "C4"
-			(at 220.98 96.5135 0)
+			(at 220.7641 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3922,8 +3922,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "36pF"
-			(at 220.98 99.0535 0)
+		(property "Value" "47pF"
+			(at 220.7641 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3931,7 +3931,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0603"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 218.44 97.79 0)
 			(effects
 				(font
@@ -4197,7 +4197,7 @@
 				)
 			)
 		)
-		(property "Footprint" "easyeda:R0805"
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
 			(at 132.08 96.52 0)
 			(effects
 				(font
@@ -4250,7 +4250,7 @@
 		(fields_autoplaced yes)
 		(uuid "d490311b-b4f6-4bbb-9717-064b7d6892fb")
 		(property "Reference" "C6"
-			(at 231.14 96.5135 0)
+			(at 230.9241 96.5714 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4258,8 +4258,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "20pF"
-			(at 231.14 99.0535 0)
+		(property "Value" "24pF"
+			(at 230.9241 98.9957 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4267,7 +4267,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "easyeda:C0805"
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder"
 			(at 228.6 97.79 0)
 			(effects
 				(font
