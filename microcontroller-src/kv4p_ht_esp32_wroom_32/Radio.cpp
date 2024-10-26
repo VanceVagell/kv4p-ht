@@ -62,10 +62,7 @@ void Radio::processCommands()
 
         while (bytesRead < (DELIMITER_LENGTH + 1))
         {
-            if (Serial.available())
-            {
-                tempBuffer[bytesRead++] = Serial.read();
-            }
+            tempBuffer[bytesRead++] = Serial.read();
         }
 
         const CommandEnum command = static_cast<CommandEnum>(tempBuffer[DELIMITER_LENGTH]);
