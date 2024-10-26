@@ -44,6 +44,8 @@ jobs:
         run: ./gradlew check --stacktrace
       - name: 'Prepare Sonar analysis'
         uses: evaristegalois11/sonar-fork-analysis@v1.2.0
+      - name: 'Find Apk'
+        run: find . -name *.apk
       - name: Upload APK
         if: startsWith(github.ref, 'refs/tags')
         uses: AButler/upload-release-assets@v3.0
