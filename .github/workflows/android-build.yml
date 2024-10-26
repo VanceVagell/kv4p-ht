@@ -44,13 +44,11 @@ jobs:
         run: ./gradlew check --stacktrace
       - name: 'Gradle Build'
         run: ./gradlew build
-      - name: 'Find Apk'
-        run: find . -name *.apk
-      - name: 'Prepare Sonar analysis'
-        uses: evaristegalois11/sonar-fork-analysis@v1.2.0
       - name: Upload APK
         if: startsWith(github.ref, 'refs/tags')
         uses: AButler/upload-release-assets@v3.0
         with:
-          files: "android-src/KV4PHT/app/build/outputs/apk/release/app-release-unsigned.apk"
+          files: "android-src/KV4PHT/app/build/outputs/apk/release/app-release-unsigned.apk;android-src/KV4PHT/app/build/outputs/apk/debug/app-debug.apk"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: 'Prepare Sonar analysis'
+        uses: evaristegalois11/sonar-fork-analysis@v1.2.0
