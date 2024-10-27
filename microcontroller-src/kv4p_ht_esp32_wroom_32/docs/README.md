@@ -16,6 +16,10 @@ Here is the activity diagram for the ESP32 code:
 
 ![Total Activity Diagram](diagrams/AD_Total.png)
 
-## Class Diagram
+## Doxygen
 
+You can get class diagrams and technical documentation in Doxygen. Run the following command to generate the documenation:
 
+```bash
+doxygen
+```
