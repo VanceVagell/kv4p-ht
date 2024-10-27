@@ -1,0 +1,19 @@
+@startuml
+
+|Radio|
+start
+:loop;
+:ReadByte;
+
+if (MessageType is MSG ?) then (yes)
+|CommandProcessor|
+:Read CMD MSG Length;
+:Determine Command Type;
+|Radio|
+:ChangeState;
+else (no)
+endif
+|Radio|
+stop
+
+@enduml

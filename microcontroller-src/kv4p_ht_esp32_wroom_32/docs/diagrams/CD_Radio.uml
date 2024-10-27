@@ -1,0 +1,40 @@
+@startuml
+class Radio
+{
+
+    void loop()
+
+    void processCommands()
+    void handleRx()
+    void handleTx()
+
+    void handleTuneToCommand(const String &paramsStr)
+    void handleFiltersCommand(const String &paramsStr)
+    void handleStopCommand()
+    void handlePttDownCommand()
+    void handlePttUpCommand()
+    void handleGetFirmwareVerCommand()
+
+    void setMode(Mode newMode)
+    bool readCommandParams(char *buffer, int paramBytesMissing)
+    void tuneTo(float freqTx, float freqRx, int tone, int squelch)
+
+    void initI2SRx()
+    void initI2STx()
+
+    commandProcessor_ : ICommandProcessor*
+    audioProcessor_ : IAudioProcessor*
+    mode_ : Mode
+    long txStartTime_ : unsigned
+    lastSquelched_ : bool
+    fadeCounter_ : int
+    fadeDirection_ : int
+    attenuation_ : int
+    txCachedAudioBytes_ : int
+    isTxCacheSatisfied_ : bool
+    txCachedAudioBuffer_[TX_CACHED_AUDIO_BUFFER_SIZE] : uint8_t
+    matchedDelimiterTokens : int
+    i2sStarted_ : bool
+}
+
+@enduml
