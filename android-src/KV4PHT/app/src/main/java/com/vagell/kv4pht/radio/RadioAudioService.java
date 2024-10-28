@@ -901,19 +901,22 @@ public class RadioAudioService extends Service {
     public synchronized void sendBytesToESP32(byte[] newBytes) {
         try {
             // usbIoManager.writeAsync(newBytes); // On MCUs like the ESP32 S2 this causes USB failures with concurrent USB rx/tx.
+            int bytesWritten = 0;
+            int totalBytes = newBytes.length;
+            final int MAX_BYTES_PER_USB_WRITE = 128;
             int usbRetries = 0;
-            boolean written = false;
             do {
                 try {
-                    serialPort.write(newBytes, 200);
+                    byte[] arrayPart = Arrays.copyOfRange(newBytes, bytesWritten, Math.min(bytesWritten + MAX_BYTES_PER_USB_WRITE, totalBytes));
+                    serialPort.write(arrayPart, 200);
+                    bytesWritten += MAX_BYTES_PER_USB_WRITE;
                     usbRetries = 0;
-                    written = true;
                 } catch (SerialTimeoutException ste) {
                     // Do nothing, we'll try again momentarily. ESP32's serial buffer may be full.
                     usbRetries++;
                     // Log.d("DEBUG", "usbRetries: " + usbRetries);
                 }
-            } while (!written && usbRetries < 10);
+            } while (bytesWritten < totalBytes && usbRetries < 10);
             // Log.d("DEBUG", "Wrote data: " + Arrays.toString(newBytes));
         } catch (Exception e) {
             e.printStackTrace();
