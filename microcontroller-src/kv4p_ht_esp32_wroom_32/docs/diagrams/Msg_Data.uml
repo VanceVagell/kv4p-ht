@@ -1,0 +1,67 @@
+@startuml
+
+enum MsgType {
+    DATA = 0xF0
+    CMD =  0x0F
+}
+
+enum CommandType {
+    COMMAND_PTT_DOWN
+    COMMAND_PTT_UP
+    COMMAND_TUNE_TO
+    COMMAND_FILTERS
+    COMMAND_STOP
+    COMMAND_GET_FIRMWARE_VER
+}
+
+object MsgHeader {
+  MsgType (1 Byte)
+}
+
+object "DataMsg **Byte => Field**" as DataMsg {
+    0 => MsgHeader = MsgType.DATA
+    1 => DataLengthInBytes
+    2..(2+DataLengthInBytes) => Data[DataLengthInBytes]
+}
+
+object "Max Msg Length" as note {
+  4096 Bytes
+}
+
+object "TXCmdMsg **Byte => Field**" as TxCmdMsg {
+    0 => MsgHeader = MsgType.CMD
+    1 => CommandType = CommandType.COMMAND_PTT_DOWN
+}
+
+object "RXCmdMsg **Byte => Field**" as RxCmdMsg {
+    0 => MsgHeader = MsgType.CMD
+    1 => CommandType = CommandType.COMMAND_PTT_UP
+}
+
+object "TuneCmdMsg **Byte => Field**" as TuneCmdMsg {
+    0 => MsgHeader = MsgType.CMD
+    1 => CommandType = CommandType.COMMAND_TUNE_TO
+    2..9 => TXFreq
+    10..17 => RXFreq
+}
+
+object "FiltersCmdMsg **Byte => Field**" as FiltersCmdMsg {
+    0 => MsgHeader = MsgType.CMD
+    1 => CommandType = CommandType.COMMAND_FILTERS
+    2 => Emphasis
+    3 => HighPass
+    4 => LowPass
+}
+
+object "StopCmdMsg **Byte => Field**" as StopCmdMsg {
+    0 => MsgHeader = MsgType.CMD
+    1 => CommandType = CommandType.COMMAND_STOP
+}
+
+object "GetFirmwareVerCmdMsg **Byte => Field**" as GetFirmwareVerCmdMsg {
+    0 => MsgHeader = MsgType.CMD
+    1 => CommandType = CommandType.COMMAND_GET_FIRMWARE_VER
+}
+
+
+@enduml
