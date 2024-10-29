@@ -844,12 +844,12 @@ public class RadioAudioService extends Service {
                         android.os.Process.setThreadPriority(
                                 android.os.Process.THREAD_PRIORITY_BACKGROUND +
                                         android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        byte numberOfBytesToSend = (byte)Math.min(audioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE);
+                        byte numberOfBytesToSend = (byte)Math.min(audioBuffer.length - chunkStart, TX_AUDIO_CHUNK_SIZE);
                         if (numberOfBytesToSend <= 0) {
                             // Something has occurred
                         } else {
                         // TODO: Make this support packets of size greater that 2^8
-                        byte[] commandInfo = { ESP32MsgType.DATA.getByte(), 0, numberOfBytesToSend};
+                        byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
                         byte[] combined = new byte[commandInfo.length + numberOfBytesToSend];
                         System.arraycopy(commandInfo, 0, combined, 0, commandInfo.length);
                         System.arraycopy(audioBuffer, chunkStart, combined, commandInfo.length, numberOfBytesToSend);

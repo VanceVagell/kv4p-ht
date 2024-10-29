@@ -22,6 +22,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/i2s.h>
 #include <esp_task_wdt.h>
 
+#include "I2SOutput.h"
+#include "SerialSampleSource.h"
+
 const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '1'}; // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};    // Must match RadioAudioService.VERSION_PREFIX in Android app.
 
@@ -79,6 +82,17 @@ boolean isTxCacheSatisfied = false; // Will be true when the DAC has enough cach
 // Built in LED
 #define LED_PIN 2
 
+// i2s pins
+i2s_pin_config_t i2sPins = {
+    .bck_io_num = GPIO_NUM_27,
+    .ws_io_num = GPIO_NUM_14,
+    .data_out_num = GPIO_NUM_26,
+    .data_in_num = -1};
+
+I2SOutput *output;
+SampleSource *sampleSource;
+SerialSampleSource<TX_TEMP_AUDIO_BUFFER_SIZE> *serialSampleSource;
+
 // Object used for radio module serial comms
 DRA818 *dra = new DRA818(&Serial2, DRA818_VHF);
 
@@ -118,6 +132,7 @@ void setup()
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
+  /////////////////////////////// Setup Radio Module
   // Set up radio module defaults
   pinMode(PD_PIN, OUTPUT);
   digitalWrite(PD_PIN, HIGH); // Power on
@@ -140,6 +155,12 @@ void setup()
   result = dra->filters(false, false, false);
   // Serial.println("filters: " + String(result));
 
+  /////////////////////////////// Setup Tx Module
+  serialSampleSource = new SerialSampleSource<TX_TEMP_AUDIO_BUFFER_SIZE>(AUDIO_SAMPLE_RATE);
+  sampleSource = static_cast<SampleSource *>(serialSampleSource);
+  output = new I2SOutput();
+
+  /////////////////////////////// Set initial state
   // Begin in STOPPED mode
   setMode(MODE_STOPPED);
 }
@@ -204,8 +225,6 @@ enum class MsgType : uint8_t
   DEFAULT_CMD = 0
 };
 
-#include <exception>
-
 void loop()
 {
   try
@@ -230,16 +249,13 @@ void loop()
           // Wait for the amount of data we want
         };
         Serial.readBytes(sizeBuffer, 2);
-        size_t numberOfIncomingAudioBytes = sizeBuffer[1];
+        size_t numberOfIncomingAudioBytes = (sizeBuffer[0] << 8) | (sizeBuffer[1] & 0xFF);
 
-        uint8_t* audioData = new uint8_t[numberOfIncomingAudioBytes];
         while (Serial.available() < numberOfIncomingAudioBytes)
         {
           // Wait for the amount of data we want
         };
-        Serial.readBytes(audioData, numberOfIncomingAudioBytes);
-        processTxAudio(audioData, numberOfIncomingAudioBytes);
-        delete audioData;
+        serialSampleSource->readFromSerial(numberOfIncomingAudioBytes);
       }
       else
       {
@@ -255,12 +271,14 @@ void loop()
       {
       case CommandValue::COMMAND_PTT_DOWN:
       {
+        output->start(I2S_NUM_0, i2sPins, sampleSource);
         setMode(MODE_TX);
         esp_task_wdt_reset();
       }
       break;
       case CommandValue::COMMAND_PTT_UP:
       {
+        output->stop(I2S_NUM_0);
         setMode(MODE_RX);
         esp_task_wdt_reset();
       }
@@ -468,34 +486,6 @@ void setMode(int newMode)
     txStartTime = micros();
     digitalWrite(LED_PIN, HIGH);
     digitalWrite(PTT_PIN, LOW);
-    initI2STx();
-    txCachedAudioBytes = 0;
-    isTxCacheSatisfied = false;
     break;
   }
-}
-
-void processTxAudio(uint8_t tempBuffer[], int bytesRead)
-{
-  if (bytesRead == 0)
-  {
-    return;
-  }
-
-  // Convert the 8-bit audio data to 16-bit
-  uint8_t buffer16[bytesRead * 2] = {0};
-  for (int i = 0; i < bytesRead; i++)
-  {
-    buffer16[i * 2 + 1] = tempBuffer[i]; // Move 8-bit audio into top 8 bits of 16-bit byte that I2S expects.
-  }
-
-  size_t totalBytesWritten = 0;
-  size_t bytesWritten;
-  size_t bytesToWrite = sizeof(buffer16);
-  do
-  {
-    ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16 + totalBytesWritten, bytesToWrite, &bytesWritten, 100));
-    totalBytesWritten += bytesWritten;
-    bytesToWrite -= bytesWritten;
-  } while (bytesToWrite > 0);
 }
