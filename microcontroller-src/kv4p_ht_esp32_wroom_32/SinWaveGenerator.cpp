@@ -9,7 +9,7 @@ SinWaveGenerator::SinWaveGenerator(int sample_rate, int frequency, float magnitu
     m_current_position = 0;
 }
 
-void SinWaveGenerator::getFrames(Frame_t *frames, int number_frames)
+size_t SinWaveGenerator::getFrames(Frame_t *frames, int number_frames)
 {
     float full_wave_samples = m_sample_rate / m_frequency;
     float step_per_sample = M_TWOPI / full_wave_samples;
@@ -24,4 +24,5 @@ void SinWaveGenerator::getFrames(Frame_t *frames, int number_frames)
             m_current_position -= M_TWOPI;
         }
     }
+    return number_frames;
 }

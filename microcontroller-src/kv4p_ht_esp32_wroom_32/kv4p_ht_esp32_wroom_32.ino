@@ -220,8 +220,8 @@ void initI2STx()
 
 enum class MsgType : uint8_t
 {
-  DATA = 0xF0,
-  CMD = 0x0F,
+  DATA = 33,
+  CMD = 64,
   DEFAULT_CMD = 0
 };
 
@@ -232,10 +232,12 @@ void loop()
     //////////// Handle an message if present
     MsgType incomingMessage = MsgType::DEFAULT_CMD;
     uint8_t headerBuffer[1];
-    if (Serial.available())
+    bool serialWasRead = false;
+    if (Serial.available() > 0)
     {
       Serial.readBytes(headerBuffer, 1);
       incomingMessage = static_cast<MsgType>(headerBuffer[0]);
+      serialWasRead = true;
     }
     switch (incomingMessage)
     {
@@ -249,8 +251,8 @@ void loop()
           // Wait for the amount of data we want
         };
         Serial.readBytes(sizeBuffer, 2);
-        size_t numberOfIncomingAudioBytes = (sizeBuffer[0] << 8) | (sizeBuffer[1] & 0xFF);
-
+        uint16_t numberOfIncomingAudioBytes = (sizeBuffer[0] << 8) | (sizeBuffer[1] & 0xFF);
+        Serial.println(numberOfIncomingAudioBytes);
         while (Serial.available() < numberOfIncomingAudioBytes)
         {
           // Wait for the amount of data we want
@@ -265,6 +267,7 @@ void loop()
     break;
     case MsgType::CMD:
     {
+        // Serial.println("CMD");
       uint8_t commandBuffer[1];
       Serial.readBytes(commandBuffer, 1);
       switch (static_cast<CommandValue>(commandBuffer[0]))
@@ -374,6 +377,13 @@ void loop()
     break;
     case MsgType::DEFAULT_CMD:
     {
+      if(serialWasRead)
+      {
+        // Serial.println("DEFAULT");
+        Serial.flush();
+      }
+      else
+      {
       // If no command was received, do the thing
       switch (mode)
       {
@@ -381,62 +391,62 @@ void loop()
         break;
       case MODE_RX:
       {
-        size_t bytesRead = 0;
-        uint8_t buffer32[I2S_READ_LEN * 4] = {0};
-        ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
-        size_t samplesRead = bytesRead / 4;
+        // size_t bytesRead = 0;
+        // uint8_t buffer32[I2S_READ_LEN * 4] = {0};
+        // ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
+        // size_t samplesRead = bytesRead / 4;
 
-        byte buffer8[I2S_READ_LEN] = {0};
-        bool squelched = (digitalRead(SQ_PIN) == HIGH);
+        // byte buffer8[I2S_READ_LEN] = {0};
+        // bool squelched = (digitalRead(SQ_PIN) == HIGH);
 
-        // Check for squelch status change
-        if (squelched != lastSquelched)
-        {
-          if (squelched)
-          {
-            // Start fade-out
-            fadeCounter = FADE_SAMPLES;
-            fadeDirection = -1;
-          }
-          else
-          {
-            // Start fade-in
-            fadeCounter = FADE_SAMPLES;
-            fadeDirection = 1;
-          }
-        }
-        lastSquelched = squelched;
+        // // Check for squelch status change
+        // if (squelched != lastSquelched)
+        // {
+        //   if (squelched)
+        //   {
+        //     // Start fade-out
+        //     fadeCounter = FADE_SAMPLES;
+        //     fadeDirection = -1;
+        //   }
+        //   else
+        //   {
+        //     // Start fade-in
+        //     fadeCounter = FADE_SAMPLES;
+        //     fadeDirection = 1;
+        //   }
+        // }
+        // lastSquelched = squelched;
 
-        int attenuationIncrement = ATTENUATION_MAX / FADE_SAMPLES;
+        // int attenuationIncrement = ATTENUATION_MAX / FADE_SAMPLES;
 
-        for (int i = 0; i < samplesRead; i++)
-        {
-          uint8_t sampleValue;
+        // for (int i = 0; i < samplesRead; i++)
+        // {
+        //   uint8_t sampleValue;
 
-          // Extract 8-bit sample from 32-bit buffer
-          sampleValue = buffer32[i * 4 + 3] << 4;
-          sampleValue |= buffer32[i * 4 + 2] >> 4;
+        //   // Extract 8-bit sample from 32-bit buffer
+        //   sampleValue = buffer32[i * 4 + 3] << 4;
+        //   sampleValue |= buffer32[i * 4 + 2] >> 4;
 
-          // Adjust attenuation during fade
-          if (fadeCounter > 0)
-          {
-            fadeCounter--;
-            attenuation += fadeDirection * attenuationIncrement;
-            attenuation = max(0, min(attenuation, ATTENUATION_MAX));
-          }
-          else
-          {
-            attenuation = squelched ? 0 : ATTENUATION_MAX;
-            fadeDirection = 0;
-          }
+        //   // Adjust attenuation during fade
+        //   if (fadeCounter > 0)
+        //   {
+        //     fadeCounter--;
+        //     attenuation += fadeDirection * attenuationIncrement;
+        //     attenuation = max(0, min(attenuation, ATTENUATION_MAX));
+        //   }
+        //   else
+        //   {
+        //     attenuation = squelched ? 0 : ATTENUATION_MAX;
+        //     fadeDirection = 0;
+        //   }
 
-          // Apply attenuation to the sample
-          int adjustedSample = (((int)sampleValue - 128) * attenuation) >> 8;
-          adjustedSample += 128;
-          buffer8[i] = (uint8_t)adjustedSample;
-        }
+        //   // Apply attenuation to the sample
+        //   int adjustedSample = (((int)sampleValue - 128) * attenuation) >> 8;
+        //   adjustedSample += 128;
+        //   buffer8[i] = (uint8_t)adjustedSample;
+        // }
 
-        Serial.write(buffer8, samplesRead);
+        // Serial.write(buffer8, samplesRead);
       }
       break;
       case MODE_TX:
@@ -444,6 +454,7 @@ void loop()
       default:
         // If we get here.. bad things happened
         break;
+      }
       }
     }
     break;
@@ -480,7 +491,7 @@ void setMode(int newMode)
   case MODE_RX:
     digitalWrite(LED_PIN, LOW);
     digitalWrite(PTT_PIN, HIGH);
-    initI2SRx();
+    // initI2SRx();
     break;
   case MODE_TX:
     txStartTime = micros();

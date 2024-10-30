@@ -18,7 +18,8 @@ public:
     virtual int sampleRate() = 0;
     // This should fill the samples buffer with the specified number of frames
     // A frame contains a LEFT and a RIGHT sample. Each sample should be signed 16 bits
-    virtual void getFrames(Frame_t *frames, int number_frames) = 0;
+    // Returns the number of frames returned in the frames buffer.
+    virtual size_t getFrames(Frame_t *frames, int number_frames) = 0;
 };
 
 #endif

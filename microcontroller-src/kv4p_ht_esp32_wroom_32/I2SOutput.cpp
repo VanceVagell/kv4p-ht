@@ -5,6 +5,7 @@
 #include <SPIFFS.h>
 #include <FS.h>
 #include <array>
+#include <esp_task_wdt.h>
 
 #include "SampleSource.h"
 #include "I2SOutput.h"
@@ -92,12 +93,28 @@ void i2sWriterTask(void *param)
     while (output->continueWritingOutput)
     {
         // Get some frames from the sample generator
-        output->m_sample_generator->getFrames(frames, NUM_FRAMES_TO_SEND);
+        size_t numberOfFramesAvailable = output->m_sample_generator->getFrames(frames, NUM_FRAMES_TO_SEND);
 
         // Write data to the I2S peripheral
-        i2s_write(output->m_i2sPort, (uint8_t *)frames,
-                  NUM_FRAMES_TO_SEND * sizeof(Frame_t),
-                  &bytesWritten, portMAX_DELAY);
+        size_t totalBytesWritten = 0;
+        size_t bytesWritten;
+        size_t bytesToWrite = numberOfFramesAvailable * 2;
+        do
+        {
+            i2s_write(output->m_i2sPort, (uint8_t *)frames +totalBytesWritten,
+                      bytesToWrite,
+                      &bytesWritten, portMAX_DELAY);
+            totalBytesWritten += bytesWritten;
+            bytesToWrite -= bytesWritten;
+        } while (bytesToWrite > 0);
+
+        // uint8_t* frameByteBuffer = (uint8_t *)frames;
+        // size_t numberOfSamplesAvailable = numberOfFramesAvailable*2;
+        // for (size_t index = 0; index < numberOfSamplesAvailable; ++index)
+        // {
+        //     Serial.println(frameByteBuffer[index]);
+        // }
+        esp_task_wdt_reset();
     }
     vTaskDelete(NULL); // Ensure task deletes itself when done
 }

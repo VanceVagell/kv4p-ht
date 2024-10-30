@@ -18,7 +18,7 @@ public:
     return m_sampleRate;
   }
 
-  void getFrames(Frame_t *frames, int number_frames) override
+  size_t getFrames(Frame_t *frames, int number_frames) override
   {
     std::lock_guard<std::recursive_mutex> m(lock);
     size_t framesAvailable = availableFrames();
@@ -30,11 +30,7 @@ public:
       m_bufferTail = (m_bufferTail + 1) % m_buffer.size();
     }
 
-    // Fill remaining frames with silence (if any)
-    if (framesToRead < number_frames)
-    {
-      std::fill_n(&frames[framesToRead], number_frames - framesToRead, Frame_t{0, 0});
-    }
+    return framesToRead;
   }
 
   void readFromSerial(size_t bytesToRead)
@@ -52,8 +48,9 @@ public:
       Serial.readBytes(tempBuffer, frames);
       for (size_t i = 0; i < frames; ++i)
       {
-        m_buffer[bufferOffset + i].right = tempBuffer[i];
-        m_buffer[bufferOffset + i].left = 0;
+        size_t currentFrameIndex = (bufferOffset + i)%BufferSize;
+        m_buffer[currentFrameIndex].right = tempBuffer[i];
+        m_buffer[currentFrameIndex].left = 0;
       }
     };
 
@@ -105,6 +102,6 @@ private:
   size_t availableFrames()
   {
     std::lock_guard<std::recursive_mutex> m(lock);
-    return availableSpaceInBytes() / sizeof(Frame_t);
+    return (m_buffer.size() - availableSpaceInBytes()) / sizeof(Frame_t);
   }
 };

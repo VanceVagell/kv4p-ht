@@ -126,8 +126,8 @@ public class RadioAudioService extends Service {
     }
 
     private enum ESP32MsgType {
-        DATA((byte) 0xF0),
-        CMD((byte) 0x0F);
+        DATA((byte) 33),
+        CMD((byte) 64);
 
         private byte commandByte;
         ESP32MsgType(byte commandByte) {
@@ -822,13 +822,19 @@ public class RadioAudioService extends Service {
 
     public void sendAudioToESP32(byte[] audioBuffer, boolean dataMode) {
         if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
-            byte numberOfBytesToSend = (byte)audioBuffer.length;
+            int numberOfBytesToSend = audioBuffer.length;
             // TODO: Make this support packets of size greater that 2^8
-            byte[] commandInfo = { ESP32MsgType.DATA.getByte(), 0, numberOfBytesToSend};
-            byte[] combined = new byte[commandInfo.length + numberOfBytesToSend];
-            System.arraycopy(commandInfo, 0, combined, 0, commandInfo.length);
-            System.arraycopy(audioBuffer, 0, combined, commandInfo.length, numberOfBytesToSend);
-            sendBytesToESP32(combined);
+//            byte[] commandInfo = { ESP32MsgType.DATA.getByte(), 0, numberOfBytesToSend};
+//            byte[] combined = new byte[commandInfo.length + numberOfBytesToSend];
+//            System.arraycopy(commandInfo, 0, combined, 0, commandInfo.length);
+//            System.arraycopy(audioBuffer, 0, combined, commandInfo.length, numberOfBytesToSend);
+//            sendBytesToESP32(combined);
+//            numberOfBytesToSend = 10;
+            byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
+            sendBytesToESP32(commandInfo);
+//            byte[] fakeAudioData = { 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39 };
+//            sendBytesToESP32(fakeAudioData);
+            sendBytesToESP32(Arrays.copyOfRange(audioBuffer, 0, numberOfBytesToSend));
         } else {
             // If the audio is fairly long, we need to send it to ESP32 at the same rate
             // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
@@ -844,16 +850,22 @@ public class RadioAudioService extends Service {
                         android.os.Process.setThreadPriority(
                                 android.os.Process.THREAD_PRIORITY_BACKGROUND +
                                         android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        byte numberOfBytesToSend = (byte)Math.min(audioBuffer.length - chunkStart, TX_AUDIO_CHUNK_SIZE);
+                        int numberOfBytesToSend = Math.min(audioBuffer.length - chunkStart, TX_AUDIO_CHUNK_SIZE);
                         if (numberOfBytesToSend <= 0) {
                             // Something has occurred
                         } else {
                         // TODO: Make this support packets of size greater that 2^8
-                        byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
-                        byte[] combined = new byte[commandInfo.length + numberOfBytesToSend];
-                        System.arraycopy(commandInfo, 0, combined, 0, commandInfo.length);
-                        System.arraycopy(audioBuffer, chunkStart, combined, commandInfo.length, numberOfBytesToSend);
-                        sendBytesToESP32(combined);
+//                        byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
+//                        byte[] combined = new byte[commandInfo.length + numberOfBytesToSend];
+//                        System.arraycopy(commandInfo, 0, combined, 0, commandInfo.length);
+//                        System.arraycopy(audioBuffer, chunkStart, combined, commandInfo.length, numberOfBytesToSend);
+//                        sendBytesToESP32(combined);
+//                            numberOfBytesToSend = 10;
+                            byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
+                            sendBytesToESP32(commandInfo);
+//                            byte[] fakeAudioData = { 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39 };
+//                            sendBytesToESP32(fakeAudioData);
+                            sendBytesToESP32(Arrays.copyOfRange(audioBuffer, chunkStart, chunkStart + numberOfBytesToSend));
                         }
                     }
                 }, (int) nextSendDelay);
@@ -938,8 +950,8 @@ public class RadioAudioService extends Service {
             // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
             try {
                 String dataStr = new String(data, "UTF-8");
-                if (dataStr.length() < 100 && dataStr.length() > 0)
-                    Log.d("DEBUG", "Str data from ESP32: " + dataStr);
+//                if (dataStr.length() < 100 && dataStr.length() > 0)
+                Log.d("DEBUG", "Str data from ESP32: " + dataStr);
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
