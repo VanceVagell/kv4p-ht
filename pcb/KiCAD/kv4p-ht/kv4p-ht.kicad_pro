@@ -514,7 +514,10 @@
       "version": 3
     },
     "net_colors": null,
-    "netclass_assignments": null,
+    "netclass_assignments": {
+      "unconnected-(U3-IO45-Pad26)": "Strapping Pin",
+      "unconnected-(U3-IO46-Pad16)": "Strapping Pin"
+    },
     "netclass_patterns": []
   },
   "pcbnew": {

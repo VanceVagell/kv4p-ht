@@ -217,7 +217,7 @@
 		(descr "LED SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal, (Body size source: https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "LED handsolder")
 		(property "Reference" "D2"
-			(at 0 -1.65 360)
+			(at 0 -1.65 0)
 			(layer "F.SilkS")
 			(hide yes)
 			(uuid "1e8b8712-f744-4e53-a529-45ebb7c98fad")
@@ -229,7 +229,7 @@
 			)
 		)
 		(property "Value" "Red"
-			(at 0 1.65 360)
+			(at 0 1.65 0)
 			(layer "F.Fab")
 			(uuid "c6fd7e23-653b-4811-a643-7ca224be6c29")
 			(effects
@@ -443,7 +443,7 @@
 			(uuid "48115881-15a1-41dc-b2eb-17879fa46c68")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(uuid "20559559-1f97-4fe7-9e0e-33a93d2b4d46")
 			(effects
@@ -1068,7 +1068,7 @@
 		(descr "SMD Solder 3-pad Jumper, 1x1.5mm rounded Pads, 0.3mm gap, open")
 		(tags "solder jumper open")
 		(property "Reference" "JP1"
-			(at 0.635 -1.8 360)
+			(at 0.635 -1.8 0)
 			(layer "F.SilkS")
 			(hide yes)
 			(uuid "75b707e8-5d01-4860-a596-2dc5f7cdb86d")
@@ -1080,7 +1080,7 @@
 			)
 		)
 		(property "Value" "LED Power Select"
-			(at 0.635 1.9 360)
+			(at 0.635 1.9 0)
 			(layer "F.Fab")
 			(uuid "4c032791-7518-4aef-b3d4-19aaa97cf89f")
 			(effects
@@ -1091,7 +1091,7 @@
 			)
 		)
 		(property "Footprint" "Libraries:SolderJumper-3_P1.3mm_0R-Pins12_RoundedPad1.0x1.5mm"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "59877bcc-8faf-4ab1-b645-2e7223e9ab93")
@@ -1103,7 +1103,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "e7094ba6-fe00-4383-bdbc-c44b9ceda513")
@@ -1115,7 +1115,7 @@
 			)
 		)
 		(property "Description" "3-pole Solder Jumper, pins 1+2 closed/bridged"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "1c3889cc-8cb1-466f-b99d-d6905e5ff44a")
@@ -1425,7 +1425,7 @@
 		(descr "Resistor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC_7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor handsolder")
 		(property "Reference" "R5"
-			(at 0 1.27 360)
+			(at 0 1.27 0)
 			(layer "F.SilkS")
 			(uuid "791d6467-7843-4d0b-acf9-a4c9f7676644")
 			(effects
@@ -1436,7 +1436,7 @@
 			)
 		)
 		(property "Value" "100R"
-			(at 0 1.65 360)
+			(at 0 1.65 0)
 			(layer "F.Fab")
 			(uuid "80e889ca-9a17-40db-baa2-5cd6f847059a")
 			(effects
@@ -1643,7 +1643,7 @@
 			(uuid "c873196f-c4f2-4cff-8fd7-5ee43b61acbe")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(uuid "c6010c46-3e44-41b5-9771-f16271bedb9c")
 			(effects
@@ -1968,7 +1968,7 @@
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC_7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "capacitor handsolder")
 		(property "Reference" "C12"
-			(at 0 1.016 360)
+			(at 0 1.016 0)
 			(layer "F.SilkS")
 			(uuid "918759c4-fb5f-42b1-8674-9fbbe8ac10b1")
 			(effects
@@ -1979,7 +1979,7 @@
 			)
 		)
 		(property "Value" "2.2nF Tuned VHF"
-			(at 0 1.43 360)
+			(at 0 1.43 0)
 			(layer "F.Fab")
 			(uuid "d8f08a6d-99d6-48d9-9c2a-acb23275e2b7")
 			(effects
@@ -2212,7 +2212,7 @@
 			(uuid "80f45ed8-1f15-42e0-b710-d5acb43e439d")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(uuid "832d983c-d644-4dc6-9e58-e5100074d308")
 			(effects
@@ -3509,7 +3509,7 @@
 		(descr "2.0mm x 2.0mm Addressable RGB LED NeoPixel Nano, 12 mA, https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
 		(tags "LED RGB NeoPixel Nano PLCC-4 2020")
 		(property "Reference" "D1"
-			(at 0 2.54 360)
+			(at 0 2.54 0)
 			(layer "F.SilkS")
 			(uuid "f7100705-f500-471e-b16e-53be1fe2a0d8")
 			(effects
@@ -3520,7 +3520,7 @@
 			)
 		)
 		(property "Value" "WS2812B"
-			(at 0 2.2 360)
+			(at 0 2.2 0)
 			(layer "F.Fab")
 			(uuid "96ea9467-b5b1-46f0-a088-e0c6625a452d")
 			(effects
@@ -3769,7 +3769,7 @@
 			(uuid "420eef1b-953d-44bf-914b-7a82b8b3d5e5")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(uuid "2ea00460-3dd0-4e0e-b1fb-d8335350d042")
 			(effects
@@ -7172,7 +7172,7 @@
 		(descr "SMD Solder 3-pad Jumper, 1x1.5mm rounded Pads, 0.3mm gap, open")
 		(tags "solder jumper open")
 		(property "Reference" "JP2"
-			(at 0.635 -1.8 360)
+			(at 0.635 -1.8 0)
 			(layer "F.SilkS")
 			(hide yes)
 			(uuid "8392e4d8-bb7f-45df-bde0-dd99a653152a")
@@ -7184,7 +7184,7 @@
 			)
 		)
 		(property "Value" "Radio Power Select"
-			(at 0.635 1.9 360)
+			(at 0.635 1.9 0)
 			(layer "F.Fab")
 			(uuid "3a1d1d8e-5fbd-4715-8507-48060e768382")
 			(effects
@@ -7195,7 +7195,7 @@
 			)
 		)
 		(property "Footprint" "Libraries:SolderJumper-3_P1.3mm_0R-Pins12_RoundedPad1.0x1.5mm"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "fc4c23be-693e-423a-be79-edd794a6dee7")
@@ -7207,7 +7207,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "70dacc22-5b9e-4bd0-ae88-1e08e6ba105a")
@@ -7219,7 +7219,7 @@
 			)
 		)
 		(property "Description" "3-pole Solder Jumper, pins 1+2 closed/bridged"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
 			(uuid "7599fabf-0346-4cce-ab18-bad2e9fd8223")
@@ -10948,7 +10948,7 @@
 			)
 		)
 		(property "Value" "100nF"
-			(at 0 1.68 360)
+			(at 0 1.68 0)
 			(layer "F.Fab")
 			(uuid "62ebe091-30c3-4604-8963-15fa1a8fc8cf")
 			(effects
@@ -11155,7 +11155,7 @@
 			(uuid "c20f13bf-d53a-4be0-934a-87acb552ab4b")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 0 0 360)
+			(at 0 0 0)
 			(layer "F.Fab")
 			(uuid "c1dac132-75aa-42eb-aa1c-a0fed715ff82")
 			(effects
