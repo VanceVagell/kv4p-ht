@@ -126,8 +126,8 @@ public class RadioAudioService extends Service {
     }
 
     private enum ESP32MsgType {
-        DATA((byte) 33),
-        CMD((byte) 64);
+        DATA((byte) 0xF0),
+        CMD((byte) 0x0F);
 
         private byte commandByte;
         ESP32MsgType(byte commandByte) {
@@ -149,7 +149,7 @@ public class RadioAudioService extends Service {
     public static final int AUDIO_SAMPLE_RATE = 44100;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     public static final  int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
+    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 8;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private UsbSerialPort serialPort;
@@ -159,7 +159,7 @@ public class RadioAudioService extends Service {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 1000;
+    private static final int PRE_BUFFER_SIZE = 4096;
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
@@ -1022,6 +1022,9 @@ public class RadioAudioService extends Service {
                         }
 
                         rxPrebufferIdx = 0;
+                        synchronized (audioTrack) {
+                            audioTrack.write(data, i+1, data.length - i);
+                        }
                         break; // Might drop a few audio bytes from data[], should be very minimal
                     }
                 }
