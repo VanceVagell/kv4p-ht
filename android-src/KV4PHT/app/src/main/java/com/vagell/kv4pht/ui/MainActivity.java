@@ -81,9 +81,14 @@ import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
+import com.vagell.kv4pht.radio.FirmwareUtils;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -316,7 +321,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void unsupportedFirmware(int firmwareVer) {
+                public void outdatedFirmware(int firmwareVer) {
                     showVersionSnackbar(firmwareVer);
                 }
             };
@@ -729,6 +734,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void attachListeners() {
+        final Context ctx = this;
+
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setOnTouchListener(new View.OnTouchListener() {
             @Override
@@ -788,6 +795,7 @@ public class MainActivity extends AppCompatActivity {
                 return touchHandled;
             }
         });
+
         pttButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -1182,9 +1190,38 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showVersionSnackbar(int firmwareVer) {
-        CharSequence snackbarMsg = "Unsupported kv4p HT firmware version (" + firmwareVer + "), please update.";
+        final Context ctx = this;
+        CharSequence snackbarMsg = "New firmware available";
         versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
+                .setAction("Flash now", new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        // Tell the radioAudioService (and ESP32 app) to hold on while we flash.
+                        radioAudioService.setMode(RadioAudioService.MODE_FLASHING);
+                        radioAudioService.sendCommandToESP32(RadioAudioService.ESP32Command.STOP);
+
+                        FirmwareUtils.flashFirmware(ctx, radioAudioService.getUsbSerialPort(), new FirmwareUtils.FirmwareCallback() {
+                            @Override
+                            public void reportProgress(int percent) {
+                                Log.d("DEBUG", "reportProgress, percent: " + percent + "%");
+                                // TODO show progress in the UI
+                            }
+
+                            @Override
+                            public void doneFlashing(boolean success) {
+                                Log.d("DEBUG", "doneFlashing, success: " + success);
+
+                                if (success) {
+                                    // Try to reconnect now that the kv4p HT firmware should be present
+                                    radioAudioService.reconnectViaUSB();
+                                } else {
+                                    // TODO report in UI that flashing failed
+                                }
+                            }
+                        });
+                    }
+                });
 
         // Make the text of the snackbar larger.
         TextView snackbarActionTextView = (TextView) versionSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);

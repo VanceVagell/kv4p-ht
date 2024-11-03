@@ -92,10 +92,7 @@ public class RadioAudioService extends Service {
     private static final int[] ESP32_VENDOR_IDS = {4292};
     private static final int[] ESP32_PRODUCT_IDS = {60000};
 
-    // Minimum Arduino (ESP32) app firmware version this Android app can communicate with.
-    // Should be incremented whenever there's a message format change, new data rate,
-    // new commands, etc.
-    private static final int MIN_FIRMWARE_VER = 1;
+    // Version related constants (also see FirmwareUtils for others)
     private static final String VERSION_PREFIX = "VERSION";
     private static String versionStrBuffer = "";
     private static final int VERSION_LENGTH = 8; // Chars in the version string from ESP32 app.
@@ -104,10 +101,12 @@ public class RadioAudioService extends Service {
     public static final int MODE_RX = 0;
     public static final int MODE_TX = 1;
     public static final int MODE_SCAN = 2;
+    public static final int MODE_BAD_FIRMWARE = 3;
+    public static final int MODE_FLASHING = 4;
     private int mode = MODE_STARTUP;
     private int messageNumber = 0;
 
-    private enum ESP32Command {
+    public enum ESP32Command {
         PTT_DOWN((byte) 1),
         PTT_UP((byte) 2),
         TUNE_TO((byte) 3), // paramsStr contains freq, offset, tone details
@@ -211,6 +210,12 @@ public class RadioAudioService extends Service {
 
     public void setMode(int mode) {
         this.mode = mode;
+
+        switch (mode) {
+            case MODE_FLASHING:
+                audioTrack.stop();
+                break;
+        }
     }
 
     public void setSquelch(int squelch) {
@@ -284,7 +289,7 @@ public class RadioAudioService extends Service {
         public void audioTrackCreated();
         public void packetReceived(APRSPacket aprsPacket);
         public void scannedToMemory(int memoryId);
-        public void unsupportedFirmware(int firmwareVer);
+        public void outdatedFirmware(int firmwareVer);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -625,6 +630,7 @@ public class RadioAudioService extends Service {
         int vendorId = device.getVendorId();
         int productId = device.getProductId();
         Log.d("DEBUG", "vendorId: " + vendorId + " productId: " + productId + " name: " + device.getDeviceName());
+        // TODO Remove these checks, we want to support more ESP32 vendors because the modules can be hard to find. Just assume it's OK.
         for (int i = 0; i < ESP32_VENDOR_IDS.length; i++) {
             if ((vendorId == ESP32_VENDOR_IDS[i]) && (productId == ESP32_PRODUCT_IDS[i])) {
                 return true;
@@ -724,6 +730,23 @@ public class RadioAudioService extends Service {
         sendCommandToESP32(ESP32Command.STOP); // Tell ESP32 app to stop whatever it's doing.
         sendCommandToESP32(ESP32Command.GET_FIRMWARE_VER); // Ask for firmware ver.
         // The version is actually evaluated in handleESP32Data().
+
+        // If we don't hear back from the ESP32, it means the firmware is either not
+        // installed or its somehow corrupt.
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (mode != MODE_STARTUP) {
+                    return;
+                } else {
+                    // TODO should offer to flash the firmware in this situation
+                    Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version.");
+                    sendCommandToESP32(ESP32Command.STOP);
+                    setMode(MODE_BAD_FIRMWARE);
+                }
+            }
+        }, 6000);
     }
 
     private void initAfterESP32Connected() {
@@ -873,12 +896,22 @@ public class RadioAudioService extends Service {
     }
 
     public synchronized void sendBytesToESP32(byte[] newBytes) {
+        if (mode == MODE_BAD_FIRMWARE) {
+            Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 with bad firmware.");
+            return;
+        }
+
+        if (mode == MODE_FLASHING) {
+            Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 while in the process of flashing a new firmware.");
+            return;
+        }
+
+        int usbRetries = 0;
         try {
             // usbIoManager.writeAsync(newBytes); // On MCUs like the ESP32 S2 this causes USB failures with concurrent USB rx/tx.
             int bytesWritten = 0;
             int totalBytes = newBytes.length;
             final int MAX_BYTES_PER_USB_WRITE = 128;
-            int usbRetries = 0;
             do {
                 try {
                     byte[] arrayPart = Arrays.copyOfRange(newBytes, bytesWritten, Math.min(bytesWritten + MAX_BYTES_PER_USB_WRITE, totalBytes));
@@ -888,7 +921,7 @@ public class RadioAudioService extends Service {
                 } catch (SerialTimeoutException ste) {
                     // Do nothing, we'll try again momentarily. ESP32's serial buffer may be full.
                     usbRetries++;
-                    // Log.d("DEBUG", "usbRetries: " + usbRetries);
+                    Log.d("DEBUG", "usbRetries: " + usbRetries);
                 }
             } while (bytesWritten < totalBytes && usbRetries < 10);
             // Log.d("DEBUG", "Wrote data: " + Arrays.toString(newBytes));
@@ -906,13 +939,20 @@ public class RadioAudioService extends Service {
             }
             findESP32Device(); // Attempt to reconnect after the brief pause above.
         }
+        if (usbRetries == 10) {
+            Log.d("DEBUG", "sendBytesToESP32: Connected to ESP32 via USB serial, but could not send data after 10 retries.");
+        }
+    }
+
+    public UsbSerialPort getUsbSerialPort() {
+        return serialPort;
     }
 
     private void handleESP32Data(byte[] data) {
             // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
          /* try {
             String dataStr = new String(data, "UTF-8");
-            //if (dataStr.length() < 100 && dataStr.length() > 0)
+            if (dataStr.length() < 100 && dataStr.length() > 0)
                 Log.d("DEBUG", "Str data from ESP32: " + dataStr);
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
@@ -932,18 +972,24 @@ public class RadioAudioService extends Service {
                         return; // Version string not yet fully received.
                     }
                     int verInt = Integer.parseInt(verStr);
-                    if (verInt < MIN_FIRMWARE_VER) {
-                        Log.d("DEBUG", "Error: ESP32 app firmware is " + verInt + " but Android app requires at least " + MIN_FIRMWARE_VER);
+
+                    // TODO remove this debug call and uncomment code below before committing
+                    callbacks.outdatedFirmware(verInt);
+                    return;
+
+                    /*
+                    if (verInt < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+                        Log.d("DEBUG", "Error: ESP32 app firmware " + verInt + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
                         if (callbacks != null) {
-                            callbacks.unsupportedFirmware(verInt);
+                            callbacks.outdatedFirmware(verInt);
                             versionStrBuffer = "";
                         }
                     } else {
-                        Log.d("DEBUG", "Supported ESP32 app firmware version detected (" + verInt + " >= " + MIN_FIRMWARE_VER + ").");
+                        Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + verInt + ").");
                         versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
                         initAfterESP32Connected();
                     }
-                    return;
+                    return; */
                 }
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
@@ -1009,6 +1055,11 @@ public class RadioAudioService extends Service {
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             } */
+        }
+
+        if (mode == MODE_BAD_FIRMWARE) {
+            // Log.d("DEBUG", "Warning: Received data from ESP32 which was thought to have bad firmware.");
+            // Just ignore any data we get in this mode, who knows what is programmed on the ESP32.
         }
     }
 

@@ -991,3 +991,425 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <http://www.gnu.org/philosophy/why-not-lgpl.html>.
+
+############## LICENSE FOR: https://ftdichip.com/software-examples/android-java-d2xx/
+
+
+	  Driver Licence Terms
+IMPORTANT NOTICE: PLEASE READ CAREFULLY BEFORE INSTALLING THE RELEVANT SOFTWARE: This licence agreement
+("Licence") is a legal agreement between you ("Licencee" or "you") and Future Technology Devices
+International Limited of 2 Seaward Place, Centurion Business Park, Glasgow, Scotland, G41 1HH (UK Company
+ Number SC136640) ("Licensor" or "we) for use of driver software provided by the Licensor ("Software").
+
+BY INSTALLING OR USING THIS SOFTWARE YOU AGREE TO THE TERMS OF THIS LICENCE WHICH WILL BIND YOU. IF YOU
+DO NOT AGREE TO THE TERMS OF THIS LICENCE, WE ARE UNWILLING TO LICENSE THE SOFTWARE TO YOU AND YOU MUST
+DISCONTINUE INSTALLATION OF THE SOFTWARE NOW.
+
+1.	Grant and scope of licence
+
+1.1	In consideration of you agreeing to abide by the terms of this Licence, the Licensor hereby grants
+	to you a non-exclusive, non-transferable, royalty free licence to use the Software on the terms of
+	this Licence.
+
+1.2	In this Licence a "Genuine FTDI Component" means an item of hardware that was manufactured for, and
+	sold by, the Licensor	or a member of the Licensor's group of companies. It does not include any counterfeit
+	or fake products.
+
+1.3	If you are a manufacturer of a device that includes a Genuine FTDI Component (each a "Device") then
+	you may install the Software onto that device. If you are a seller or distributor of a Device then
+	You may distribute the Software with the Device. If you are a user of a Device then you may install
+	the Software on the Device, or onto a computer system in order to use the Device.
+
+1.4	In each of those cases you may:
+
+1.4.1	install and use the Software for your purposes only; and
+
+1.4.2	only use the Software in conjunction with products based on and/or incorporating a Genuine FTDI Component.
+
+1.5	The Software will not function properly on or with a component that is not a Genuine FTDI Component.
+	Use of the Software as a driver for, or installation of the Software onto,  a component that is not
+	a Genuine FTDI Component, including without limitation counterfeit components, MAY IRRETRIEVABLY DAMAGE
+	THAT COMPONENT.  It is the Licensee's responsibility to make sure that all chips it installs the Software
+	on, or uses the Software as a driver for, are Genuine FTDI Components. If in doubt then contact the Licensor.
+
+
+2.	If a custom vendor ID and/or product ID or description string are used, it is the responsibility of
+	the product manufacturer to maintain any changes and subsequent WHQL re-certification as a result of
+	making these changes.
+
+
+3.	Licensee's undertakings
+
+3.1	Except as expressly set out in this Licence or as permitted by any local law, you undertake:
+
+3.1.1	not to copy the Software, except where such copying is incidental to normal use of the Software or
+	where it is necessary for the purpose of back-up or operational security;
+
+3.1.2	not to rent, lease, sub-license, loan, translate, merge, adapt, vary or modify the Software or any
+	part of it;
+
+3.1.3	not to make alterations to, or modifications of, the whole or any part of the Software nor permit
+	the Software or any part of it to be combined with, or become incorporated in, any other programs;
+
+3.1.4	not to disassemble, de-compile, reverse engineer or create derivative works based on the whole or
+	any part of the Software;
+
+3.1.5	to keep all copies of the Software secure;
+
+3.1.6	to include the copyright notice of the Licensor on all entire and partial copies of the Software in
+	any form; and
+
+3.1.7	not to provide, or otherwise make available, the Software in any form, in whole or in part (including,
+	but not limited to, program listings, object and source program listings, object code and source
+	code) to any person.
+
+
+4.	Intellectual property rights
+
+4.1	You acknowledge that all intellectual property rights in the Software throughout the world belong to
+	the Licensor, that rights in the Software are licensed (not sold) to you, and that you have no rights
+	in, or to, the Software other than the right to use them in accordance with the terms of this Licence.
+
+
+5.	Warranty
+
+5.1	To the maximum extent permitted by applicable law, the software is provided "as is".
+
+5.2	All implied warranties, implied conditions and/or implied licences are excluded from this Licence,
+	including but not limited to implied warranties of quality and/or fitness for purpose (in all cases)
+	to the fullest extent permitted by law.
+
+
+5.3	You acknowledge that the Software has not been developed to meet your individual requirements and that
+	the Software may not be uninterrupted or free of bugs or errors.
+
+
+6.	Licensor's liability
+
+6.1	To the maximum extent permitted by applicable law, in no event shall the Licensor be liable for any:
+
+6.1.1	special loss or damage;
+
+6.1.2	incidental loss or damage;
+
+6.1.3	indirect or consequential loss or damage:
+
+6.1.4	loss of income;
+
+6.1.5	loss of business;
+
+6.1.6	loss of profits;
+
+6.1.7	loss of revenue;
+
+6.1.8	loss of  contracts;
+
+6.1.9	business interruption;
+
+6.1.10	loss of the use of money or anticipated savings;
+
+6.1.11	loss of information;
+
+6.1.12	loss of opportunity;
+
+6.1.13	loss of  goodwill or reputation; and/or
+
+6.1.14	loss of, damage to or corruption of data;
+
+(in each case) of any kind howsoever arising and whether caused by delict (including negligence), breach
+of contract or otherwise.
+
+6.2	FTDI's total liability to you in relation to the Software shall not exceed 500 US Dollars.
+
+6.3	Nothing in this Licence limits or excludes liability for death or personal injury or for fraud.
+
+
+7.	Termination
+
+7.1	The Licensor may terminate this Licence immediately if:
+
+7.1.1	you fail to comply with any of the terms and conditions of the Licence; or
+
+7.1.2	you commence or participate in any legal proceedings against the Licensor.
+
+7.2	Upon termination:
+
+7.2.1	all rights granted to you under this Licence shall cease;
+
+7.2.2	you must cease all activities authorised by this Licence; and
+
+7.2.3	you must immediately delete or remove the Software from all computer equipment in your possession
+	and immediately destroy all copies of the Software then in your possession, custody or control.
+
+
+
+8.	Transfer of rights and obligations
+
+8.1	You may not transfer, assign, charge or otherwise dispose of this Licence, or any of your rights or
+	obligations arising under it.
+
+8.2	The Licensor may transfer, assign, charge, sub-contract or otherwise dispose of this Licence, or any
+	of his rights or obligations arising under it, at any time during the term of the Licence.
+
+
+9.	Waiver
+
+9.1	If the Licensor fails, at any time during the term of this Licence, to insist on strict performance
+	of any of your obligations under this Licence, or if the Licensor fails to exercise any of the rights
+	or remedies to which he is entitled under this Licence, this shall not constitute a waiver of such
+	rights or remedies and shall not relieve you from compliance with such obligations.
+
+9.2	A waiver by the Licensor of any default shall not constitute a waiver of any subsequent default.
+
+9.3	No waiver by the Licensor of any of these terms and conditions shall be effective unless it is expressly
+	stated to be a waiver and is communicated to you in writing.
+
+
+10.	Severability
+
+If any of the terms of this Licence are determined by any competent authority to be invalid, unlawful or
+unenforceable to any extent, such term, condition or provision will to that extent be severed from the
+remaining terms, conditions and provisions which will continue to be valid to the fullest extent permitted by law.
+
+
+11.	Entire agreement
+
+11.1	This Licence constitutes the whole agreement between us and supersedes any previous arrangement,
+	understanding or agreement between us, relating to the licensing of the Software.
+
+11.2	Each party acknowledges that in entering into this Licence it does not rely on any statement, representation,
+	warranty or understanding other than those expressly set out in this Licence.  Each party agrees
+	that it will have no remedy in respect of any statement, representation, warranty or understanding
+	that is not expressly set out in this Licence. Each party agrees that its only remedy in respect
+	of those representations, statements, assurances and warranties that are set out in this Licence
+	will be for breach of contract in accordance with the terms of this Licence.
+
+11.3	The parties agree that nothing in this Licence will limit or exclude any liability they may have
+	for fraud.
+
+
+12.	Miscellaneous
+
+12.1	This Licence does not create a partnership or joint venture between the parties to it, nor authorise
+	a party to act as agent for the other.
+
+12.2	This Licence does not create any legal rights enforceable by any third party.
+
+12.3	This Licence may only be varied by express written legal agreement between the parties.
+
+
+13.	Law and jurisdiction
+
+This Licence, its subject matter or its formation (including non-contractual disputes or claims) shall
+be governed by and construed in accordance with Scots law and submitted to the non-exclusive jurisdiction
+of the Scottish courts.
+
+############## LICENSE FOR: https://github.com/ksksue/PhysicaloidLibrary
+
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+############## LICENSE FOR: https://github.com/bdureau/BearConsole2
+
+Project unclear license but is provided freely on GitHub. Filed a request for clearer licensing:
+https://github.com/bdureau/BearConsole2/issues/3
