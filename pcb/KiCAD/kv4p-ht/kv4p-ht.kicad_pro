@@ -202,9 +202,11 @@
       ],
       "track_widths": [
         0.0,
-        0.2,
-        0.5,
-        1.06
+        0.254,
+        0.381,
+        0.508,
+        0.762,
+        1.016
       ],
       "tuning_pattern_settings": {
         "diff_pair_defaults": {
@@ -236,6 +238,10 @@
         {
           "diameter": 0.0,
           "drill": 0.0
+        },
+        {
+          "diameter": 0.381,
+          "drill": 0.1778
         }
       ],
       "zones_allow_external_fillets": false
@@ -515,6 +521,10 @@
     },
     "net_colors": null,
     "netclass_assignments": {
+      "/GPIO0{slash}~{Program}": "Strapping Pin",
+      "/GPIO12": "Strapping Pin",
+      "/GPIO15": "Strapping Pin",
+      "/GPIO2": "Strapping Pin",
       "unconnected-(U3-IO45-Pad26)": "Strapping Pin",
       "unconnected-(U3-IO46-Pad16)": "Strapping Pin"
     },
