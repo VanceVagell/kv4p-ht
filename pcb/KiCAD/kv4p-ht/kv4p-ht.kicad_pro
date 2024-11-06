@@ -706,6 +706,12 @@
           "label": "LCSC",
           "name": "LCSC",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Alternate LCSC",
+          "name": "Alternate LCSC",
+          "show": true
         }
       ],
       "filter_string": "",
