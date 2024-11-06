@@ -6,11 +6,11 @@
 	(paper "A4")
 	(title_block
 		(title "kv4P HT")
-		(date "2024-10-22")
-		(rev "1.8-DP")
+		(date "2024-11-06")
+		(rev "2.0a")
 		(company "VanceVagell")
 		(comment 1 "https://github.com/VanceVagell/kv4p-ht")
-		(comment 2 "KiCAD translation - DefProc")
+		(comment 2 "v2 hardware by @SmittyHalibut")
 	)
 	(lib_symbols
 		(symbol "Connector:Conn_Coaxial_Small"
@@ -160,6 +160,108 @@
 						)
 					)
 					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+		)
+		(symbol "Connector:TestPoint"
+			(pin_numbers hide)
+			(pin_names
+				(offset 0.762) hide)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "TP"
+				(at 0 6.858 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "TestPoint"
+				(at 0 5.08 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 5.08 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 5.08 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "test point"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "test point tp"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "Pin* Test*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "TestPoint_0_1"
+				(circle
+					(center 0 3.302)
+					(radius 0.762)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "TestPoint_1_1"
+				(pin passive line
+					(at 0 0 90)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -5846,12 +5948,6 @@
 		(uuid "1fabcd41-98bb-406d-87c1-c006100db9b2")
 	)
 	(junction
-		(at 239.395 149.86)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "27cd83a3-3847-49e1-8b86-4f857686417a")
-	)
-	(junction
 		(at 142.875 118.745)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5960,12 +6056,6 @@
 		(uuid "6522c7d9-0184-48df-b23f-925d3cfeea63")
 	)
 	(junction
-		(at 250.825 28.575)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "6e880157-e3cb-47a8-8c65-8ddc55f08ef8")
-	)
-	(junction
 		(at 75.565 21.59)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -6006,6 +6096,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "8ac7a158-1582-4925-9ccc-482a4d25b4fd")
+	)
+	(junction
+		(at 245.11 28.575)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "8cb367dd-7862-4675-9dfc-cea41debc7c8")
 	)
 	(junction
 		(at 202.565 69.215)
@@ -6335,6 +6431,16 @@
 	)
 	(wire
 		(pts
+			(xy 259.715 168.275) (xy 259.715 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "339f79f6-928b-41e9-b18f-3dfd6edaeda8")
+	)
+	(wire
+		(pts
 			(xy 148.59 177.8) (xy 149.225 177.8)
 		)
 		(stroke
@@ -6345,7 +6451,7 @@
 	)
 	(wire
 		(pts
-			(xy 238.125 149.86) (xy 239.395 149.86)
+			(xy 238.125 149.86) (xy 240.665 149.86)
 		)
 		(stroke
 			(width 0)
@@ -6382,16 +6488,6 @@
 			(type default)
 		)
 		(uuid "3a84f6f6-0bcd-4d8e-9be8-a1d806e1f75a")
-	)
-	(wire
-		(pts
-			(xy 239.395 149.86) (xy 240.665 149.86)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "3b1bab22-e356-4706-9c34-6d1a1970413b")
 	)
 	(wire
 		(pts
@@ -6445,7 +6541,7 @@
 	)
 	(wire
 		(pts
-			(xy 233.045 28.575) (xy 250.825 28.575)
+			(xy 233.045 28.575) (xy 245.11 28.575)
 		)
 		(stroke
 			(width 0)
@@ -6465,13 +6561,13 @@
 	)
 	(wire
 		(pts
-			(xy 239.395 168.275) (xy 239.395 149.86)
+			(xy 245.11 28.575) (xy 255.27 28.575)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "56e2b557-d154-448e-9b40-b11a6396f5d0")
+		(uuid "503c45a1-e73c-41fb-a2ee-c159de34e40c")
 	)
 	(wire
 		(pts
@@ -6482,16 +6578,6 @@
 			(type default)
 		)
 		(uuid "56f9e095-2ccf-46d9-a834-a499e576ae08")
-	)
-	(wire
-		(pts
-			(xy 250.825 28.575) (xy 255.27 28.575)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "57e49aa7-ead2-4b44-82fe-6d3dedba8a20")
 	)
 	(wire
 		(pts
@@ -7085,7 +7171,7 @@
 	)
 	(wire
 		(pts
-			(xy 250.825 149.86) (xy 253.365 149.86)
+			(xy 250.825 149.86) (xy 259.715 149.86)
 		)
 		(stroke
 			(width 0)
@@ -7165,7 +7251,7 @@
 	)
 	(wire
 		(pts
-			(xy 233.045 33.655) (xy 250.825 33.655)
+			(xy 233.045 33.655) (xy 245.11 33.655)
 		)
 		(stroke
 			(width 0)
@@ -7205,7 +7291,7 @@
 	)
 	(wire
 		(pts
-			(xy 233.045 168.275) (xy 239.395 168.275)
+			(xy 233.045 168.275) (xy 259.715 168.275)
 		)
 		(stroke
 			(width 0)
@@ -7491,7 +7577,7 @@
 	)
 	(hierarchical_label "NeoPixel DO"
 		(shape input)
-		(at 253.365 149.86 0)
+		(at 259.715 149.86 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7765,6 +7851,18 @@
 		)
 		(uuid "a8afb197-6fcb-4c25-99c6-90b2273455ab")
 	)
+	(hierarchical_label "Radio AF Out"
+		(shape input)
+		(at 171.45 38.1 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "aa5c7b16-9d5c-4744-bf0a-370e3680b723")
+	)
 	(hierarchical_label "Radio Mic In"
 		(shape input)
 		(at 224.79 46.99 180)
@@ -8004,6 +8102,18 @@
 			(justify left)
 		)
 		(uuid "f0b7f703-d1f6-4ce1-90f2-eda13787cdfb")
+	)
+	(hierarchical_label "Radio Mic In"
+		(shape input)
+		(at 146.05 38.1 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "f201528a-6c96-4b84-ac90-f2d25ec92362")
 	)
 	(hierarchical_label "SAO GPIO1"
 		(shape input)
@@ -9083,7 +9193,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C2403466"
+		(property "LCSC" "C3842037"
 			(at 194.945 75.565 0)
 			(effects
 				(font
@@ -9101,7 +9211,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C3842037"
+		(property "Alternate LCSC" "C3842037, C2403466"
 			(at 194.945 75.565 0)
 			(effects
 				(font
@@ -10286,6 +10396,71 @@
 		)
 	)
 	(symbol
+		(lib_id "Connector:TestPoint")
+		(at 165.1 25.4 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "285cbe60-3511-49d8-b078-cf58c1996ee8")
+		(property "Reference" "TP2"
+			(at 161.798 20.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+3.3v"
+			(at 161.798 22.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
+			(at 165.1 20.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 165.1 20.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "test point"
+			(at 165.1 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "64e7e284-435c-4c73-bd27-374444a00359")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "TP2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:VBUS")
 		(at 44.45 31.115 270)
 		(unit 1)
@@ -10347,6 +10522,71 @@
 			(project ""
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
 					(reference "#PWR043")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector:TestPoint")
+		(at 146.05 38.1 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "2b482226-e908-4635-bc3e-e2cd4f1d59e4")
+		(property "Reference" "TP4"
+			(at 142.748 33.02 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Radio Mic"
+			(at 142.748 35.56 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
+			(at 146.05 33.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 146.05 33.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "test point"
+			(at 146.05 38.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "ecd7da0d-1893-4c1e-88a7-3c9635753e37")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "TP4")
 					(unit 1)
 				)
 			)
@@ -11131,7 +11371,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
+		(property "Alternate LCSC" "C882578, C2168957"
 			(at 220.98 69.215 0)
 			(effects
 				(font
@@ -11500,7 +11740,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C2388041"
+		(property "LCSC" "C1806"
 			(at 184.785 75.565 0)
 			(effects
 				(font
@@ -11518,7 +11758,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C1806"
+		(property "Alternate LCSC" "C1806, C2388041"
 			(at 184.785 75.565 0)
 			(effects
 				(font
@@ -12390,6 +12630,74 @@
 		)
 	)
 	(symbol
+		(lib_id "power:+5V")
+		(at 146.05 25.4 270)
+		(mirror x)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "52971e7b-d5f9-4c96-b3e8-fd0935ba7e8a")
+		(property "Reference" "#PWR059"
+			(at 142.24 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "+5V"
+			(at 149.86 25.3999 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 146.05 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 146.05 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+5V\""
+			(at 146.05 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "19e885c8-b55d-4a5c-94e9-0a7f60b03763")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "#PWR059")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R_Small")
 		(at 106.045 177.165 0)
 		(unit 1)
@@ -13169,7 +13477,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C2050394"
+		(property "LCSC" "C2043775"
 			(at 200.025 69.215 0)
 			(effects
 				(font
@@ -13187,7 +13495,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" ""
+		(property "Alternate LCSC" "C2043775, C2050394"
 			(at 200.025 69.215 0)
 			(effects
 				(font
@@ -13386,7 +13694,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
+		(property "Alternate LCSC" "C882578, C2168957"
 			(at 148.59 182.245 0)
 			(effects
 				(font
@@ -13922,7 +14230,7 @@
 				)
 			)
 		)
-		(property "Value" "DRA818"
+		(property "Value" "DRA/SA818"
 			(at 240.03 41.91 0)
 			(effects
 				(font
@@ -14659,7 +14967,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
+		(property "Alternate LCSC" "C882578, C2168957"
 			(at 143.51 95.885 0)
 			(effects
 				(font
@@ -14876,15 +15184,15 @@
 		(fields_autoplaced yes)
 		(uuid "87394496-6e0d-424c-98c9-a44805871001")
 		(property "Reference" "J1"
-			(at 177.6845 62.865 0)
+			(at 177.6845 63.5 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property "Value" "SMA"
-			(at 177.6845 65.405 0)
+		(property "Value" "Antenna"
+			(at 177.6845 66.04 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -14971,7 +15279,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 250.825 31.115 0)
+		(at 245.11 31.115 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -14979,7 +15287,7 @@
 		(dnp no)
 		(uuid "876253cf-5237-4ecb-b053-81c0e9888869")
 		(property "Reference" "C3"
-			(at 252.73 29.845 0)
+			(at 247.015 29.845 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -14988,7 +15296,7 @@
 			)
 		)
 		(property "Value" "2.2nF Tuned VHF"
-			(at 252.73 31.75 0)
+			(at 247.015 31.75 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -14997,7 +15305,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15006,7 +15314,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15015,7 +15323,7 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15024,7 +15332,7 @@
 			)
 		)
 		(property "LCSC" "C2168957"
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15033,7 +15341,7 @@
 			)
 		)
 		(property "Manufacturer" "Murata"
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15042,7 +15350,7 @@
 			)
 		)
 		(property "Part Number" "GCM1885C1H222FA16D"
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15051,7 +15359,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15060,7 +15368,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15069,7 +15377,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 250.825 31.115 0)
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15077,8 +15385,8 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
-			(at 250.825 31.115 0)
+		(property "Alternate LCSC" "C882578, C2168957"
+			(at 245.11 31.115 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15282,6 +15590,73 @@
 		)
 	)
 	(symbol
+		(lib_id "power:+3.3V")
+		(at 165.1 25.4 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "8cc77127-b89b-4f8c-bea0-e94c99ab5980")
+		(property "Reference" "#PWR060"
+			(at 161.29 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 168.91 25.3999 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 165.1 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 165.1 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 165.1 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "76b98284-aa95-40ff-9c83-09590b57c733")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "#PWR060")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R_Small")
 		(at 243.205 149.86 90)
 		(unit 1)
@@ -15389,6 +15764,71 @@
 			(project "kv4p-ht"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
 					(reference "R5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector:TestPoint")
+		(at 184.15 25.4 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "8d5066d0-3a30-434b-af10-ae286d54a52c")
+		(property "Reference" "TP3"
+			(at 180.848 20.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Gnd"
+			(at 180.848 22.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
+			(at 184.15 20.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 184.15 20.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "test point"
+			(at 184.15 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "f3d4b94c-ed0b-4b7d-8282-727e474a5a6e")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "TP3")
 					(unit 1)
 				)
 			)
@@ -16266,7 +16706,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
+		(property "Alternate LCSC" "C882578, C2168957"
 			(at 148.59 151.13 0)
 			(effects
 				(font
@@ -16505,7 +16945,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C2403466"
+		(property "LCSC" "C3842037"
 			(at 205.105 75.565 0)
 			(effects
 				(font
@@ -16523,7 +16963,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C3842037"
+		(property "Alternate LCSC" "C3842037, C2403466"
 			(at 205.105 75.565 0)
 			(effects
 				(font
@@ -17855,7 +18295,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
+		(property "Alternate LCSC" "C882578, C2168957"
 			(at 250.825 153.67 0)
 			(effects
 				(font
@@ -18147,7 +18587,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
+		(property "Alternate LCSC" "C882578, C2168957"
 			(at 142.875 121.285 0)
 			(effects
 				(font
@@ -18437,6 +18877,73 @@
 	)
 	(symbol
 		(lib_id "power:GND")
+		(at 184.15 25.4 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "cbf2fa1a-0b4f-467d-b27c-8b6e84794a15")
+		(property "Reference" "#PWR061"
+			(at 190.5 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 187.96 25.3999 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 184.15 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 184.15 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 184.15 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "a5ff41e6-b792-4d40-ad1c-90f27cc0ac9f")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "#PWR061")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
 		(at 142.875 123.825 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -18496,6 +19003,71 @@
 			(project "kv4p-ht"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
 					(reference "#PWR051")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector:TestPoint")
+		(at 171.45 38.1 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "ceddc72d-dbf2-46c7-8a1d-b1682f02d296")
+		(property "Reference" "TP5"
+			(at 168.148 33.02 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Radio AF Out"
+			(at 168.148 35.56 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
+			(at 171.45 33.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 171.45 33.02 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "test point"
+			(at 171.45 38.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "98cb8910-ea48-4097-82fb-0223b79744c2")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "TP5")
 					(unit 1)
 				)
 			)
@@ -18699,7 +19271,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C2388041"
+		(property "LCSC" "C1806"
 			(at 215.265 75.565 0)
 			(effects
 				(font
@@ -18717,7 +19289,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C1806"
+		(property "Alternate LCSC" "C1806, C2388041"
 			(at 215.265 75.565 0)
 			(effects
 				(font
@@ -18808,6 +19380,71 @@
 		)
 	)
 	(symbol
+		(lib_id "Connector:TestPoint")
+		(at 146.05 25.4 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "d5b1481c-9875-4cb4-b9f4-4113cf270720")
+		(property "Reference" "TP1"
+			(at 142.748 20.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "+5v"
+			(at 142.748 22.86 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
+			(at 146.05 20.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 146.05 20.32 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "test point"
+			(at 146.05 25.4 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "60df152d-882a-47cc-927e-c8072b50955c")
+		)
+		(instances
+			(project ""
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "TP1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "LED:WS2812B-2020")
 		(at 230.505 149.86 0)
 		(unit 1)
@@ -18824,7 +19461,7 @@
 				)
 			)
 		)
-		(property "Value" "WS2812B"
+		(property "Value" "SK6812-EC20"
 			(at 230.505 140.335 0)
 			(effects
 				(font
@@ -19807,7 +20444,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C882578"
+		(property "Alternate LCSC" "C882578, C2168957"
 			(at 207.645 153.67 0)
 			(effects
 				(font
