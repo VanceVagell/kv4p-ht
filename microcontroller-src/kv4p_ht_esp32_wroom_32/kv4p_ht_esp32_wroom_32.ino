@@ -248,8 +248,8 @@ void loop() {
             paramsStr += String((char *)paramPartsBuffer);
             paramBytesMissing--;
           }
-          float freqTxFloat = paramsStr.substring(0, 8).toFloat();
-          float freqRxFloat = paramsStr.substring(7, 15).toFloat();
+          float freqTxFloat = paramsStr.substring(0, 7).toFloat();
+          float freqRxFloat = paramsStr.substring(7, 14).toFloat();
           int toneInt = paramsStr.substring(14, 16).toInt();
           int squelchInt = paramsStr.substring(16, 17).toInt();
 
@@ -346,8 +346,6 @@ void loop() {
             float freqRxFloat = paramsStr.substring(7, 15).toFloat();
             int toneInt = paramsStr.substring(14, 16).toInt();
             int squelchInt = paramsStr.substring(16, 17).toInt();
-
-            // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
 
             tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
           }
