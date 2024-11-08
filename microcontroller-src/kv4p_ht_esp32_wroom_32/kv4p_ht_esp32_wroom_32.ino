@@ -102,11 +102,14 @@ void setup()
 {
   setupSerial();
   // AudioLogger::instance().begin(Serial, AudioLogger::Debug);
+  AudioLogger::instance().begin(Serial, AudioLogger::Error);
   setupWDT();
   setupLED();
   setupDRA818();
   setInitialState();
   setupAudioTools();
+  // tuneTo(146.700, 146.700, 0, 0);
+  // startRx();
 }
 
 MsgType msgType;
@@ -380,10 +383,12 @@ void startRx()
 
     auto config = in.defaultConfig(RX_MODE);
     config.copyFrom(info);
-    config.use_apll = true;
+    config.sample_rate = 53700;
 #if defined(ESP32) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0 , 0)
-    config.dac_mono_channel = DAC_CHANNEL_MASK_CH0;
+    config.adc_channels[0] = ADC_CHANNEL_6;
     config.adc_attenuation = ADC_ATTEN_DB_0;
+    // config.is_auto_center_read = false;
+    config.adc_conversion_mode = ADC_CONV_ALTER_UNIT;
 #else
     config.auto_clear = false;
     config.is_auto_center_read = false;
