@@ -166,9 +166,6 @@ public class RadioAudioService extends Service {
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
 
-    // Delimiter must match ESP32 code
-    private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0x0F, (byte)0xF0};
-
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
     private PacketDemodulator afskDemodulator = null;
