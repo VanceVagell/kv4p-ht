@@ -149,7 +149,7 @@ public class RadioAudioService extends Service {
     public static final int AUDIO_SAMPLE_RATE = 44100;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     public static final  int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 8;
+    public static final  int MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 8;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private UsbSerialPort serialPort;
@@ -554,7 +554,7 @@ public class RadioAudioService extends Service {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build())
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(minBufferSize)
+                .setBufferSizeInBytes(MIN_BUFFER_SIZE)
                 .build();
 
         restartAudioPrebuffer();
