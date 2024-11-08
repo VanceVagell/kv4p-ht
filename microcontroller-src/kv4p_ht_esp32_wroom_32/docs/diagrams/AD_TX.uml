@@ -20,7 +20,8 @@ repeat
 repeat while (Data Read < DataLength)
 
 |AudioProcessor|
-:write Buffer to DRA818;
+:write Buffer to Encoded Input Stream;
+:Copy available bytes to outputStream;
 endif
 |Radio|
 stop
