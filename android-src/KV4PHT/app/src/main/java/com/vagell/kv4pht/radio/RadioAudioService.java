@@ -945,43 +945,39 @@ public class RadioAudioService extends Service {
 
     private void handleESP32Data(byte[] data) {
             // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
-            try {
-                String dataStr = new String(data, "UTF-8");
-//                if (dataStr.length() < 100 && dataStr.length() > 0)
-                Log.d("DEBUG", "Str data from ESP32: " + dataStr);
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            }
+            // try {
+            String logDataStr = new String(data, StandardCharsets.UTF_8);
+            // if (logDataStr.length() < 100 && logDataStr.length() > 0)
+            Log.d("DEBUG", "Str data from ESP32: " + logDataStr);
+            // } catch (UnsupportedEncodingException e) {
+            //     throw new RuntimeException(e);
+            // }
             // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
 
         if (mode == MODE_STARTUP) {
-            try {
-                String dataStr = new String(data, "UTF-8");
-                versionStrBuffer += dataStr;
-                if (versionStrBuffer.contains(VERSION_PREFIX)) {
-                    int startIdx = versionStrBuffer.indexOf(VERSION_PREFIX) + VERSION_PREFIX.length();
-                    String verStr = "";
-                    try {
-                        verStr = versionStrBuffer.substring(startIdx, startIdx + VERSION_LENGTH);
-                    } catch (IndexOutOfBoundsException iobe) {
-                        return; // Version string not yet fully received.
-                    }
-                    int verInt = Integer.parseInt(verStr);
-                    if (verInt < MIN_FIRMWARE_VER) {
-                        Log.d("DEBUG", "Error: ESP32 app firmware is " + verInt + " but Android app requires at least " + MIN_FIRMWARE_VER);
-                        if (callbacks != null) {
-                            callbacks.unsupportedFirmware(verInt);
-                            versionStrBuffer = "";
-                        }
-                    } else {
-                        Log.d("DEBUG", "Supported ESP32 app firmware version detected (" + verInt + " >= " + MIN_FIRMWARE_VER + ").");
-                        versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
-                        initAfterESP32Connected();
-                    }
-                    return;
+            String dataStr = new String(data, StandardCharsets.UTF_8);
+            versionStrBuffer += dataStr;
+            if (versionStrBuffer.contains(VERSION_PREFIX)) {
+                int startIdx = versionStrBuffer.indexOf(VERSION_PREFIX) + VERSION_PREFIX.length();
+                String verStr = "";
+                try {
+                    verStr = versionStrBuffer.substring(startIdx, startIdx + VERSION_LENGTH);
+                } catch (IndexOutOfBoundsException iobe) {
+                    return; // Version string not yet fully received.
                 }
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
+                int verInt = Integer.parseInt(verStr);
+                if (verInt < MIN_FIRMWARE_VER) {
+                    Log.d("DEBUG", "Error: ESP32 app firmware is " + verInt + " but Android app requires at least " + MIN_FIRMWARE_VER);
+                    if (callbacks != null) {
+                        callbacks.unsupportedFirmware(verInt);
+                        versionStrBuffer = "";
+                    }
+                } else {
+                    Log.d("DEBUG", "Supported ESP32 app firmware version detected (" + verInt + " >= " + MIN_FIRMWARE_VER + ").");
+                    versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
+                    initAfterESP32Connected();
+                }
+                return;
             }
         }
 
