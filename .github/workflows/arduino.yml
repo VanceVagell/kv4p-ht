@@ -24,11 +24,12 @@ jobs:
           fqbn: esp32:esp32:esp32:EventsCore=0
           platforms: |
             - name: "esp32:esp32"
-              version: "2.0.17"
+              version: "3.0.5"
           sketch-paths: |
             - microcontroller-src/kv4p_ht_esp32_wroom_32
           libraries: |
             - name: EspSoftwareSerial
               version: 8.1.0
             - source-url: https://github.com/fatpat/arduino-dra818/archive/refs/tags/v1.0.1.zip
+            - source-url: https://github.com/pschatzmann/arduino-audio-tools/archive/5214dec10ebaab57d6eb485cb96b4180da476b54.zip
           verbose: true
