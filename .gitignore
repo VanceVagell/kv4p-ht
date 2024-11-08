@@ -4,3 +4,4 @@ android-src/KV4PHT/usbSerialForAndroid/build/*
 build/
 .idea/
 .vscode/
+backups/

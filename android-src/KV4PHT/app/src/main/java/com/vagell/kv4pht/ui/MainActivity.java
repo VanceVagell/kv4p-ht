@@ -472,6 +472,9 @@ public class MainActivity extends AppCompatActivity {
                 findViewById(R.id.sendButtonOverlay).setVisibility(View.GONE);
             }
         } else if (screenType == ScreenType.SCREEN_VOICE){
+            hideKeyboard();
+            findViewById(R.id.frequencyContainer).setVisibility(View.VISIBLE);
+
             if (callsignSnackbar != null) {
                 callsignSnackbar.dismiss();
             }
@@ -869,8 +872,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void hideKeyboard() {
-        InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
-        imm.hideSoftInputFromWindow(this.getCurrentFocus().getWindowToken(), 0);
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (null != imm) {
+            imm.hideSoftInputFromWindow(findViewById(R.id.mainTopLevelLayout).getWindowToken(), 0);
+        }
     }
 
     /**
