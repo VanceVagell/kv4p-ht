@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "AudioTools.h"
 
 // #define SERIAL_TRACE_LOGGING
+// #define START_IN_RX_MODE
 
 ////////////////////////////////////////////////////////////////////////////////
 /// AudioTools Globals
@@ -108,8 +109,11 @@ void setup()
   setupDRA818();
   setInitialState();
   setupAudioTools();
-  // tuneTo(146.700, 146.700, 0, 0);
-  // startRx();
+
+#ifdef START_IN_RX_MODE
+  tuneTo(146.700, 146.700, 0, 0);
+  startRx();
+#endif // START_IN_RX_MODE
 }
 
 MsgType msgType;
@@ -378,15 +382,17 @@ void startRx()
 #endif
   if (!started)
   {
+    enc.setSigned(true);
 // TODO: Start the Rx audio streams
 #ifndef AUDIO_USE_SIN_FOR_TESTING
 
     auto config = in.defaultConfig(RX_MODE);
     config.copyFrom(info);
-    config.sample_rate = 53700;
 #if defined(ESP32) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0 , 0)
+    config.sample_rate = 53904;
     config.adc_channels[0] = ADC_CHANNEL_6;
     config.adc_attenuation = ADC_ATTEN_DB_0;
+    config.adc_calibration_active = true;
     // config.is_auto_center_read = false;
     config.adc_conversion_mode = ADC_CONV_ALTER_UNIT;
 #else
