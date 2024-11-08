@@ -1016,13 +1016,15 @@ public class RadioAudioService extends Service {
                             synchronized (audioTrack) {
                                 audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
                             }
+
+                            synchronized (audioTrack) {
+                                // write the remaining audio bytes from data[] so we don't drop them
+                                audioTrack.write(data, i+1, data.length - i);
+                            }
                         }
 
                         rxPrebufferIdx = 0;
-                        synchronized (audioTrack) {
-                            audioTrack.write(data, i+1, data.length - i);
-                        }
-                        break; // Might drop a few audio bytes from data[], should be very minimal
+                        break;
                     }
                 }
             }
