@@ -391,10 +391,6 @@ void startRx()
 #if defined(ESP32) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0 , 0)
     config.sample_rate = 53904;
     config.adc_channels[0] = ADC_CHANNEL_6;
-    config.adc_attenuation = ADC_ATTEN_DB_0;
-    config.adc_calibration_active = true;
-    // config.is_auto_center_read = false;
-    config.adc_conversion_mode = ADC_CONV_ALTER_UNIT;
 #else
     config.auto_clear = false;
     config.is_auto_center_read = false;
