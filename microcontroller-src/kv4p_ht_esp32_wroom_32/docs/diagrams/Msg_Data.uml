@@ -20,8 +20,8 @@ object MsgHeader {
 
 object "DataMsg **Byte => Field**" as DataMsg {
     0 => MsgHeader = MsgType.DATA
-    1 => DataLengthInBytes
-    2..(2+DataLengthInBytes) => Data[DataLengthInBytes]
+    1..2 => DataLengthInBytes
+    3..(3+DataLengthInBytes) => Data[DataLengthInBytes]
 }
 
 object "Max Msg Length" as note {
