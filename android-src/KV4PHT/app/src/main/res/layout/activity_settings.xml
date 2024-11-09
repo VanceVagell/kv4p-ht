@@ -7,7 +7,7 @@
     android:orientation="vertical"
     tools:context=".ui.SettingsActivity"
     android:background="@drawable/bg"
-    android:paddingTop="64dp"
+    android:paddingTop="96dp"
     android:paddingRight="24dp"
     android:paddingBottom="24dp"
     android:paddingLeft="24dp"

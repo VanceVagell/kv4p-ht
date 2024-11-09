@@ -81,14 +81,10 @@ import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
-import com.vagell.kv4pht.radio.FirmwareUtils;
+import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -128,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
     public static final int REQUEST_ADD_MEMORY = 0;
     public static final int REQUEST_EDIT_MEMORY = 1;
     public static final int REQUEST_SETTINGS = 2;
+    public static final int REQUEST_FIRMWARE = 3;
 
     private MainViewModel viewModel;
     private RecyclerView recyclerView;
@@ -324,6 +321,11 @@ public class MainActivity extends AppCompatActivity {
                 public void outdatedFirmware(int firmwareVer) {
                     showVersionSnackbar(firmwareVer);
                 }
+
+                @Override
+                public void missingFirmware() {
+                    showVersionSnackbar(-1);
+                }
             };
 
             radioAudioService.setCallbacks(callbacks);
@@ -399,6 +401,18 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         viewModel.loadData();
+
+        // If we lost reference to the radioAudioService, re-establish it
+        if (null == radioAudioService) {
+            Intent intent = new Intent(this, RadioAudioService.class);
+            intent.putExtra("callsign", callsign);
+            intent.putExtra("squelch", squelch);
+            intent.putExtra("activeMemoryId", activeMemoryId);
+            intent.putExtra("activeFrequencyStr", activeFrequencyStr);
+
+            // Binding to the RadioAudioService causes it to start (e.g. play back audio).
+            bindService(intent, connection, Context.BIND_AUTO_CREATE);
+        }
     }
 
     @Override
@@ -1189,37 +1203,19 @@ public class MainActivity extends AppCompatActivity {
         usbSnackbar.show();
     }
 
+    /**
+     * Alerts the user to missing or old firmware with the option to flash the latest.
+     * @param firmwareVer The currently installed firmware version, or -1 if no firmware installed.
+     */
     private void showVersionSnackbar(int firmwareVer) {
         final Context ctx = this;
-        CharSequence snackbarMsg = "New firmware available";
+        CharSequence snackbarMsg = firmwareVer == -1 ? "No firmware installed" : "New firmware available";
         versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
                 .setAction("Flash now", new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        // Tell the radioAudioService (and ESP32 app) to hold on while we flash.
-                        radioAudioService.setMode(RadioAudioService.MODE_FLASHING);
-                        radioAudioService.sendCommandToESP32(RadioAudioService.ESP32Command.STOP);
-
-                        FirmwareUtils.flashFirmware(ctx, radioAudioService.getUsbSerialPort(), new FirmwareUtils.FirmwareCallback() {
-                            @Override
-                            public void reportProgress(int percent) {
-                                Log.d("DEBUG", "reportProgress, percent: " + percent + "%");
-                                // TODO show progress in the UI
-                            }
-
-                            @Override
-                            public void doneFlashing(boolean success) {
-                                Log.d("DEBUG", "doneFlashing, success: " + success);
-
-                                if (success) {
-                                    // Try to reconnect now that the kv4p HT firmware should be present
-                                    radioAudioService.reconnectViaUSB();
-                                } else {
-                                    // TODO report in UI that flashing failed
-                                }
-                            }
-                        });
+                        startFirmwareActivity();
                     }
                 });
 
@@ -1411,9 +1407,49 @@ public class MainActivity extends AppCompatActivity {
             case REQUEST_SETTINGS:
                 // Don't need to do anything here, since settings are applied in onResume() anyway.
                 break;
+            case REQUEST_FIRMWARE:
+                if (resultCode == Activity.RESULT_OK) {
+                    showSimpleSnackbar("Successfully updated firmware");
+
+                    // Try to reconnect now that the kv4p HT firmware should be present
+                    if (null != radioAudioService) {
+                        radioAudioService.reconnectViaUSB();
+                    }
+                }
+                break;
             default:
                 Log.d("DEBUG", "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
         }
+    }
+
+    private void showSimpleSnackbar(String msg) {
+        Snackbar simpleSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), msg, Snackbar.LENGTH_LONG)
+                .setBackgroundTint(getResources().getColor(R.color.primary))
+                .setTextColor(getResources().getColor(R.color.medium_gray));
+
+        // Make the text of the snackbar larger.
+        TextView snackbarTextView = (TextView) simpleSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        simpleSnackbar.show();
+    }
+
+    private void startFirmwareActivity() {
+        // Stop any scanning or transmitting
+        if (radioAudioService != null) {
+            radioAudioService.setScanning(false);
+            radioAudioService.endPtt();
+        }
+        endPttUi();
+        setScanningUi(false);
+
+        // Tell the radioAudioService to hold on while we flash.
+        radioAudioService.setMode(RadioAudioService.MODE_FLASHING);
+
+        // Actually start the firmware activity
+        Intent intent = new Intent("com.vagell.kv4pht.FIRMWARE_ACTION");
+        intent.putExtra("requestCode", REQUEST_FIRMWARE);
+        startActivityForResult(intent, REQUEST_FIRMWARE);
     }
 
     public void settingsClicked(View view) {

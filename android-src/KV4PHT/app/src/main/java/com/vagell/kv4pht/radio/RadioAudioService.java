@@ -56,6 +56,7 @@ import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
@@ -136,7 +137,7 @@ public class RadioAudioService extends Service {
     public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
-    private UsbSerialPort serialPort;
+    private static UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
     private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a single USB write
     private Map<String, Integer> mTones = new HashMap<>();
@@ -209,13 +210,14 @@ public class RadioAudioService extends Service {
     }
 
     public void setMode(int mode) {
-        this.mode = mode;
-
         switch (mode) {
             case MODE_FLASHING:
+                sendCommandToESP32(RadioAudioService.ESP32Command.STOP);
                 audioTrack.stop();
                 break;
         }
+
+        this.mode = mode;
     }
 
     public void setSquelch(int squelch) {
@@ -290,6 +292,7 @@ public class RadioAudioService extends Service {
         public void packetReceived(APRSPacket aprsPacket);
         public void scannedToMemory(int memoryId);
         public void outdatedFirmware(int firmwareVer);
+        public void missingFirmware();
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -630,7 +633,9 @@ public class RadioAudioService extends Service {
         int vendorId = device.getVendorId();
         int productId = device.getProductId();
         Log.d("DEBUG", "vendorId: " + vendorId + " productId: " + productId + " name: " + device.getDeviceName());
-        // TODO Remove these checks, we want to support more ESP32 vendors because the modules can be hard to find. Just assume it's OK.
+        // TODO these vendor and product checks might be too rigid/brittle for future PCBs,
+        // especially those that are more custom and not a premade dev board. But we need some way
+        // to tell if the given USB device is an ESP32 so we can interact with the right device.
         for (int i = 0; i < ESP32_VENDOR_IDS.length; i++) {
             if ((vendorId == ESP32_VENDOR_IDS[i]) && (productId == ESP32_PRODUCT_IDS[i])) {
                 return true;
@@ -732,7 +737,7 @@ public class RadioAudioService extends Service {
         // The version is actually evaluated in handleESP32Data().
 
         // If we don't hear back from the ESP32, it means the firmware is either not
-        // installed or its somehow corrupt.
+        // installed or it's somehow corrupt.
         final Handler handler = new Handler(Looper.getMainLooper());
         handler.postDelayed(new Runnable() {
             @Override
@@ -740,9 +745,8 @@ public class RadioAudioService extends Service {
                 if (mode != MODE_STARTUP) {
                     return;
                 } else {
-                    // TODO should offer to flash the firmware in this situation
-                    Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version.");
-                    sendCommandToESP32(ESP32Command.STOP);
+                    Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
+                    callbacks.missingFirmware();
                     setMode(MODE_BAD_FIRMWARE);
                 }
             }
@@ -944,7 +948,7 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public UsbSerialPort getUsbSerialPort() {
+    public static UsbSerialPort getUsbSerialPort() {
         return serialPort;
     }
 
@@ -972,12 +976,6 @@ public class RadioAudioService extends Service {
                         return; // Version string not yet fully received.
                     }
                     int verInt = Integer.parseInt(verStr);
-
-                    // TODO remove this debug call and uncomment code below before committing
-                    callbacks.outdatedFirmware(verInt);
-                    return;
-
-                    /*
                     if (verInt < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                         Log.d("DEBUG", "Error: ESP32 app firmware " + verInt + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
                         if (callbacks != null) {
@@ -989,7 +987,7 @@ public class RadioAudioService extends Service {
                         versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
                         initAfterESP32Connected();
                     }
-                    return; */
+                    return;
                 }
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);

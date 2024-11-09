@@ -1,4 +1,4 @@
-package com.vagell.kv4pht.radio;
+package com.vagell.kv4pht.firmware;
 
 import android.content.Context;
 import android.util.Log;
@@ -32,6 +32,7 @@ public class FirmwareUtils {
     }
 
     public interface FirmwareCallback {
+        public void connectedToBootloader();
         public void reportProgress(int percent);
         public void doneFlashing(boolean success);
     }
@@ -101,6 +102,7 @@ public class FirmwareUtils {
             failed = true;
         }
         if (!failed) {
+            callback.connectedToBootloader();
             cmd.changeBaudRate();
             trackProgress(callback, 10);
             cmd.init();
