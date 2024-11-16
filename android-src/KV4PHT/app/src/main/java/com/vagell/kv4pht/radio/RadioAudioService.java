@@ -168,6 +168,7 @@ public class RadioAudioService extends Service {
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
+    private static int maxFreq = 148; // in MHz
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -207,6 +208,10 @@ public class RadioAudioService extends Service {
 
     public void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
         setRadioFilters(emphasis, highpass, lowpass);
+    }
+
+    public static void setMaxFreq(int newMaxFreq) {
+        maxFreq = newMaxFreq;
     }
 
     public void setMode(int mode) {
@@ -416,7 +421,7 @@ public class RadioAudioService extends Service {
         while (freq > 148.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
         }
-        freq = Math.min(freq, 148.0f);
+        freq = Math.min(freq, maxFreq);
         freq = Math.max(freq, 144.0f);
 
         strFreq = String.format(java.util.Locale.US,"%.4f", freq);

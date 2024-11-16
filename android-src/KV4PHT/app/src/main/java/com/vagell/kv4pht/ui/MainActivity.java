@@ -623,6 +623,7 @@ public class MainActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = viewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting maxFreqSetting = viewModel.appDb.appSettingDao().getByName("maxFreq");
                 AppSetting lastMemoryId = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
                 AppSetting lastFreq = viewModel.appDb.appSettingDao().getByName("lastFreq");
                 AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
@@ -669,6 +670,11 @@ public class MainActivity extends AppCompatActivity {
                                 radioAudioService.setActiveMemoryId(activeMemoryId);
                                 radioAudioService.setActiveFrequencyStr(activeFrequencyStr);
                             }
+                        }
+
+                        if (maxFreqSetting != null) {
+                            int maxFreq = Integer.parseInt(maxFreqSetting.value);
+                            RadioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
                         }
 
                         if (squelchSetting != null) {
