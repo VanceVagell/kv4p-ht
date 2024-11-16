@@ -17,10 +17,18 @@ package com.vagell.kv4pht.firmware.bearconsole;
  *  and boot buttons on the board
  **/
 
+import android.content.Context;
+import android.util.Base64;
+
 import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.vagell.kv4pht.R;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.zip.Deflater;
 
 
@@ -29,8 +37,8 @@ public class CommandInterfaceESP32 {
     public static int ESP_FLASH_BLOCK = 0x400;
 
     private static final int ESP_ROM_BAUD = 115200;
-    private static final int FLASH_WRITE_SIZE = 0x8000;
-    private static final int STUBLOADER_FLASH_WRITE_SIZE = 0x4000;
+    private static final int FLASH_WRITE_SIZE = 0x400;
+    private static final int STUBLOADER_FLASH_WRITE_SIZE = 0x8000;
     private static final int FLASH_SECTOR_SIZE = 0x1000; // Flash sector size, minimum unit of erase.
     private static final int FLASH_TIMEOUT_MS = 4000;
     private static final int COMMAND_TIMEOUT_MS = 100;
@@ -105,10 +113,12 @@ public class CommandInterfaceESP32 {
     }
     UploadSTM32CallBack mUpCallback;
     UsbSerialPort mSerialPort;
+    Context mContext;
 
-    public CommandInterfaceESP32(UploadSTM32CallBack UpCallback, UsbSerialPort serialPort) {
+    public CommandInterfaceESP32(Context context, UploadSTM32CallBack UpCallback, UsbSerialPort serialPort) {
         mUpCallback = UpCallback;
         mSerialPort = serialPort;
+        mContext = context;
     }
 
     public boolean initChip() {
@@ -144,6 +154,97 @@ public class CommandInterfaceESP32 {
             }
         }
         return syncSuccess;
+    }
+
+    public void loadStubFromFile() {
+        try {
+            // Read the JSON file from assets
+            InputStream is = mContext.getResources().openRawResource(R.raw.esp32_stub_loader);
+
+            int size = is.available();
+            byte[] buffer = new byte[size];
+            is.read(buffer);
+            is.close();
+
+            String jsonStr = new String(buffer, "UTF-8");
+
+            // Parse the JSON
+            JSONObject json = new JSONObject(jsonStr);
+
+            // Extract the fields
+            int entry = json.getInt("entry");
+            String textBase64 = json.getString("text");
+            int textStart = json.getInt("text_start");
+            String dataBase64 = json.getString("data");
+            int dataStart = json.getInt("data_start");
+
+            // Decode the base64 strings into byte arrays
+            byte[] textSegment = Base64.decode(textBase64, Base64.DEFAULT);
+            byte[] dataSegment = Base64.decode(dataBase64, Base64.DEFAULT);
+
+            // Now use these in the loadStub() method
+            loadStub(textSegment, textStart, dataSegment, dataStart, entry);
+
+        } catch (IOException e) {
+            mUpCallback.onInfo("IOException: " + e.getMessage() + "\n");
+        } catch (JSONException e) {
+            mUpCallback.onInfo("JSONException: " + e.getMessage() + "\n");
+        }
+    }
+
+    public void loadStub(byte[] textSegment, int textStart, byte[] dataSegment, int dataStart, int entry) {
+        mUpCallback.onInfo("Uploading stub loader..." + "\n");
+
+        // Load text segment
+        loadSegment(textSegment, textStart);
+
+        // Load data segment
+        loadSegment(dataSegment, dataStart);
+
+        // Start the stub loader
+        startStub(entry);
+
+        IS_STUB = true;
+        mUpCallback.onInfo("Stub loader uploaded." + "\n");
+    }
+
+    private void loadSegment(byte[] segment, int address) {
+        int length = segment.length;
+        int numBlocks = (length + ESP_RAM_BLOCK - 1) / ESP_RAM_BLOCK;
+        int eraseSize = (length + 3) & ~3;
+
+        // Send MEM_BEGIN command
+        byte[] pkt = _appendArray(_int_to_bytearray(eraseSize),
+                _int_to_bytearray(numBlocks));
+        pkt = _appendArray(pkt, _int_to_bytearray(ESP_RAM_BLOCK));
+        pkt = _appendArray(pkt, _int_to_bytearray(address));
+        sendCommand((byte) ESP_MEM_BEGIN, pkt, 0, DEFAULT_TIMEOUT);
+
+        // Send MEM_DATA commands
+        int seq = 0;
+        int position = 0;
+        while (position < length) {
+            int blockSize = Math.min(length - position, ESP_RAM_BLOCK);
+            byte[] block = _subArray(segment, position, blockSize);
+
+            byte[] pkt2 = _appendArray(_int_to_bytearray(blockSize),
+                    _int_to_bytearray(seq));
+            pkt2 = _appendArray(pkt2, _int_to_bytearray(0));
+            pkt2 = _appendArray(pkt2, _int_to_bytearray(0));
+            pkt2 = _appendArray(pkt2, block);
+
+            sendCommand((byte) ESP_MEM_DATA, pkt2, _checksum(block), DEFAULT_TIMEOUT);
+
+            seq++;
+            position += blockSize;
+        }
+    }
+
+    private void startStub(int entryAddress) {
+        // Send MEM_END command with entry point
+        byte[] pkt = _appendArray(_int_to_bytearray(entryAddress),
+                _int_to_bytearray(0));
+        sendCommand((byte) ESP_MEM_END, pkt, 0, DEFAULT_TIMEOUT);
     }
 
     public void changeBaudRate() {
@@ -473,7 +574,7 @@ public class CommandInterfaceESP32 {
 
             byte block[];
 
-            if (image.length - position >= FLASH_WRITE_SIZE) {
+            if (image.length - position >= (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE)) {
                 block = _subArray(image, position, FLASH_WRITE_SIZE);
             } else {
                 // Pad the last block
@@ -481,7 +582,7 @@ public class CommandInterfaceESP32 {
 
                 // we have an incomplete block (ie: less than 1024) so let pad the missing block
                 // with 0xFF
-                /*byte tempArray[] = new byte[FLASH_WRITE_SIZE - block.length];
+                /*byte tempArray[] = new byte[(IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - block.length];
                 for (int i = 0; i < tempArray.length; i++) {
                     tempArray[i] = (byte) 0xFF;
                 }
@@ -491,7 +592,7 @@ public class CommandInterfaceESP32 {
             flash_defl_block(block, seq, FLASH_TIMEOUT_MS);
             seq += 1;
             written += block.length;
-            position += FLASH_WRITE_SIZE;
+            position += (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE);
         }
 
         long t2 = System.currentTimeMillis();
@@ -500,8 +601,8 @@ public class CommandInterfaceESP32 {
 
     private int flash_defl_begin(int size, int compsize, int offset) {
 
-        int num_blocks = (int) Math.floor((double) (compsize + FLASH_WRITE_SIZE - 1) / (double) FLASH_WRITE_SIZE);
-        int erase_blocks = (int) Math.floor((double) (size + FLASH_WRITE_SIZE - 1) / (double) FLASH_WRITE_SIZE);
+        int num_blocks = (int) Math.floor((double) (compsize + (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - 1) / (double) (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE));
+        int erase_blocks = (int) Math.floor((double) (size + (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - 1) / (double) (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE));
         // Start time
         long t1 = System.currentTimeMillis();
 
@@ -511,14 +612,14 @@ public class CommandInterfaceESP32 {
             write_size = size;
             timeout = 3000;
         } else {
-            write_size = erase_blocks * FLASH_WRITE_SIZE;
+            write_size = erase_blocks * (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE);
             timeout = timeout_per_mb(ERASE_REGION_TIMEOUT_PER_MB, write_size);
         }
 
         mUpCallback.onInfo("Compressed " + size + " bytes to " + compsize + "..."+ "\n");
 
         byte pkt[] = _appendArray(_int_to_bytearray(write_size), _int_to_bytearray(num_blocks));
-        pkt = _appendArray(pkt, _int_to_bytearray(FLASH_WRITE_SIZE));
+        pkt = _appendArray(pkt, _int_to_bytearray((IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE)));
         pkt = _appendArray(pkt, _int_to_bytearray(offset));
 
         // System.out.println("params:" +printHex(pkt));

@@ -214,6 +214,12 @@ public class RadioAudioService extends Service {
             case MODE_FLASHING:
                 sendCommandToESP32(RadioAudioService.ESP32Command.STOP);
                 audioTrack.stop();
+                usbIoManager.stop();
+                break;
+            default:
+                if (null != usbIoManager && usbIoManager.getState() == SerialInputOutputManager.State.STOPPED) {
+                    usbIoManager.start();
+                }
                 break;
         }
 
@@ -1164,6 +1170,14 @@ public class RadioAudioService extends Service {
         ArrayList<Digipeater> digipeaters = new ArrayList<>();
         digipeaters.add(new Digipeater("WIDE1*"));
         digipeaters.add(new Digipeater("WIDE2-1"));
+        if (null == callsign || callsign.trim().equals("")) {
+            Log.d("DEBUG", "Error: Tried to send a chat message with no sender callsign.");
+            return;
+        }
+        if (null == targetCallsign || targetCallsign.trim().equals("")) {
+            Log.d("DEBUG", "Warning: Tried to send a chat message with no recipient callsign, defaulted to 'CQ'.");
+            targetCallsign = "CQ";
+        }
         APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
         Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
 

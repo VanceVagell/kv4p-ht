@@ -60,8 +60,12 @@ public class FirmwareUtils {
             public void onUploading(int value) {
                 Log.d("DEBUG", "onUploading: " + value);
 
-                // The 4th file takes the longest, so we give it a full 50% of the progress.
-                if (progressPercent >= 50) {
+                // Some of the file writes take a while, show finer-grained progress for those.
+                if (progressPercent >= 20 && progressPercent < 30) {
+                    int newPercent = Math.min(50, (int) (20 + (10 * ((float) value / 100.0f))));
+                    trackProgress(callback, newPercent);
+                }
+                else if (progressPercent >= 50) {
                     int newPercent = Math.min(100, (int) (50 + (50 * ((float) value / 100.0f))));
                     trackProgress(callback, newPercent);
                 }
@@ -87,7 +91,7 @@ public class FirmwareUtils {
                 Log.d("DEBUG", "onError: " + err);
             }
         };
-        cmd = new CommandInterfaceESP32(UpCallback, usbSerialPort);
+        cmd = new CommandInterfaceESP32(ctx, UpCallback, usbSerialPort);
 
         firmwareFile1 = ctx.getResources().openRawResource(FIRMWARE_FILE_1_ID);
         firmwareFile2 = ctx.getResources().openRawResource(FIRMWARE_FILE_2_ID);
@@ -103,7 +107,8 @@ public class FirmwareUtils {
         }
         if (!failed) {
             callback.connectedToBootloader();
-            cmd.changeBaudRate();
+            // cmd.loadStubFromFile(); // Does not work
+            // cmd.changeBaudRate(); // Faster baud can't work without stub loader
             trackProgress(callback, 10);
             cmd.init();
             trackProgress(callback, 20);

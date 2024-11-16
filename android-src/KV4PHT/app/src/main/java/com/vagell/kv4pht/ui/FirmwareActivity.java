@@ -20,6 +20,7 @@ package com.vagell.kv4pht.ui;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Color;
 import android.os.Bundle;
 
 import com.google.android.material.progressindicator.CircularProgressIndicator;
@@ -29,6 +30,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.TextView;
 
 import androidx.navigation.NavController;
@@ -49,11 +51,13 @@ import java.util.concurrent.TimeUnit;
 
 public class FirmwareActivity extends AppCompatActivity {
     private ThreadPoolExecutor threadPoolExecutor = null;
+    private Snackbar errorSnackbar = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_firmware);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // Or firmware writing will fail when app is paused
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
@@ -76,7 +80,18 @@ public class FirmwareActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        startFlashing();
+    }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (errorSnackbar != null) {
+            errorSnackbar.dismiss();
+        }
+    }
+
+    private void startFlashing() {
         setStatusText("Connecting to bootloader...");
         findViewById(R.id.firmwareInstructionText1).setVisibility(View.VISIBLE);
         findViewById(R.id.firmwareInstructionImage).setVisibility(View.VISIBLE);
@@ -138,7 +153,25 @@ public class FirmwareActivity extends AppCompatActivity {
                             finish();
                         } else {
                             Log.d("DEBUG", "Error: Flashing firmware failed.");
-                            // TODO report in UI that flashing failed, with option to retry
+
+                            CharSequence snackbarMsg = "Failed to flash firmware";
+                            errorSnackbar = Snackbar.make(ctx, findViewById(R.id.firmwareTopLevelView), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+                                    .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+                            errorSnackbar.setAction("Retry", new View.OnClickListener() {
+                                        @Override
+                                        public void onClick(View view) {
+                                            errorSnackbar.dismiss();
+                                            startFlashing();
+                                        }
+                                    });
+
+                            // Make the text of the snackbar larger.
+                            TextView snackbarActionTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+                            snackbarActionTextView.setTextSize(20);
+                            TextView snackbarTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+                            snackbarTextView.setTextSize(20);
+
+                            errorSnackbar.show();
                         }
                     }
                 });
