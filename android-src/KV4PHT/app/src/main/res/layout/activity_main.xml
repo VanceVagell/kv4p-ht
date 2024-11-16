@@ -112,7 +112,7 @@
                     android:textSize="64dp"
                     android:text="kv4p HT"
                     android:background="@color/clear"
-                    android:maxLength="7"
+                    android:maxLength="8"
                     android:maxLines="1"
                     android:singleLine="true"
                     android:inputType="numberDecimal" />

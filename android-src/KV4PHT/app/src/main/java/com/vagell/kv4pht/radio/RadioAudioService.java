@@ -411,7 +411,7 @@ public class RadioAudioService extends Service {
             freq = Float.parseFloat(strFreq);
         } catch (NumberFormatException nfe) { // Not sure how some people are breaking this, but default to FM calling frequency if we can't understand strFreq.
             nfe.printStackTrace();
-            return "146.520";
+            return "146.5200";
         }
         while (freq > 148.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
@@ -419,39 +419,13 @@ public class RadioAudioService extends Service {
         freq = Math.min(freq, 148.0f);
         freq = Math.max(freq, 144.0f);
 
-        strFreq = String.format(java.util.Locale.US,"%.3f", freq);
-        strFreq = formatFrequency(strFreq);
+        strFreq = String.format(java.util.Locale.US,"%.4f", freq);
 
         return strFreq;
     }
 
-    public static String formatFrequency(String tempFrequency) {
-        tempFrequency = tempFrequency.trim();
-
-        // Pad any missing zeroes to match format expected by radio module.
-        if (tempFrequency.matches("14[4-8]\\.[0-9][0-9][0-9]")) {
-            return tempFrequency;
-        } else if (tempFrequency.matches("14[4-8]\\.[0-9][0-9]")) {
-            return tempFrequency + "0";
-        } else if (tempFrequency.matches("14[4-8]\\.[0-9]")) {
-            return tempFrequency + "00";
-        } else if (tempFrequency.matches("14[4-8]\\.")) {
-            return tempFrequency + "000";
-        } else if (tempFrequency.matches("14[4-8]")) {
-            return tempFrequency + ".000";
-        } else if (tempFrequency.matches("14[4-8][0-9][0-9][0-9]")) {
-            return tempFrequency.substring(0, 3) + "." + tempFrequency.substring(3, 6);
-        } else if (tempFrequency.matches("14[4-8][0-9][0-9]")) {
-            return tempFrequency.substring(0, 3) + "." + tempFrequency.substring(3, 5) + "0";
-        } else if (tempFrequency.matches("14[4-8][0-9]")) {
-            return tempFrequency.substring(0, 3) + "." + tempFrequency.substring(3, 4) + "00";
-        }
-
-        return null;
-    }
-
     public String validateFrequency(String tempFrequency) {
-        String newFrequency = formatFrequency(tempFrequency);
+        String newFrequency = makeSafe2MFreq(tempFrequency);
 
         // Resort to the old frequency, the one the user inputted is unsalvageable.
         return newFrequency == null ? activeFrequencyStr : newFrequency;

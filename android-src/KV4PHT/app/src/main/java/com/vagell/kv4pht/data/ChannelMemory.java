@@ -36,7 +36,7 @@ public class ChannelMemory {
     public String name;
 
     @ColumnInfo(name = "frequency")
-    public String frequency; // in format "xxx.xxx"
+    public String frequency; // in format "xxx.xxxx"
 
     @ColumnInfo(name = "offset")
     public int offset; // 0 = none, 1 = down, 2 = up

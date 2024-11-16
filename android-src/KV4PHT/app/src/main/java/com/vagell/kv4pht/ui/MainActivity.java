@@ -114,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
     // Radio params and related settings
-    private String activeFrequencyStr = "144.000";
+    private String activeFrequencyStr = "144.0000";
     private int squelch = 0;
     private String callsign = null;
     private boolean stickyPTT = false;
@@ -662,7 +662,7 @@ public class MainActivity extends AppCompatActivity {
                             if (lastFreq != null) {
                                 activeFrequencyStr = lastFreq.value;
                             } else {
-                                activeFrequencyStr = "146.520"; // VHF calling freq
+                                activeFrequencyStr = "146.5200"; // VHF calling freq
                             }
 
                             if (radioAudioService != null) {
