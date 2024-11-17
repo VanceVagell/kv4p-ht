@@ -16,6 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <Arduino.h>
+
 #include <algorithm>
 #include <DRA818.h>
 #include <driver/adc.h>
@@ -99,6 +101,19 @@ int fadeCounter = 0;
 int fadeDirection = 0; // 0: no fade, 1: fade in, -1: fade out
 int attenuation = ATTENUATION_MAX; // Full volume
 bool lastSquelched = false;
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Forward Declarations
+////////////////////////////////////////////////////////////////////////////////
+
+void initI2SRx();
+void initI2STx();
+void tuneTo(float freqTx, float freqRx, int tone, int squelch);
+void setMode(int newMode);
+void processTxAudio(uint8_t tempBuffer[], int bytesRead);
+
+
 
 void setup() {
   // Communication with Android via USB cable
