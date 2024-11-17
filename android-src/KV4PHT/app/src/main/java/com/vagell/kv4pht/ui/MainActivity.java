@@ -911,6 +911,7 @@ public class MainActivity extends AppCompatActivity {
      * interact with the radio (use RadioAudioService for that).
      */
     private void tuneToFreqUi(String frequencyStr) {
+        final Context ctx = this;
         activeFrequencyStr = radioAudioService.validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
@@ -921,23 +922,25 @@ public class MainActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                AppSetting lastFreqSetting = viewModel.appDb.appSettingDao().getByName("lastFreq");
-                if (lastFreqSetting != null) {
-                    lastFreqSetting.value = frequencyStr;
-                    viewModel.appDb.appSettingDao().update(lastFreqSetting);
-                } else {
-                    lastFreqSetting = new AppSetting("lastFreq", frequencyStr);
-                    viewModel.appDb.appSettingDao().insertAll(lastFreqSetting);
-                }
+                synchronized(ctx) { // Avoid 2 threads checking if something is set / setting it at once.
+                    AppSetting lastFreqSetting = viewModel.appDb.appSettingDao().getByName("lastFreq");
+                    if (lastFreqSetting != null) {
+                        lastFreqSetting.value = frequencyStr;
+                        viewModel.appDb.appSettingDao().update(lastFreqSetting);
+                    } else {
+                        lastFreqSetting = new AppSetting("lastFreq", frequencyStr);
+                        viewModel.appDb.appSettingDao().insertAll(lastFreqSetting);
+                    }
 
-                // And clear out any saved memory ID, so we restore to a simplex freq on restart.
-                AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
-                if (lastMemoryIdSetting != null) {
-                    lastMemoryIdSetting.value = "-1";
-                    viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
-                } else {
-                    lastMemoryIdSetting = new AppSetting("lastMemoryId", "-1");
-                    viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                    // And clear out any saved memory ID, so we restore to a simplex freq on restart.
+                    AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                    if (lastMemoryIdSetting != null) {
+                        lastMemoryIdSetting.value = "-1";
+                        viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                    } else {
+                        lastMemoryIdSetting = new AppSetting("lastMemoryId", "-1");
+                        viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                    }
                 }
             }
         });

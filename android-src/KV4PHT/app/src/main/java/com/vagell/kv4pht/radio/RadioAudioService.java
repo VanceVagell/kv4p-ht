@@ -810,6 +810,11 @@ public class RadioAudioService extends Service {
 
         consecutiveSilenceBytes = 0;
 
+        if (null == memoryToScanNext) { // Unclear how this could happen, but exception occurred in the wild (GitHub issue #99).
+            Log.d("DEBUG", "Warning: Tried to scan to null memory, skipping it.");
+            return;
+        }
+
         // Log.d("DEBUG", "Scanning to: " + memoryToScanNext.name);
         tuneToMemory(memoryToScanNext, squelch > 0 ? squelch : 1, true); // If user turned off squelch, set it to 1 during scan.
         if (callbacks != null) {
