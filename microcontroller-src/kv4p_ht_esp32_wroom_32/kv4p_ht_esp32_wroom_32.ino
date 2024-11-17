@@ -24,7 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/i2s.h>
 #include <esp_task_wdt.h>
 
-const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '1'}; // Should be 8 characters representing a zero-padded version, like 00000001.
+const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '2'}; // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
 
 // Commands defined here must match the Android app
@@ -239,13 +239,13 @@ void loop() {
         {
           // Example:
           // 145.450144.850061
-          // 7 chars for tx, 7 chars for rx, 2 chars for tone, 1 char for squelch (17 bytes total for params)
+          // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch (19 bytes total for params)
           setMode(MODE_RX);
 
           // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
           // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
           // putting them in there. If so, we take byte-by-byte until we get the full params.
-          int paramBytesMissing = 17;
+          int paramBytesMissing = 19;
           String paramsStr = "";
           if (paramBytesMissing > 0) {
             uint8_t paramPartsBuffer[paramBytesMissing];
@@ -263,10 +263,11 @@ void loop() {
             paramsStr += String((char *)paramPartsBuffer);
             paramBytesMissing--;
           }
-          float freqTxFloat = paramsStr.substring(0, 7).toFloat();
-          float freqRxFloat = paramsStr.substring(7, 14).toFloat();
-          int toneInt = paramsStr.substring(14, 16).toInt();
-          int squelchInt = paramsStr.substring(16, 17).toInt();
+
+          float freqTxFloat = paramsStr.substring(0, 8).toFloat();
+          float freqRxFloat = paramsStr.substring(8, 16).toFloat();
+          int toneInt = paramsStr.substring(16, 18).toInt();
+          int squelchInt = paramsStr.substring(18, 19).toInt();
 
           // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
 
@@ -332,14 +333,14 @@ void loop() {
           case COMMAND_TUNE_TO:
           {
             // Example:
-            // 145.450144.850061
-            // 7 chars for tx, 7 chars for rx, 2 chars for tone, 1 char for squelch (17 bytes total for params)
+            // 145.4500144.8500061
+            // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch (19 bytes total for params)
             setMode(MODE_RX);
 
             // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
             // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
             // putting them in there. If so, we take byte-by-byte until we get the full params.
-            int paramBytesMissing = 17;
+            int paramBytesMissing = 19;
             String paramsStr = "";
             if (paramBytesMissing > 0) {
               uint8_t paramPartsBuffer[paramBytesMissing];
@@ -357,10 +358,11 @@ void loop() {
               paramsStr += String((char *)paramPartsBuffer);
               paramBytesMissing--;
             }
+
             float freqTxFloat = paramsStr.substring(0, 8).toFloat();
-            float freqRxFloat = paramsStr.substring(7, 15).toFloat();
-            int toneInt = paramsStr.substring(14, 16).toInt();
-            int squelchInt = paramsStr.substring(16, 17).toInt();
+            float freqRxFloat = paramsStr.substring(8, 16).toFloat();
+            int toneInt = paramsStr.substring(16, 18).toInt();
+            int squelchInt = paramsStr.substring(18, 19).toInt();
 
             tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
           }
