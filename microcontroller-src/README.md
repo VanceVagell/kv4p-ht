@@ -51,6 +51,10 @@
    - Select version **2.0.17**. The code needs to be updated to support 3.X
    - Click **Install** and Wait for the installation to complete.
 
+3. **Configure**
+   - Go to `Tools` > `Events Run On` > Select `Core 0`
+      - This is done so audio processing interrupts run on a separate thread for maximum stability.
+
 ### Install Required Libraries
 
 1. **Install EspSoftwareSerial:**
