@@ -7,7 +7,7 @@
     android:orientation="vertical"
     tools:context=".ui.SettingsActivity"
     android:background="@drawable/bg"
-    android:paddingTop="64dp"
+    android:paddingTop="96dp"
     android:paddingRight="24dp"
     android:paddingBottom="24dp"
     android:paddingLeft="24dp"
@@ -24,170 +24,234 @@
         android:layout_marginBottom="16dp"
         android:layout_gravity="center"/>
 
-    <com.google.android.material.textfield.TextInputLayout
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_weight="0"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:hint="Your callsign"
-        app:hintTextColor="@color/primary_deselected"
-        app:boxStrokeColor="@color/primary"
-        android:textColorHint="@color/primary_deselected">
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/callsignTextInputEditText"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:textSize="20dp"
-            android:maxLength="10"
-            android:maxLines="1"
-            android:singleLine="true"
-            android:textColor="@color/primary">
-        </com.google.android.material.textfield.TextInputEditText>
-    </com.google.android.material.textfield.TextInputLayout>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:fontFamily="@font/jost"
-        android:text="Squelch"
-        android:textColor="@color/primary_deselected"
-        android:textSize="16dp"
-        android:labelFor="@id/squelchSlider"
-        android:layout_marginTop="16dp"/>
-
-    <com.google.android.material.slider.Slider
-        android:id="@+id/squelchSlider"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:valueFrom="0.0"
-        android:valueTo="8.0"
-        android:stepSize="1.0"
-        app:labelBehavior="gone" /> <!-- Would like to keep the label, but the color is illegible and can't figure out how to set it. -->
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:fontFamily="@font/jost"
-        android:text="Filters"
-        android:textColor="@color/primary_deselected"
-        android:textSize="16dp"
-        android:layout_marginTop="16dp"/>
-
-    <Switch
-        android:id="@+id/emphasisSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Pre- &amp; De-emphasis"
-        android:textSize="18dp"
-        android:textColor="@color/primary"
-        android:layout_marginTop="8dp"
-        android:trackTintMode="add"/>
-
-    <Switch
-        android:id="@+id/highpassSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Highpass"
-        android:textSize="18dp"
-        android:textColor="@color/primary"
-        android:layout_marginTop="8dp"
-        android:trackTintMode="add"/>
-
-    <Switch
-        android:id="@+id/lowpassSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Lowpass"
-        android:textSize="18dp"
-        android:textColor="@color/primary"
-        android:layout_marginTop="8dp"
-        android:trackTintMode="add"/>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:fontFamily="@font/jost"
-        android:text="Accessibility"
-        android:textColor="@color/primary_deselected"
-        android:textSize="16dp"
-        android:layout_marginTop="24dp"/>
-
-    <Switch
-        android:id="@+id/stickyPTTSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Sticky PTT"
-        android:textSize="18dp"
-        android:textColor="@color/primary"
-        android:layout_marginTop="8dp"
-        android:trackTintMode="add"/>
-
-    <Switch
-        android:id="@+id/noAnimationsSwitch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Disable animations"
-        android:textSize="18dp"
-        android:textColor="@color/primary"
-        android:layout_marginTop="8dp"
-        android:trackTintMode="add"/>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="8dp">
-
-        <TextView
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/jost"
-            android:text="Closed captions"
-            android:textColor="@color/primary"
-            android:textSize="18dp"
-            android:layout_gravity="center_vertical"
-            android:layout_weight="1"
-            android:labelFor="@id/closedCaptionsButton"/>
+            android:orientation="vertical">
 
-        <Button
-            android:id="@+id/closedCaptionsButton"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_weight="0"
-            android:background="?android:attr/selectableItemBackground"
-            android:text="System setting"
-            android:textSize="16dp"
-            android:textFontWeight="500"
-            android:textColor="@color/primary"
-            android:textAllCaps="true"
-            android:enabled="true"
-            android:onClick="closedCaptionsButtonClicked"
-            android:layout_gravity="end"
-            android:textAlignment="viewEnd"
-            android:padding="0dp" />
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="0"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:hint="Your callsign"
+                app:hintTextColor="@color/primary_deselected"
+                app:boxStrokeColor="@color/primary"
+                android:textColorHint="@color/primary_deselected">
 
-    </LinearLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/callsignTextInputEditText"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:textSize="20dp"
+                    android:maxLength="10"
+                    android:maxLines="1"
+                    android:singleLine="true"
+                    android:textColor="@color/primary">
+                </com.google.android.material.textfield.TextInputEditText>
+            </com.google.android.material.textfield.TextInputLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="32dp"
-        android:gravity="right">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/jost"
+                android:text="Squelch"
+                android:textColor="@color/primary_deselected"
+                android:textSize="16dp"
+                android:labelFor="@id/squelchSlider"
+                android:layout_marginTop="16dp"/>
 
-        <Button
-            android:id="@+id/doneButton"
-            android:layout_width="wrap_content"
-            android:layout_height="56dp"
-            android:layout_weight="0"
-            android:text="Done"
-            android:textSize="20dp"
-            android:textFontWeight="500"
-            android:textColor="@color/black"
-            android:textAllCaps="false"
-            android:enabled="true"
-            android:onClick="doneButtonClicked"/>
-    </LinearLayout>
+            <com.google.android.material.slider.Slider
+                android:id="@+id/squelchSlider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:valueFrom="0.0"
+                android:valueTo="8.0"
+                android:stepSize="1.0"
+                app:labelBehavior="gone" /> <!-- Would like to keep the label, but the color is illegible and can't figure out how to set it. -->
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/jost"
+                android:text="Filters"
+                android:textColor="@color/primary_deselected"
+                android:textSize="16dp"
+                android:layout_marginTop="16dp"/>
+
+            <Switch
+                android:id="@+id/emphasisSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Pre- &amp; De-emphasis"
+                android:textSize="18dp"
+                android:textColor="@color/primary"
+                android:layout_marginTop="8dp"
+                android:trackTintMode="add"/>
+
+            <Switch
+                android:id="@+id/highpassSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Highpass"
+                android:textSize="18dp"
+                android:textColor="@color/primary"
+                android:layout_marginTop="8dp"
+                android:trackTintMode="add"/>
+
+            <Switch
+                android:id="@+id/lowpassSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Lowpass"
+                android:textSize="18dp"
+                android:textColor="@color/primary"
+                android:layout_marginTop="8dp"
+                android:trackTintMode="add"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/jost"
+                android:text="Accessibility"
+                android:textColor="@color/primary_deselected"
+                android:textSize="16dp"
+                android:layout_marginTop="24dp"/>
+
+            <Switch
+                android:id="@+id/stickyPTTSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Sticky PTT"
+                android:textSize="18dp"
+                android:textColor="@color/primary"
+                android:layout_marginTop="8dp"
+                android:trackTintMode="add"/>
+
+            <Switch
+                android:id="@+id/noAnimationsSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Disable animations"
+                android:textSize="18dp"
+                android:textColor="@color/primary"
+                android:layout_marginTop="8dp"
+                android:trackTintMode="add"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/jost"
+                    android:text="Closed captions"
+                    android:textColor="@color/primary"
+                    android:textSize="18dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_weight="1"
+                    android:labelFor="@id/closedCaptionsButton"/>
+
+                <Button
+                    android:id="@+id/closedCaptionsButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_weight="0"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:text="System setting"
+                    android:textSize="16dp"
+                    android:textFontWeight="500"
+                    android:textColor="@color/primary"
+                    android:textAllCaps="true"
+                    android:enabled="true"
+                    android:onClick="closedCaptionsButtonClicked"
+                    android:layout_gravity="end"
+                    android:textAlignment="viewEnd"
+                    android:padding="0dp" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/jost"
+                android:text="Advanced"
+                android:textColor="@color/primary_deselected"
+                android:textSize="16dp"
+                android:layout_marginTop="24dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/jost"
+                    android:text="Max frequency"
+                    android:textColor="@color/primary"
+                    android:textSize="18dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_weight="1"
+                    android:labelFor="@id/closedCaptionsButton"/>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:padding="0dp"
+                    android:layout_weight="0"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    app:hintTextColor="@color/primary_deselected"
+                    app:boxStrokeColor="@color/primary"
+                    android:textColorHint="@color/primary_deselected">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/maxFreqTextView"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:padding="0dp"
+                        android:layout_weight="1"
+                        android:inputType="none"
+                        android:text="148MHz"
+                        android:textSize="20dp"
+                        android:textColor="@color/primary"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="32dp"
+                android:gravity="right">
+
+                <Button
+                    android:id="@+id/doneButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="56dp"
+                    android:layout_weight="0"
+                    android:layout_marginBottom="64dp"
+                    android:text="Done"
+                    android:textSize="20dp"
+                    android:textFontWeight="500"
+                    android:textColor="@color/black"
+                    android:textAllCaps="false"
+                    android:enabled="true"
+                    android:onClick="doneButtonClicked"/>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>

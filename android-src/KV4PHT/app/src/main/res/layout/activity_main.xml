@@ -112,7 +112,7 @@
                     android:textSize="64dp"
                     android:text="kv4p HT"
                     android:background="@color/clear"
-                    android:maxLength="7"
+                    android:maxLength="8"
                     android:maxLines="1"
                     android:singleLine="true"
                     android:inputType="numberDecimal" />
@@ -202,7 +202,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:textColor="@color/primary"
-                        android:text="SCAN"
+                        android:text="Scan"
                         android:fontFamily="@font/jost"
                         android:textSize="20dp"
                         android:textFontWeight="500"

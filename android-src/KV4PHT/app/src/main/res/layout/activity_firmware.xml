@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".ui.FirmwareActivity"
+    android:background="@drawable/bg"
+    android:paddingTop="96dp"
+    android:paddingRight="24dp"
+    android:paddingBottom="24dp"
+    android:paddingLeft="24dp"
+    android:id="@+id/firmwareTopLevelView">
+
+    <TextView
+        android:id="@+id/firmwareToolbarTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Firmware update"
+        android:textSize="32sp"
+        app:fontWeight="500"
+        android:textColor="@color/primary"
+        android:layout_marginBottom="16dp"
+        android:layout_gravity="center"/>
+
+    <TextView
+        android:id="@+id/firmwareStatusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/jost"
+        android:textStyle="italic"
+        android:gravity="center"
+        android:text="Connecting to bootloader..."
+        android:textColor="@color/primary_deselected"
+        android:textSize="24dp"
+        android:maxLines="1"/>
+
+    <com.google.android.material.progressindicator.CircularProgressIndicator
+        android:id="@+id/firmwareProgressIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:layout_gravity="center"
+        android:paddingTop="24dp"
+        app:trackColor="@color/primary_deselected"
+        app:indicatorColor="@color/accent"/>
+
+    <TextView
+        android:id="@+id/firmwareInstructionText1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="32dp"
+        android:fontFamily="@font/jost"
+        android:text="Keep your kv4p HT plugged into your phone, and push these buttons:\n
+\n
+  1. Hold “Boot”\n
+  2. Press and release “Reset”\n
+  3. Release “Boot”\n
+  4. Wait about 30 seconds for it to connect"
+        android:textColor="@color/primary_deselected"
+        android:textSize="20dp"/>
+
+    <ImageView
+        android:id="@+id/firmwareInstructionImage"
+        android:paddingTop="32dp"
+        android:layout_width="match_parent"
+        android:layout_height="256dp"
+        android:contentDescription="Photo of the bottom of the kv4p HT PCB, showing the reset button on the left, and the boot button on the right."
+        android:scaleType="centerInside"
+        android:src="@drawable/firmware_instructions" />
+
+    <TextView
+        android:id="@+id/firmwareInstructionText2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="32dp"
+        android:fontFamily="@font/jost"
+        android:text="Keep your phone screen on, this app open, and don’t unplug your kv4p HT until flashing is done.\n
+\n
+This usually takes 5-10 minutes."
+        android:textColor="@color/primary_deselected"
+        android:textSize="20dp"
+        android:visibility="gone"/>
+
+    <LinearLayout
+        android:id="@+id/firmwareButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="32dp"
+        android:gravity="right">
+
+        <Button
+            android:id="@+id/firmwareCancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_weight="0"
+            android:background="?android:attr/selectableItemBackground"
+            android:text="Cancel"
+            android:textSize="20dp"
+            android:textFontWeight="500"
+            android:textColor="@color/primary"
+            android:textAllCaps="false"
+            android:enabled="true"
+            android:onClick="firmwareCancelButtonClicked" />
+    </LinearLayout>
+</LinearLayout>

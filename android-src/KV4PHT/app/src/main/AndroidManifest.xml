@@ -7,8 +7,8 @@
 
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.VIBRATE"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -20,6 +20,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KV4PHT"
         tools:targetApi="31">
+        <activity
+            android:name=".ui.FirmwareActivity"
+            android:exported="true"
+            android:theme="@style/Theme.KV4PHT"
+            android:windowSoftInputMode="stateVisible">
+            <intent-filter>
+                <action android:name="com.vagell.kv4pht.FIRMWARE_ACTION" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="true"
@@ -58,6 +69,7 @@
 
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter" />
@@ -65,9 +77,8 @@
 
         <service
             android:name=".radio.RadioAudioService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="false">
-        </service>
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"></service>
     </application>
 
 </manifest>

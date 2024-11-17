@@ -7,7 +7,7 @@
 	(title_block
 		(title "kv4P HT")
 		(date "2024-11-06")
-		(rev "2.0a")
+		(rev "2.0b")
 		(company "VanceVagell")
 		(comment 1 "https://github.com/VanceVagell/kv4p-ht")
 		(comment 2 "v2 hardware by @SmittyHalibut")
@@ -15178,7 +15178,7 @@
 		(at 177.165 69.215 180)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom no)
+		(in_bom yes)
 		(on_board yes)
 		(dnp no)
 		(fields_autoplaced yes)
@@ -15254,6 +15254,15 @@
 			)
 		)
 		(property "Alternate LCSC" ""
+			(at 177.165 69.215 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C496551"
 			(at 177.165 69.215 0)
 			(effects
 				(font

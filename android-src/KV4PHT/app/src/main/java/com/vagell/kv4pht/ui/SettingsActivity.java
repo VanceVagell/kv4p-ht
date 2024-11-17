@@ -26,7 +26,10 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.KeyEvent;
 import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Switch;
@@ -41,6 +44,8 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -57,6 +62,7 @@ public class SettingsActivity extends AppCompatActivity {
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         populateOriginalValues();
+        populateMaxFrequencies();
         attachListeners();
     }
 
@@ -74,6 +80,17 @@ public class SettingsActivity extends AppCompatActivity {
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
+    private void populateMaxFrequencies() {
+        AutoCompleteTextView maxFreqTextView = findViewById(R.id.maxFreqTextView);
+
+        List<String> maxFreqs = new ArrayList<String>();
+        maxFreqs.add("148MHz");
+        maxFreqs.add("146MHz");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, maxFreqs);
+        maxFreqTextView.setAdapter(arrayAdapter);
+    }
+
     private void populateOriginalValues() {
         if (threadPoolExecutor == null) {
             return;
@@ -89,6 +106,7 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -126,6 +144,11 @@ public class SettingsActivity extends AppCompatActivity {
                         if (disableAnimationsSetting != null) {
                             Switch noAnimationsSwitch = (Switch) (findViewById(R.id.noAnimationsSwitch));
                             noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
+                        }
+
+                        if (maxFreqSetting != null) {
+                            AutoCompleteTextView maxFreqTextView = (AutoCompleteTextView) findViewById(R.id.maxFreqTextView);
+                            maxFreqTextView.setText(maxFreqSetting.value + "MHz", false);
                         }
                     }
                 });
@@ -219,6 +242,43 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 setNoAnimations(isChecked);
+            }
+        });
+
+        TextView maxFreqTextView = findViewById(R.id.maxFreqTextView);
+        maxFreqTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.maxFreqTextView)).getText().toString().trim();
+                setMaxFreq(newText.substring(0, 3));
+            }
+        });
+    }
+
+    /**
+     * @param maxFreq Megahertz as a string, e.g. "148".
+     */
+    private void setMaxFreq(String maxFreq) {
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
+
+                if (setting == null) {
+                    setting = new AppSetting("maxFreq", maxFreq);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = maxFreq;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
             }
         });
     }
