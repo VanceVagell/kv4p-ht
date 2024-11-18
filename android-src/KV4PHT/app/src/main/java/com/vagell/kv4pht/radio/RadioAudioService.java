@@ -125,6 +125,21 @@ public class RadioAudioService extends Service {
         }
     }
 
+    private enum ESP32MsgType {
+        DATA((byte) 0xF0),
+        CMD((byte) 0x0F);
+
+        private byte commandByte;
+        ESP32MsgType(byte commandByte) {
+            this.commandByte = commandByte;
+        }
+
+        public byte getByte() {
+            return commandByte;
+        }
+    }
+
+
     public static final byte SILENT_BYTE = -128;
 
     // Callbacks to the Activity that started us
@@ -134,7 +149,7 @@ public class RadioAudioService extends Service {
     public static final int AUDIO_SAMPLE_RATE = 44100;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     public static final  int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
+    public static final  int MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 8;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private static UsbSerialPort serialPort;
@@ -144,15 +159,12 @@ public class RadioAudioService extends Service {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 1000;
+    private static final int PRE_BUFFER_SIZE = 4096;
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
-
-    // Delimiter must match ESP32 code
-    private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
 
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
@@ -532,7 +544,7 @@ public class RadioAudioService extends Service {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build())
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(minBufferSize)
+                .setBufferSizeInBytes(MIN_BUFFER_SIZE)
                 .build();
 
         restartAudioPrebuffer();
@@ -824,7 +836,19 @@ public class RadioAudioService extends Service {
 
     public void sendAudioToESP32(byte[] audioBuffer, boolean dataMode) {
         if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
-            sendBytesToESP32(audioBuffer);
+            int numberOfBytesToSend = audioBuffer.length;
+            // TODO: Make this support packets of size greater that 2^8
+//            byte[] commandInfo = { ESP32MsgType.DATA.getByte(), 0, numberOfBytesToSend};
+//            byte[] combined = new byte[commandInfo.length + numberOfBytesToSend];
+//            System.arraycopy(commandInfo, 0, combined, 0, commandInfo.length);
+//            System.arraycopy(audioBuffer, 0, combined, commandInfo.length, numberOfBytesToSend);
+//            sendBytesToESP32(combined);
+//            numberOfBytesToSend = 10;
+            byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
+            sendBytesToESP32(commandInfo);
+//            byte[] fakeAudioData = { 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39 };
+//            sendBytesToESP32(fakeAudioData);
+            sendBytesToESP32(Arrays.copyOfRange(audioBuffer, 0, numberOfBytesToSend));
         } else {
             // If the audio is fairly long, we need to send it to ESP32 at the same rate
             // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
@@ -840,8 +864,23 @@ public class RadioAudioService extends Service {
                         android.os.Process.setThreadPriority(
                                 android.os.Process.THREAD_PRIORITY_BACKGROUND +
                                         android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        sendBytesToESP32(Arrays.copyOfRange(audioBuffer, chunkStart,
-                                Math.min(audioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
+                        int numberOfBytesToSend = Math.min(audioBuffer.length - chunkStart, TX_AUDIO_CHUNK_SIZE);
+                        if (numberOfBytesToSend <= 0) {
+                            // Something has occurred
+                        } else {
+                        // TODO: Make this support packets of size greater that 2^8
+//                        byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
+//                        byte[] combined = new byte[commandInfo.length + numberOfBytesToSend];
+//                        System.arraycopy(commandInfo, 0, combined, 0, commandInfo.length);
+//                        System.arraycopy(audioBuffer, chunkStart, combined, commandInfo.length, numberOfBytesToSend);
+//                        sendBytesToESP32(combined);
+//                            numberOfBytesToSend = 10;
+                            byte[] commandInfo = { ESP32MsgType.DATA.getByte(), (byte)(numberOfBytesToSend >> 8), (byte)numberOfBytesToSend};
+                            sendBytesToESP32(commandInfo);
+//                            byte[] fakeAudioData = { 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39 };
+//                            sendBytesToESP32(fakeAudioData);
+                            sendBytesToESP32(Arrays.copyOfRange(audioBuffer, chunkStart, chunkStart + numberOfBytesToSend));
+                        }
                     }
                 }, (int) nextSendDelay);
 
@@ -864,17 +903,13 @@ public class RadioAudioService extends Service {
     }
 
     public void sendCommandToESP32(ESP32Command command) {
-        byte[] commandArray = { COMMAND_DELIMITER[0], COMMAND_DELIMITER[1],
-                COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
-                COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
+        byte[] commandArray = { ESP32MsgType.CMD.getByte(), command.getByte() };
         sendBytesToESP32(commandArray);
         Log.d("DEBUG", "Sent command: " + command);
     }
 
     public void sendCommandToESP32(ESP32Command command, String paramsStr) {
-        byte[] commandArray = { COMMAND_DELIMITER[0], COMMAND_DELIMITER[1],
-                COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
-                COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
+        byte[] commandArray = { ESP32MsgType.CMD.getByte(), command.getByte() };
         byte[] combined = new byte[commandArray.length + paramsStr.length()];
         ByteBuffer buffer = ByteBuffer.wrap(combined);
         buffer.put(commandArray);
@@ -944,28 +979,27 @@ public class RadioAudioService extends Service {
 
     private void handleESP32Data(byte[] data) {
             // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
-         /* try {
-            String dataStr = new String(data, "UTF-8");
-            if (dataStr.length() < 100 && dataStr.length() > 0)
-                Log.d("DEBUG", "Str data from ESP32: " + dataStr);
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            } */
+            // try {
+            // String logDataStr = new String(data, StandardCharsets.UTF_8);
+            // if (logDataStr.length() < 100 && logDataStr.length() > 0)
+            // Log.d("DEBUG", "Str data from ESP32: " + logDataStr);
+            // } catch (UnsupportedEncodingException e) {
+            //     throw new RuntimeException(e);
+            // }
             // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
 
         if (mode == MODE_STARTUP) {
-            try {
-                String dataStr = new String(data, "UTF-8");
-                versionStrBuffer += dataStr;
-                if (versionStrBuffer.contains(VERSION_PREFIX)) {
-                    int startIdx = versionStrBuffer.indexOf(VERSION_PREFIX) + VERSION_PREFIX.length();
-                    String verStr = "";
-                    try {
-                        verStr = versionStrBuffer.substring(startIdx, startIdx + VERSION_LENGTH);
-                    } catch (IndexOutOfBoundsException iobe) {
-                        return; // Version string not yet fully received.
-                    }
-                    int verInt = Integer.parseInt(verStr);
+            String dataStr = new String(data, StandardCharsets.UTF_8);
+            versionStrBuffer += dataStr;
+            if (versionStrBuffer.contains(VERSION_PREFIX)) {
+                int startIdx = versionStrBuffer.indexOf(VERSION_PREFIX) + VERSION_PREFIX.length();
+                String verStr = "";
+                try {
+                    verStr = versionStrBuffer.substring(startIdx, startIdx + VERSION_LENGTH);
+                } catch (IndexOutOfBoundsException iobe) {
+                    return; // Version string not yet fully received.
+                }
+                int verInt = Integer.parseInt(verStr);
                     if (verInt < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                         Log.d("DEBUG", "Error: ESP32 app firmware " + verInt + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
                         if (callbacks != null) {
@@ -977,10 +1011,7 @@ public class RadioAudioService extends Service {
                         versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
                         initAfterESP32Connected();
                     }
-                    return;
-                }
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
+                return;
             }
         }
 
@@ -1015,10 +1046,15 @@ public class RadioAudioService extends Service {
                             synchronized (audioTrack) {
                                 audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
                             }
+
+                            synchronized (audioTrack) {
+                                // write the remaining audio bytes from data[] so we don't drop them
+                                audioTrack.write(data, i+1, data.length - i);
+                            }
                         }
 
                         rxPrebufferIdx = 0;
-                        break; // Might drop a few audio bytes from data[], should be very minimal
+                        break;
                     }
                 }
             }

@@ -1,0 +1,44 @@
+@startuml
+
+|Radio|
+start
+:loop;
+:ReadByte;
+
+if (MessageType is MSG ?) then (yes)
+|CommandProcessor|
+:Read CMD MSG Length;
+:Determine Command Type;
+|Radio|
+:ChangeState;
+else (no)
+
+|Radio|
+if (Mode is RX?) then (yes)
+|AudioProcessor|
+
+repeat
+  :Read Data from DRA818 into Buffer;
+repeat while (Data Read < Desired RX Packet Length)
+
+|AudioProcessor|
+:write Buffer to Serial;
+else(no)
+if ( Mode is TX? ) then (yes)
+|AudioProcessor|
+:Determine DataLength;
+
+repeat
+  :Read Serial into Buffer;
+repeat while (Data Read < DataLength)
+
+|AudioProcessor|
+:write Buffer to DRA818;
+else (no)
+endif
+endif
+endif
+|Radio|
+stop
+
+@enduml
