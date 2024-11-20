@@ -243,19 +243,21 @@
                 android:layout_marginTop="16dp"> <!-- displayed when user taps the bottom nav -->
 
                 <ScrollView
-                    android:id="@+id/textChatScrollView"
+                    android:id="@+id/aprsScrollView"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
-                    <TextView
-                        android:id="@+id/textChatLog"
+                    <LinearLayout
+                        android:id="@+id/aprsContainer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textSize="20dp"
-                        android:textColor="@color/primary"
-                        android:textIsSelectable="true"/>
+                        android:orientation="vertical">
+
+                        <!-- APRS type-specific views will be added here. -->
+
+                    </LinearLayout>
                 </ScrollView>
 
                 <View

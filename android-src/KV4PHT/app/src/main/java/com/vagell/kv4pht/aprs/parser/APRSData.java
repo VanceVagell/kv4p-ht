@@ -81,6 +81,11 @@ public abstract class APRSData implements java.io.Serializable, java.lang.Compar
         return this.type;
     }
 
+    /**
+     * @return String
+     */
+    public String getComment() { return this.comment; }
+
     /** 
      * @return byte[] the raw bytes handed to this object
      */

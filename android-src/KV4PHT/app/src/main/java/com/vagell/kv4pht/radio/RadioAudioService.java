@@ -1094,15 +1094,9 @@ public class RadioAudioService extends Service {
                     InformationField infoField = aprsPacket.getAprsInformation();
                     if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
                         MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
-                        if (messagePacket.isAck()) { // Don't list ACKs in chat log, or notify about them.
-                            // TODO in the future, when chat log isn't just plain text, we can add a checkmark to ACK'd messages we sent.
-                            Log.d("DEBUG", "Received ACK: " + messagePacket.toString());
-                            return;
-                        }
-                        finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
 
                         // If the message was addressed to us, notify the user and ACK the message to the sender.
-                        if (messagePacket.getTargetCallsign().toUpperCase().equals(callsign.toUpperCase())) {
+                        if (messagePacket.getTargetCallsign().trim().toUpperCase().equals(callsign.toUpperCase())) {
                             showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
                                     aprsPacket.getSourceCall() + " messaged you", messagePacket.getMessageBody(), MainActivity.INTENT_OPEN_CHAT);
                             sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), messagePacket.getMessageNumber());

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:layout_marginBottom="8dp"
+    android:gravity="start">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="start|center_vertical"
+        android:layout_marginBottom="2dp">
+
+        <TextView
+            android:id="@+id/fromCallsign"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="KV4P"
+            android:textColor="@color/primary"
+            android:textFontWeight="500"
+            android:textSize="12sp"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:id="@+id/timestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12:10pm"
+            android:textColor="@android:color/darker_gray"
+            android:textSize="12sp"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="&quot;"
+            android:textColor="@android:color/darker_gray"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/objName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="147.225+H"
+            android:textColor="@color/primary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="&quot;"
+            android:textColor="@android:color/darker_gray"
+            android:textSize="12sp"
+            android:layout_marginRight="4dp"/>
+
+        <ImageButton
+            android:id="@+id/senderPositionButton"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/ic_pin"
+            android:alpha="0.8"
+            android:contentDescription="Show sender's position"
+            android:onClick="senderPositionClicked"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="start|center_vertical"
+        android:layout_marginBottom="2dp">
+
+        <TextView
+            android:id="@+id/comment"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="50m Net Th9PM Mg1StTu"
+            android:textColor="@android:color/darker_gray"
+            android:textStyle="italic"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>

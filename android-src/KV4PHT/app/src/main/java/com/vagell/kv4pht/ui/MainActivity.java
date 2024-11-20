@@ -54,6 +54,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -76,8 +77,12 @@ import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
+import com.vagell.kv4pht.aprs.parser.APRSTypes;
 import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
+import com.vagell.kv4pht.aprs.parser.ObjectField;
+import com.vagell.kv4pht.aprs.parser.PositionField;
+import com.vagell.kv4pht.aprs.parser.WeatherField;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
@@ -426,26 +431,91 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleChatPacket(APRSPacket aprsPacket) {
-        final String finalString;
+        View newAprsView = null;
 
-        // Reformat the packet to be more human readable.
         InformationField infoField = aprsPacket.getAprsInformation();
-        if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
+        WeatherField weatherField = (WeatherField) infoField.getAprsData(APRSTypes.T_WX);
+        PositionField positionField = (PositionField) infoField.getAprsData(APRSTypes.T_POSITION);
+        ObjectField objectField = (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT);
+
+        // Try to find a comment (could be at multiple levels in the packet).
+        String comment = aprsPacket.getComment();
+        if (null != infoField && (null == comment || comment.trim().length() == 0)) {
+            comment = infoField.getComment();
+        }
+        if (null != positionField && (null == comment || comment.trim().length() == 0)) {
+            comment = positionField.getComment();
+        }
+        if (null != objectField && (null == comment || comment.trim().length() == 0)) {
+            comment = objectField.getComment();
+        }
+        if (null != weatherField && (null == comment || comment.trim().length() == 0)) {
+            comment = weatherField.getComment();
+        }
+
+        if (null != weatherField) { // APRS "weather" (i.e. any message with weather data attached)
+            // TODO
+
+            if (null != comment && comment.trim().length() != 0) {
+                Log.d("DEBUG", "Weather packet has comment");
+            }
+
+            Log.d("DEBUG", "Weather packet received");
+        } else if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
             MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
-            finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
-        } else { // Raw APRS packet. Useful for things like monitoring 144.39 for misc APRS traffic.
-            // TODO add better implementation of other message types (especially Location and Object, which are common on 144.390MHz).
-            finalString = aprsPacket.toString();
+
+            Log.d("DEBUG", "Message packet received");
+            // finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
+
+            if (messagePacket.isAck()) {
+                // TODO Add a checkmark to ACK'd messages we sent.
+                Log.d("DEBUG", "Message ack received");
+                return;
+            }
+        } else if (infoField.getDataTypeIdentifier() == ';') { // APRS "object"
+            if (null != objectField) {
+                Log.d("DEBUG", "Object packet received");
+
+                if (null == comment || comment.trim().length() == 0) { // If main packet has no comment, check for object-specific comment
+                    comment = objectField.getComment();
+                }
+                if (null != comment && comment.trim().length() != 0) {
+                    Log.d("DEBUG", "Object packet has comment");
+                }
+
+                // TODO
+            }
+        } else {
+            if (positionField != null) { // APRS "position" (i.e. anything else with a position)
+                Log.d("DEBUG", "Position packet received");
+
+                if (null != comment && comment.trim().length() != 0) {
+                    Log.d("DEBUG", "Position packet has comment");
+                }
+                // TODO
+            } else { // Unknown packet type
+                if (null != comment && comment.trim().length() != 0) {
+                    Log.d("DEBUG", "Unknown packet with comment received");
+                    // TODO
+                } else {
+                    Log.d("DEBUG", "Unknown packet WITHOUT comment received");
+                }
+            }
+        }
+
+        if (null == newAprsView) {
+            Log.d("DEBUG", "Warning: Failed to create newAprsView for APRS packet: " + aprsPacket.toString());
+            return;
         }
 
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                TextView chatLog = findViewById(R.id.textChatLog);
-                chatLog.append(finalString + "\n");
+                LinearLayout aprsContainer = findViewById(R.id.aprsContainer);
+                aprsContainer.addView(newAprsView);
 
-                ScrollView textChatScrollView = findViewById(R.id.textChatScrollView);
-                textChatScrollView.fullScroll(View.FOCUS_DOWN);
+                ScrollView aprsScrollView = findViewById(R.id.aprsScrollView);
+                aprsScrollView.fullScroll(View.FOCUS_DOWN);
             }
         });
     }
@@ -553,10 +623,11 @@ public class MainActivity extends AppCompatActivity {
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
 
-        TextView chatLog = findViewById(R.id.textChatLog);
-        chatLog.append(callsign + " to " + targetCallsign + ": " + outText + "\n");
+        // TODO add a new APRS message view to aprsContainer
+        LinearLayout aprsContainer = findViewById(R.id.aprsContainer);
+        // chatLog.append(callsign + " to " + targetCallsign + ": " + outText + "\n");
 
-        ScrollView scrollView = findViewById(R.id.textChatScrollView);
+        ScrollView scrollView = findViewById(R.id.aprsScrollView);
         scrollView.fullScroll(View.FOCUS_DOWN);
 
         findViewById(R.id.textChatInput).requestFocus();

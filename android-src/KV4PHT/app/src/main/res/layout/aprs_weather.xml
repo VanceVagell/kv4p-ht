@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:layout_marginBottom="8dp"
+    android:gravity="start">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="start|center_vertical"
+        android:layout_marginBottom="2dp">
+
+        <TextView
+            android:id="@+id/fromCallsign"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="KV4P"
+            android:textColor="@color/primary"
+            android:textFontWeight="500"
+            android:textSize="12sp"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:id="@+id/timestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12:10pm"
+            android:textColor="@android:color/darker_gray"
+            android:textSize="12sp"
+            android:layout_marginRight="4dp" />
+
+        <ImageButton
+            android:id="@+id/senderPositionButton"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/ic_pin"
+            android:alpha="0.8"
+            android:contentDescription="Show sender's position"
+            android:onClick="senderPositionClicked"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/rounded_bubble"
+        android:orientation="vertical"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+
+            <LinearLayout
+                android:layout_width="64dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="start|center_vertical">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/ic_temp"
+                    android:alpha="0.8"
+                    android:contentDescription="Temperature"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:id="@+id/temperature"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="78.2"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="°"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="64dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="start|center_vertical">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/ic_humid"
+                    android:alpha="0.8"
+                    android:contentDescription="Humidity"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:id="@+id/humidity"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="98"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="%"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="start|center_vertical">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/ic_pressure"
+                    android:alpha="0.8"
+                    android:contentDescription="Air pressure"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:id="@+id/pressure"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="30.148"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="inHg"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start|center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="64dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="start|center_vertical">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/ic_rain"
+                    android:alpha="0.8"
+                    android:contentDescription="Rain"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:id="@+id/rain"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0.7"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="&quot;"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="64dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="start|center_vertical">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/ic_snow"
+                    android:alpha="0.8"
+                    android:contentDescription="Snow"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:id="@+id/snow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="&quot;"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="start|center_vertical">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:background="@drawable/ic_wind"
+                    android:alpha="0.8"
+                    android:contentDescription="Wind"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:id="@+id/wind"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="5"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="mph"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp"
+                    android:layout_marginRight="4dp"/>
+
+                <TextView
+                    android:id="wind_direction"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NE"
+                    android:textColor="@android:color/darker_gray"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
