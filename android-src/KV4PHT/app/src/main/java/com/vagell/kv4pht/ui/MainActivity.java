@@ -508,6 +508,11 @@ public class MainActivity extends AppCompatActivity {
 
             if (messagePacket.isAck()) {
                 aprsMessage.wasAcknowledged = true;
+                try {
+                    aprsMessage.msgNum = Integer.parseInt(messagePacket.getMessageNumber());
+                } catch (Exception e) {
+                    Log.d("DEBUG", "Warning: Bad message number in APRS ack, ignoring: " + messagePacket.getMessageNumber());
+                }
                 // Log.d("DEBUG", "Message ack received");
             } else {
                 aprsMessage.toCallsign = messagePacket.getTargetCallsign();
@@ -533,15 +538,16 @@ public class MainActivity extends AppCompatActivity {
                 if (aprsMessage.wasAcknowledged) {
                     // When this is an ack, we don't insert anything in the DB, we try to find that old message to ack it.
                     oldAPRSMessage = MainViewModel.appDb.aprsMessageDao().getMsgToAck(aprsMessage.fromCallsign, aprsMessage.msgNum);
-                }
-
-                if (null == oldAPRSMessage) {
-                    // Add a message
-                    MainViewModel.appDb.aprsMessageDao().insertAll(aprsMessage);
+                    if (null == oldAPRSMessage) {
+                        return;
+                    } else {
+                        // Ack an old message
+                        oldAPRSMessage.wasAcknowledged = true;
+                        MainViewModel.appDb.aprsMessageDao().update(oldAPRSMessage);
+                    }
                 } else {
-                    // Ack an old message
-                    oldAPRSMessage.wasAcknowledged = true;
-                    MainViewModel.appDb.aprsMessageDao().update(oldAPRSMessage);
+                    // Not an ack, add a message
+                    MainViewModel.appDb.aprsMessageDao().insertAll(aprsMessage);
                 }
 
                 viewModel.loadData();
