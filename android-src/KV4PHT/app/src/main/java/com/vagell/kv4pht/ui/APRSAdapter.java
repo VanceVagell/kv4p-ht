@@ -222,7 +222,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             if (null == textViewTemperature) {
                 return;
             }
-            textViewTimestamp.setText(String.format(Locale.US, "%.1f", temperature));
+            textViewTemperature.setText(String.format(Locale.US, "%.1f", temperature));
         }
 
         public void setHumidity(double humidity) {
