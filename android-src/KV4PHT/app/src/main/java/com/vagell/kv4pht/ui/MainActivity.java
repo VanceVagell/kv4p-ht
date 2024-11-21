@@ -493,7 +493,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (null != weatherField) { // APRS "weather" (i.e. any message with weather data attached)
             aprsMessage.type = APRSMessage.WEATHER_TYPE;
-            aprsMessage.temperature = (null == weatherField.getTemp()) ? 0 : weatherField.getTemp(); // TODO show a dash or something instead of "0" when a value is missing
+            aprsMessage.temperature = (null == weatherField.getTemp()) ? 0 : weatherField.getTemp();
             aprsMessage.humidity = (null == weatherField.getHumidity()) ? 0 : weatherField.getHumidity();
             aprsMessage.pressure = (null == weatherField.getPressure()) ? 0 : weatherField.getPressure();
             aprsMessage.rain = (null == weatherField.getRainLast24Hours()) ? 0 : weatherField.getRainLast24Hours(); // TODO don't ignore other rain measurements
@@ -509,9 +509,14 @@ public class MainActivity extends AppCompatActivity {
             if (messagePacket.isAck()) {
                 aprsMessage.wasAcknowledged = true;
                 try {
-                    aprsMessage.msgNum = Integer.parseInt(messagePacket.getMessageNumber());
+                    String msgNumStr = messagePacket.getMessageNumber();
+                    if (msgNumStr != null) {
+                        aprsMessage.msgNum = Integer.parseInt(msgNumStr.trim());
+                    }
                 } catch (Exception e) {
-                    Log.d("DEBUG", "Warning: Bad message number in APRS ack, ignoring: " + messagePacket.getMessageNumber());
+                    Log.d("DEBUG", "Warning: Bad message number in APRS ack, ignoring: '" + messagePacket.getMessageNumber() + "'");
+                    e.printStackTrace();
+                    return;
                 }
                 // Log.d("DEBUG", "Message ack received");
             } else {
@@ -539,6 +544,7 @@ public class MainActivity extends AppCompatActivity {
                     // When this is an ack, we don't insert anything in the DB, we try to find that old message to ack it.
                     oldAPRSMessage = MainViewModel.appDb.aprsMessageDao().getMsgToAck(aprsMessage.fromCallsign, aprsMessage.msgNum);
                     if (null == oldAPRSMessage) {
+                        Log.d("DEBUG", "Can't ack unknown APRS message with number: " + aprsMessage.msgNum);
                         return;
                     } else {
                         // Ack an old message

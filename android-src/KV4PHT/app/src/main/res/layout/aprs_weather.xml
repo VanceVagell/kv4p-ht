@@ -79,7 +79,7 @@
                     android:id="@+id/temperature"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="78.2"
+                    android:text="?"
                     android:textColor="@android:color/darker_gray"
                     android:textSize="14sp" />
 
@@ -110,7 +110,7 @@
                     android:id="@+id/humidity"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="98"
+                    android:text="?"
                     android:textColor="@android:color/darker_gray"
                     android:textSize="14sp" />
 
@@ -140,7 +140,7 @@
                     android:id="@+id/pressure"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="10051.000"
+                    android:text="?"
                     android:textColor="@android:color/darker_gray"
                     android:textSize="14sp"
                     android:layout_marginRight="4dp"/>
@@ -178,7 +178,7 @@
                     android:id="@+id/rain"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="0.7"
+                    android:text="?"
                     android:textColor="@android:color/darker_gray"
                     android:textSize="14sp" />
 
@@ -239,7 +239,7 @@
                     android:id="@+id/wind"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="5"
+                    android:text="?"
                     android:textColor="@android:color/darker_gray"
                     android:textSize="14sp"
                     android:layout_marginRight="4dp"/>
@@ -256,7 +256,7 @@
                     android:id="@+id/windDirection"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="NE"
+                    android:text=""
                     android:textColor="@android:color/darker_gray"
                     android:textSize="14sp" />
             </LinearLayout>
