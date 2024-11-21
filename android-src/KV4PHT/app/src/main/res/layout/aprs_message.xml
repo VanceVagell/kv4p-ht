@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:layout_marginBottom="8dp"
+    android:layout_marginBottom="16dp"
     android:gravity="start">
 
     <LinearLayout
@@ -21,7 +21,55 @@
             android:text="KV4P"
             android:textColor="@color/primary"
             android:textFontWeight="500"
-            android:textSize="12sp" />
+            android:textSize="14sp"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="to "
+            android:textColor="@android:color/darker_gray"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/toCallsign"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CQ"
+            android:textColor="@color/primary"
+            android:textFontWeight="500"
+            android:textSize="14sp"
+            android:layout_marginRight="4dp" />
+
+        <TextView
+            android:id="@+id/timestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="12:10pm"
+            android:textColor="@android:color/darker_gray"
+            android:textSize="14sp"
+            android:layout_marginRight="4dp" />
+
+
+        <ImageButton
+            android:id="@+id/senderPositionButton"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:background="@drawable/ic_pin"
+            android:alpha="0.8"
+            android:layout_marginRight="4dp"
+            android:contentDescription="Show sender's position"
+            android:visibility="gone"/>
+
+        <ImageView
+            android:id="@+id/msgAck"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:background="@drawable/ic_check"
+            android:alpha="0.8"
+            android:contentDescription="Checkmark, message acknowledged"
+            android:visibility="gone"/>
+
 
     </LinearLayout>
 
@@ -34,66 +82,13 @@
         android:paddingRight="12dp">
 
         <TextView
-            android:id="@+id/messageText"
+            android:id="@+id/messageBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="The quick brown fox jumped over the lazy dog."
             android:textColor="@color/primary"
-            android:textSize="16sp"
+            android:textSize="20sp"
             android:padding="8dp" />
-
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="end|center_vertical"
-        android:paddingTop="4dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="to "
-            android:textColor="@android:color/darker_gray"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/toCallsign"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="CQ"
-            android:textColor="@color/primary"
-            android:textFontWeight="500"
-            android:textSize="12sp"
-            android:layout_marginRight="4dp" />
-
-        <TextView
-            android:id="@+id/timestamp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="12:10pm"
-            android:textColor="@android:color/darker_gray"
-            android:textSize="12sp"
-            android:layout_marginRight="4dp" />
-
-
-        <ImageButton
-            android:id="@+id/senderPositionButton"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
-            android:background="@drawable/ic_pin"
-            android:alpha="0.8"
-            android:layout_marginRight="4dp"
-            android:contentDescription="Show sender's position"
-            android:onClick="senderPositionClicked"/>
-
-        <ImageView
-            android:layout_width="12dp"
-            android:layout_height="12dp"
-            android:background="@drawable/ic_check"
-            android:alpha="0.8"
-            android:contentDescription="Checkmark, message acknowledged"/>
 
     </LinearLayout>
 </LinearLayout>

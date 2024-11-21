@@ -242,23 +242,16 @@
                 android:layout_marginRight="24dp"
                 android:layout_marginTop="16dp"> <!-- displayed when user taps the bottom nav -->
 
-                <ScrollView
-                    android:id="@+id/aprsScrollView"
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/aprsRecyclerView"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:layout_weight="1">
 
-                    <LinearLayout
-                        android:id="@+id/aprsContainer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
+                    <!-- APRS messages go here -->
 
-                        <!-- APRS type-specific views will be added here. -->
-
-                    </LinearLayout>
-                </ScrollView>
+                </androidx.recyclerview.widget.RecyclerView>
 
                 <View
                     android:layout_width="fill_parent"

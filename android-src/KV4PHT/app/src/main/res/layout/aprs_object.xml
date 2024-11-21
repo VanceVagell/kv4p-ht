@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:layout_marginBottom="8dp"
+    android:layout_marginBottom="16dp"
     android:gravity="start">
 
     <LinearLayout
@@ -21,7 +21,7 @@
             android:text="KV4P"
             android:textColor="@color/primary"
             android:textFontWeight="500"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:layout_marginRight="4dp" />
 
         <TextView
@@ -30,7 +30,7 @@
             android:layout_height="wrap_content"
             android:text="12:10pm"
             android:textColor="@android:color/darker_gray"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:layout_marginRight="4dp" />
 
         <TextView
@@ -38,7 +38,7 @@
             android:layout_height="wrap_content"
             android:text="&quot;"
             android:textColor="@android:color/darker_gray"
-            android:textSize="12sp" />
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/objName"
@@ -46,33 +46,35 @@
             android:layout_height="wrap_content"
             android:text="147.225+H"
             android:textColor="@color/primary"
-            android:textSize="12sp" />
+            android:textSize="14sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="&quot;"
             android:textColor="@android:color/darker_gray"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:layout_marginRight="4dp"/>
 
         <ImageButton
             android:id="@+id/senderPositionButton"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:background="@drawable/ic_pin"
             android:alpha="0.8"
             android:contentDescription="Show sender's position"
-            android:onClick="senderPositionClicked"/>
+            android:visibility="gone"/>
 
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/commentHolder"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="start|center_vertical"
-        android:layout_marginBottom="2dp">
+        android:layout_marginBottom="2dp"
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/comment"
@@ -81,6 +83,7 @@
             android:text="50m Net Th9PM Mg1StTu"
             android:textColor="@android:color/darker_gray"
             android:textStyle="italic"
-            android:textSize="12sp" />
+            android:textSize="14sp"
+            android:paddingLeft="24dp"/>
     </LinearLayout>
 </LinearLayout>

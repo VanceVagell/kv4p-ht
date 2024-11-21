@@ -31,6 +31,7 @@ import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.os.Binder;
@@ -521,6 +522,10 @@ public class RadioAudioService extends Service {
     }
 
     private void initAudioTrack() {
+        if (audioTrack != null) {
+            audioTrack.release();
+            audioTrack = null;
+        }
         audioTrack = new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -533,7 +538,9 @@ public class RadioAudioService extends Service {
                         .build())
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .setBufferSizeInBytes(minBufferSize)
+                .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
                 .build();
+        audioTrack.setAuxEffectSendLevel(0.0f);
 
         restartAudioPrebuffer();
 

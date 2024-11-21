@@ -54,8 +54,6 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -67,6 +65,7 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
+import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -82,15 +81,17 @@ import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.ObjectField;
 import com.vagell.kv4pht.aprs.parser.PositionField;
+import com.vagell.kv4pht.aprs.parser.Utilities;
 import com.vagell.kv4pht.aprs.parser.WeatherField;
+import com.vagell.kv4pht.data.APRSMessage;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
-import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -132,8 +133,10 @@ public class MainActivity extends AppCompatActivity {
     public static final int REQUEST_FIRMWARE = 3;
 
     private MainViewModel viewModel;
-    private RecyclerView recyclerView;
-    private MemoriesAdapter adapter;
+    private RecyclerView memoriesRecyclerView;
+    private MemoriesAdapter memoriesAdapter;
+    private RecyclerView aprsRecyclerView;
+    private APRSAdapter aprsAdapter;
 
     private ThreadPoolExecutor threadPoolExecutor = null;
 
@@ -169,9 +172,9 @@ public class MainActivity extends AppCompatActivity {
         binding.setVariable(BR.viewModel, viewModel);
 
         // Prepare a RecyclerView for the list of channel memories
-        recyclerView = findViewById(R.id.memoriesList);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new MemoriesAdapter(new MemoriesAdapter.MemoryListener() {
+        memoriesRecyclerView = findViewById(R.id.memoriesList);
+        memoriesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        memoriesAdapter = new MemoriesAdapter(new MemoriesAdapter.MemoryListener() {
             @Override
             public void onMemoryClick(ChannelMemory memory) {
                 // Actually tune to it.
@@ -186,7 +189,7 @@ public class MainActivity extends AppCompatActivity {
 
                 // Highlight the tapped memory, unhighlight all the others.
                 viewModel.highlightMemory(memory);
-                adapter.notifyDataSetChanged();
+                memoriesAdapter.notifyDataSetChanged();
             }
 
             @Override
@@ -199,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                adapter.notifyDataSetChanged();
+                                memoriesAdapter.notifyDataSetChanged();
 
                                 if (radioAudioService != null) {
                                     radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
@@ -222,9 +225,9 @@ public class MainActivity extends AppCompatActivity {
                 startActivityForResult(intent, REQUEST_EDIT_MEMORY);
             }
         });
-        recyclerView.setAdapter(adapter);
+        memoriesRecyclerView.setAdapter(memoriesAdapter);
 
-        // Observe the LiveData in MainViewModel (so the RecyclerView can populate with the memories)
+        // Observe the channel memories LiveData in MainViewModel (so the RecyclerView can populate with the memories)
         viewModel.getChannelMemories().observe(this, new Observer<List<ChannelMemory>>() {
             @Override
             public void onChanged(List<ChannelMemory> channelMemories) {
@@ -236,8 +239,28 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                adapter.setMemoriesList(channelMemories);
-                adapter.notifyDataSetChanged();
+                memoriesAdapter.setMemoriesList(channelMemories);
+                memoriesAdapter.notifyDataSetChanged();
+            }
+        });
+
+        // Prepare a RecyclerView for the list APRS messages we've received in the past
+        aprsRecyclerView = findViewById(R.id.aprsRecyclerView);
+        aprsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        aprsAdapter = new APRSAdapter();
+        aprsRecyclerView.setAdapter(aprsAdapter);
+
+        // Observe the APRS messages LiveData in MainViewModel (so the RecyclerView can populate with the APRS messages)
+        viewModel.getAPRSMessages().observe(this, new Observer<List<APRSMessage>>() {
+            @Override
+            public void onChanged(List<APRSMessage> aprsMessages) {
+                aprsAdapter.setAPRSMessageList(aprsMessages);
+                aprsAdapter.notifyDataSetChanged();
+
+                // Scroll to the bottom when a new message is added
+                if (aprsMessages != null && !aprsMessages.isEmpty()) {
+                    aprsRecyclerView.scrollToPosition(aprsMessages.size() - 1);
+                }
             }
         });
 
@@ -431,12 +454,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleChatPacket(APRSPacket aprsPacket) {
-        View newAprsView = null;
+        // We use duck-typing for APRS messages since the spec is pretty loose with all the ways
+        // you can define different fields and values. Once we know the type, we set aprsMessage.type.
 
+        APRSMessage aprsMessage = new APRSMessage();
         InformationField infoField = aprsPacket.getAprsInformation();
         WeatherField weatherField = (WeatherField) infoField.getAprsData(APRSTypes.T_WX);
         PositionField positionField = (PositionField) infoField.getAprsData(APRSTypes.T_POSITION);
         ObjectField objectField = (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT);
+        aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
+
+        // Get the fromCallsign (all APRS messages must have this)
+        aprsMessage.fromCallsign = aprsPacket.getSourceCall();
+
+        // Get the position, if included.
+        if (null != positionField) {
+            aprsMessage.positionLat = positionField.getPosition().getLatitude();
+            aprsMessage.positionLong = positionField.getPosition().getLongitude();
+        }
 
         // Try to find a comment (could be at multiple levels in the packet).
         String comment = aprsPacket.getComment();
@@ -452,70 +487,71 @@ public class MainActivity extends AppCompatActivity {
         if (null != weatherField && (null == comment || comment.trim().length() == 0)) {
             comment = weatherField.getComment();
         }
+        if (null != comment && comment.trim().length() > 0) {
+            aprsMessage.comment = comment;
+        }
 
         if (null != weatherField) { // APRS "weather" (i.e. any message with weather data attached)
-            // TODO
+            aprsMessage.type = APRSMessage.WEATHER_TYPE;
+            aprsMessage.temperature = (null == weatherField.getTemp()) ? 0 : weatherField.getTemp(); // TODO show a dash or something instead of "0" when a value is missing
+            aprsMessage.humidity = (null == weatherField.getHumidity()) ? 0 : weatherField.getHumidity();
+            aprsMessage.pressure = (null == weatherField.getPressure()) ? 0 : weatherField.getPressure();
+            aprsMessage.rain = (null == weatherField.getRainLast24Hours()) ? 0 : weatherField.getRainLast24Hours(); // TODO don't ignore other rain measurements
+            aprsMessage.snow = (null == weatherField.getSnowfallLast24Hours()) ? 0 : weatherField.getSnowfallLast24Hours();
+            aprsMessage.windForce = (null == weatherField.getWindSpeed()) ? 0 : weatherField.getWindSpeed();
+            aprsMessage.windDir = (null == weatherField.getWindDirection()) ? "" : Utilities.degressToCardinal(weatherField.getWindDirection());
 
-            if (null != comment && comment.trim().length() != 0) {
-                Log.d("DEBUG", "Weather packet has comment");
-            }
-
-            Log.d("DEBUG", "Weather packet received");
+            // Log.d("DEBUG", "Weather packet received");
         } else if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
+            aprsMessage.type = APRSMessage.MESSAGE_TYPE;
             MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
 
-            Log.d("DEBUG", "Message packet received");
-            // finalString = aprsPacket.getSourceCall() + " to " + messagePacket.getTargetCallsign() + ": " + messagePacket.getMessageBody();
-
             if (messagePacket.isAck()) {
-                // TODO Add a checkmark to ACK'd messages we sent.
-                Log.d("DEBUG", "Message ack received");
-                return;
+                aprsMessage.wasAcknowledged = true;
+                // Log.d("DEBUG", "Message ack received");
+            } else {
+                aprsMessage.toCallsign = messagePacket.getTargetCallsign();
+                aprsMessage.msgBody = messagePacket.getMessageBody();
+                // Log.d("DEBUG", "Message packet received");
             }
         } else if (infoField.getDataTypeIdentifier() == ';') { // APRS "object"
+            aprsMessage.type = APRSMessage.OBJECT_TYPE;
             if (null != objectField) {
-                Log.d("DEBUG", "Object packet received");
-
-                if (null == comment || comment.trim().length() == 0) { // If main packet has no comment, check for object-specific comment
-                    comment = objectField.getComment();
-                }
-                if (null != comment && comment.trim().length() != 0) {
-                    Log.d("DEBUG", "Object packet has comment");
-                }
-
-                // TODO
-            }
-        } else {
-            if (positionField != null) { // APRS "position" (i.e. anything else with a position)
-                Log.d("DEBUG", "Position packet received");
-
-                if (null != comment && comment.trim().length() != 0) {
-                    Log.d("DEBUG", "Position packet has comment");
-                }
-                // TODO
-            } else { // Unknown packet type
-                if (null != comment && comment.trim().length() != 0) {
-                    Log.d("DEBUG", "Unknown packet with comment received");
-                    // TODO
-                } else {
-                    Log.d("DEBUG", "Unknown packet WITHOUT comment received");
-                }
+                aprsMessage.objName = objectField.getObjectName();
+                // Log.d("DEBUG", "Object packet received");
             }
         }
 
-        if (null == newAprsView) {
-            Log.d("DEBUG", "Warning: Failed to create newAprsView for APRS packet: " + aprsPacket.toString());
+        if (threadPoolExecutor == null) {
             return;
         }
 
-        runOnUiThread(new Runnable() {
+        threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                LinearLayout aprsContainer = findViewById(R.id.aprsContainer);
-                aprsContainer.addView(newAprsView);
+                APRSMessage oldAPRSMessage = null;
+                if (aprsMessage.wasAcknowledged) {
+                    // When this is an ack, we don't insert anything in the DB, we try to find that old message to ack it.
+                    oldAPRSMessage = MainViewModel.appDb.aprsMessageDao().getMsgToAck(aprsMessage.fromCallsign, aprsMessage.msgNum);
+                }
 
-                ScrollView aprsScrollView = findViewById(R.id.aprsScrollView);
-                aprsScrollView.fullScroll(View.FOCUS_DOWN);
+                if (null == oldAPRSMessage) {
+                    // Add a message
+                    MainViewModel.appDb.aprsMessageDao().insertAll(aprsMessage);
+                } else {
+                    // Ack an old message
+                    oldAPRSMessage.wasAcknowledged = true;
+                    MainViewModel.appDb.aprsMessageDao().update(oldAPRSMessage);
+                }
+
+                viewModel.loadData();
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        aprsAdapter.notifyDataSetChanged();
+                    }
+                });
             }
         });
     }
@@ -623,12 +659,32 @@ public class MainActivity extends AppCompatActivity {
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
 
-        // TODO add a new APRS message view to aprsContainer
-        LinearLayout aprsContainer = findViewById(R.id.aprsContainer);
-        // chatLog.append(callsign + " to " + targetCallsign + ": " + outText + "\n");
+        if (threadPoolExecutor == null) {
+            return;
+        }
 
-        ScrollView scrollView = findViewById(R.id.aprsScrollView);
-        scrollView.fullScroll(View.FOCUS_DOWN);
+        final APRSMessage aprsMessage = new APRSMessage();
+        aprsMessage.type = APRSMessage.MESSAGE_TYPE;
+        aprsMessage.fromCallsign = callsign.toUpperCase().trim();
+        aprsMessage.toCallsign = targetCallsign.toUpperCase().trim();
+        aprsMessage.msgBody = outText.trim();
+        aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
+        // TODO include position once we add GPS support, if the user has enabled this setting
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                MainViewModel.appDb.aprsMessageDao().insertAll(aprsMessage);
+                viewModel.loadData();
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        aprsAdapter.notifyDataSetChanged();
+                    }
+                });
+            }
+        });
 
         findViewById(R.id.textChatInput).requestFocus();
     }
@@ -1021,7 +1077,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Unhighlight all memory rows, since this is a simplex frequency.
         viewModel.highlightMemory(null);
-        adapter.notifyDataSetChanged();
+        memoriesAdapter.notifyDataSetChanged();
     }
 
     /**
@@ -1272,7 +1328,8 @@ public class MainActivity extends AppCompatActivity {
     private void showUSBSnackbar() {
         CharSequence snackbarMsg = "kv4p HT radio not found, plugged in?";
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-            .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+            .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
+            .setAnchorView(findViewById(R.id.bottomNavigationView));
 
         // Make the text of the snackbar larger.
         TextView snackbarActionTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
@@ -1297,7 +1354,8 @@ public class MainActivity extends AppCompatActivity {
                     public void onClick(View view) {
                         startFirmwareActivity();
                     }
-                });
+                })
+                .setAnchorView(findViewById(R.id.bottomNavigationView));
 
         // Make the text of the snackbar larger.
         TextView snackbarActionTextView = (TextView) versionSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
@@ -1445,7 +1503,7 @@ public class MainActivity extends AppCompatActivity {
             case REQUEST_ADD_MEMORY:
                 if (resultCode == Activity.RESULT_OK) {
                     viewModel.loadData();
-                    adapter.notifyDataSetChanged();
+                    memoriesAdapter.notifyDataSetChanged();
                 }
                 break;
             case REQUEST_EDIT_MEMORY:
@@ -1461,7 +1519,7 @@ public class MainActivity extends AppCompatActivity {
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
-                                    adapter.notifyDataSetChanged();
+                                    memoriesAdapter.notifyDataSetChanged();
                                     // Tune to the edited memory to force any changes to be applied (e.g. new tone
                                     // or frequency).
                                     List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();

@@ -25,6 +25,7 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.room.Room;
 
+import com.vagell.kv4pht.data.APRSMessage;
 import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.data.ChannelMemory;
 
@@ -39,6 +40,9 @@ public class MainViewModel extends ViewModel {
 
     // LiveData holding the list of ChannelMemory objects
     private final MutableLiveData<List<ChannelMemory>> channelMemories = new MutableLiveData<>();
+
+    // LiveData holding the list of APRSMessage objects
+    private final MutableLiveData<List<APRSMessage>> aprsMessages = new MutableLiveData<>();
 
     private MainViewModelCallback callback;
 
@@ -57,15 +61,17 @@ public class MainViewModel extends ViewModel {
 
     public void loadData() {
         if (appDb == null) {
-            appDb = Room.databaseBuilder(activity.getApplicationContext(),
-                    AppDatabase.class, "kv4pht-db").build();
+            appDb = AppDatabase.getInstance(activity.getApplicationContext());
         }
 
-        // Channel memories
         Executor executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
-            List<ChannelMemory> data = appDb.channelMemoryDao().getAll();
-            channelMemories.postValue(data);
+            List<ChannelMemory> memoryData = appDb.channelMemoryDao().getAll();
+            channelMemories.postValue(memoryData);
+
+            List<APRSMessage> aprsData = appDb.aprsMessageDao().getAll();
+            aprsMessages.postValue(aprsData);
+
             if (callback != null) {
                 callback.onLoadDataDone();
             }
@@ -74,6 +80,10 @@ public class MainViewModel extends ViewModel {
 
     public LiveData<List<ChannelMemory>> getChannelMemories() {
         return channelMemories;
+    }
+
+    public LiveData<List<APRSMessage>> getAPRSMessages() {
+        return aprsMessages;
     }
 
     public void highlightMemory(ChannelMemory memory) {
