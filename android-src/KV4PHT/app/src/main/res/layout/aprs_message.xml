@@ -88,7 +88,8 @@
             android:text="The quick brown fox jumped over the lazy dog."
             android:textColor="@color/primary"
             android:textSize="20sp"
-            android:padding="8dp" />
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"/>
 
     </LinearLayout>
 </LinearLayout>

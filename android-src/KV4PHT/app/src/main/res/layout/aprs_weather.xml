@@ -46,34 +46,34 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="70dp"
         android:background="@drawable/rounded_bubble"
         android:orientation="vertical"
-        android:paddingTop="8dp"
         android:paddingLeft="8dp"
+        android:paddingTop="8dp"
         android:paddingRight="8dp"
         android:paddingBottom="8dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
             android:gravity="start|center_vertical"
-            android:orientation="horizontal"
-            android:layout_marginBottom="4dp">
+            android:orientation="horizontal">
 
             <LinearLayout
                 android:layout_width="80dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="start|center_vertical">
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:background="@drawable/ic_temp"
+                    android:layout_marginRight="4dp"
                     android:alpha="0.8"
-                    android:contentDescription="Temperature"
-                    android:layout_marginRight="4dp"/>
+                    android:background="@drawable/ic_temp"
+                    android:contentDescription="Temperature" />
 
                 <TextView
                     android:id="@+id/temperature"
@@ -95,16 +95,16 @@
             <LinearLayout
                 android:layout_width="80dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="start|center_vertical">
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:background="@drawable/ic_humid"
+                    android:layout_marginRight="4dp"
                     android:alpha="0.8"
-                    android:contentDescription="Humidity"
-                    android:layout_marginRight="4dp"/>
+                    android:background="@drawable/ic_humid"
+                    android:contentDescription="Humidity" />
 
                 <TextView
                     android:id="@+id/humidity"
@@ -125,25 +125,25 @@
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="start|center_vertical">
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:background="@drawable/ic_pressure"
+                    android:layout_marginRight="4dp"
                     android:alpha="0.8"
-                    android:contentDescription="Air pressure"
-                    android:layout_marginRight="4dp"/>
+                    android:background="@drawable/ic_pressure"
+                    android:contentDescription="Air pressure" />
 
                 <TextView
                     android:id="@+id/pressure"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginRight="4dp"
                     android:text="?"
                     android:textColor="@color/primary"
-                    android:textSize="16sp"
-                    android:layout_marginRight="4dp"/>
+                    android:textSize="16sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -163,16 +163,16 @@
             <LinearLayout
                 android:layout_width="80dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="start|center_vertical">
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:background="@drawable/ic_rain"
+                    android:layout_marginRight="4dp"
                     android:alpha="0.8"
-                    android:contentDescription="Rain"
-                    android:layout_marginRight="4dp"/>
+                    android:background="@drawable/ic_rain"
+                    android:contentDescription="Rain" />
 
                 <TextView
                     android:id="@+id/rain"
@@ -194,16 +194,16 @@
             <LinearLayout
                 android:layout_width="80dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="start|center_vertical">
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:background="@drawable/ic_snow"
+                    android:layout_marginRight="4dp"
                     android:alpha="0.8"
-                    android:contentDescription="Snow"
-                    android:layout_marginRight="4dp"/>
+                    android:background="@drawable/ic_snow"
+                    android:contentDescription="Snow" />
 
                 <TextView
                     android:id="@+id/snow"
@@ -224,33 +224,33 @@
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="start|center_vertical">
+                android:gravity="start|center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:background="@drawable/ic_wind"
+                    android:layout_marginRight="4dp"
                     android:alpha="0.8"
-                    android:contentDescription="Wind"
-                    android:layout_marginRight="4dp"/>
+                    android:background="@drawable/ic_wind"
+                    android:contentDescription="Wind" />
 
                 <TextView
                     android:id="@+id/wind"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginRight="4dp"
                     android:text="?"
                     android:textColor="@color/primary"
-                    android:textSize="16sp"
-                    android:layout_marginRight="4dp"/>
+                    android:textSize="16sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginRight="4dp"
                     android:text="mph"
                     android:textColor="@color/primary"
-                    android:textSize="16sp"
-                    android:layout_marginRight="4dp"/>
+                    android:textSize="16sp" />
 
                 <TextView
                     android:id="@+id/windDirection"
