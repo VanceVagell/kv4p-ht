@@ -154,7 +154,7 @@ public class FirmwareActivity extends AppCompatActivity {
                         } else {
                             Log.d("DEBUG", "Error: Flashing firmware failed.");
 
-                            CharSequence snackbarMsg = "Failed to flash firmware";
+                            CharSequence snackbarMsg = "Failed to flash firmware. If it keeps failing, use kv4p.com web flasher.";
                             errorSnackbar = Snackbar.make(ctx, findViewById(R.id.firmwareTopLevelView), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                                     .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
                             errorSnackbar.setAction("Retry", new View.OnClickListener() {
