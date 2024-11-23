@@ -89,7 +89,8 @@
             android:textColor="@color/primary"
             android:textSize="20sp"
             android:paddingLeft="8dp"
-            android:paddingRight="8dp"/>
+            android:paddingRight="8dp"
+            android:textIsSelectable="true"/>
 
     </LinearLayout>
 </LinearLayout>
