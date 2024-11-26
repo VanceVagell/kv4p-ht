@@ -95,7 +95,7 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
   - **Transmit Frequency**: 8 ASCII characters (e.g., `146.5200`).
   - **Receive Frequency**: 8 ASCII characters.
   - **Tone**: 2 ASCII characters representing an integer (e.g., `00` for none).
-  - **Squelch**: 1 ASCII character (`0` or `1`).
+  - **Squelch**: 1 ASCII character (`0` thru `8`).
 - **Usage**:
   - Send the delimiter.
   - Send the command code `0x03`.
@@ -108,7 +108,7 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
 | Transmit Frequency    | 8      | Frequency in MHz (e.g., `146.5200`)                  |
 | Receive Frequency     | 8      | Frequency in MHz                                     |
 | Tone                  | 2      | CTCSS tone frequency code (`00` for none)            |
-| Squelch               | 1      | `0` for off, `1` for on                              |
+| Squelch               | 1      | `0` through `8` (off through maximum squelch)        |
 
 ### 3.4. COMMAND_FILTERS (0x04)
 
