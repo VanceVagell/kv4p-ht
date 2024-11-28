@@ -527,11 +527,101 @@
           "label": "DNP",
           "name": "${DNP}",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "#",
+          "name": "${ITEM_NUMBER}",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Alternate LCSC",
+          "name": "Alternate LCSC",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Digi-Key",
+          "name": "Digi-Key",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Digikey",
+          "name": "Digikey",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Farnell",
+          "name": "Farnell",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "LCSC",
+          "name": "LCSC",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "MFN",
+          "name": "MFN",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "MPN",
+          "name": "MPN",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Manufacturer",
+          "name": "Manufacturer",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Mouser",
+          "name": "Mouser",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Notes",
+          "name": "Notes",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Part Number",
+          "name": "Part Number",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "RS",
+          "name": "RS",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "generic",
+          "name": "generic",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Description",
+          "name": "Description",
+          "show": false
         }
       ],
       "filter_string": "",
       "group_symbols": true,
-      "name": "Grouped By Value",
+      "name": "",
       "sort_asc": true,
       "sort_field": "Reference"
     },

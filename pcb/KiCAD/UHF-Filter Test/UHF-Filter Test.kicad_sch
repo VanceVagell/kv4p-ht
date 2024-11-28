@@ -996,7 +996,7 @@
 	)
 	(text "Ghost parts are alternate footprints.  Filter design at:\nhttps://github.com/VanceVagell/kv4p-ht/issues/88#issuecomment-2499352637"
 		(exclude_from_sim no)
-		(at 172.085 85.09 0)
+		(at 77.47 77.47 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -1004,316 +1004,28 @@
 		)
 		(uuid "04ff3fe8-8791-40f4-b61f-49be4a200115")
 	)
-	(symbol
-		(lib_id "Device:L_Small")
-		(at 164.465 64.77 90)
-		(unit 1)
+	(text "UHF:\n    0.91pF   4.7pF    3.6pF\n    15nH    9.1nH    9.1nH\n3.3pF    6.2pF    5.1pF    1.6pF"
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "067d19a4-ffb6-46a3-ac54-48c52c177fde")
-		(property "Reference" "L3"
-			(at 164.465 59.69 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
+		(at 81.28 88.9 0)
+		(effects
+			(font
+				(size 1.27 1.27)
 			)
+			(justify left)
 		)
-		(property "Value" "43nH"
-			(at 164.465 62.23 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digikey" ""
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Notes" ""
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "generic" ""
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C574016"
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Part Number" "SWI0603F-43NG"
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Alternate LCSC" "C1330253 (0805)"
-			(at 164.465 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "2"
-			(uuid "2d818de4-7a85-4d82-9695-8edd0d63488a")
-		)
-		(pin "1"
-			(uuid "d9b9eaf9-5e40-4109-9d7e-b52a8f7bc3d1")
-		)
-		(instances
-			(project "kv4p-ht"
-				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "L3")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:C_Small")
-		(at 168.275 71.12 180)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "13635954-d22a-4885-baf7-8250cf82c203")
-		(property "Reference" "C1"
-			(at 171.45 69.8435 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Value" "18pF"
-			(at 171.45 72.3835 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Farnell" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Mouser" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "RS" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digi-Key" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "MPN" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "MFN" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digikey" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Notes" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "generic" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C1549"
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Part Number" "Ya basic."
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Alternate LCSC" ""
-			(at 168.275 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "49801e85-9a39-4c78-9844-4973e478c654")
-		)
-		(pin "2"
-			(uuid "79c4514c-9b70-47e9-b598-5caa3278c758")
-		)
-		(instances
-			(project "kv4p-ht"
-				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "C1")
-					(unit 1)
-				)
-			)
-		)
+		(uuid "427213e5-7209-4fa2-9f32-5a086997a983")
 	)
 	(symbol
 		(lib_id "Device:L_Small")
-		(at 182.245 67.31 90)
+		(at 173.355 67.31 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
 		(on_board yes)
 		(dnp yes)
-		(uuid "1e3e35a9-3d47-4d25-8355-9fe80961f49e")
-		(property "Reference" "L6"
-			(at 182.245 66.04 90)
+		(uuid "0bdef8df-22ba-4b41-ab17-8cb70d2402d2")
+		(property "Reference" "L16"
+			(at 173.355 66.04 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1321,128 +1033,7 @@
 			)
 		)
 		(property "Value" "~"
-			(at 182.245 64.77 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digikey" ""
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Notes" ""
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "generic" ""
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" ""
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Part Number" ""
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Alternate LCSC" ""
-			(at 182.245 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "2"
-			(uuid "9ab31c8e-400c-4c9a-babe-50a9a289353a")
-		)
-		(pin "1"
-			(uuid "e3301e64-1ff8-4d33-8775-97f0370db231")
-		)
-		(instances
-			(project "kv4p-ht"
-				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "L6")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:L_Small")
-		(at 164.465 67.31 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom no)
-		(on_board yes)
-		(dnp yes)
-		(uuid "1e440d5d-9d53-4989-a2be-f2550bce350e")
-		(property "Reference" "L4"
-			(at 164.465 66.04 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "~"
-			(at 164.465 64.77 90)
+			(at 173.355 64.77 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1450,7 +1041,7 @@
 			)
 		)
 		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1459,7 +1050,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1468,7 +1059,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1477,7 +1068,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1486,7 +1077,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1495,7 +1086,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1504,7 +1095,7 @@
 			)
 		)
 		(property "LCSC" ""
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1513,7 +1104,7 @@
 			)
 		)
 		(property "Part Number" ""
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1522,7 +1113,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 164.465 67.31 0)
+			(at 173.355 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1531,15 +1122,15 @@
 			)
 		)
 		(pin "2"
-			(uuid "2200e2c1-4389-4884-b3ae-4d88b2a7d5f4")
+			(uuid "ba22b35c-20bb-4c00-8706-cf80335ad72d")
 		)
 		(pin "1"
-			(uuid "6ae68747-ac6f-4305-b46d-cc85f6c46de5")
+			(uuid "b85e683c-583b-4beb-a756-80a629dcd842")
 		)
 		(instances
-			(project "kv4p-ht"
+			(project "Filter Test"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "L4")
+					(reference "L16")
 					(unit 1)
 				)
 			)
@@ -1547,16 +1138,16 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 182.245 52.705 90)
+		(at 173.355 52.705 90)
 		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "236bd988-fb06-4880-a226-1b13b4671cd0")
-		(property "Reference" "C31"
-			(at 180.34 48.26 90)
+		(uuid "1826e3a8-c7c0-462c-8afd-0360bcf94b44")
+		(property "Reference" "C29"
+			(at 171.45 48.26 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1564,8 +1155,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "11pF"
-			(at 179.705 50.165 90)
+		(property "Value" "4.7pF"
+			(at 170.815 50.165 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1574,7 +1165,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 182.245 52.705 0)
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1583,7 +1174,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 182.245 52.705 0)
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1592,7 +1183,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 182.245 52.705 0)
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1601,7 +1192,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 182.245 52.705 0)
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1610,7 +1201,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 182.245 52.705 0)
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1619,7 +1210,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 182.245 52.705 0)
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1627,8 +1218,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C527000"
-			(at 182.245 52.705 0)
+		(property "LCSC" "C161327"
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1636,8 +1227,8 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" ""
-			(at 182.245 52.705 0)
+		(property "Part Number" "GJM1555C1H4R7BB01D"
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1646,7 +1237,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 182.245 52.705 0)
+			(at 173.355 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1655,47 +1246,50 @@
 			)
 		)
 		(pin "1"
-			(uuid "edac31ad-1baa-4ffc-8705-8c345383093d")
+			(uuid "bac2f15d-1257-406a-be2e-4fee5cd400a7")
 		)
 		(pin "2"
-			(uuid "d9114b70-63db-4d97-b0d3-96a45b0c07ed")
+			(uuid "b3017a75-c7f8-4958-a0cb-68582fb60692")
 		)
 		(instances
-			(project "kv4p-ht"
+			(project "Filter Test"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "C31")
+					(reference "C29")
 					(unit 1)
 				)
 			)
 		)
 	)
 	(symbol
-		(lib_id "Device:L_Small")
-		(at 182.245 64.77 90)
+		(lib_id "Device:C_Small")
+		(at 178.435 71.12 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "327adc83-3839-4405-98a3-d2f31d3ea584")
-		(property "Reference" "L1"
-			(at 182.245 59.69 90)
+		(fields_autoplaced yes)
+		(uuid "259ca2b2-e725-427a-a9b8-214fe3e6a634")
+		(property "Reference" "C4"
+			(at 181.61 69.8435 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
-		(property "Value" "27nH"
-			(at 182.245 62.23 90)
+		(property "Value" "5.1pF"
+			(at 181.61 72.3835 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify right)
 			)
 		)
-		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
-			(at 182.245 64.77 0)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1704,7 +1298,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 182.245 64.77 0)
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1713,7 +1307,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 182.245 64.77 0)
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1722,7 +1316,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 182.245 64.77 0)
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1731,7 +1325,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 182.245 64.77 0)
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1740,7 +1334,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 182.245 64.77 0)
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1748,8 +1342,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1330812"
-			(at 182.245 64.77 0)
+		(property "LCSC" "C237535"
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1757,8 +1351,8 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" "LQW2BAN27NJ00L"
-			(at 182.245 64.77 0)
+		(property "Part Number" "GJM1555C1H5R1BB01D"
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1767,7 +1361,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 182.245 64.77 0)
+			(at 178.435 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1775,16 +1369,16 @@
 				(hide yes)
 			)
 		)
-		(pin "2"
-			(uuid "21c729ab-fb9d-415b-83d9-3332c0bc6151")
-		)
 		(pin "1"
-			(uuid "0543d9d2-47bc-4baa-99ed-01b22333f843")
+			(uuid "55c626d0-407c-4f21-80c4-bbe801f5c060")
+		)
+		(pin "2"
+			(uuid "414440d5-9690-4695-86d1-139fb6c40c01")
 		)
 		(instances
-			(project "kv4p-ht"
+			(project "Filter Test"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "L1")
+					(reference "C4")
 					(unit 1)
 				)
 			)
@@ -1807,7 +1401,7 @@
 				)
 			)
 		)
-		(property "Value" "2.2nF Tuned VHF"
+		(property "Value" "220pF Tuned UHF"
 			(at 198.755 67.31 90)
 			(effects
 				(font
@@ -1842,7 +1436,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C2168957"
+		(property "LCSC" "C388907"
 			(at 194.31 64.77 0)
 			(effects
 				(font
@@ -1860,7 +1454,7 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" "GCM1885C1H222FA16D"
+		(property "Part Number" "GCM1885C2A221JA16D"
 			(at 194.31 64.77 0)
 			(effects
 				(font
@@ -2090,16 +1684,138 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:C_Small")
-		(at 158.115 71.12 180)
+		(lib_id "Device:L_Small")
+		(at 164.465 64.77 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "40c9781a-57ae-460a-875d-463bad84e781")
-		(property "Reference" "C5"
-			(at 160.4391 69.9014 0)
+		(uuid "5546220b-e51a-4d49-92d1-9570ca891963")
+		(property "Reference" "L3"
+			(at 164.465 59.69 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "15nH"
+			(at 164.465 62.23 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Digikey" ""
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Notes" ""
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "generic" ""
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C341794"
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part Number" "LQW2BAN15NG00L (preferred) , LQW2BAS15NG00L spec'd"
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Alternate LCSC" "C3222503 (preferred)"
+			(at 164.465 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "a713a215-30c1-4fa8-ae00-262337821466")
+		)
+		(pin "1"
+			(uuid "fc5cba73-436f-497d-92a1-a7d076fc7173")
+		)
+		(instances
+			(project "Filter Test"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "L3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 168.275 71.12 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "64e481ff-06e7-46c5-8663-23e760a0cf5e")
+		(property "Reference" "C1"
+			(at 171.45 69.8435 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2107,8 +1823,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "10pF"
-			(at 160.02 71.755 0)
+		(property "Value" "6.2pF"
+			(at 171.45 72.3835 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2117,7 +1833,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 158.115 71.12 0)
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2126,7 +1842,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 158.115 71.12 0)
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2135,16 +1851,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 158.115 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digikey" ""
-			(at 158.115 71.12 0)
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2153,7 +1860,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 158.115 71.12 0)
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2162,7 +1869,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 158.115 71.12 0)
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2170,8 +1877,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C32949"
-			(at 158.115 71.12 0)
+		(property "LCSC" "C161331"
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2179,8 +1886,8 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" "Ya so basic."
-			(at 158.115 71.12 0)
+		(property "Part Number" "GJM1555C1H6R2BB01D"
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2189,7 +1896,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 158.115 71.12 0)
+			(at 168.275 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2198,257 +1905,15 @@
 			)
 		)
 		(pin "1"
-			(uuid "006cd482-02d9-46d2-91a5-92ceb758af55")
+			(uuid "f28b6c4c-2af8-4f7b-8cb9-fa9ee7d1132a")
 		)
 		(pin "2"
-			(uuid "89f532b8-181d-4d7c-96ed-361ecc616e9b")
+			(uuid "a9a71f57-28c7-4ffb-9570-dfc0a4373b96")
 		)
 		(instances
-			(project "kv4p-ht"
+			(project "Filter Test"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "C5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:L_Small")
-		(at 173.355 67.31 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom no)
-		(on_board yes)
-		(dnp yes)
-		(uuid "6027cde6-2e07-427b-b6d4-d5d1afc14e0d")
-		(property "Reference" "L5"
-			(at 173.355 66.04 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "~"
-			(at 173.355 64.77 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digikey" ""
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Notes" ""
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "generic" ""
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" ""
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Part Number" ""
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Alternate LCSC" ""
-			(at 173.355 67.31 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "2"
-			(uuid "e95cd9ed-a158-48d5-b687-66d2e67939ea")
-		)
-		(pin "1"
-			(uuid "0a69faa7-387d-4229-bc9a-64685586bd70")
-		)
-		(instances
-			(project "kv4p-ht"
-				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "L5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:L_Small")
-		(at 173.355 64.77 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "641eab41-637f-4f4f-9d49-5dcfc3ec728f")
-		(property "Reference" "L2"
-			(at 173.355 59.69 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "30nH"
-			(at 173.355 62.23 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digikey" ""
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Notes" ""
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "generic" ""
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C5137205"
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Part Number" "FHW0805UC030JGT"
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Alternate LCSC" "C3221803"
-			(at 173.355 64.77 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "2"
-			(uuid "98590e39-3e10-4987-b969-8cecb686027f")
-		)
-		(pin "1"
-			(uuid "fc4cb78b-0fc5-4854-970c-d2f6f9f55bdf")
-		)
-		(instances
-			(project "kv4p-ht"
-				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "L2")
+					(reference "C1")
 					(unit 1)
 				)
 			)
@@ -2520,35 +1985,32 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:C_Small")
-		(at 164.465 52.705 90)
-		(mirror x)
+		(lib_id "Device:L_Small")
+		(at 182.245 64.77 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "7e082977-f7df-40e7-a2cc-fdc9fc141531")
-		(property "Reference" "C27"
-			(at 162.56 48.26 90)
+		(uuid "6f059d4b-b783-4ef4-84fa-44e8e2996181")
+		(property "Reference" "L1"
+			(at 182.245 59.69 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
 			)
 		)
-		(property "Value" "2.7pF"
-			(at 161.925 50.165 90)
+		(property "Value" "9.1nH"
+			(at 182.245 62.23 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify right)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 164.465 52.705 0)
+		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
+			(at 182.245 64.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2557,7 +2019,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 164.465 52.705 0)
+			(at 182.245 64.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2566,7 +2028,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 164.465 52.705 0)
+			(at 182.245 64.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2575,7 +2037,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 164.465 52.705 0)
+			(at 182.245 64.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2584,7 +2046,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 164.465 52.705 0)
+			(at 182.245 64.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2593,7 +2055,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 164.465 52.705 0)
+			(at 182.245 64.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2601,8 +2063,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1561"
-			(at 164.465 52.705 0)
+		(property "LCSC" "C77125"
+			(at 182.245 64.77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2610,8 +2072,131 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" ""
-			(at 164.465 52.705 0)
+		(property "Part Number" "LQW18AN9N1G80D preferred, LQW18AN9N1D00D spec'd"
+			(at 182.245 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Alternate LCSC" "C2049208 preferred"
+			(at 182.245 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "8d0f4a02-816a-4846-81c5-e454ffd49376")
+		)
+		(pin "1"
+			(uuid "b5eb41c6-dc62-4234-a261-7289799ca0a5")
+		)
+		(instances
+			(project "Filter Test"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "L1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 158.115 71.12 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "812cc53b-0a94-4eec-932c-cb1d6789123e")
+		(property "Reference" "C5"
+			(at 160.4391 69.9014 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "3.3pF"
+			(at 160.02 71.755 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 158.115 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 158.115 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 158.115 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Digikey" ""
+			(at 158.115 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Notes" ""
+			(at 158.115 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "generic" ""
+			(at 158.115 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C88892"
+			(at 158.115 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part Number" "GJM1555C1H3R3WB01D"
+			(at 158.115 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2620,7 +2205,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 164.465 52.705 0)
+			(at 158.115 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2629,15 +2214,15 @@
 			)
 		)
 		(pin "1"
-			(uuid "58fed69a-2a06-4ed9-a450-7ecae33ab301")
+			(uuid "4025e2f8-ffa3-4f34-8356-83ca77b0d3fe")
 		)
 		(pin "2"
-			(uuid "3ec0fb2f-ab76-40e4-959c-102556970d7e")
+			(uuid "6d428440-bedb-4a79-879c-7a33723e2e53")
 		)
 		(instances
-			(project "kv4p-ht"
+			(project "Filter Test"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "C27")
+					(reference "C5")
 					(unit 1)
 				)
 			)
@@ -2757,6 +2342,127 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:L_Small")
+		(at 182.245 67.31 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp yes)
+		(uuid "87bf00d8-83f3-416b-aa47-806fe4d2267c")
+		(property "Reference" "L18"
+			(at 182.245 66.04 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "~"
+			(at 182.245 64.77 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Digikey" ""
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Notes" ""
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "generic" ""
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" ""
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part Number" ""
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Alternate LCSC" ""
+			(at 182.245 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "4aa89b3d-2a85-4887-970b-0f85167dcf9b")
+		)
+		(pin "1"
+			(uuid "bc45f935-61de-41ed-8dfa-36c555bfce52")
+		)
+		(instances
+			(project "Filter Test"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "L18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Connector:Conn_Coaxial_Small")
 		(at 227.33 68.58 0)
 		(unit 1)
@@ -2861,16 +2567,16 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 178.435 71.12 180)
+		(at 182.245 52.705 90)
+		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "9edff599-fb7e-45dd-8d11-6cddab40fe11")
-		(property "Reference" "C4"
-			(at 181.61 69.8435 0)
+		(uuid "a049fa75-a7e5-45ea-b374-24328e8edbbd")
+		(property "Reference" "C31"
+			(at 180.34 48.26 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2878,8 +2584,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "16pF"
-			(at 181.61 72.3835 0)
+		(property "Value" "3.6pF"
+			(at 179.705 50.165 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2888,7 +2594,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 178.435 71.12 0)
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2897,7 +2603,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 178.435 71.12 0)
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2906,7 +2612,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 178.435 71.12 0)
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2915,7 +2621,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 178.435 71.12 0)
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2924,7 +2630,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 178.435 71.12 0)
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2933,7 +2639,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 178.435 71.12 0)
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2941,8 +2647,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C77590"
-			(at 178.435 71.12 0)
+		(property "LCSC" "C161320"
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2950,8 +2656,8 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" "CC0402JRNPO9BN160"
-			(at 178.435 71.12 0)
+		(property "Part Number" "GJM1555C1H3R6BB01D"
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2960,7 +2666,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 178.435 71.12 0)
+			(at 182.245 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -2969,15 +2675,15 @@
 			)
 		)
 		(pin "1"
-			(uuid "9f730b8d-dd8b-41bd-9d8b-842becbb3ecc")
+			(uuid "136d3981-210f-408d-8670-5e29e07028b5")
 		)
 		(pin "2"
-			(uuid "2ccdc7ac-1338-4db1-b772-27ddc8aec761")
+			(uuid "edb99ad0-daf7-46a6-a0e4-cdcef191e4fb")
 		)
 		(instances
-			(project "kv4p-ht"
+			(project "Filter Test"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "C4")
+					(reference "C31")
 					(unit 1)
 				)
 			)
@@ -3049,6 +2755,127 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:L_Small")
+		(at 173.355 64.77 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ad42093f-aa05-465d-ad81-312945a124a6")
+		(property "Reference" "L2"
+			(at 173.355 59.69 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "9.1nH"
+			(at 173.355 62.23 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Digikey" ""
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Notes" ""
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "generic" ""
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C77125"
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part Number" "LQW18AN9N1G80D preferred, LQW18AN9N1D00D spec'd"
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Alternate LCSC" "C2049208 preferred"
+			(at 173.355 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "f385a3f5-207d-46d6-ad90-0001c4dd4800")
+		)
+		(pin "1"
+			(uuid "c65f974d-0c0a-4e56-8174-91fbda25b013")
+		)
+		(instances
+			(project "Filter Test"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "L2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 188.595 76.2 0)
 		(unit 1)
@@ -3108,6 +2935,130 @@
 			(project "kv4p-ht"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
 					(reference "#PWR09")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Small")
+		(at 188.595 71.12 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "b654b77f-e192-4101-a2cb-febdf8e160fa")
+		(property "Reference" "C6"
+			(at 191.77 69.8435 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "1.6pF"
+			(at 191.77 72.3835 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Digikey" ""
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Notes" ""
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "generic" ""
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C88881"
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part Number" "GJM1555C1H1R6WB01D"
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Alternate LCSC" ""
+			(at 188.595 71.12 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "a4fed6ed-9f0b-4109-acf9-4c90730e50ba")
+		)
+		(pin "2"
+			(uuid "15939fd4-0957-495b-ac72-f3d2596b99d7")
+		)
+		(instances
+			(project "Filter Test"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "C6")
 					(unit 1)
 				)
 			)
@@ -3180,140 +3131,16 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 188.595 71.12 180)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "d490311b-b4f6-4bbb-9717-064b7d6892fb")
-		(property "Reference" "C6"
-			(at 191.77 69.8435 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Value" "5.1pF"
-			(at 191.77 72.3835 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Digikey" ""
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Notes" ""
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "generic" ""
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "LCSC" "C60220"
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Part Number" ""
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Alternate LCSC" ""
-			(at 188.595 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "3281d634-b287-4d6c-930d-8f50d9bbde54")
-		)
-		(pin "2"
-			(uuid "f7cbdd6d-ba62-44fe-88da-7a765d0e844a")
-		)
-		(instances
-			(project "kv4p-ht"
-				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "C6")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:C_Small")
-		(at 173.355 52.705 90)
+		(at 164.465 52.705 90)
 		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(uuid "d97d4d16-9108-4018-8f24-e994069cd667")
-		(property "Reference" "C29"
-			(at 171.45 48.26 90)
+		(uuid "d0d1d6c6-5824-4943-af0a-0d0d9b4e7735")
+		(property "Reference" "C27"
+			(at 162.56 48.26 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3321,8 +3148,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "13pF"
-			(at 170.815 50.165 90)
+		(property "Value" "0.9pF"
+			(at 161.925 50.165 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3331,7 +3158,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
-			(at 173.355 52.705 0)
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3340,7 +3167,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 173.355 52.705 0)
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3349,7 +3176,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 173.355 52.705 0)
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3358,7 +3185,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 173.355 52.705 0)
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3367,7 +3194,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 173.355 52.705 0)
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3376,7 +3203,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 173.355 52.705 0)
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3384,8 +3211,8 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C393681"
-			(at 173.355 52.705 0)
+		(property "LCSC" "C161350"
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3393,8 +3220,8 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" ""
-			(at 173.355 52.705 0)
+		(property "Part Number" "GJM1555C1HR90WB01D"
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3403,7 +3230,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 173.355 52.705 0)
+			(at 164.465 52.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3412,15 +3239,136 @@
 			)
 		)
 		(pin "1"
-			(uuid "e413404d-e07e-487a-aa50-7df183ef6e91")
+			(uuid "e7e3f75b-3b03-4b31-b9fe-62584f3668a8")
 		)
 		(pin "2"
-			(uuid "c855742c-c28a-4ffa-855e-e2dcdb156ba8")
+			(uuid "a623b36c-0a0e-4ecd-827f-a21d5b961ee2")
 		)
 		(instances
-			(project "kv4p-ht"
+			(project "Filter Test"
 				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
-					(reference "C29")
+					(reference "C27")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:L_Small")
+		(at 164.465 67.31 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board yes)
+		(dnp yes)
+		(uuid "d9531e5c-9787-4077-8855-a85eb3614de8")
+		(property "Reference" "L14"
+			(at 164.465 66.04 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "~"
+			(at 164.465 64.77 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Digikey" ""
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Notes" ""
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "generic" ""
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" ""
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part Number" ""
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Alternate LCSC" ""
+			(at 164.465 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "5376d4d8-a461-4a9c-9467-fb639dfbc4fb")
+		)
+		(pin "1"
+			(uuid "e663b7dd-8d94-4240-9bb5-bdac00c9a2be")
+		)
+		(instances
+			(project "Filter Test"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "L14")
 					(unit 1)
 				)
 			)
