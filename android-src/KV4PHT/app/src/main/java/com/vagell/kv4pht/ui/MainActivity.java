@@ -1003,6 +1003,7 @@ public class MainActivity extends AppCompatActivity {
         final View rootView = findViewById(android.R.id.content);
         final View frequencyView = findViewById(R.id.frequencyContainer);
         final EditText activeFrequencyEditText = findViewById(R.id.activeFrequency);
+        final View rxAudioCircleView = findViewById(R.id.rxAudioCircle);
 
         // Track if keyboard is likely visible (and/or screen got short for some reason), so we can
         // make room for critical UI components that must be visible.
@@ -1033,9 +1034,11 @@ public class MainActivity extends AppCompatActivity {
                 if (heightDiff > screenHeight * 0.25) { // If more than 25% of the screen height is reduced
                     // Keyboard is visible, hide the top view
                     frequencyView.setVisibility(View.GONE);
+                    rxAudioCircleView.setVisibility(View.GONE);
                 } else {
                     // Keyboard is hidden, show the top view
                     frequencyView.setVisibility(View.VISIBLE);
+                    rxAudioCircleView.setVisibility(View.VISIBLE);
                 }
             }
         });
