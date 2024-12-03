@@ -21,6 +21,7 @@ package com.vagell.kv4pht.ui;
 import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
@@ -51,6 +52,8 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_edit_memory);
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
