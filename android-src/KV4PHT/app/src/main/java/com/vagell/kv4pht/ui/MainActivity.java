@@ -614,6 +614,7 @@ public class MainActivity extends AppCompatActivity {
         } else if (screenType == ScreenType.SCREEN_VOICE){
             hideKeyboard();
             findViewById(R.id.frequencyContainer).setVisibility(View.VISIBLE);
+            findViewById(R.id.rxAudioCircle).setVisibility(View.VISIBLE);
 
             if (callsignSnackbar != null) {
                 callsignSnackbar.dismiss();
