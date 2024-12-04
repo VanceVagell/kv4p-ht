@@ -305,6 +305,7 @@ public class RadioAudioService extends Service {
         public void scannedToMemory(int memoryId);
         public void outdatedFirmware(int firmwareVer);
         public void missingFirmware();
+        public void txAllowed(boolean allowed);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -409,6 +410,16 @@ public class RadioAudioService extends Service {
 
         // Reset audio prebuffer
         restartAudioPrebuffer();
+
+        try {
+            Float freq = Float.parseFloat(activeFrequencyStr);
+            if (freq < 144.0f || freq > maxFreq) {
+                callbacks.txAllowed(false);
+            } else {
+                callbacks.txAllowed(true);
+            }
+        } catch (NumberFormatException nfe) {
+        }
     }
 
     public static String makeSafe2MFreq(String strFreq) {
@@ -416,14 +427,11 @@ public class RadioAudioService extends Service {
         try {
             freq = Float.parseFloat(strFreq);
         } catch (NumberFormatException nfe) { // Not sure how some people are breaking this, but default to FM calling frequency if we can't understand strFreq.
-            nfe.printStackTrace();
-            return "146.5200";
+            return "144.0000";
         }
-        while (freq > 148.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
+        while (freq > 500.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
         }
-        freq = Math.min(freq, maxFreq);
-        freq = Math.max(freq, 144.0f);
 
         strFreq = String.format(java.util.Locale.US,"%.4f", freq);
 
@@ -549,7 +557,7 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public void startPtt(boolean dataMode) {
+    public void startPtt() {
         setMode(MODE_TX);
 
         // Setup runaway tx safety measures.
@@ -1186,7 +1194,7 @@ public class RadioAudioService extends Service {
         }
         byte[] simpleAudioBytes = ArrayUtils.toPrimitive(audioBytes.toArray(new Byte[0]));
 
-        startPtt(true);
+        startPtt();
         final Handler handler = new Handler(Looper.getMainLooper());
         handler.postDelayed(new Runnable() {
             @Override

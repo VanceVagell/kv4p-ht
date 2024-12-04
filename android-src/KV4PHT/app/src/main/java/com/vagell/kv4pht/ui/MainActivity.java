@@ -66,7 +66,6 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
-import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -92,7 +91,6 @@ import com.vagell.kv4pht.radio.RadioAudioService;
 
 
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -356,6 +354,12 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void missingFirmware() {
                     showVersionSnackbar(-1);
+                }
+
+                @Override
+                public void txAllowed(boolean allowed) {
+                    // Only show the PTT button when tx is allowed (e.g. within ham band).
+                    findViewById(R.id.pttButton).setVisibility(allowed ? View.VISIBLE : View.GONE);
                 }
             };
 
@@ -921,7 +925,7 @@ public class MainActivity extends AppCompatActivity {
                             if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
                                 ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                                 if (radioAudioService != null) {
-                                    radioAudioService.startPtt(false);
+                                    radioAudioService.startPtt();
                                 }
                                 startPttUi(false);
                             } else if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_TX) {
@@ -934,7 +938,7 @@ public class MainActivity extends AppCompatActivity {
                         } else {
                             ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                             if (radioAudioService != null) {
-                                radioAudioService.startPtt(false);
+                                radioAudioService.startPtt();
                             }
                             startPttUi(false);
                         }
@@ -973,7 +977,7 @@ public class MainActivity extends AppCompatActivity {
                 if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
                     ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                     if (radioAudioService != null) {
-                        radioAudioService.startPtt(false);
+                        radioAudioService.startPtt();
                     }
                     startPttUi(false);
                 } else if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_TX) {
