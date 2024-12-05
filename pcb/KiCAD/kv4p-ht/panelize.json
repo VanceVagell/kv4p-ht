@@ -6,7 +6,7 @@
     "tabs": {
         "type": "fixed",
         "vwidth": "20mm",
-        "hwidth": "10mm",
+        "hwidth": "15mm",
         "hcount": "0"
     },
     "cuts": {
@@ -23,12 +23,21 @@
     },
     "fiducials": {
         "type": "4fid",
-        "hoffset": "10mm",
-        "voffset": "2.5mm"
+        "hoffset": "12mm",
+        "voffset": "5mm",
+        "opening": "3mm"
     },
     "text": {
         "type": "simple",
         "voffset": "2.5mm",
-        "text": "kv4p-ht v2.1a 2024-11-24 Halibut Electronics"
+        "thickness": "0.25mm",
+        "text": "kv4p-ht, v2.0c"
+    },
+    "text2": {
+        "type": "simple",
+        "voffset": "-2.5mm",
+        "thickness": "0.25mm",
+        "text": "Manufactured by Halibut Electronics, 2024-12-05",
+        "anchor": "mb"
     }
 }
