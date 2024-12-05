@@ -1198,7 +1198,8 @@ public class RadioAudioService extends Service {
             APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
             ax25Packet = new Packet(aprsPacket.toAX25Frame());
         } catch (IllegalArgumentException iae) {
-            // TODOV
+            callbacks.chatError("Error in your callsign or To: callsign.");
+            return;
         }
 
         // TODO start a timer to re-send this packet (up to a few times) if we don't receive an ACK for it.
