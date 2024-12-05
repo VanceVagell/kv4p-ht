@@ -187,7 +187,8 @@ public class SerialInputOutputManager implements Runnable {
     public void run() {
         synchronized (this) {
             if (getState() != State.STOPPED) {
-                throw new IllegalStateException("Already running");
+                Log.d("DEBUG", "Warning: Tried to run() a SerialInputOutputManager that was already running.");
+                return;
             }
             mState = State.RUNNING;
         }

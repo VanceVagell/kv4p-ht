@@ -21,12 +21,14 @@ package com.vagell.kv4pht.ui;
 import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
@@ -50,6 +52,8 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_edit_memory);
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
@@ -122,6 +126,25 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                     AutoCompleteTextView editMemoryGroupTextInputEditText = findViewById(R.id.editMemoryGroupTextInputEditText);
                     editMemoryGroupTextInputEditText.setText(selectedMemoryGroup, false);
                 }
+
+                String offset = extras.getString("offset");
+                if (offset != null) {
+                    AutoCompleteTextView editOffset = findViewById(R.id.editOffsetTextView);
+                    editOffset.setText(offset, false);
+                }
+
+                String tone = extras.getString("tone");
+                if (tone != null) {
+                    AutoCompleteTextView editTone = findViewById(R.id.editToneTextView);
+                    editTone.setText(tone, false);
+                }
+
+                String name = extras.getString("name");
+                if (name != null) {
+                    TextInputEditText editNameTextInputEditText = findViewById(R.id.editNameTextInputEditText);
+                    editNameTextInputEditText.setText(name);
+                }
+
             }
         }
 
@@ -160,6 +183,13 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
+                if( MainViewModel.appDb == null ) {
+                    //For example direct call other app intent.
+                    //If app is not already open do not nullpointer-exception.
+                    MainViewModel preloader = new MainViewModel();
+                    preloader.setActivity(activity);
+                    preloader.loadData();
+                }
                 List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
 
                 // Remove any blank memory groups from the list (shouldn't have been saved, ideally).

@@ -50,6 +50,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -65,7 +66,6 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
-import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -91,7 +91,6 @@ import com.vagell.kv4pht.radio.RadioAudioService;
 
 
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -160,6 +159,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
@@ -298,6 +299,8 @@ public class MainActivity extends AppCompatActivity {
         viewModel.loadData();
     }
 
+    final Context context = this;
+
     /** Defines callbacks for service binding, passed to bindService(). */
     private ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -353,6 +356,73 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void missingFirmware() {
                     showVersionSnackbar(-1);
+                }
+
+                @Override
+                public void txAllowed(boolean allowed) {
+                    // Only enable the PTT button when tx is allowed (e.g. within ham band).
+                    findViewById(R.id.pttButton).setClickable(allowed);
+                }
+
+                @Override
+                public void txStarted() {
+                    if (activeMemoryId == -1) {
+                        return;
+                    }
+
+                    // Display any offset while transmitting.
+                    List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+                    if (channelMemories == null) {
+                        return;
+                    }
+                    for (int i = 0; i < channelMemories.size(); i++) {
+                        if (channelMemories.get(i).memoryId == activeMemoryId) {
+                            ChannelMemory memory = channelMemories.get(i);
+                            if (memory.offset == ChannelMemory.OFFSET_NONE) {
+                                return; // No offset, can just leave current frequency visible.
+                            }
+
+                            Float freq = Float.parseFloat(memory.frequency);
+                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + 0.6f) : (freq - 0.6f);
+                            showFrequency(radioAudioService.validateFrequency("" + freq));
+                            break;
+                        }
+                    }
+                }
+
+                @Override
+                public void txEnded() {
+                    if (activeMemoryId == -1) {
+                        return;
+                    }
+
+                    // Stop displaying any offset now that transmit is done.
+                    List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+                    if (channelMemories == null) {
+                        return;
+                    }
+                    for (int i = 0; i < channelMemories.size(); i++) {
+                        if (channelMemories.get(i).memoryId == activeMemoryId) {
+                            ChannelMemory memory = channelMemories.get(i);
+                            Float freq = Float.parseFloat(memory.frequency);
+                            showFrequency(radioAudioService.validateFrequency("" + freq));
+                            break;
+                        }
+                    }
+                }
+
+                @Override
+                public void chatError(String snackbarMsg) {
+                    Snackbar snackbar = Snackbar.make(context, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
+                            .setBackgroundTint(Color.rgb(140, 20, 0))
+                            .setTextColor(Color.WHITE)
+                            .setAnchorView(findViewById(R.id.textChatInput));
+
+                    // Make the text of the snackbar larger.
+                    TextView snackbarTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+                    snackbarTextView.setTextSize(20);
+
+                    snackbar.show();
                 }
             };
 
@@ -611,6 +681,7 @@ public class MainActivity extends AppCompatActivity {
         } else if (screenType == ScreenType.SCREEN_VOICE){
             hideKeyboard();
             findViewById(R.id.frequencyContainer).setVisibility(View.VISIBLE);
+            findViewById(R.id.rxAudioCircle).setVisibility(View.VISIBLE);
 
             if (callsignSnackbar != null) {
                 callsignSnackbar.dismiss();
@@ -802,7 +873,7 @@ public class MainActivity extends AppCompatActivity {
                             if (lastFreq != null) {
                                 activeFrequencyStr = lastFreq.value;
                             } else {
-                                activeFrequencyStr = "146.5200"; // VHF calling freq
+                                activeFrequencyStr = "144.0000";
                             }
 
                             if (radioAudioService != null) {
@@ -899,13 +970,6 @@ public class MainActivity extends AppCompatActivity {
         pttButton.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                // If the user tries to transmit, stop scanning so we don't
-                // move to a different frequency during or after the tx.
-                if (radioAudioService != null) {
-                    radioAudioService.setScanning(false, false);
-                }
-                setScanningUi(false);
-
                 boolean touchHandled = false;
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
@@ -917,7 +981,11 @@ public class MainActivity extends AppCompatActivity {
                             if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
                                 ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                                 if (radioAudioService != null) {
-                                    radioAudioService.startPtt(false);
+                                    // If the user tries to transmit, stop scanning so we don't
+                                    // move to a different frequency during or after the tx.
+                                    radioAudioService.setScanning(false, false);
+                                    setScanningUi(false);
+                                    radioAudioService.startPtt();
                                 }
                                 startPttUi(false);
                             } else if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_TX) {
@@ -930,7 +998,11 @@ public class MainActivity extends AppCompatActivity {
                         } else {
                             ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                             if (radioAudioService != null) {
-                                radioAudioService.startPtt(false);
+                                // If the user tries to transmit, stop scanning so we don't
+                                // move to a different frequency during or after the tx.
+                                radioAudioService.setScanning(false, false);
+                                setScanningUi(false);
+                                radioAudioService.startPtt();
                             }
                             startPttUi(false);
                         }
@@ -969,7 +1041,7 @@ public class MainActivity extends AppCompatActivity {
                 if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
                     ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                     if (radioAudioService != null) {
-                        radioAudioService.startPtt(false);
+                        radioAudioService.startPtt();
                     }
                     startPttUi(false);
                 } else if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_TX) {
@@ -1000,6 +1072,7 @@ public class MainActivity extends AppCompatActivity {
         final View rootView = findViewById(android.R.id.content);
         final View frequencyView = findViewById(R.id.frequencyContainer);
         final EditText activeFrequencyEditText = findViewById(R.id.activeFrequency);
+        final View rxAudioCircleView = findViewById(R.id.rxAudioCircle);
 
         // Track if keyboard is likely visible (and/or screen got short for some reason), so we can
         // make room for critical UI components that must be visible.
@@ -1030,9 +1103,11 @@ public class MainActivity extends AppCompatActivity {
                 if (heightDiff > screenHeight * 0.25) { // If more than 25% of the screen height is reduced
                     // Keyboard is visible, hide the top view
                     frequencyView.setVisibility(View.GONE);
+                    rxAudioCircleView.setVisibility(View.GONE);
                 } else {
                     // Keyboard is hidden, show the top view
                     frequencyView.setVisibility(View.VISIBLE);
+                    rxAudioCircleView.setVisibility(View.VISIBLE);
                 }
             }
         });
@@ -1144,6 +1219,7 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                Log.d("DEBUG", "showFrequency: " + frequency);
                 EditText activeFrequencyField = findViewById(R.id.activeFrequency);
                 activeFrequencyField.setText(frequency);
                 activeFrequencyStr = frequency;

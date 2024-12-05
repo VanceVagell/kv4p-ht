@@ -305,6 +305,10 @@ public class RadioAudioService extends Service {
         public void scannedToMemory(int memoryId);
         public void outdatedFirmware(int firmwareVer);
         public void missingFirmware();
+        public void txAllowed(boolean allowed);
+        public void txStarted();
+        public void txEnded();
+        public void chatError(String snackbarText);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -409,6 +413,16 @@ public class RadioAudioService extends Service {
 
         // Reset audio prebuffer
         restartAudioPrebuffer();
+
+        try {
+            Float freq = Float.parseFloat(activeFrequencyStr);
+            if (freq < 144.0f || freq > maxFreq) {
+                callbacks.txAllowed(false);
+            } else {
+                callbacks.txAllowed(true);
+            }
+        } catch (NumberFormatException nfe) {
+        }
     }
 
     public static String makeSafe2MFreq(String strFreq) {
@@ -416,14 +430,17 @@ public class RadioAudioService extends Service {
         try {
             freq = Float.parseFloat(strFreq);
         } catch (NumberFormatException nfe) { // Not sure how some people are breaking this, but default to FM calling frequency if we can't understand strFreq.
-            nfe.printStackTrace();
-            return "146.5200";
+            return "144.0000";
         }
-        while (freq > 148.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
+        while (freq > 500.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
         }
-        freq = Math.min(freq, maxFreq);
-        freq = Math.max(freq, 144.0f);
+
+        if (freq < 134.0f) {
+            freq = 134.0f; // Lowest freq supported by radio module
+        } else if (freq > 174.0f) {
+            freq = 174.0f; // Highest freq supported
+        }
 
         strFreq = String.format(java.util.Locale.US,"%.4f", freq);
 
@@ -483,6 +500,16 @@ public class RadioAudioService extends Service {
 
         // Reset audio prebuffer
         restartAudioPrebuffer();
+
+        try {
+            Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset));
+            if (txFreq < 144.0f || txFreq > maxFreq) {
+                callbacks.txAllowed(false);
+            } else {
+                callbacks.txAllowed(true);
+            }
+        } catch (NumberFormatException nfe) {
+        }
     }
 
     private String getToneIdxStr(String toneStr) {
@@ -549,7 +576,7 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public void startPtt(boolean dataMode) {
+    public void startPtt() {
         setMode(MODE_TX);
 
         // Setup runaway tx safety measures.
@@ -576,6 +603,7 @@ public class RadioAudioService extends Service {
 
         sendCommandToESP32(ESP32Command.PTT_DOWN);
         audioTrack.stop();
+        callbacks.txStarted();
     }
 
     public void endPtt() {
@@ -586,6 +614,7 @@ public class RadioAudioService extends Service {
         sendCommandToESP32(ESP32Command.PTT_UP);
         audioTrack.flush();
         restartAudioPrebuffer();
+        callbacks.txEnded();
     }
 
     public void reconnectViaUSB() {
@@ -1163,8 +1192,15 @@ public class RadioAudioService extends Service {
             Log.d("DEBUG", "Warning: Tried to send a chat message with no recipient callsign, defaulted to 'CQ'.");
             targetCallsign = "CQ";
         }
-        APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
-        Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
+
+        Packet ax25Packet = null;
+        try {
+            APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
+            ax25Packet = new Packet(aprsPacket.toAX25Frame());
+        } catch (IllegalArgumentException iae) {
+            callbacks.chatError("Error in your callsign or To: callsign.");
+            return;
+        }
 
         // TODO start a timer to re-send this packet (up to a few times) if we don't receive an ACK for it.
         txAX25Packet(ax25Packet);
@@ -1186,7 +1222,7 @@ public class RadioAudioService extends Service {
         }
         byte[] simpleAudioBytes = ArrayUtils.toPrimitive(audioBytes.toArray(new Byte[0]));
 
-        startPtt(true);
+        startPtt();
         final Handler handler = new Handler(Looper.getMainLooper());
         handler.postDelayed(new Runnable() {
             @Override

@@ -28,6 +28,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.CompoundButton;
@@ -57,6 +58,8 @@ public class SettingsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
+
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
@@ -267,6 +270,10 @@ public class SettingsActivity extends AppCompatActivity {
      * @param maxFreq Megahertz as a string, e.g. "148".
      */
     private void setMaxFreq(String maxFreq) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
