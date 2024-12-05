@@ -306,6 +306,8 @@ public class RadioAudioService extends Service {
         public void outdatedFirmware(int firmwareVer);
         public void missingFirmware();
         public void txAllowed(boolean allowed);
+        public void txStarted();
+        public void txEnded();
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -584,6 +586,7 @@ public class RadioAudioService extends Service {
 
         sendCommandToESP32(ESP32Command.PTT_DOWN);
         audioTrack.stop();
+        callbacks.txStarted();
     }
 
     public void endPtt() {
@@ -594,6 +597,7 @@ public class RadioAudioService extends Service {
         sendCommandToESP32(ESP32Command.PTT_UP);
         audioTrack.flush();
         restartAudioPrebuffer();
+        callbacks.txEnded();
     }
 
     public void reconnectViaUSB() {

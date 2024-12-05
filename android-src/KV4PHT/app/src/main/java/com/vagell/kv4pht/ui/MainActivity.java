@@ -361,6 +361,53 @@ public class MainActivity extends AppCompatActivity {
                     // Only show the PTT button when tx is allowed (e.g. within ham band).
                     findViewById(R.id.pttButton).setVisibility(allowed ? View.VISIBLE : View.GONE);
                 }
+
+                @Override
+                public void txStarted() {
+                    if (activeMemoryId == -1) {
+                        return;
+                    }
+
+                    // Display any offset while transmitting.
+                    List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+                    if (channelMemories == null) {
+                        return;
+                    }
+                    for (int i = 0; i < channelMemories.size(); i++) {
+                        if (channelMemories.get(i).memoryId == activeMemoryId) {
+                            ChannelMemory memory = channelMemories.get(i);
+                            if (memory.offset == ChannelMemory.OFFSET_NONE) {
+                                return; // No offset, can just leave current frequency visible.
+                            }
+
+                            Float freq = Float.parseFloat(memory.frequency);
+                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + 0.6f) : (freq - 0.6f);
+                            showFrequency(radioAudioService.validateFrequency("" + freq));
+                            break;
+                        }
+                    }
+                }
+
+                @Override
+                public void txEnded() {
+                    if (activeMemoryId == -1) {
+                        return;
+                    }
+
+                    // Stop displaying any offset now that transmit is done.
+                    List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+                    if (channelMemories == null) {
+                        return;
+                    }
+                    for (int i = 0; i < channelMemories.size(); i++) {
+                        if (channelMemories.get(i).memoryId == activeMemoryId) {
+                            ChannelMemory memory = channelMemories.get(i);
+                            Float freq = Float.parseFloat(memory.frequency);
+                            showFrequency(radioAudioService.validateFrequency("" + freq));
+                            break;
+                        }
+                    }
+                }
             };
 
             radioAudioService.setCallbacks(callbacks);
@@ -810,7 +857,7 @@ public class MainActivity extends AppCompatActivity {
                             if (lastFreq != null) {
                                 activeFrequencyStr = lastFreq.value;
                             } else {
-                                activeFrequencyStr = "146.5200"; // VHF calling freq
+                                activeFrequencyStr = "144.0000";
                             }
 
                             if (radioAudioService != null) {
@@ -907,13 +954,6 @@ public class MainActivity extends AppCompatActivity {
         pttButton.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                // If the user tries to transmit, stop scanning so we don't
-                // move to a different frequency during or after the tx.
-                if (radioAudioService != null) {
-                    radioAudioService.setScanning(false, false);
-                }
-                setScanningUi(false);
-
                 boolean touchHandled = false;
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
@@ -925,6 +965,10 @@ public class MainActivity extends AppCompatActivity {
                             if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
                                 ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                                 if (radioAudioService != null) {
+                                    // If the user tries to transmit, stop scanning so we don't
+                                    // move to a different frequency during or after the tx.
+                                    radioAudioService.setScanning(false, false);
+                                    setScanningUi(false);
                                     radioAudioService.startPtt();
                                 }
                                 startPttUi(false);
@@ -938,6 +982,10 @@ public class MainActivity extends AppCompatActivity {
                         } else {
                             ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                             if (radioAudioService != null) {
+                                // If the user tries to transmit, stop scanning so we don't
+                                // move to a different frequency during or after the tx.
+                                radioAudioService.setScanning(false, false);
+                                setScanningUi(false);
                                 radioAudioService.startPtt();
                             }
                             startPttUi(false);
@@ -1155,6 +1203,7 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                Log.d("DEBUG", "showFrequency: " + frequency);
                 EditText activeFrequencyField = findViewById(R.id.activeFrequency);
                 activeFrequencyField.setText(frequency);
                 activeFrequencyStr = frequency;
