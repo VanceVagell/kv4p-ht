@@ -437,6 +437,8 @@ public class RadioAudioService extends Service {
 
         if (freq < 134.0f) {
             freq = 134.0f; // Lowest freq supported by radio module
+        } else if (freq > 174.0f) {
+            freq = 174.0f; // Highest freq supported
         }
 
         strFreq = String.format(java.util.Locale.US,"%.4f", freq);
