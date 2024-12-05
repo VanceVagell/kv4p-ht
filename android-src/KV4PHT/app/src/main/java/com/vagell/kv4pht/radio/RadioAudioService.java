@@ -435,6 +435,10 @@ public class RadioAudioService extends Service {
             freq /= 10;
         }
 
+        if (freq < 134.0f) {
+            freq = 134.0f; // Lowest freq supported by radio module
+        }
+
         strFreq = String.format(java.util.Locale.US,"%.4f", freq);
 
         return strFreq;
