@@ -360,8 +360,8 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void txAllowed(boolean allowed) {
-                    // Only show the PTT button when tx is allowed (e.g. within ham band).
-                    findViewById(R.id.pttButton).setVisibility(allowed ? View.VISIBLE : View.GONE);
+                    // Only enable the PTT button when tx is allowed (e.g. within ham band).
+                    findViewById(R.id.pttButton).setClickable(allowed);
                 }
 
                 @Override
