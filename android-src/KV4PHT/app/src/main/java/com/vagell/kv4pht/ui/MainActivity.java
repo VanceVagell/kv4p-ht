@@ -299,6 +299,8 @@ public class MainActivity extends AppCompatActivity {
         viewModel.loadData();
     }
 
+    final Context context = this;
+
     /** Defines callbacks for service binding, passed to bindService(). */
     private ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -407,6 +409,20 @@ public class MainActivity extends AppCompatActivity {
                             break;
                         }
                     }
+                }
+
+                @Override
+                public void chatError(String snackbarMsg) {
+                    Snackbar snackbar = Snackbar.make(context, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
+                            .setBackgroundTint(Color.rgb(140, 20, 0))
+                            .setTextColor(Color.WHITE)
+                            .setAnchorView(findViewById(R.id.textChatInput));
+
+                    // Make the text of the snackbar larger.
+                    TextView snackbarTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+                    snackbarTextView.setTextSize(20);
+
+                    snackbar.show();
                 }
             };
 

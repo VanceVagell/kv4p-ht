@@ -270,6 +270,10 @@ public class SettingsActivity extends AppCompatActivity {
      * @param maxFreq Megahertz as a string, e.g. "148".
      */
     private void setMaxFreq(String maxFreq) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {

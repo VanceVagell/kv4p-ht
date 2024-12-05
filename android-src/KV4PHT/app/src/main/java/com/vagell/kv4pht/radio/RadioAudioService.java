@@ -308,6 +308,7 @@ public class RadioAudioService extends Service {
         public void txAllowed(boolean allowed);
         public void txStarted();
         public void txEnded();
+        public void chatError(String snackbarText);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -1191,8 +1192,14 @@ public class RadioAudioService extends Service {
             Log.d("DEBUG", "Warning: Tried to send a chat message with no recipient callsign, defaulted to 'CQ'.");
             targetCallsign = "CQ";
         }
-        APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
-        Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
+
+        Packet ax25Packet = null;
+        try {
+            APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
+            ax25Packet = new Packet(aprsPacket.toAX25Frame());
+        } catch (IllegalArgumentException iae) {
+            // TODOV
+        }
 
         // TODO start a timer to re-send this packet (up to a few times) if we don't receive an ACK for it.
         txAX25Packet(ax25Packet);
