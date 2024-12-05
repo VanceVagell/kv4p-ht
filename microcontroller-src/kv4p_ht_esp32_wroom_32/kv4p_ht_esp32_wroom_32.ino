@@ -238,7 +238,7 @@ void loop() {
         case COMMAND_TUNE_TO:
         {
           // Example:
-          // 145.450144.850061
+          // 145.4500144.8500061
           // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch (19 bytes total for params)
           setMode(MODE_RX);
 

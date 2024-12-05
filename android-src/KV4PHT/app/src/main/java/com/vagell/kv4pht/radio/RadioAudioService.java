@@ -493,6 +493,16 @@ public class RadioAudioService extends Service {
 
         // Reset audio prebuffer
         restartAudioPrebuffer();
+
+        try {
+            Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset));
+            if (txFreq < 144.0f || txFreq > maxFreq) {
+                callbacks.txAllowed(false);
+            } else {
+                callbacks.txAllowed(true);
+            }
+        } catch (NumberFormatException nfe) {
+        }
     }
 
     private String getToneIdxStr(String toneStr) {
