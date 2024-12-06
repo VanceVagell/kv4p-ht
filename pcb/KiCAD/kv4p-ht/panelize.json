@@ -1,0 +1,43 @@
+{
+    "layout": {
+        "hspace": "5mm",
+        "cols": "2"
+    },
+    "tabs": {
+        "type": "fixed",
+        "vwidth": "20mm",
+        "hwidth": "15mm",
+        "hcount": "0"
+    },
+    "cuts": {
+        "type": "vcuts",
+        "layer": "User.1"
+    },
+    "framing": {
+        "type": "railstb"
+    },
+    "tooling": {
+        "type": "4hole",
+        "hoffset": "5mm",
+        "voffset": "2.5mm"
+    },
+    "fiducials": {
+        "type": "4fid",
+        "hoffset": "12mm",
+        "voffset": "5mm",
+        "opening": "3mm"
+    },
+    "text": {
+        "type": "simple",
+        "voffset": "2.5mm",
+        "thickness": "0.25mm",
+        "text": "kv4p-ht, v2.0c"
+    },
+    "text2": {
+        "type": "simple",
+        "voffset": "-2.5mm",
+        "thickness": "0.25mm",
+        "text": "Manufactured by Halibut Electronics, 2024-12-05",
+        "anchor": "mb"
+    }
+}

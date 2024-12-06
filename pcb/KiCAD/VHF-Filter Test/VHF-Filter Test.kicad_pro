@@ -37,9 +37,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 0.0,
-          "height": 0.9,
-          "width": 1.5
+          "drill": 0.762,
+          "height": 1.524,
+          "width": 1.524
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -48,35 +48,11 @@
         "silk_text_thickness": 0.1,
         "silk_text_upright": false,
         "zones": {
-          "min_clearance": 0.224282
+          "min_clearance": 0.5
         }
       },
-      "diff_pair_dimensions": [
-        {
-          "gap": 0.0,
-          "via_gap": 0.0,
-          "width": 0.0
-        }
-      ],
-      "drc_exclusions": [
-        "clearance|128632500|71817500|0750b01c-4ae3-4d35-9380-3269a8a605df|dc54f4c5-75f3-487d-a806-4be3944b4319",
-        "clearance|163467500|71817500|26650d58-863a-4b4d-86dd-0d9694c51425|f6f5d69c-55bc-407d-89e1-b1f1a48970d9",
-        "copper_edge_clearance|153165000|63679000|4b1e51b6-19fb-45a7-a548-3886f7c48de3|832f883f-ad5d-4c1a-83fc-79c0f937b207",
-        "copper_edge_clearance|153165000|63679000|4b1e51b6-19fb-45a7-a548-3886f7c48de3|ba2b4c72-f44a-415f-a47d-0c55c7159c40",
-        "copper_edge_clearance|156215000|63679000|4b1e51b6-19fb-45a7-a548-3886f7c48de3|fcaadeed-3138-4928-bb14-aa3ad3eb782d",
-        "copper_edge_clearance|160150000|63679000|4b1e51b6-19fb-45a7-a548-3886f7c48de3|b4252ef3-6712-4456-9dea-2443a61c618c",
-        "copper_edge_clearance|160150000|63679000|4b1e51b6-19fb-45a7-a548-3886f7c48de3|d083b5c2-05b3-4176-8bd0-8fc49e9f244c",
-        "hole_clearance|143000000|140265000|46d1aa55-6c22-48b5-951f-c27d659b12c5|cb6cab0d-45c9-47c1-bace-98a32c2e90a4",
-        "hole_clearance|143000000|140265000|d61113c9-5201-41f9-9a32-cda9dd2c3f07|cb6cab0d-45c9-47c1-bace-98a32c2e90a4",
-        "hole_clearance|149100000|140265000|9f2b51e0-e8a2-4afe-92f3-a640d264c01b|d1e5d3d3-05bd-476f-b64c-2ce7aba22feb",
-        "hole_clearance|149100000|140265000|c1ff157f-1366-4cd2-bc3c-59cea496d2d2|d1e5d3d3-05bd-476f-b64c-2ce7aba22feb",
-        "items_not_allowed|133115000|137155000|dbc6e62a-30f8-4b5a-8971-c80faba317aa|00000000-0000-0000-0000-000000000000",
-        "items_not_allowed|133255000|107740000|a57f1937-d195-4df7-ba41-2ea1d0bc0798|00000000-0000-0000-0000-000000000000",
-        "lib_footprint_issues|146517500|85991668|6eb35d48-9164-4fde-8087-0a4301044828|00000000-0000-0000-0000-000000000000",
-        "lib_footprint_mismatch|146050000|98425000|430daed6-b93d-4181-a033-3a0d902e7a38|00000000-0000-0000-0000-000000000000",
-        "lib_footprint_mismatch|155575000|59484000|d2774137-d06d-4eea-9f4e-ccab8ea1e78e|00000000-0000-0000-0000-000000000000",
-        "lib_footprint_mismatch|155575000|64476000|2c4241ea-58ef-4dd6-94b1-1f3e07709847|00000000-0000-0000-0000-000000000000"
-      ],
+      "diff_pair_dimensions": [],
+      "drc_exclusions": [],
       "meta": {
         "version": 2
       },
@@ -86,7 +62,7 @@
         "connection_width": "warning",
         "copper_edge_clearance": "error",
         "copper_sliver": "warning",
-        "courtyards_overlap": "ignore",
+        "courtyards_overlap": "error",
         "diff_pair_gap_out_of_range": "error",
         "diff_pair_uncoupled_length_too_long": "error",
         "drill_out_of_range": "error",
@@ -114,9 +90,9 @@
         "padstack": "warning",
         "pth_inside_courtyard": "ignore",
         "shorting_items": "error",
-        "silk_edge_clearance": "ignore",
-        "silk_over_copper": "ignore",
-        "silk_overlap": "ignore",
+        "silk_edge_clearance": "warning",
+        "silk_over_copper": "warning",
+        "silk_overlap": "warning",
         "skew_out_of_range": "error",
         "solder_mask_bridge": "error",
         "starved_thermal": "error",
@@ -134,21 +110,21 @@
       },
       "rules": {
         "max_error": 0.005,
-        "min_clearance": 0.1,
+        "min_clearance": 0.0,
         "min_connection": 0.0,
-        "min_copper_edge_clearance": 0.0,
-        "min_hole_clearance": 0.2,
+        "min_copper_edge_clearance": 0.199898,
+        "min_hole_clearance": 0.25,
         "min_hole_to_hole": 0.25,
         "min_microvia_diameter": 0.2,
         "min_microvia_drill": 0.1,
         "min_resolved_spokes": 2,
         "min_silk_clearance": 0.0,
-        "min_text_height": 0.1,
-        "min_text_thickness": 0.01,
-        "min_through_hole_diameter": 0.2,
-        "min_track_width": 0.1,
-        "min_via_annular_width": 0.05,
-        "min_via_diameter": 0.3,
+        "min_text_height": 0.8,
+        "min_text_thickness": 0.08,
+        "min_through_hole_diameter": 0.3,
+        "min_track_width": 0.0,
+        "min_via_annular_width": 0.1,
+        "min_via_diameter": 0.5,
         "solder_mask_to_copper_clearance": 0.005,
         "use_height_for_length_calcs": true
       },
@@ -195,14 +171,7 @@
           "td_width_to_size_filter_ratio": 0.9
         }
       ],
-      "track_widths": [
-        0.0,
-        0.254,
-        0.381,
-        0.508,
-        0.762,
-        1.016
-      ],
+      "track_widths": [],
       "tuning_pattern_settings": {
         "diff_pair_defaults": {
           "corner_radius_percentage": 80,
@@ -229,24 +198,7 @@
           "spacing": 0.6
         }
       },
-      "via_dimensions": [
-        {
-          "diameter": 0.0,
-          "drill": 0.0
-        },
-        {
-          "diameter": 0.381,
-          "drill": 0.1778
-        },
-        {
-          "diameter": 0.381,
-          "drill": 0.2
-        },
-        {
-          "diameter": 0.45,
-          "drill": 0.2
-        }
-      ],
+      "via_dimensions": [],
       "zones_allow_external_fillets": false
     },
     "ipc2581": {
@@ -464,7 +416,7 @@
       "no_connect_dangling": "warning",
       "pin_not_connected": "error",
       "pin_not_driven": "error",
-      "pin_to_pin": "error",
+      "pin_to_pin": "warning",
       "power_pin_not_driven": "error",
       "similar_labels": "warning",
       "simulation_model_issue": "ignore",
@@ -479,7 +431,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "kv4p-ht.kicad_pro",
+    "filename": "Filter Test.kicad_pro",
     "version": 1
   },
   "net_settings": {
@@ -500,37 +452,13 @@
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
-      },
-      {
-        "bus_width": 12,
-        "clearance": 0.2,
-        "diff_pair_gap": 0.25,
-        "diff_pair_via_gap": 0.25,
-        "diff_pair_width": 0.2,
-        "line_style": 0,
-        "microvia_diameter": 0.3,
-        "microvia_drill": 0.1,
-        "name": "RF",
-        "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 1.06,
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
-        "wire_width": 6
       }
     ],
     "meta": {
       "version": 3
     },
     "net_colors": null,
-    "netclass_assignments": {
-      "/GPIO0{slash}~{Program}": "Strapping Pin",
-      "/GPIO12": "Strapping Pin",
-      "/GPIO15": "Strapping Pin",
-      "/GPIO2": "Strapping Pin",
-      "unconnected-(U3-IO45-Pad26)": "Strapping Pin",
-      "unconnected-(U3-IO46-Pad16)": "Strapping Pin"
-    },
+    "netclass_assignments": null,
     "netclass_patterns": []
   },
   "pcbnew": {
@@ -580,7 +508,7 @@
           "group_by": false,
           "label": "Datasheet",
           "name": "Datasheet",
-          "show": false
+          "show": true
         },
         {
           "group_by": false,
@@ -599,131 +527,11 @@
           "label": "DNP",
           "name": "${DNP}",
           "show": true
-        },
-        {
-          "group_by": false,
-          "label": "#",
-          "name": "${ITEM_NUMBER}",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Availability",
-          "name": "Availability",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Description_1",
-          "name": "Description_1",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Digi-Key",
-          "name": "Digi-Key",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Farnell",
-          "name": "Farnell",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "MFN",
-          "name": "MFN",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "MPN",
-          "name": "MPN",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Mouser",
-          "name": "Mouser",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Notes",
-          "name": "Notes",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "PART_REV",
-          "name": "PART_REV",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Price",
-          "name": "Price",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "RS",
-          "name": "RS",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "SnapEDA_Link",
-          "name": "SnapEDA_Link",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Digikey",
-          "name": "Digikey",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "generic",
-          "name": "generic",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Description",
-          "name": "Description",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Manufacturer",
-          "name": "Manufacturer",
-          "show": false
-        },
-        {
-          "group_by": false,
-          "label": "Part Number",
-          "name": "Part Number",
-          "show": true
-        },
-        {
-          "group_by": true,
-          "label": "LCSC",
-          "name": "LCSC",
-          "show": true
-        },
-        {
-          "group_by": false,
-          "label": "Alternate LCSC",
-          "name": "Alternate LCSC",
-          "show": true
         }
       ],
       "filter_string": "",
       "group_symbols": true,
-      "name": "",
+      "name": "Grouped By Value",
       "sort_asc": true,
       "sort_field": "Reference"
     },
