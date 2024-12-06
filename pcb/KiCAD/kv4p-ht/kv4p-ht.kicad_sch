@@ -6178,6 +6178,12 @@
 		(uuid "6522c7d9-0184-48df-b23f-925d3cfeea63")
 	)
 	(junction
+		(at 81.915 179.705)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "6952d313-a6fb-4760-b6d4-a4657629df9b")
+	)
+	(junction
 		(at 75.565 21.59)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -6951,6 +6957,16 @@
 	)
 	(wire
 		(pts
+			(xy 81.915 179.705) (xy 79.375 179.705)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7f33b7b3-68da-4ca3-806b-146bc1f91b28")
+	)
+	(wire
+		(pts
 			(xy 245.745 149.86) (xy 250.825 149.86)
 		)
 		(stroke
@@ -7461,7 +7477,7 @@
 	)
 	(wire
 		(pts
-			(xy 82.55 179.705) (xy 79.375 179.705)
+			(xy 84.455 179.705) (xy 81.915 179.705)
 		)
 		(stroke
 			(width 0)
@@ -8193,7 +8209,7 @@
 	)
 	(hierarchical_label "Radio AF Out"
 		(shape input)
-		(at 87.63 179.705 0)
+		(at 89.535 179.705 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -13465,6 +13481,121 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R_Small")
+		(at 81.915 182.245 0)
+		(mirror y)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "542cb597-5d3f-4c84-8454-b8446a63453a")
+		(property "Reference" "R22"
+			(at 84.455 183.5151 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "47k"
+			(at 84.455 185.42 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C25819"
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Digikey" ""
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Notes" ""
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "generic" ""
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Alternate LCSC" ""
+			(at 81.915 182.245 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "43bd2b16-e6da-4880-8771-ce4e55f21215")
+		)
+		(pin "1"
+			(uuid "52f083eb-1a02-4dbe-961b-b3d6a66ccb02")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "R22")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 240.03 72.39 0)
 		(unit 1)
@@ -16966,6 +17097,72 @@
 		)
 	)
 	(symbol
+		(lib_id "power:+3.3V")
+		(at 81.915 184.785 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "99299320-f801-49e2-a665-4936fffceb4c")
+		(property "Reference" "#PWR068"
+			(at 81.915 180.975 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "+3.3V"
+			(at 81.915 189.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 81.915 184.785 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 81.915 184.785 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
+			(at 81.915 184.785 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "4a94b9fe-d4d5-49e4-8dce-e5d10fbf7f60")
+		)
+		(instances
+			(project "kv4p-ht"
+				(path "/8d95c9c7-5cc4-4882-841b-38628c0aab26"
+					(reference "#PWR068")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R_Small")
 		(at 200.025 149.86 90)
 		(unit 1)
@@ -17969,7 +18166,7 @@
 	)
 	(symbol
 		(lib_id "Device:C_Small")
-		(at 85.09 179.705 90)
+		(at 86.995 179.705 90)
 		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
@@ -17979,7 +18176,7 @@
 		(fields_autoplaced yes)
 		(uuid "a10aa65f-a04f-42ec-acaa-6fe6aa4c6f2c")
 		(property "Reference" "C10"
-			(at 85.0964 172.72 90)
+			(at 87.0014 172.72 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -17987,7 +18184,7 @@
 			)
 		)
 		(property "Value" "1uF"
-			(at 85.0964 175.26 90)
+			(at 87.0014 175.26 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -17995,7 +18192,7 @@
 			)
 		)
 		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18004,7 +18201,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18013,7 +18210,7 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18022,7 +18219,7 @@
 			)
 		)
 		(property "LCSC" "C15849"
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18031,7 +18228,7 @@
 			)
 		)
 		(property "Digikey" ""
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18040,7 +18237,7 @@
 			)
 		)
 		(property "Notes" ""
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18049,7 +18246,7 @@
 			)
 		)
 		(property "generic" ""
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -18058,7 +18255,7 @@
 			)
 		)
 		(property "Alternate LCSC" ""
-			(at 85.09 179.705 0)
+			(at 86.995 179.705 0)
 			(effects
 				(font
 					(size 1.27 1.27)

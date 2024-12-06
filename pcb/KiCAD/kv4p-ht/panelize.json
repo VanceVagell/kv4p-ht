@@ -11,7 +11,7 @@
     },
     "cuts": {
         "type": "vcuts",
-        "layer": "Edge.Cuts"
+        "layer": "User.1"
     },
     "framing": {
         "type": "railstb"
