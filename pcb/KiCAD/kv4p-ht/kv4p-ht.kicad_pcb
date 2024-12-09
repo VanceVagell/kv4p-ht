@@ -9,7 +9,7 @@
 	(paper "A4")
 	(title_block
 		(title "kv4p HT")
-		(date "2024-12-05")
+		(date "2024-12-09")
 		(rev "2.0c")
 		(company "VanceVagell")
 		(comment 1 "https://github.com/VanceVagell/kv4p-ht")
