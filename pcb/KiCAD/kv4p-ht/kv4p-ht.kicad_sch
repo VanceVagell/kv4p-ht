@@ -8792,7 +8792,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
+		(property "Footprint" "Libraries:L_0805_2115Metric (Murata Inductors)"
 			(at 164.465 64.77 0)
 			(effects
 				(font
@@ -8846,7 +8846,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C574016"
+		(property "LCSC" "C1330253"
 			(at 164.465 64.77 0)
 			(effects
 				(font
@@ -8855,7 +8855,7 @@
 				(hide yes)
 			)
 		)
-		(property "Part Number" "SWI0603F-43NG"
+		(property "Part Number" "LQW2BAN43NG00L"
 			(at 164.465 64.77 0)
 			(effects
 				(font
@@ -8864,7 +8864,7 @@
 				(hide yes)
 			)
 		)
-		(property "Alternate LCSC" "C1330253 (0805)"
+		(property "Alternate LCSC" "C1330253 (0805), C574016 (0603)"
 			(at 164.465 64.77 0)
 			(effects
 				(font
@@ -9942,7 +9942,7 @@
 				)
 			)
 		)
-		(property "Footprint" "kv4p-ht:SW-Push-SPST-Horizontal-C381061"
+		(property "Footprint" "kv4p-ht:SW-Push-SPST-Horizontal-C455252"
 			(at 154.305 172.72 0)
 			(effects
 				(font
@@ -10334,7 +10334,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
+		(property "Footprint" "Inductor_SMD:L_0603_1608Metric"
 			(at 164.465 67.31 0)
 			(effects
 				(font
@@ -11518,7 +11518,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
+		(property "Footprint" "Libraries:L_0805_2115Metric (Murata Inductors)"
 			(at 182.245 64.77 0)
 			(effects
 				(font
@@ -12587,7 +12587,7 @@
 				)
 			)
 		)
-		(property "Footprint" "kv4p-ht:SW-Push-SPST-Horizontal-C381061"
+		(property "Footprint" "kv4p-ht:SW-Push-SPST-Horizontal-C455252"
 			(at 155.575 141.605 0)
 			(effects
 				(font
@@ -14273,7 +14273,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Inductor_SMD:L_0805_2012Metric"
+		(property "Footprint" "Libraries:L_0805_2115Metric (Murata Inductors)"
 			(at 173.355 64.77 0)
 			(effects
 				(font

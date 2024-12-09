@@ -39,5 +39,9 @@
         "thickness": "0.25mm",
         "text": "Manufactured by Halibut Electronics, 2024-12-05",
         "anchor": "mb"
+    },
+    "post": {
+        "refillzones": "True",
+        "dimensions": "True"
     }
 }
