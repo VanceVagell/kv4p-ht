@@ -5,3 +5,4 @@ build/
 backups/
 ~*
 *.lck
+*.swp
