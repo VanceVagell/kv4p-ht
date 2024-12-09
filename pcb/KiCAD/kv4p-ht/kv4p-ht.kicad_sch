@@ -8792,7 +8792,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Libraries:L_0805_2115Metric (Murata Inductors)"
+		(property "Footprint" "kv4p-ht:L_0805_2115Metric (Murata Inductors)"
 			(at 164.465 64.77 0)
 			(effects
 				(font
@@ -11518,7 +11518,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Libraries:L_0805_2115Metric (Murata Inductors)"
+		(property "Footprint" "kv4p-ht:L_0805_2115Metric (Murata Inductors)"
 			(at 182.245 64.77 0)
 			(effects
 				(font
@@ -14273,7 +14273,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Libraries:L_0805_2115Metric (Murata Inductors)"
+		(property "Footprint" "kv4p-ht:L_0805_2115Metric (Murata Inductors)"
 			(at 173.355 64.77 0)
 			(effects
 				(font
