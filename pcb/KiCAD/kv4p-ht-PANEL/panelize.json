@@ -19,7 +19,8 @@
     "tooling": {
         "type": "4hole",
         "hoffset": "5mm",
-        "voffset": "2.5mm"
+        "voffset": "2.5mm",
+        "size": "1mm"
     },
     "fiducials": {
         "type": "4fid",
@@ -37,7 +38,11 @@
         "type": "simple",
         "voffset": "-2.5mm",
         "thickness": "0.25mm",
-        "text": "Manufactured by Halibut Electronics, 2024-12-05",
+        "text": "Manufactured by Halibut Electronics, 2024-12-09",
         "anchor": "mb"
+    },
+    "post": {
+        "refillzones": "True",
+        "dimensions": "True"
     }
 }
