@@ -199,12 +199,12 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/jost"
-                    android:text="Max frequency"
+                    android:text="Max tx frequency"
                     android:textColor="@color/primary"
                     android:textSize="18dp"
                     android:layout_gravity="center_vertical"
                     android:layout_weight="1"
-                    android:labelFor="@id/closedCaptionsButton"/>
+                    android:labelFor="@id/maxFreqTextView"/>
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="wrap_content"

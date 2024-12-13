@@ -90,6 +90,7 @@ import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 
+import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -599,6 +600,15 @@ public class MainActivity extends AppCompatActivity {
             if (null != objectField) {
                 aprsMessage.objName = objectField.getObjectName();
                 // Log.d("DEBUG", "Object packet received");
+            }
+        }
+
+        // If the message type is unknown, we at least display the raw contents as a comment.
+        if (aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0)) {
+            if (null != infoField) {
+                try {
+                    comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
+                } catch (Exception e) { }
             }
         }
 
