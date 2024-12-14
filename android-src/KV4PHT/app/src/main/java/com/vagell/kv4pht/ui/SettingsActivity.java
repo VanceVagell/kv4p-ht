@@ -53,7 +53,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class SettingsActivity extends AppCompatActivity {
-    private static final String DEFAULT_RX_SAMPLE_RATE_MULT = "1.00470";
+    private static final String DEFAULT_RX_SAMPLE_RATE_MULT = "1.00494";
 
     private ThreadPoolExecutor threadPoolExecutor = null;
 
