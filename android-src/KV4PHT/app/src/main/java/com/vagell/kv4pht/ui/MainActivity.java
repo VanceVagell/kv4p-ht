@@ -844,6 +844,7 @@ public class MainActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = viewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting bandwidthSetting = viewModel.appDb.appSettingDao().getByName("bandwidth");
                 AppSetting maxFreqSetting = viewModel.appDb.appSettingDao().getByName("maxFreq");
                 AppSetting micGainBoostSetting = viewModel.appDb.appSettingDao().getByName("micGainBoost");
                 AppSetting rxSampleRateSetting = viewModel.appDb.appSettingDao().getByName("rxSampleRate");
@@ -894,6 +895,12 @@ public class MainActivity extends AppCompatActivity {
                             if (radioAudioService != null) {
                                 radioAudioService.setActiveMemoryId(activeMemoryId);
                                 radioAudioService.setActiveFrequencyStr(activeFrequencyStr);
+                            }
+                        }
+
+                        if (bandwidthSetting != null) {
+                            if (radioAudioService != null) {
+                                radioAudioService.setBandwidth(bandwidthSetting.value);
                             }
                         }
 

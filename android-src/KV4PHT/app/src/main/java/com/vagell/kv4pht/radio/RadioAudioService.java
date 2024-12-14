@@ -154,6 +154,7 @@ public class RadioAudioService extends Service {
     private int activeMemoryId = -1; // -1 means we're in simplex mode
     private static int maxFreq = 148; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
+    private String bandwidth = "Wide";
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -276,6 +277,10 @@ public class RadioAudioService extends Service {
 
     public void setMicGainBoost(String micGainBoost) {
         this.micGainBoost = MicGainBoost.parse(micGainBoost);
+    }
+
+    public void setBandwidth(String bandwidth) {
+        this.bandwidth = bandwidth;
     }
 
     public void setRxSampleRate(String rxSampleRate) {
@@ -498,7 +503,8 @@ public class RadioAudioService extends Service {
             sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) +
                     makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel +
                     String.format("%05d", (int) (SampleRate.toInt(rxSampleRate) * rxSampleRateMult)) + // e.g. "44100"
-                    String.format("%05d", SampleRate.toInt(txSampleRate))); // e.g. "44100"
+                    String.format("%05d", SampleRate.toInt(txSampleRate)) + // e.g. "44100"
+                    (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
         // Reset audio prebuffer
@@ -589,7 +595,8 @@ public class RadioAudioService extends Service {
                             makeSafe2MFreq(memory.frequency) +
                             getToneIdxStr(memory.tone) + squelchLevel +
                             String.format("%05d", (int) (SampleRate.toInt(rxSampleRate) * rxSampleRateMult)) + // e.g. "44100"
-                            String.format("%05d", SampleRate.toInt(txSampleRate))); // e.g. "44100"
+                            String.format("%05d", SampleRate.toInt(txSampleRate)) + // e.g. "44100"
+                            (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
         // Reset audio prebuffer

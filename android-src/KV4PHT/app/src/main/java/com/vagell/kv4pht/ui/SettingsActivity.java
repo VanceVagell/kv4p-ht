@@ -68,6 +68,7 @@ public class SettingsActivity extends AppCompatActivity {
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         populateOriginalValues();
+        populateBandwidths();
         populateMaxFrequencies();
         populateMicGainOptions();
         populateSampleRateOptions();
@@ -86,6 +87,17 @@ public class SettingsActivity extends AppCompatActivity {
         super.onResume();
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+    }
+
+    private void populateBandwidths() {
+        AutoCompleteTextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
+
+        List<String> bandwidths = new ArrayList<String>();
+        bandwidths.add("Wide");
+        bandwidths.add("Narrow");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
+        bandwidthTextView.setAdapter(arrayAdapter);
     }
 
     private void populateMaxFrequencies() {
@@ -141,6 +153,7 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting bandwidthSetting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
                 AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
                 AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
                 AppSetting rxSampleRateSetting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRate");
@@ -183,6 +196,11 @@ public class SettingsActivity extends AppCompatActivity {
                         if (disableAnimationsSetting != null) {
                             Switch noAnimationsSwitch = (Switch) (findViewById(R.id.noAnimationsSwitch));
                             noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
+                        }
+
+                        if (bandwidthSetting != null) {
+                            AutoCompleteTextView bandwidthTextVIew = (AutoCompleteTextView) findViewById(R.id.bandwidthTextView);
+                            bandwidthTextVIew.setText(bandwidthSetting.value, false);
                         }
 
                         if (maxFreqSetting != null) {
@@ -304,6 +322,23 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
+        TextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
+        bandwidthTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.bandwidthTextView)).getText().toString().trim();
+                setBandwidth(newText);
+            }
+        });
+
         TextView maxFreqTextView = findViewById(R.id.maxFreqTextView);
         maxFreqTextView.addTextChangedListener(new TextWatcher() {
             @Override
@@ -386,6 +421,30 @@ public class SettingsActivity extends AppCompatActivity {
             public void afterTextChanged(Editable s) {
                 String newText = ((TextView) findViewById(R.id.rxSampleRateMultTextView)).getText().toString().trim();
                 setRxSampleRateMult(newText);
+            }
+        });
+    }
+
+    /**
+     * @param bandwidth Change the bandwidth to use, either "Wide" or "Narrow". (25kHz or 12.5kHz)
+     */
+    private void setBandwidth(String bandwidth) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
+
+                if (setting == null) {
+                    setting = new AppSetting("bandwidth", bandwidth);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = bandwidth;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
             }
         });
     }
