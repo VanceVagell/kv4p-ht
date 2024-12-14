@@ -216,11 +216,14 @@ public class RadioAudioService extends Service {
 
     public enum SampleRate {
         SAMPLE_RATE_44,
+        SAMPLE_RATE_22,
         SAMPLE_RATE_16;
 
         public static SampleRate parse(String str) {
             if (str.equals("44.1kHz")) {
                 return SAMPLE_RATE_44;
+            } else if (str.equals("22kHz")) {
+                return SAMPLE_RATE_22;
             } else if (str.equals("16kHz")) {
                 return SAMPLE_RATE_16;
             }
@@ -231,21 +234,13 @@ public class RadioAudioService extends Service {
         public static int toInt(SampleRate sampleRate) {
             if (sampleRate == SAMPLE_RATE_44) {
                 return 44100;
+            } else if (sampleRate == SAMPLE_RATE_22) {
+                return 22050;
             } else if (sampleRate == SAMPLE_RATE_16) {
                 return 16000;
             }
 
             return 44100;
-        }
-
-        public static String encode(SampleRate sampleRate) {
-            if (sampleRate == SAMPLE_RATE_44) {
-                return "0";
-            } else if (sampleRate == SAMPLE_RATE_16) {
-                return "1";
-            }
-
-            return "0";
         }
     }
 

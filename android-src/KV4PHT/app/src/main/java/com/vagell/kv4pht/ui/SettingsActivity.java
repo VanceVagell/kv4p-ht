@@ -53,6 +53,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class SettingsActivity extends AppCompatActivity {
+    private static final String DEFAULT_RX_SAMPLE_RATE_MULT = "1.00470";
+
     private ThreadPoolExecutor threadPoolExecutor = null;
 
     @Override
@@ -116,6 +118,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         List<String> sampleRateOptions = new ArrayList<String>();
         sampleRateOptions.add("44.1kHz");
+        sampleRateOptions.add("22kHz");
         sampleRateOptions.add("16kHz");
 
         ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, sampleRateOptions);
@@ -494,16 +497,35 @@ public class SettingsActivity extends AppCompatActivity {
             return;
         }
 
+        // If the given value has any issues, revert to default.
+        if (null == rxSampleRateMult || rxSampleRateMult.trim().length() == 0) {
+            rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
+            ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
+        } else {
+            try {
+                float multFloat = Float.parseFloat(rxSampleRateMult);
+                if (multFloat < 0.5 || multFloat > 1.5) {
+                    rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
+                    ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
+                }
+            } catch (Exception e) {
+                rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
+                ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
+            }
+        }
+
+        final String fixedMult = rxSampleRateMult;
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
                 AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
 
                 if (setting == null) {
-                    setting = new AppSetting("rxSampleRateMult", rxSampleRateMult);
+                    setting = new AppSetting("rxSampleRateMult", fixedMult);
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
-                    setting.value = rxSampleRateMult;
+                    setting.value = fixedMult;
                     MainViewModel.appDb.appSettingDao().update(setting);
                 }
             }
