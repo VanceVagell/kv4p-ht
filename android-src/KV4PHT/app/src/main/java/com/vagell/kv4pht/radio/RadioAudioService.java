@@ -126,6 +126,37 @@ public class RadioAudioService extends Service {
         }
     }
 
+    public enum MicGainBoost {
+        NONE,
+        LOW,
+        MED,
+        HIGH;
+
+        public static MicGainBoost parseMicGainBoost(String str) {
+            if (str.equals("High")) {
+                return MicGainBoost.HIGH;
+            } else if (str.equals("Med")) {
+                return MicGainBoost.MED;
+            } else if (str.equals("Low")) {
+                return MicGainBoost.LOW;
+            }
+
+            return MicGainBoost.NONE;
+        }
+
+        public static float toFloat(MicGainBoost micGainBoost) {
+            if (micGainBoost == LOW) {
+                return 1.5f;
+            } else if (micGainBoost == MED) {
+                return 2.0f;
+            } else if (micGainBoost == HIGH) {
+                return 2.5f;
+            }
+
+            return 1.0f;
+        }
+    }
+
     public static final byte SILENT_BYTE = -128;
 
     // Callbacks to the Activity that started us
@@ -170,6 +201,7 @@ public class RadioAudioService extends Service {
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
     private static int maxFreq = 148; // in MHz
+    private MicGainBoost micGainBoost = MicGainBoost.NONE;
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -209,6 +241,10 @@ public class RadioAudioService extends Service {
 
     public void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
         setRadioFilters(emphasis, highpass, lowpass);
+    }
+
+    public void setMicGainBoost(String micGainBoost) {
+        this.micGainBoost = MicGainBoost.parseMicGainBoost(micGainBoost);
     }
 
     public static void setMaxFreq(int newMaxFreq) {
@@ -858,7 +894,40 @@ public class RadioAudioService extends Service {
         }
     }
 
+    private byte[] applyMicGain(byte[] audioBuffer) {
+        if (micGainBoost == MicGainBoost.NONE) {
+            return audioBuffer; // No gain, just return original
+        }
+
+        byte[] newAudioBuffer = new byte[audioBuffer.length];
+        float gain = MicGainBoost.toFloat(micGainBoost);
+
+        for (int i = 0; i < audioBuffer.length; i++) {
+            // Convert from [0..255] to [-128..127]
+            int signedSample = (audioBuffer[i] & 0xFF) - 128;
+
+            // Apply gain
+            signedSample = (int)(signedSample * gain);
+
+            // Clip to [-128..127]
+            signedSample = Math.min(127, signedSample);
+            signedSample = Math.max(-128, signedSample);
+
+            // Convert back to [0..255]
+            signedSample += 128;
+
+            // Store in the new buffer
+            newAudioBuffer[i] = (byte) signedSample;
+        }
+
+        return newAudioBuffer;
+    }
+
     public void sendAudioToESP32(byte[] audioBuffer, boolean dataMode) {
+        if (!dataMode) {
+            audioBuffer = applyMicGain(audioBuffer);
+        }
+
         if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
             sendBytesToESP32(audioBuffer);
         } else {
@@ -868,6 +937,7 @@ public class RadioAudioService extends Service {
             final Handler handler = new Handler(Looper.getMainLooper());
             final float msToSendOneChunk = (float) TX_AUDIO_CHUNK_SIZE / (float) AUDIO_SAMPLE_RATE * 1000f;
             float nextSendDelay = 0f;
+            byte[] finalAudioBuffer = audioBuffer;
             for (int i = 0; i < audioBuffer.length; i += TX_AUDIO_CHUNK_SIZE) {
                 final int chunkStart = i;
                 handler.postDelayed(new Runnable() {
@@ -876,8 +946,8 @@ public class RadioAudioService extends Service {
                         android.os.Process.setThreadPriority(
                                 android.os.Process.THREAD_PRIORITY_BACKGROUND +
                                         android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        sendBytesToESP32(Arrays.copyOfRange(audioBuffer, chunkStart,
-                                Math.min(audioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
+                        sendBytesToESP32(Arrays.copyOfRange(finalAudioBuffer, chunkStart,
+                                Math.min(finalAudioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
                     }
                 }, (int) nextSendDelay);
 

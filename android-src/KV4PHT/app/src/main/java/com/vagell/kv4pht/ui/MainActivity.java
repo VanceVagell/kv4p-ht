@@ -540,6 +540,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Get the position, if included.
         if (null != positionField) {
+            aprsMessage.type = APRSMessage.POSITION_TYPE; // Anything with a position is POSITION_TYPE unless we determine more specific type later.
             aprsMessage.positionLat = positionField.getPosition().getLatitude();
             aprsMessage.positionLong = positionField.getPosition().getLongitude();
         }
@@ -608,6 +609,7 @@ public class MainActivity extends AppCompatActivity {
             if (null != infoField) {
                 try {
                     comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
+                    aprsMessage.comment = comment;
                 } catch (Exception e) { }
             }
         }
@@ -844,6 +846,7 @@ public class MainActivity extends AppCompatActivity {
                 AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = viewModel.appDb.appSettingDao().getByName("disableAnimations");
                 AppSetting maxFreqSetting = viewModel.appDb.appSettingDao().getByName("maxFreq");
+                AppSetting micGainBoostSetting = viewModel.appDb.appSettingDao().getByName("micGainBoost");
                 AppSetting lastMemoryId = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
                 AppSetting lastFreq = viewModel.appDb.appSettingDao().getByName("lastFreq");
                 AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
@@ -895,6 +898,13 @@ public class MainActivity extends AppCompatActivity {
                         if (maxFreqSetting != null) {
                             int maxFreq = Integer.parseInt(maxFreqSetting.value);
                             RadioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
+                        }
+
+                        if (micGainBoostSetting != null) {
+                            String micGainBoost = micGainBoostSetting.value;
+                            if (radioAudioService != null) {
+                                radioAudioService.setMicGainBoost(micGainBoost);
+                            }
                         }
 
                         if (squelchSetting != null) {

@@ -66,6 +66,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         populateOriginalValues();
         populateMaxFrequencies();
+        populateMicGainOptions();
         attachListeners();
     }
 
@@ -94,6 +95,19 @@ public class SettingsActivity extends AppCompatActivity {
         maxFreqTextView.setAdapter(arrayAdapter);
     }
 
+    private void populateMicGainOptions() {
+        AutoCompleteTextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
+
+        List<String> micGainOptions = new ArrayList<String>();
+        micGainOptions.add("None");
+        micGainOptions.add("Low");
+        micGainOptions.add("Med");
+        micGainOptions.add("High");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, micGainOptions);
+        micGainBoostTextView.setAdapter(arrayAdapter);
+    }
+
     private void populateOriginalValues() {
         if (threadPoolExecutor == null) {
             return;
@@ -110,6 +124,8 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
                 AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
+                AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
+
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -152,6 +168,11 @@ public class SettingsActivity extends AppCompatActivity {
                         if (maxFreqSetting != null) {
                             AutoCompleteTextView maxFreqTextView = (AutoCompleteTextView) findViewById(R.id.maxFreqTextView);
                             maxFreqTextView.setText(maxFreqSetting.value + "MHz", false);
+                        }
+
+                        if (micGainBoostSetting != null) {
+                            AutoCompleteTextView micGainBoostTextView = (AutoCompleteTextView) findViewById(R.id.micGainBoostTextView);
+                            micGainBoostTextView.setText(micGainBoostSetting.value, false);
                         }
                     }
                 });
@@ -264,6 +285,23 @@ public class SettingsActivity extends AppCompatActivity {
                 setMaxFreq(newText.substring(0, 3));
             }
         });
+
+        TextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
+        micGainBoostTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.micGainBoostTextView)).getText().toString().trim();
+                setMicGainBoost(newText);
+            }
+        });
     }
 
     /**
@@ -284,6 +322,31 @@ public class SettingsActivity extends AppCompatActivity {
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
                     setting.value = maxFreq;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param micGainBoost The level of software gain that should be added to mic audio.
+     *                     Should be one of "None", "Low", "Med", or "High".
+     */
+    private void setMicGainBoost(String micGainBoost) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
+
+                if (setting == null) {
+                    setting = new AppSetting("micGainBoost", micGainBoost);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = micGainBoost;
                     MainViewModel.appDb.appSettingDao().update(setting);
                 }
             }
