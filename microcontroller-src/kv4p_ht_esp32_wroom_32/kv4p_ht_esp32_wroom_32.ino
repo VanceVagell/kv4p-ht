@@ -46,12 +46,10 @@ int matchedDelimiterTokens = 0;
 #define MODE_STOPPED 2
 int mode = MODE_STOPPED;
 
-// Audio sampling rate, must match what Android app expects (and sends).
-#define AUDIO_SAMPLE_RATE 44100
-
-// Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
-// But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
-#define SAMPLING_RATE_OFFSET 218
+// Audio sampling rate and baud rates must match what Android app expects.
+int rxAudioSampleRate = 44100; // May be changed by TUNE_TO
+int txAudioSampleRate = 44100; // Ditto
+int baudRate = 921600; // Variable because may be dynamic / configurable in the future.
 
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_TEMP_AUDIO_BUFFER_SIZE 4096 // Holds data we already got off of USB serial from Android app
@@ -102,22 +100,19 @@ int fadeDirection = 0; // 0: no fade, 1: fade in, -1: fade out
 int attenuation = ATTENUATION_MAX; // Full volume
 bool lastSquelched = false;
 
-
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
 ////////////////////////////////////////////////////////////////////////////////
 
 void initI2SRx();
 void initI2STx();
-void tuneTo(float freqTx, float freqRx, int tone, int squelch);
+void tuneTo(float freqTx, float freqRx, int tone, int squelch, int newRxSampleRate, int newTxSampleRate);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 
-
-
 void setup() {
   // Communication with Android via USB cable
-  Serial.begin(921600);
+  Serial.begin(baudRate);
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
 
@@ -144,7 +139,6 @@ void setup() {
     result = dra->handshake(); // Wait for module to start up
   }
   // Serial.println("handshake: " + String(result));
-  // tuneTo(146.700, 146.700, 0, 0);
   result = dra->volume(8);
   // Serial.println("volume: " + String(result));
   result = dra->filters(false, false, false);
@@ -165,9 +159,9 @@ void initI2SRx() {
   adc1_config_width(ADC_WIDTH_BIT_12);
   adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
 
-  static const i2s_config_t i2sRxConfig = {
+  i2s_config_t i2sRxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-      .sample_rate = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
+      .sample_rate = rxAudioSampleRate,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
       .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
@@ -190,9 +184,9 @@ void initI2STx() {
   }
   i2sStarted = true;
 
-  static const i2s_config_t i2sTxConfig = {
+  i2s_config_t i2sTxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
-      .sample_rate = AUDIO_SAMPLE_RATE,
+      .sample_rate = txAudioSampleRate,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
       .intr_alloc_flags = 0,
@@ -237,15 +231,12 @@ void loop() {
         // commands appropriately. Or at least extract the business logic from them to avoid that duplication.
         case COMMAND_TUNE_TO:
         {
-          // Example:
-          // 145.4500144.8500061
-          // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch (19 bytes total for params)
           setMode(MODE_RX);
 
           // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
           // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
           // putting them in there. If so, we take byte-by-byte until we get the full params.
-          int paramBytesMissing = 19;
+          int paramBytesMissing = 29;
           String paramsStr = "";
           if (paramBytesMissing > 0) {
             uint8_t paramPartsBuffer[paramBytesMissing];
@@ -264,14 +255,19 @@ void loop() {
             paramBytesMissing--;
           }
 
+          // Example:
+          // 145.4500144.85000614410044100
+          // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 5 char for rx sample rate, 5 char for tx sample rate (29 bytes total for params)
           float freqTxFloat = paramsStr.substring(0, 8).toFloat();
           float freqRxFloat = paramsStr.substring(8, 16).toFloat();
           int toneInt = paramsStr.substring(16, 18).toInt();
           int squelchInt = paramsStr.substring(18, 19).toInt();
+          int newRxSampleRate = paramsStr.substring(19, 24).toInt();
+          int newTxSampleRate = paramsStr.substring(24, 29).toInt();
 
           // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
 
-          tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
+          tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, newRxSampleRate, newTxSampleRate);
         }
           break;
         case COMMAND_FILTERS:
@@ -332,15 +328,12 @@ void loop() {
             break;
           case COMMAND_TUNE_TO:
           {
-            // Example:
-            // 145.4500144.8500061
-            // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch (19 bytes total for params)
             setMode(MODE_RX);
 
             // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
             // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
             // putting them in there. If so, we take byte-by-byte until we get the full params.
-            int paramBytesMissing = 19;
+            int paramBytesMissing = 29;
             String paramsStr = "";
             if (paramBytesMissing > 0) {
               uint8_t paramPartsBuffer[paramBytesMissing];
@@ -359,12 +352,19 @@ void loop() {
               paramBytesMissing--;
             }
 
+            // Example:
+            // 145.4500144.85000614410044100
+            // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 1 char for rx sample rate, 1 char for tx sample rate (29 bytes total for params)
             float freqTxFloat = paramsStr.substring(0, 8).toFloat();
             float freqRxFloat = paramsStr.substring(8, 16).toFloat();
             int toneInt = paramsStr.substring(16, 18).toInt();
             int squelchInt = paramsStr.substring(18, 19).toInt();
+            int newRxSampleRate = paramsStr.substring(19, 24).toInt();
+            int newTxSampleRate = paramsStr.substring(24, 29).toInt();
 
-            tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt);
+            // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
+
+            tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, newRxSampleRate, newTxSampleRate);
           }
             break;
           case COMMAND_FILTERS:
@@ -524,7 +524,13 @@ void loop() {
   }
 }
 
-void tuneTo(float freqTx, float freqRx, int tone, int squelch) {
+void tuneTo(float freqTx, float freqRx, int tone, int squelch, int newRxSampleRate, int newTxSampleRate) {
+  rxAudioSampleRate = newRxSampleRate;
+  txAudioSampleRate = newTxSampleRate;
+
+  initI2SRx();
+
+  // Tell radio module to tune
   int result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
   // Serial.println("tuneTo: " + String(result));
 }

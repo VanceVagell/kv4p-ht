@@ -44,6 +44,7 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
+import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +68,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateOriginalValues();
         populateMaxFrequencies();
         populateMicGainOptions();
+        populateSampleRateOptions();
         attachListeners();
     }
 
@@ -108,6 +110,19 @@ public class SettingsActivity extends AppCompatActivity {
         micGainBoostTextView.setAdapter(arrayAdapter);
     }
 
+    private void populateSampleRateOptions() {
+        AutoCompleteTextView rxSampleRateTextView = findViewById(R.id.rxSampleRateTextView);
+        AutoCompleteTextView txSampleRateTextView = findViewById(R.id.txSampleRateTextView);
+
+        List<String> sampleRateOptions = new ArrayList<String>();
+        sampleRateOptions.add("44.1kHz");
+        sampleRateOptions.add("16kHz");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, sampleRateOptions);
+        rxSampleRateTextView.setAdapter(arrayAdapter);
+        txSampleRateTextView.setAdapter(arrayAdapter);
+    }
+
     private void populateOriginalValues() {
         if (threadPoolExecutor == null) {
             return;
@@ -125,7 +140,9 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
                 AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
                 AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
-
+                AppSetting rxSampleRateSetting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRate");
+                AppSetting txSampleRateSetting = MainViewModel.appDb.appSettingDao().getByName("txSampleRate");
+                AppSetting rxSampleRateMultSetting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -173,6 +190,21 @@ public class SettingsActivity extends AppCompatActivity {
                         if (micGainBoostSetting != null) {
                             AutoCompleteTextView micGainBoostTextView = (AutoCompleteTextView) findViewById(R.id.micGainBoostTextView);
                             micGainBoostTextView.setText(micGainBoostSetting.value, false);
+                        }
+
+                        if (rxSampleRateSetting != null) {
+                            AutoCompleteTextView rxSampleRateTextView = (AutoCompleteTextView) findViewById(R.id.rxSampleRateTextView);
+                            rxSampleRateTextView.setText(rxSampleRateSetting.value, false);
+                        }
+
+                        if (txSampleRateSetting != null) {
+                            AutoCompleteTextView txSampleRateTextView = (AutoCompleteTextView) findViewById(R.id.txSampleRateTextView);
+                            txSampleRateTextView.setText(txSampleRateSetting.value, false);
+                        }
+
+                        if (rxSampleRateMultSetting != null) {
+                            TextView rxSampleRateMultTextView = (TextView) findViewById(R.id.rxSampleRateMultTextView);
+                            rxSampleRateMultTextView.setText(rxSampleRateMultSetting.value);
                         }
                     }
                 });
@@ -302,6 +334,57 @@ public class SettingsActivity extends AppCompatActivity {
                 setMicGainBoost(newText);
             }
         });
+
+        TextView rxSampleRateTextView = findViewById(R.id.rxSampleRateTextView);
+        rxSampleRateTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.rxSampleRateTextView)).getText().toString().trim();
+                setRxSampleRate(newText);
+            }
+        });
+
+        TextView txSampleRateTextView = findViewById(R.id.txSampleRateTextView);
+        txSampleRateTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.txSampleRateTextView)).getText().toString().trim();
+                setTxSampleRate(newText);
+            }
+        });
+
+        TextView rxSampleRateMultTextView = findViewById(R.id.rxSampleRateMultTextView);
+        rxSampleRateMultTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.rxSampleRateMultTextView)).getText().toString().trim();
+                setRxSampleRateMult(newText);
+            }
+        });
     }
 
     /**
@@ -347,6 +430,80 @@ public class SettingsActivity extends AppCompatActivity {
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
                     setting.value = micGainBoost;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param rxSampleRate The rate at which rx audio should be sampled by the ESP32 firmware, e.g. "44.1kHz", "16kHz"
+     */
+    private void setRxSampleRate(String rxSampleRate) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRate");
+
+                if (setting == null) {
+                    setting = new AppSetting("rxSampleRate", rxSampleRate);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = rxSampleRate;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param txSampleRate The rate at which tx audio should be sampled by the ESP32 firmware, e.g. "44.1kHz", "16kHz"
+     */
+    private void setTxSampleRate(String txSampleRate) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("txSampleRate");
+
+                if (setting == null) {
+                    setting = new AppSetting("txSampleRate", txSampleRate);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = txSampleRate;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param rxSampleRateMult A multipler (with baseline of 1.0) to apply to the rx sample rate.
+     *                         This can be used to adjust for ESP32 dev boards that aren't sampling
+     *                         at exactly the right rate.
+     */
+    private void setRxSampleRateMult(String rxSampleRateMult) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
+
+                if (setting == null) {
+                    setting = new AppSetting("rxSampleRateMult", rxSampleRateMult);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = rxSampleRateMult;
                     MainViewModel.appDb.appSettingDao().update(setting);
                 }
             }
