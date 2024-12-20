@@ -18,32 +18,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
-import android.Manifest;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.Service;
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.hardware.usb.UsbDevice;
-import android.hardware.usb.UsbDeviceConnection;
-import android.hardware.usb.UsbManager;
-import android.media.AudioAttributes;
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioRecord;
-import android.media.AudioTrack;
-import android.os.Binder;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.Looper;
-import android.util.Log;
-
-import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
-import androidx.lifecycle.LiveData;
+import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import com.hoho.android.usbserial.driver.SerialTimeoutException;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
@@ -67,17 +52,31 @@ import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbManager;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioRecord;
+import android.media.AudioTrack;
+import android.os.Binder;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.util.Log;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.lifecycle.LiveData;
 
 /**
  * Background service that manages the connection to the ESP32 (to control the radio), and
@@ -128,7 +127,8 @@ public class RadioAudioService extends Service {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 1000;
+    private static int audioTrackUnderrunCount = 0;
+    private static final int PRE_BUFFER_SIZE = 1024 * 2;
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
@@ -667,7 +667,7 @@ public class RadioAudioService extends Service {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build())
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(rxMinBufferSize)
+                .setBufferSizeInBytes(1024 * 3)
                 .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
                 .build();
         audioTrack.setAuxEffectSendLevel(0.0f);
@@ -837,7 +837,7 @@ public class RadioAudioService extends Service {
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadBufferSize(4096); // Must be much larger than ESP32's send buffer (so we never block it)
+        usbIoManager.setReadBufferSize(1024); // Must be much larger than ESP32's send buffer (so we never block it)
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
 
@@ -1169,6 +1169,10 @@ public class RadioAudioService extends Service {
 
                         // Play the audio.
                         audioTrack.write(data, 0, data.length);
+                        if (audioTrackUnderrunCount != audioTrack.getUnderrunCount()) {
+                            audioTrackUnderrunCount = audioTrack.getUnderrunCount();
+                            Log.d("DEBUG", "audioTrack.getUnderrunCount(): " + audioTrackUnderrunCount);
+                        }
 
                         if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                             audioTrack.play();
