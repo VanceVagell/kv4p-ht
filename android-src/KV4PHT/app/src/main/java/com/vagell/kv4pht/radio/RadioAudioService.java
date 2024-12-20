@@ -18,39 +18,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-
-import com.hoho.android.usbserial.driver.SerialTimeoutException;
-import com.hoho.android.usbserial.driver.UsbSerialDriver;
-import com.hoho.android.usbserial.driver.UsbSerialPort;
-import com.hoho.android.usbserial.driver.UsbSerialProber;
-import com.hoho.android.usbserial.util.SerialInputOutputManager;
-import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.aprs.parser.APRSPacket;
-import com.vagell.kv4pht.aprs.parser.Digipeater;
-import com.vagell.kv4pht.aprs.parser.InformationField;
-import com.vagell.kv4pht.aprs.parser.MessagePacket;
-import com.vagell.kv4pht.aprs.parser.Parser;
-import com.vagell.kv4pht.data.ChannelMemory;
-import com.vagell.kv4pht.firmware.FirmwareUtils;
-import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
-import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
-import com.vagell.kv4pht.javAX25.ax25.Packet;
-import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
-import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
-import com.vagell.kv4pht.ui.MainActivity;
-
-import org.apache.commons.lang3.ArrayUtils;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -74,9 +41,44 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
+
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.LiveData;
+
+import com.hoho.android.usbserial.driver.SerialTimeoutException;
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
+import com.hoho.android.usbserial.util.SerialInputOutputManager;
+import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.aprs.parser.APRSPacket;
+import com.vagell.kv4pht.aprs.parser.Digipeater;
+import com.vagell.kv4pht.aprs.parser.InformationField;
+import com.vagell.kv4pht.aprs.parser.MessagePacket;
+import com.vagell.kv4pht.aprs.parser.Parser;
+import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.firmware.FirmwareUtils;
+import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
+import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
+import com.vagell.kv4pht.javAX25.ax25.Packet;
+import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
+import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
+import com.vagell.kv4pht.ui.MainActivity;
+
+import org.apache.commons.lang3.ArrayUtils;
+
+import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Background service that manages the connection to the ESP32 (to control the radio), and
