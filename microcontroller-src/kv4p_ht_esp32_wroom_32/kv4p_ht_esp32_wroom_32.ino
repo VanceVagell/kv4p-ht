@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <DRA818.h>
 #include <driver/adc.h>
 #include <driver/i2s.h>
+#include <driver/dac.h>
 #include <esp_task_wdt.h>
 
 const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '3'}; // Should be 8 characters representing a zero-padded version, like 00000001.
@@ -47,8 +48,8 @@ int matchedDelimiterTokens = 0;
 int mode = MODE_STOPPED;
 
 // Audio sampling rate and baud rates must match what Android app expects.
-int rxAudioSampleRate = 44100; // May be changed by TUNE_TO
-int txAudioSampleRate = 44100; // Ditto
+uint32_t rxAudioSampleRate = 44100 * 1.22; // May be changed by TUNE_TO
+uint32_t txAudioSampleRate = 44100 * 1.22; // Ditto
 int baudRate = 921600; // Variable because may be dynamic / configurable in the future.
 
 // Buffer for outgoing audio bytes to send to radio module
@@ -87,7 +88,7 @@ long txStartTime = -1;
 bool i2sStarted = false;
 
 // I2S audio sampling stuff
-#define I2S_READ_LEN      1024
+#define I2S_READ_LEN      32
 #define I2S_WRITE_LEN     1024
 #define I2S_ADC_UNIT      ADC_UNIT_1
 #define I2S_ADC_CHANNEL   ADC1_CHANNEL_6
@@ -109,16 +110,20 @@ void initI2STx();
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, int newRxSampleRate, int newTxSampleRate);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
+void iir_lowpass_reset();
 
 void setup() {
-  // Communication with Android via USB cable
+    // Communication with Android via USB cable
   Serial.begin(baudRate);
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
 
+   esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = 30 * 1000,
+        .trigger_panic = true,
+    };
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
-  esp_task_wdt_init(10, true); // Reboot if locked up for a bit
-  esp_task_wdt_add(NULL); // Add the current task to WDT watch
+  esp_task_wdt_reconfigure(&twdt_config); // Reboot if locked up for a bit
 
   // Debug LED
   pinMode(LED_PIN, OUTPUT);
@@ -157,14 +162,13 @@ void initI2SRx() {
 
   // Initialize ADC
   adc1_config_width(ADC_WIDTH_BIT_12);
-  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
+  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
 
   i2s_config_t i2sRxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
       .sample_rate = rxAudioSampleRate,
-      .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-      .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
       .dma_buf_count = 4,
       .dma_buf_len = I2S_READ_LEN,
@@ -175,6 +179,9 @@ void initI2SRx() {
 
   ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sRxConfig, 0, NULL));
   ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
+  iir_lowpass_reset();
+  dac_output_enable(DAC_CHAN_1);  // GPIO26 (DAC1)
+  dac_output_voltage(DAC_CHAN_1, 138);
 }
 
 void initI2STx() {
@@ -199,8 +206,37 @@ void initI2STx() {
   i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);           
 }
 
+
+
+// Scale factor for fixed-point math (Q15 format)
+#define FIXED_POINT_SHIFT 15
+#define ALPHA (int32_t)(0.999992 * (1 << FIXED_POINT_SHIFT))  // α = 0.999992 To achieve a 2-second decay at a 44.1 kHz sample rate
+
+static int32_t prev_y = 0;
+
+void iir_lowpass_reset() {
+  prev_y = 0;
+}
+
+// IIR Low-pass filter (state in Q15)
+int16_t iir_lowpass(int16_t x) {
+  // Filter state in Q15 format
+  static int32_t prev_y = 0;
+  // Scale input to Q15
+  int32_t x_q15 = x << FIXED_POINT_SHIFT;
+  // IIR calculation (in Q15): y[n] = α * x[n] + (1 - α) * y[n-1]
+  prev_y = (ALPHA * x_q15 + ((1 << FIXED_POINT_SHIFT) - ALPHA) * prev_y) >> FIXED_POINT_SHIFT;
+  // Convert result back to integer (Q0)
+  return (int16_t)(prev_y >> FIXED_POINT_SHIFT);
+}
+
+// High-pass: x[n] - LPF(x[n])
+int16_t remove_dc(int16_t x) {
+    return x - iir_lowpass(x);
+}
+
 void loop() {
-  try {
+   {
     if (mode == MODE_STOPPED) {
       // Read a command from Android app
       uint8_t tempBuffer[100]; // Big enough for a command and params, won't hold audio data
@@ -401,11 +437,10 @@ void loop() {
       }
 
       size_t bytesRead = 0;
-      uint8_t buffer32[I2S_READ_LEN * 4] = {0};
-      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
-      size_t samplesRead = bytesRead / 4;
+      uint16_t buffer16[I2S_READ_LEN] = {0};
+      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, portMAX_DELAY));
+      size_t samplesRead = bytesRead / 2;
 
-      byte buffer8[I2S_READ_LEN] = {0};
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
 
       // Check for squelch status change
@@ -425,11 +460,6 @@ void loop() {
       int attenuationIncrement = ATTENUATION_MAX / FADE_SAMPLES;
 
       for (int i = 0; i < samplesRead; i++) {
-        uint8_t sampleValue;
-
-        // Extract 8-bit sample from 32-bit buffer
-        sampleValue = buffer32[i * 4 + 3] << 4;
-        sampleValue |= buffer32[i * 4 + 2] >> 4;
 
         // Adjust attenuation during fade
         if (fadeCounter > 0) {
@@ -441,13 +471,10 @@ void loop() {
           fadeDirection = 0;
         }
 
-        // Apply attenuation to the sample
-        int adjustedSample = (((int)sampleValue - 128) * attenuation) >> 8;
-        adjustedSample += 128;
-        buffer8[i] = (uint8_t)adjustedSample;
+         buffer16[i] = (int32_t)remove_dc(((2048 - (uint16_t(buffer16[i]) & 0xfff)) << 4)) * attenuation >> 8;
       }
 
-      Serial.write(buffer8, samplesRead);
+      Serial.write((uint8_t*)buffer16, bytesRead);
     } else if (mode == MODE_TX) {
       // Check for runaway tx
       int txSeconds = (micros() - txStartTime) / 1000000;
@@ -516,9 +543,6 @@ void loop() {
 
     // Regularly reset the WDT timer to prevent the device from rebooting (prove we're not locked up).
     esp_task_wdt_reset();
-  } catch (int e) {
-    // Disregard, we don't want to crash. Just pick up at next loop().)
-    // Serial.println("Exception in loop(), skipping cycle.");
   }
 }
 
