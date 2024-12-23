@@ -58,8 +58,7 @@ public class APRSPacket implements Serializable {
 		this.dti = (char)body[0];
         this.aprsInformation = new InformationField(body);
     }
-    
-    
+
 	/** 
 	 * @param callsign
 	 * @return String

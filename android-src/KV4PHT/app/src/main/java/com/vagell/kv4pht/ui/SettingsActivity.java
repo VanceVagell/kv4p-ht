@@ -44,6 +44,7 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
+import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +53,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class SettingsActivity extends AppCompatActivity {
+    private static final String DEFAULT_RX_SAMPLE_RATE_MULT = "1.00494";
+
     private ThreadPoolExecutor threadPoolExecutor = null;
 
     @Override
@@ -65,7 +68,10 @@ public class SettingsActivity extends AppCompatActivity {
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         populateOriginalValues();
+        populateBandwidths();
         populateMaxFrequencies();
+        populateMicGainOptions();
+        populateSampleRateOptions();
         attachListeners();
     }
 
@@ -83,6 +89,17 @@ public class SettingsActivity extends AppCompatActivity {
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
+    private void populateBandwidths() {
+        AutoCompleteTextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
+
+        List<String> bandwidths = new ArrayList<String>();
+        bandwidths.add("Wide");
+        bandwidths.add("Narrow");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
+        bandwidthTextView.setAdapter(arrayAdapter);
+    }
+
     private void populateMaxFrequencies() {
         AutoCompleteTextView maxFreqTextView = findViewById(R.id.maxFreqTextView);
 
@@ -92,6 +109,33 @@ public class SettingsActivity extends AppCompatActivity {
 
         ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, maxFreqs);
         maxFreqTextView.setAdapter(arrayAdapter);
+    }
+
+    private void populateMicGainOptions() {
+        AutoCompleteTextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
+
+        List<String> micGainOptions = new ArrayList<String>();
+        micGainOptions.add("None");
+        micGainOptions.add("Low");
+        micGainOptions.add("Med");
+        micGainOptions.add("High");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, micGainOptions);
+        micGainBoostTextView.setAdapter(arrayAdapter);
+    }
+
+    private void populateSampleRateOptions() {
+        AutoCompleteTextView rxSampleRateTextView = findViewById(R.id.rxSampleRateTextView);
+        AutoCompleteTextView txSampleRateTextView = findViewById(R.id.txSampleRateTextView);
+
+        List<String> sampleRateOptions = new ArrayList<String>();
+        sampleRateOptions.add("44.1kHz");
+        sampleRateOptions.add("22kHz");
+        sampleRateOptions.add("16kHz");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, sampleRateOptions);
+        rxSampleRateTextView.setAdapter(arrayAdapter);
+        txSampleRateTextView.setAdapter(arrayAdapter);
     }
 
     private void populateOriginalValues() {
@@ -109,7 +153,12 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting bandwidthSetting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
                 AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
+                AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
+                AppSetting rxSampleRateSetting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRate");
+                AppSetting txSampleRateSetting = MainViewModel.appDb.appSettingDao().getByName("txSampleRate");
+                AppSetting rxSampleRateMultSetting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -149,9 +198,34 @@ public class SettingsActivity extends AppCompatActivity {
                             noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
                         }
 
+                        if (bandwidthSetting != null) {
+                            AutoCompleteTextView bandwidthTextVIew = (AutoCompleteTextView) findViewById(R.id.bandwidthTextView);
+                            bandwidthTextVIew.setText(bandwidthSetting.value, false);
+                        }
+
                         if (maxFreqSetting != null) {
                             AutoCompleteTextView maxFreqTextView = (AutoCompleteTextView) findViewById(R.id.maxFreqTextView);
                             maxFreqTextView.setText(maxFreqSetting.value + "MHz", false);
+                        }
+
+                        if (micGainBoostSetting != null) {
+                            AutoCompleteTextView micGainBoostTextView = (AutoCompleteTextView) findViewById(R.id.micGainBoostTextView);
+                            micGainBoostTextView.setText(micGainBoostSetting.value, false);
+                        }
+
+                        if (rxSampleRateSetting != null) {
+                            AutoCompleteTextView rxSampleRateTextView = (AutoCompleteTextView) findViewById(R.id.rxSampleRateTextView);
+                            rxSampleRateTextView.setText(rxSampleRateSetting.value, false);
+                        }
+
+                        if (txSampleRateSetting != null) {
+                            AutoCompleteTextView txSampleRateTextView = (AutoCompleteTextView) findViewById(R.id.txSampleRateTextView);
+                            txSampleRateTextView.setText(txSampleRateSetting.value, false);
+                        }
+
+                        if (rxSampleRateMultSetting != null) {
+                            TextView rxSampleRateMultTextView = (TextView) findViewById(R.id.rxSampleRateMultTextView);
+                            rxSampleRateMultTextView.setText(rxSampleRateMultSetting.value);
                         }
                     }
                 });
@@ -248,6 +322,23 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
+        TextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
+        bandwidthTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.bandwidthTextView)).getText().toString().trim();
+                setBandwidth(newText);
+            }
+        });
+
         TextView maxFreqTextView = findViewById(R.id.maxFreqTextView);
         maxFreqTextView.addTextChangedListener(new TextWatcher() {
             @Override
@@ -262,6 +353,98 @@ public class SettingsActivity extends AppCompatActivity {
             public void afterTextChanged(Editable s) {
                 String newText = ((TextView) findViewById(R.id.maxFreqTextView)).getText().toString().trim();
                 setMaxFreq(newText.substring(0, 3));
+            }
+        });
+
+        TextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
+        micGainBoostTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.micGainBoostTextView)).getText().toString().trim();
+                setMicGainBoost(newText);
+            }
+        });
+
+        TextView rxSampleRateTextView = findViewById(R.id.rxSampleRateTextView);
+        rxSampleRateTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.rxSampleRateTextView)).getText().toString().trim();
+                setRxSampleRate(newText);
+            }
+        });
+
+        TextView txSampleRateTextView = findViewById(R.id.txSampleRateTextView);
+        txSampleRateTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.txSampleRateTextView)).getText().toString().trim();
+                setTxSampleRate(newText);
+            }
+        });
+
+        TextView rxSampleRateMultTextView = findViewById(R.id.rxSampleRateMultTextView);
+        rxSampleRateMultTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.rxSampleRateMultTextView)).getText().toString().trim();
+                setRxSampleRateMult(newText);
+            }
+        });
+    }
+
+    /**
+     * @param bandwidth Change the bandwidth to use, either "Wide" or "Narrow". (25kHz or 12.5kHz)
+     */
+    private void setBandwidth(String bandwidth) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
+
+                if (setting == null) {
+                    setting = new AppSetting("bandwidth", bandwidth);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = bandwidth;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
             }
         });
     }
@@ -284,6 +467,124 @@ public class SettingsActivity extends AppCompatActivity {
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
                     setting.value = maxFreq;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param micGainBoost The level of software gain that should be added to mic audio.
+     *                     Should be one of "None", "Low", "Med", or "High".
+     */
+    private void setMicGainBoost(String micGainBoost) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
+
+                if (setting == null) {
+                    setting = new AppSetting("micGainBoost", micGainBoost);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = micGainBoost;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param rxSampleRate The rate at which rx audio should be sampled by the ESP32 firmware, e.g. "44.1kHz", "16kHz"
+     */
+    private void setRxSampleRate(String rxSampleRate) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRate");
+
+                if (setting == null) {
+                    setting = new AppSetting("rxSampleRate", rxSampleRate);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = rxSampleRate;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param txSampleRate The rate at which tx audio should be sampled by the ESP32 firmware, e.g. "44.1kHz", "16kHz"
+     */
+    private void setTxSampleRate(String txSampleRate) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("txSampleRate");
+
+                if (setting == null) {
+                    setting = new AppSetting("txSampleRate", txSampleRate);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = txSampleRate;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param rxSampleRateMult A multipler (with baseline of 1.0) to apply to the rx sample rate.
+     *                         This can be used to adjust for ESP32 dev boards that aren't sampling
+     *                         at exactly the right rate.
+     */
+    private void setRxSampleRateMult(String rxSampleRateMult) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        // If the given value has any issues, revert to default.
+        if (null == rxSampleRateMult || rxSampleRateMult.trim().length() == 0) {
+            rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
+            ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
+        } else {
+            try {
+                float multFloat = Float.parseFloat(rxSampleRateMult);
+                if (multFloat < 0.5 || multFloat > 1.5) {
+                    rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
+                    ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
+                }
+            } catch (Exception e) {
+                rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
+                ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
+            }
+        }
+
+        final String fixedMult = rxSampleRateMult;
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
+
+                if (setting == null) {
+                    setting = new AppSetting("rxSampleRateMult", fixedMult);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = fixedMult;
                     MainViewModel.appDb.appSettingDao().update(setting);
                 }
             }

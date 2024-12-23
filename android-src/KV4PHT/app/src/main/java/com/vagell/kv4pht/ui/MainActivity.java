@@ -102,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isRecording = false;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
+    private int txMinBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.SampleRate.toInt(RadioAudioService.txSampleRate), channelConfig, audioFormat) * 2;
     private Thread recordingThread;
 
     // Active screen type (e.g. voice or chat)
@@ -539,6 +539,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Get the position, if included.
         if (null != positionField) {
+            aprsMessage.type = APRSMessage.POSITION_TYPE; // Anything with a position is POSITION_TYPE unless we determine more specific type later.
             aprsMessage.positionLat = positionField.getPosition().getLatitude();
             aprsMessage.positionLong = positionField.getPosition().getLongitude();
         }
@@ -599,6 +600,16 @@ public class MainActivity extends AppCompatActivity {
             if (null != objectField) {
                 aprsMessage.objName = objectField.getObjectName();
                 // Log.d("DEBUG", "Object packet received");
+            }
+        }
+
+        // If there is a fault in the packet, or the message type is unknown, we at least display the raw contents as a comment.
+        if (aprsPacket.hasFault() || (aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0))) {
+            if (null != infoField) {
+                try {
+                    comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
+                    aprsMessage.comment = comment;
+                } catch (Exception e) { }
             }
         }
 
@@ -833,7 +844,12 @@ public class MainActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = viewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting bandwidthSetting = viewModel.appDb.appSettingDao().getByName("bandwidth");
                 AppSetting maxFreqSetting = viewModel.appDb.appSettingDao().getByName("maxFreq");
+                AppSetting micGainBoostSetting = viewModel.appDb.appSettingDao().getByName("micGainBoost");
+                AppSetting rxSampleRateSetting = viewModel.appDb.appSettingDao().getByName("rxSampleRate");
+                AppSetting txSampleRateSetting = viewModel.appDb.appSettingDao().getByName("txSampleRate");
+                AppSetting rxSampleRateMultSetting = viewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
                 AppSetting lastMemoryId = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
                 AppSetting lastFreq = viewModel.appDb.appSettingDao().getByName("lastFreq");
                 AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
@@ -882,9 +898,44 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
 
+                        if (bandwidthSetting != null) {
+                            if (radioAudioService != null) {
+                                radioAudioService.setBandwidth(bandwidthSetting.value);
+                            }
+                        }
+
                         if (maxFreqSetting != null) {
                             int maxFreq = Integer.parseInt(maxFreqSetting.value);
                             RadioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
+                        }
+
+                        if (micGainBoostSetting != null) {
+                            String micGainBoost = micGainBoostSetting.value;
+                            if (radioAudioService != null) {
+                                radioAudioService.setMicGainBoost(micGainBoost);
+                            }
+                        }
+
+                        if (rxSampleRateSetting != null) {
+                            String rxSampleRate = rxSampleRateSetting.value;
+                            if (radioAudioService != null) {
+                                radioAudioService.setRxSampleRate(rxSampleRate);
+                            }
+                        }
+
+                        if (txSampleRateSetting != null) {
+                            String txSampleRate = txSampleRateSetting.value;
+                            if (radioAudioService != null) {
+                                radioAudioService.setTxSampleRate(txSampleRate);
+                                initAudioRecorder();
+                            }
+                        }
+
+                        if (rxSampleRateMultSetting != null) {
+                            String rxSampleRateMult = rxSampleRateMultSetting.value;
+                            if (radioAudioService != null) {
+                                radioAudioService.setRxSampleRateMult(rxSampleRateMult);
+                            }
                         }
 
                         if (squelchSetting != null) {
@@ -1343,8 +1394,14 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
-                audioFormat, minBufferSize);
+        if (null != audioRecord) {
+            audioRecord.stop();
+            audioRecord.release();
+            audioRecord = null;
+        }
+
+        audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RadioAudioService.SampleRate.toInt(RadioAudioService.txSampleRate), channelConfig,
+                audioFormat, txMinBufferSize);
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.d("DEBUG", "Audio init error");
@@ -1373,15 +1430,15 @@ public class MainActivity extends AppCompatActivity {
 
     private void processAudioStream() {
         while (isRecording) {
-            byte[] audioBuffer = new byte[minBufferSize];
+            byte[] audioBuffer = new byte[txMinBufferSize];
             int bytesRead;
-            bytesRead = audioRecord.read(audioBuffer, 0, minBufferSize);
+            bytesRead = audioRecord.read(audioBuffer, 0, txMinBufferSize);
 
             if (bytesRead > 0) {
                 if (radioAudioService != null) {
                     radioAudioService.sendAudioToESP32(Arrays.copyOfRange(audioBuffer, 0, bytesRead), false);
 
-                    int bytesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
+                    int bytesPerAnimFrame = RadioAudioService.SampleRate.toInt(RadioAudioService.txSampleRate) / RECORD_ANIM_FPS;
                     long audioChunkByteTotal = 0;
                     int waitMs = 0;
                     for (int i = 0; i < bytesRead; i++) {
