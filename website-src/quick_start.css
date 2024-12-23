@@ -1,0 +1,70 @@
+esp-web-install-button button {
+	display: block;
+	padding: 8px 32px;
+	font-size: 16px;
+	font-weight: 500;
+	color: #FFF;
+	background-color: #AD5642;
+	border: none;
+	border-radius: 8px;
+	text-decoration: none;
+	box-shadow: 0 0 3px 0 #999;
+	margin: 24px 0;
+	cursor: pointer;
+}
+
+.main-content-area {
+	padding: 0 32px;
+	max-width: 1280px;
+}
+
+.main-content-area ol>li {
+	margin-top: 24px !important;
+}
+
+iframe {
+	margin: 24px auto 48px auto;
+	display: block;
+}
+
+.main-content-area ol>li {
+	padding: 16px 24px;
+	border-radius: 32px;
+	box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+}
+
+h3 {
+    top: 32px;
+    position: absolute;
+    margin-left: 16px;
+    font-size: 28px;
+    display: inline-block;
+}
+
+li h3+ul {
+	margin-top: 16px;
+	padding-inline-start: 52px;
+	padding-bottom: 24px;
+}
+
+ol {
+	padding: 0;
+}
+
+ol>li {
+	list-style: decimal inside none;
+	counter-increment: listcounter;
+}
+
+ol>li::marker {
+	line-height: 1.2em;
+	font-size: 48px;
+	content: counter(listcounter);
+	color: #AD5642;
+	font-weight: 500;
+}
+
+h1 {
+	margin-top: 48px;
+}
+
