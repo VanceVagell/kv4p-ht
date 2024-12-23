@@ -210,24 +210,23 @@ void initI2STx() {
 
 // Scale factor for fixed-point math (Q15 format)
 #define FIXED_POINT_SHIFT 15
-#define ALPHA (int32_t)(0.999992 * (1 << FIXED_POINT_SHIFT))  // α = 0.999992 To achieve a 2-second decay at a 44.1 kHz sample rate
+#define SAMPLE_RATE 44100
+#define DECAY_TIME 0.25 // seconds
+#define ALPHA (1.0f - expf(-1.0f / (SAMPLE_RATE * (DECAY_TIME / logf(2.0f)))))
 
-static int32_t prev_y = 0;
+static float prev_y = 0.0f;
 
 void iir_lowpass_reset() {
-  prev_y = 0;
+  prev_y = 0.0f;
 }
 
-// IIR Low-pass filter (state in Q15)
+// IIR Low-pass filter (float state)
 int16_t iir_lowpass(int16_t x) {
-  // Filter state in Q15 format
-  static int32_t prev_y = 0;
-  // Scale input to Q15
-  int32_t x_q15 = x << FIXED_POINT_SHIFT;
-  // IIR calculation (in Q15): y[n] = α * x[n] + (1 - α) * y[n-1]
-  prev_y = (ALPHA * x_q15 + ((1 << FIXED_POINT_SHIFT) - ALPHA) * prev_y) >> FIXED_POINT_SHIFT;
-  // Convert result back to integer (Q0)
-  return (int16_t)(prev_y >> FIXED_POINT_SHIFT);
+  float x_f = (float)x;
+  // IIR calculation: y[n] = α * x[n] + (1 - α) * y[n-1]
+  prev_y = ALPHA * x_f + (1.0f - ALPHA) * prev_y;
+  // Convert result back to int16
+  return (int16_t)prev_y;
 }
 
 // High-pass: x[n] - LPF(x[n])
