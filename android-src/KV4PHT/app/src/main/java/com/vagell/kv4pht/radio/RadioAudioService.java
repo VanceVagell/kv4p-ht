@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
+
 import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -113,11 +114,12 @@ public class RadioAudioService extends Service {
     private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
+    private static final int RX_AUDIO_CHUNK_SIZE = 128;
     public static SampleRate rxSampleRate = SampleRate.SAMPLE_RATE_44;
     public static SampleRate txSampleRate = SampleRate.SAMPLE_RATE_44;
     public static float rxSampleRateMult = 1.00494f;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    public static final  int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
+    public static final  int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
     public static final  int rxMinBufferSize = AudioRecord.getMinBufferSize(SampleRate.toInt(rxSampleRate), channelConfig, audioFormat) * 2;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
@@ -128,7 +130,8 @@ public class RadioAudioService extends Service {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 1000;
+    private static int audioTrackUnderrunCount = 0;
+    private static final int PRE_BUFFER_SIZE = RX_AUDIO_CHUNK_SIZE * 2;
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
@@ -667,7 +670,7 @@ public class RadioAudioService extends Service {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build())
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(rxMinBufferSize)
+                .setBufferSizeInBytes(RX_AUDIO_CHUNK_SIZE * 3)
                 .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
                 .build();
         audioTrack.setAuxEffectSendLevel(0.0f);
@@ -837,7 +840,7 @@ public class RadioAudioService extends Service {
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadBufferSize(4096); // Must be much larger than ESP32's send buffer (so we never block it)
+        usbIoManager.setReadBufferSize(RX_AUDIO_CHUNK_SIZE); // Must be much larger than ESP32's send buffer (so we never block it)
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
 
@@ -1169,6 +1172,10 @@ public class RadioAudioService extends Service {
 
                         // Play the audio.
                         audioTrack.write(data, 0, data.length);
+                        if (audioTrackUnderrunCount != audioTrack.getUnderrunCount()) {
+                            audioTrackUnderrunCount = audioTrack.getUnderrunCount();
+                            Log.d("DEBUG", "audioTrack.getUnderrunCount(): " + audioTrackUnderrunCount);
+                        }
 
                         if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                             audioTrack.play();
