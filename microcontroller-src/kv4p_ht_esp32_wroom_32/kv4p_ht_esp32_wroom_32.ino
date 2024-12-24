@@ -118,12 +118,9 @@ void setup() {
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
 
-   esp_task_wdt_config_t twdt_config = {
-        .timeout_ms = 30 * 1000,
-        .trigger_panic = true,
-    };
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
-  esp_task_wdt_reconfigure(&twdt_config); // Reboot if locked up for a bit
+  esp_task_wdt_init(30, true); // Reboot if locked up for a bit
+  esp_task_wdt_add(NULL); // Add the current task to WDT watch
 
   // Debug LED
   pinMode(LED_PIN, OUTPUT);
@@ -180,8 +177,8 @@ void initI2SRx() {
   ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sRxConfig, 0, NULL));
   ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
   iir_lowpass_reset();
-  dac_output_enable(DAC_CHAN_1);  // GPIO26 (DAC1)
-  dac_output_voltage(DAC_CHAN_1, 138);
+  dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
+  dac_output_voltage(DAC_CHANNEL_2, 138);
 }
 
 void initI2STx() {
