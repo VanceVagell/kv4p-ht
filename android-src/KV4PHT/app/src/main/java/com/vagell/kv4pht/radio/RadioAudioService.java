@@ -107,18 +107,17 @@ public class RadioAudioService extends Service {
     public static final int MODE_FLASHING = 4;
     private int mode = MODE_STARTUP;
     private int messageNumber = 0;
+
     public static final byte SILENT_BYTE = -128;
 
     // Callbacks to the Activity that started us
     private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
-    public static SampleRate rxSampleRate = SampleRate.SAMPLE_RATE_44;
-    public static SampleRate txSampleRate = SampleRate.SAMPLE_RATE_44;
-    public static float rxSampleRateMult = 1.00494f;
+    public static final int AUDIO_SAMPLE_RATE = 44100;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     public static final  int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    public static final  int rxMinBufferSize = AudioRecord.getMinBufferSize(SampleRate.toInt(rxSampleRate), channelConfig, audioFormat) * 2;
+    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private static UsbSerialPort serialPort;
@@ -215,36 +214,6 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public enum SampleRate {
-        SAMPLE_RATE_44,
-        SAMPLE_RATE_22,
-        SAMPLE_RATE_16;
-
-        public static SampleRate parse(String str) {
-            if (str.equals("44.1kHz")) {
-                return SAMPLE_RATE_44;
-            } else if (str.equals("22kHz")) {
-                return SAMPLE_RATE_22;
-            } else if (str.equals("16kHz")) {
-                return SAMPLE_RATE_16;
-            }
-
-            return SAMPLE_RATE_44;
-        }
-
-        public static int toInt(SampleRate sampleRate) {
-            if (sampleRate == SAMPLE_RATE_44) {
-                return 44100;
-            } else if (sampleRate == SAMPLE_RATE_22) {
-                return 22050;
-            } else if (sampleRate == SAMPLE_RATE_16) {
-                return 16000;
-            }
-
-            return 44100;
-        }
-    }
-
     /**
      * Class used for the client Binder. This service always runs in the same process as its clients.
      */
@@ -281,26 +250,6 @@ public class RadioAudioService extends Service {
 
     public void setBandwidth(String bandwidth) {
         this.bandwidth = bandwidth;
-    }
-
-    public void setRxSampleRate(String rxSampleRate) {
-        this.rxSampleRate = SampleRate.parse(rxSampleRate);
-        initAudioTrack();
-        initAFSKModem();
-    }
-
-    public void setTxSampleRate(String txSampleRate) {
-        this.txSampleRate = SampleRate.parse(txSampleRate);
-        initAFSKModem();
-        // Recording sample rate is set in MainActivity (which owns the recording object).
-    }
-
-    public void setRxSampleRateMult(String rxSampleRateMult) {
-        try {
-            this.rxSampleRateMult = Float.parseFloat(rxSampleRateMult);
-        } catch (Exception e) {
-            this.rxSampleRateMult = 1.00494f; // Use default if some bad data in the setting.
-        }
     }
 
     public static void setMaxFreq(int newMaxFreq) {
@@ -500,11 +449,7 @@ public class RadioAudioService extends Service {
         squelch = squelchLevel;
 
         if (serialPort != null) {
-            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) +
-                    makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel +
-                    String.format("%05d", (int) (SampleRate.toInt(rxSampleRate) * rxSampleRateMult)) + // e.g. "44100"
-                    String.format("%05d", SampleRate.toInt(txSampleRate)) + // e.g. "44100"
-                    (bandwidth.equals("Wide") ? "W" : "N"));
+            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
         }
 
         // Reset audio prebuffer
@@ -591,12 +536,7 @@ public class RadioAudioService extends Service {
 
         if (serialPort != null) {
             sendCommandToESP32(ESP32Command.TUNE_TO,
-                    getTxFreq(memory.frequency, memory.offset) +
-                            makeSafe2MFreq(memory.frequency) +
-                            getToneIdxStr(memory.tone) + squelchLevel +
-                            String.format("%05d", (int) (SampleRate.toInt(rxSampleRate) * rxSampleRateMult)) + // e.g. "44100"
-                            String.format("%05d", SampleRate.toInt(txSampleRate)) + // e.g. "44100"
-                            (bandwidth.equals("Wide") ? "W" : "N"));
+                    getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone) + squelchLevel);
         }
 
         // Reset audio prebuffer
@@ -643,19 +583,17 @@ public class RadioAudioService extends Service {
         // means there is no signal detected on the given frequency) even when there is. I did
         // extensive debugging and even rewrote large portions of the DRA818v library to determine
         // that this was the case. So in lieu of that, we scan using a timing/silence-based system.
-        if (consecutiveSilenceBytes >= (SampleRate.toInt(rxSampleRate) * SEC_BETWEEN_SCANS)) {
+        if (consecutiveSilenceBytes >= (AUDIO_SAMPLE_RATE * SEC_BETWEEN_SCANS)) {
             consecutiveSilenceBytes = 0;
             nextScan();
         }
     }
 
     private void initAudioTrack() {
-        if (null != audioTrack) {
-            audioTrack.stop();
+        if (audioTrack != null) {
             audioTrack.release();
             audioTrack = null;
         }
-
         audioTrack = new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -663,11 +601,11 @@ public class RadioAudioService extends Service {
                         .build())
                 .setAudioFormat(new AudioFormat.Builder()
                         .setEncoding(audioFormat)
-                        .setSampleRate(SampleRate.toInt(rxSampleRate))
+                        .setSampleRate(AUDIO_SAMPLE_RATE)
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .build())
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(rxMinBufferSize)
+                .setBufferSizeInBytes(minBufferSize)
                 .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
                 .build();
         audioTrack.setAuxEffectSendLevel(0.0f);
@@ -1002,7 +940,7 @@ public class RadioAudioService extends Service {
             // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
             // be lost.
             final Handler handler = new Handler(Looper.getMainLooper());
-            final float msToSendOneChunk = (float) TX_AUDIO_CHUNK_SIZE / (float) SampleRate.toInt(txSampleRate) * 1000f;
+            final float msToSendOneChunk = (float) TX_AUDIO_CHUNK_SIZE / (float) AUDIO_SAMPLE_RATE * 1000f;
             float nextSendDelay = 0f;
             byte[] finalAudioBuffer = audioBuffer;
             for (int i = 0; i < audioBuffer.length; i += TX_AUDIO_CHUNK_SIZE) {
@@ -1160,22 +1098,17 @@ public class RadioAudioService extends Service {
         if (mode == MODE_RX || mode == MODE_SCAN) {
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
-                    try {
-                        if (afskDemodulator != null) { // Avoid race condition at app start.
-                            // Add the audio samples to the AFSK demodulator.
-                            float[] audioAsFloats = convertPCM8ToFloatArray(data);
-                            afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
-                        }
-
+                    if (afskDemodulator != null) { // Avoid race condition at app start.
                         // Play the audio.
                         audioTrack.write(data, 0, data.length);
 
-                        if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                            audioTrack.play();
-                        }
-                    } catch (Exception e) {
-                        // Objects may cease to exist when user changes rx sample rate
-                        return;
+                        // Add the audio samples to the AFSK demodulator.
+                        float[] audioAsFloats = convertPCM8ToFloatArray(data);
+                        afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
+                    }
+
+                    if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                        audioTrack.play();
                     }
                 }
             } else {
@@ -1187,16 +1120,11 @@ public class RadioAudioService extends Service {
                         prebufferComplete = true;
                         // Log.d("DEBUG", "Rx prebuffer full, writing to audioTrack.");
                         if (audioTrack != null) {
-                            try {
-                                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                                    audioTrack.play();
-                                }
-                                synchronized (audioTrack) {
-                                    audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
-                                }
-                            } catch (Exception e) {
-                                // audioTrack may cease to exist when user changes rx sample rate
-                                return;
+                            if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                                audioTrack.play();
+                            }
+                            synchronized (audioTrack) {
+                                audioTrack.write(rxBytesPrebuffer, 0, PRE_BUFFER_SIZE);
                             }
                         }
 
@@ -1298,8 +1226,8 @@ public class RadioAudioService extends Service {
         };
 
         try {
-            afskDemodulator = new Afsk1200MultiDemodulator(SampleRate.toInt(rxSampleRate), packetHandler);
-            afskModulator = new Afsk1200Modulator(SampleRate.toInt(txSampleRate));
+            afskDemodulator = new Afsk1200MultiDemodulator(AUDIO_SAMPLE_RATE, packetHandler);
+            afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
         } catch (Exception e) {
             Log.d("DEBUG", "Unable to create AFSK modem objects.");
         }
@@ -1375,8 +1303,8 @@ public class RadioAudioService extends Service {
             @Override
             public void run() {
                 // Add some silence before and after the data.
-                int bytesOfLeadInDelay = (SampleRate.toInt(txSampleRate) / 1000 * MS_SILENCE_BEFORE_DATA);
-                int bytesOfTailDelay = (SampleRate.toInt(txSampleRate) / 1000 * MS_SILENCE_AFTER_DATA);
+                int bytesOfLeadInDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA);
+                int bytesOfTailDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA);
                 byte[] combinedAudio = new byte[bytesOfLeadInDelay + simpleAudioBytes.length + bytesOfTailDelay];
                 for (int i = 0; i < bytesOfLeadInDelay; i++) {
                     combinedAudio[i] = SILENT_BYTE;
