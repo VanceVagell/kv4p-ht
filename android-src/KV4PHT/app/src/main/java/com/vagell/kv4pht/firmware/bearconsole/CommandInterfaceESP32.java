@@ -594,7 +594,7 @@ public class CommandInterfaceESP32 {
                 attempts++;
                 retVal = flash_defl_block(block, seq, FLASH_TIMEOUT_MS);
                 if (retVal.retCode == -1) {
-                    mUpCallback.onInfo("Retry #" + attempts + " because Ret code:" + retVal.retCode + "\n");
+                    mUpCallback.onInfo("Retry #" + attempts + " because Ret code: " + retVal.retCode + "\n");
                 }
             } while (attempts < MAX_ATTEMPTS && retVal.retCode == -1);
 
@@ -608,7 +608,7 @@ public class CommandInterfaceESP32 {
     }
 
     private int flash_defl_begin(int size, int compsize, int offset) {
-rd
+
         int num_blocks = (int) Math.floor((double) (compsize + (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - 1) / (double) (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE));
         int erase_blocks = (int) Math.floor((double) (size + (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - 1) / (double) (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE));
         // Start time
