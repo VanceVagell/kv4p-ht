@@ -587,12 +587,17 @@ public class CommandInterfaceESP32 {
                 block = _appendArray(block, tempArray);*/
             }
 
-            cmdRet retVal = flash_defl_block(block, seq, FLASH_TIMEOUT_MS);
-            if (retVal.retCode ==-1) {
-                //This should fix issue when writing is incorrect by trying again
-                mUpCallback.onInfo("Retry because Ret code:" + retVal.retCode +"\n");
+            int attempts = 0;
+            final int MAX_ATTEMPTS = 10;
+            cmdRet retVal;
+            do {
+                attempts++;
                 retVal = flash_defl_block(block, seq, FLASH_TIMEOUT_MS);
-            }
+                if (retVal.retCode == -1) {
+                    mUpCallback.onInfo("Retry #" + attempts + " because Ret code:" + retVal.retCode + "\n");
+                }
+            } while (attempts < MAX_ATTEMPTS && retVal.retCode == -1);
+
             seq += 1;
             written += block.length;
             position += (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE);
