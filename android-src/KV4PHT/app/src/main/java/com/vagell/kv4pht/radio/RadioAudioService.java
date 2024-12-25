@@ -154,6 +154,7 @@ public class RadioAudioService extends Service {
     private static int maxFreq = 148; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
+    private boolean txAllowed = true;
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -459,11 +460,14 @@ public class RadioAudioService extends Service {
 
         try {
             Float freq = Float.parseFloat(activeFrequencyStr);
-            if (freq < 144.0f || freq > maxFreq) {
-                callbacks.txAllowed(false);
+            Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
+            if (freq < 144.0f || freq > offsetMaxFreq) {
+                txAllowed = false;
+
             } else {
-                callbacks.txAllowed(true);
+                txAllowed = true;
             }
+            callbacks.txAllowed(txAllowed);
         } catch (NumberFormatException nfe) {
         }
     }
@@ -548,11 +552,14 @@ public class RadioAudioService extends Service {
 
         try {
             Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset));
-            if (txFreq < 144.0f || txFreq > maxFreq) {
-                callbacks.txAllowed(false);
+            Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
+            if (txFreq < 144.0f || txFreq > offsetMaxFreq) {
+                txAllowed = false;
+
             } else {
-                callbacks.txAllowed(true);
+                txAllowed = true;
             }
+            callbacks.txAllowed(txAllowed);
         } catch (NumberFormatException nfe) {
         }
     }
@@ -622,6 +629,10 @@ public class RadioAudioService extends Service {
     }
 
     public void startPtt() {
+        if (!txAllowed) { // Extra precauation, though MainActivity should enforce this.
+            return;
+        }
+
         setMode(MODE_TX);
 
         // Setup runaway tx safety measures.
@@ -1237,6 +1248,8 @@ public class RadioAudioService extends Service {
     }
 
     public void sendAckMessage(String targetCallsign, String remoteMessageNum) {
+        // TODOV
+
         // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
         MessagePacket msgPacket = new MessagePacket(targetCallsign, "ack" + remoteMessageNum, remoteMessageNum);
         ArrayList<Digipeater> digipeaters = new ArrayList<>();

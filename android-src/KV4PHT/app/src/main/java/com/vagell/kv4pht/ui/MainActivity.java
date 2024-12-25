@@ -361,8 +361,9 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void txAllowed(boolean allowed) {
-                    // Only enable the PTT button when tx is allowed (e.g. within ham band).
+                    // Only enable the PTT and send chat buttons when tx is allowed (e.g. within ham band).
                     findViewById(R.id.pttButton).setClickable(allowed);
+                    findViewById(R.id.sendButton).setClickable(allowed);
                 }
 
                 @Override
