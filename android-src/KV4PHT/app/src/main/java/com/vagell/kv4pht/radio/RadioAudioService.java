@@ -114,7 +114,7 @@ public class RadioAudioService extends Service {
     private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
-    public static final int AUDIO_SAMPLE_RATE = 44100;
+    public static final int AUDIO_SAMPLE_RATE = 16000;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     public static final  int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
     public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
@@ -127,7 +127,7 @@ public class RadioAudioService extends Service {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 1000;
+    private static final int PRE_BUFFER_SIZE = 256;
     private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
     private int rxPrebufferIdx = 0;
     private boolean prebufferComplete = false;
@@ -449,7 +449,9 @@ public class RadioAudioService extends Service {
         squelch = squelchLevel;
 
         if (serialPort != null) {
-            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) + makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel);
+            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) +
+                    makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel +
+                    (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
         // Reset audio prebuffer
@@ -536,7 +538,9 @@ public class RadioAudioService extends Service {
 
         if (serialPort != null) {
             sendCommandToESP32(ESP32Command.TUNE_TO,
-                    getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) + getToneIdxStr(memory.tone) + squelchLevel);
+                    getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) +
+                            getToneIdxStr(memory.tone) + squelchLevel +
+                            (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
         // Reset audio prebuffer
@@ -735,7 +739,7 @@ public class RadioAudioService extends Service {
         Log.d("DEBUG", "serialPort: " + serialPort);
         try {
             serialPort.open(connection);
-            serialPort.setParameters(921600, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            serialPort.setParameters(230400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.d("DEBUG", "Error: couldn't open USB serial port.");
             if (callbacks != null) {
@@ -775,7 +779,6 @@ public class RadioAudioService extends Service {
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadBufferSize(4096); // Must be much larger than ESP32's send buffer (so we never block it)
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
 

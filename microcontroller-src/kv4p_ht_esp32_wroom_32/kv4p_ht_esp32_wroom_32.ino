@@ -47,11 +47,11 @@ int matchedDelimiterTokens = 0;
 int mode = MODE_STOPPED;
 
 // Audio sampling rate, must match what Android app expects (and sends).
-#define AUDIO_SAMPLE_RATE 44100
+#define AUDIO_SAMPLE_RATE 16000
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
-#define SAMPLING_RATE_OFFSET 218
+#define SAMPLING_RATE_OFFSET 79
 
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_TEMP_AUDIO_BUFFER_SIZE 4096 // Holds data we already got off of USB serial from Android app
@@ -113,11 +113,9 @@ void tuneTo(float freqTx, float freqRx, int tone, int squelch);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 
-
-
 void setup() {
   // Communication with Android via USB cable
-  Serial.begin(921600);
+  Serial.begin(230400);
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
 
@@ -144,7 +142,6 @@ void setup() {
     result = dra->handshake(); // Wait for module to start up
   }
   // Serial.println("handshake: " + String(result));
-  // tuneTo(146.700, 146.700, 0, 0);
   result = dra->volume(8);
   // Serial.println("volume: " + String(result));
   result = dra->filters(false, false, false);
@@ -367,7 +364,7 @@ void loop() {
             float freqRxFloat = paramsStr.substring(8, 16).toFloat();
             int toneInt = paramsStr.substring(16, 18).toInt();
             int squelchInt = paramsStr.substring(18, 19).toInt();
-            String bandwidth = paramsStr.substring(29, 30);
+            String bandwidth = paramsStr.substring(19, 20);
             tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
           }
             break;
