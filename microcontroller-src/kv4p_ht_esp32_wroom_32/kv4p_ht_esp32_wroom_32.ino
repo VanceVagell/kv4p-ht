@@ -234,9 +234,6 @@ void loop() {
         // commands appropriately. Or at least extract the business logic from them to avoid that duplication.
         case COMMAND_TUNE_TO:
         {
-          // Example:
-          // 145.4500144.8500061
-          // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch (19 bytes total for params)
           setMode(MODE_RX);
 
           // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.

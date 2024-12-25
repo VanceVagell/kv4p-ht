@@ -604,8 +604,8 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // If the message type is unknown, we at least display the raw contents as a comment.
-        if (aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0)) {
+        // If there is a fault in the packet, or the message type is unknown, we at least display the raw contents as a comment.
+        if (aprsPacket.hasFault() || aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0)) {
             if (null != infoField) {
                 try {
                     comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
@@ -1368,6 +1368,12 @@ public class MainActivity extends AppCompatActivity {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestAudioPermissions();
             return;
+        }
+
+        if (null != audioRecord) {
+            audioRecord.stop();
+            audioRecord.release();
+            audioRecord = null;
         }
 
         audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
