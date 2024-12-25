@@ -1210,7 +1210,7 @@ public class RadioAudioService extends Service {
                         MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
 
                         // If the message was addressed to us, notify the user and ACK the message to the sender.
-                        if (messagePacket.getTargetCallsign().trim().toUpperCase().equals(callsign.toUpperCase())) {
+                        if (!messagePacket.isAck() && messagePacket.getTargetCallsign().trim().toUpperCase().equals(callsign.toUpperCase())) {
                             showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
                                     aprsPacket.getSourceCall() + " messaged you", messagePacket.getMessageBody(), MainActivity.INTENT_OPEN_CHAT);
                             sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), messagePacket.getMessageNumber());
