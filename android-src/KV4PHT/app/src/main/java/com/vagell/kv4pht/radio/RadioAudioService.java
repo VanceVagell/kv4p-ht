@@ -1166,7 +1166,7 @@ public class RadioAudioService extends Service {
                     try {
                         if (afskDemodulator != null) { // Avoid race condition at app start.
                             // Add the audio samples to the AFSK demodulator.
-                            float[] audioAsFloats = convertPCM8ToFloatArray(data);
+                            float[] audioAsFloats = convertPCM16ToFloatArray(data);
                             afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
                         }
 
@@ -1241,19 +1241,18 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private float[] convertPCM8ToFloatArray(byte[] pcm8Data) {
-        // Create a float array of the same length as the input byte array
-        float[] floatData = new float[pcm8Data.length];
-
-        // Iterate through the byte array and convert each sample
-        for (int i = 0; i < pcm8Data.length; i++) {
-            // Convert unsigned 8-bit PCM to signed 8-bit value
-            int signedValue = (pcm8Data[i] & 0xFF) - 128;
-
-            // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = signedValue / 128.0f;
+    private float[] convertPCM16ToFloatArray(byte[] pcm16Data) {
+        // Each PCM16 sample is 2 bytes, so the float array will have half the length
+        float[] floatData = new float[pcm16Data.length / 2];
+        // Iterate through the byte array in steps of 2 (16-bit samples)
+        for (int i = 0; i < floatData.length; i++) {
+            int low = pcm16Data[i * 2] & 0xFF;              // Lower byte (unsigned)
+            int high = pcm16Data[i * 2 + 1];                // Upper byte (signed)
+            // Combine the bytes to form a signed 16-bit value
+            int signedValue = (high << 8) | low;
+            // Normalize to the range [-1.0, 1.0]
+            floatData[i] = signedValue / 32768.0f;
         }
-
         return floatData;
     }
 
