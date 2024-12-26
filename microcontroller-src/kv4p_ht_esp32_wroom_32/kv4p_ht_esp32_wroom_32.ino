@@ -109,7 +109,7 @@ bool lastSquelched = false;
 
 void initI2SRx();
 void initI2STx();
-void tuneTo(float freqTx, float freqRx, int tone, int squelch);
+void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 
