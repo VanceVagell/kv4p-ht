@@ -41,6 +41,12 @@ h3 {
     display: inline-block;
 }
 
+h2 {
+	font-size: 24px;
+	margin: 8px 0 16px 0;
+	display: block;
+}
+
 li h3+ul {
 	margin-top: 16px;
 	padding-inline-start: 52px;
@@ -66,5 +72,54 @@ ol>li::marker {
 
 h1 {
 	margin-top: 48px;
+}
+
+#parts-columns {
+	display: flex;	
+}
+
+.parts-column {
+	vertical-align: top;
+	padding: 0 32px 0 0;
+}
+
+#kits {
+	width: 280px;
+	flex: 0 0 auto; /* prevents flex from shrinking it */
+}
+
+#loose {
+	flex: 1 1 auto;
+	min-width: 0; /* helps prevent awkward overflow in some cases */
+	list-style: decimal outside none;
+}
+
+.kit-vendor {
+	border: 1px #fefefe;
+	border-radius: 16px;	
+	padding: 24px 32px;
+	background: #fff;
+	display: block;
+	border: 1px solid #eee;
+	text-decoration: none;
+	margin: 0 0 24px 0;
+	vertical-align: top;
+	width: 256px;
+	text-align: center;
+}
+
+.kit-vendor * {
+	display: block;
+}
+
+.kit-vendor img {
+	margin: 0 auto;
+}
+
+.vendor-name {
+	padding-bottom: 16px;
+	font-weight: 500;
+	color: #1F1E1A;
+	font-size: 24px;
 }
 

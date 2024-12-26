@@ -53,26 +53,51 @@
 				<iframe width="800" height="450" src="https://www.youtube.com/embed/TTboBthcY18?si=1QlrYJJHVByPtxnj" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 				<ol>
 				<li><h3>Order the parts</h3>
-				    <ul>
-						<li><a href="https://www.aliexpress.com/i/2251832119661277.html" target="_new">SA818-V radio module</a> $9 (also available on eBay)</li>
-						<li><a href="https://www.aliexpress.us/item/3256807630806447.html" target="_new">ESP-WROOM-32 Development Board Type-C USB</a> $3 (<b>choose "Color: 38Pin Type-C"</b>)</li>
-						<li>SMA male antenna of your choice. e.g. <a href="https://a.co/d/7bbVemg" target="_new">pocket-size antenna</a> $5 or <a href="https://signalstuff.com/products/st-sma-m/?band=2m70cm-dual-band" target="_new">1/4 wave Signal Stick</a> $22</li>
-						<li>Choose one of these 2 connectors (either works, they have the 5.1k ohm pull-down resistors needed to make problem ESP32s work):</li>
-						<ul>
-							<li>Option 1 (Recommended): <a href="https://www.amazon.com/dp/B0744BKDRD" target="_new">this short cable</a> and  <a href="https://www.amazon.com/dp/B0B8PGDFFV" target="_new">this adapter</a> from Amazon</a>. This option may have better audio quality.</li>
-							<li>Option 2: <a href="https://www.aliexpress.us/item/3256806668421477.html" target="_new">this small connector from AliExpress</a> $3 (<b>choose "Color: C female-C-C"</b>, be careful because they have similar names!)</li>
-						</ul>
-						<li><a href="https://a.co/d/cDwCeES" target="_new">SMA female 90 degree connector</a> $1</li>
-						<li><a href="https://www.amazon.com/dp/B07PFW5SXB" target="_new">Sticky gel pads</a> $1</li>
-						<li>PCB v1.7b $5</li>
-						<ul>
-							<li>Option 1 (recommended): order on <a href="https://cart.jlcpcb.com/quote" target="_new">JLCPCB</a>, use default settings, <b>choose "PCBA"</b>, and provide these <a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb/v1.7b" target="_new">3 design files</a></b>
-							<li>Option 2: <a href="https://www.pcbway.com/project/shareproject/kv4p_HT_v1_6_8d625758.html" target="_new">order on PCBWay, <b>choose "PCB+Assembly"</b></a> on the right. NOTE: Includes the EPS32, radio module, and SMA connector.</li>
-						</ul>
-						<br>
-						<p>NOTE: Estimated prices are for 1 unit, but you may need to buy a 5- or 10-pack. Consider group ordering with a local ham club.</p>
-					</ul>
+					<div id="parts-columns">
+						<div id="kits" class="parts-column">
+							<h2>Buy a kit</h2>
+							<p>kv4p HT makes no money from these sites, but they provide convenient kits:</p>
+							<br>
+							<div id="kit-vendors">
+								<a href="https://electronics.halibut.com/product/kv4p-ht-v2/" target="_new" class="kit-vendor">
+									<span class="vendor-name">Halibut Electronics</span>
+									<img src="img/halibut-logo.jpg" alt="Logo resembling a fish">
+								</a>
+								<a href="https://newdiytech.com/products/kv4p-ht-homebrew-vhf-radio-android-phone-into-ham-radio-transceiver-pcb-v1-7-sa818-v-sa818s-radio-module" target="_new" class="kit-vendor">
+									<span class="vendor-name">New DIY</span>
+									<img src="img/newdiy-logo.avif" alt="Logo that is a red circle with the words New DIY inside it">
+								</a>
+							</div>
+						</div>
+						
+						<div id="loose" class="parts-column">
+							<h2>Or loose parts</h2>
+							<ul>
+								<li><a href="https://www.aliexpress.com/i/2251832119661277.html" target="_new">SA818-V radio module</a> (DRA818V may be substituted)</li>
+								<li><a href="https://www.aliexpress.us/item/3256807630806447.html" target="_new">ESP-WROOM-32 Development Board Type-C USB</a> (<b>choose "Color: 38Pin Type-C"</b>)</li>
+								<li>SMA male antenna of your choice. e.g. <a href="https://a.co/d/7bbVemg" target="_new">pocket-size antenna</a> or <a href="https://signalstuff.com/products/st-sma-m/?band=2m70cm-dual-band" target="_new">1/4 wave Signal Stick</a></li>
+								<li>Choose one of these 2 connectors (either works, they have the 5.1k ohm pull-down resistors needed to make problem ESP32s work):</li>
+								<ul>
+									<li>Option 1 (Recommended): <a href="https://www.amazon.com/dp/B0744BKDRD" target="_new">this short cable</a> and  <a href="https://www.amazon.com/dp/B0B8PGDFFV" target="_new">this adapter</a> from Amazon</a>. This option may have better audio quality.</li>
+									<li>Option 2: <a href="https://www.aliexpress.us/item/3256806668421477.html" target="_new">this small connector from AliExpress</a> (<b>choose "Color: C female-C-C"</b>, be careful because they have similar names!)</li>
+								</ul>
+								<li><a href="https://a.co/d/cDwCeES" target="_new">SMA female 90 degree connector</a></li>
+								<li><a href="https://www.amazon.com/dp/B07PFW5SXB" target="_new">Sticky gel pads</a></li>
+								<li>PCB v1.7b</li>
+								<ul>
+									<li>Option 1 (recommended): order on <a href="https://cart.jlcpcb.com/quote" target="_new">JLCPCB</a>, use default settings, <b>choose "PCBA"</b>, and provide these <a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb/v1.7b" target="_new">3 design files</a></b>
+									<li>Option 2: <a href="https://www.pcbway.com/project/shareproject/kv4p_HT_v1_6_8d625758.html" target="_new">order on PCBWay, <b>choose "PCB+Assembly"</b></a> on the right. NOTE: They might send you a kit with all parts, check the follow up email they send you.</li>
+								</ul>
+							</ul>
+						</div>
+					</div>
+					<br>
 				</li>
+				<li><h3>Solder the parts</h3>
+					<ul>
+					<li>Solder the SA818-V, ESP32, and SMA connector to the PCB.</li>
+					<li>Then, trim all of the ESP32's legs as short as possible (so they don't contact your phone).</li>
+					</ul>
 				<li><h3>3D print the case, and optionally the stand</h3>
 					<ul>
 					<li>Find the <a href="https://www.thingiverse.com/thing:6782580" target="_new">3D printer files on Thingiverse</a></li>
@@ -80,22 +105,16 @@
 						<li>If you're using the 3-port U-shaped USB connector (linked in step 1), use the design ending in "...for_3_port_connector".</li>
 					</ul>
 					<li>The case looks cooler with 2-colors, which most 3D printers can do (<a href="https://www.youtube.com/watch?v=vL4hiZ1ZvJQ" target="_new">see how</a>)</li>
+
 					</ul>
 				</li>
-				<li><h3>Solder the DRA818V, ESP32, and SMA connector to the PCB</h3>
+				<li><h3>Assemble the parts</h3>
 					<ul>
-						<li>Once the ESP32 is soldered, trim all of its legs as short as possible (so they don't contact your phone)</li>
-					</ul>
-				</li>
-				<li><h3>Insert the PCB into the case until it snaps in</h3></li>
-				<li><h3>Attach kv4p HT to your phone with a piece of sticky gel pad</h3>
-					<ul>
+					<li>Insert the PCB into the case until it snaps in</li>
 					<li>Cut a strip of sticky gel pad to attach the kv4p HT to the back of your phone</li>
-					<li>Tip: insert the USB C 180 degree connector before pressing the kv4p HT to your phone, to help you align it properly</li>
-					<li>It will stay put, but can be easily removed with no residue</li>
+					<li>Screw on the antenna</li>
 					</ul>
 				</li>
-				<li><h3>Screw on the antenna</h3></li>
 				<li><h3>Install the Android app</h3>
 					<ul>
 						<li>The app requires Android 8 or higher, which came out in 2017 and pretty much all phones with a USB C connector will have.</li>
@@ -106,7 +125,6 @@
 
 					</ul>
 				</li>
-				<li><h3>Get on the air, and have fun!</h3></li>
 				</ol>
 				<h1>Need some help?</h1>
 				<p>Visit the <a href="https://discord.gg/Ev9R9uFeCq" target="_new">kv4p HT Discord general channel</a> and ask for advice.</p>
