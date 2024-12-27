@@ -80,11 +80,11 @@ h1 {
 
 .parts-column {
 	vertical-align: top;
-	padding: 0 32px 0 0;
+	padding: 0 120px 0 0;
 }
 
 #kits {
-	width: 280px;
+	width: 320px;
 	flex: 0 0 auto; /* prevents flex from shrinking it */
 }
 
