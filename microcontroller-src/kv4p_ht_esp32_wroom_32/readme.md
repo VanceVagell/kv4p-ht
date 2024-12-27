@@ -32,7 +32,7 @@ This document provides detailed instructions on how to interact with the KV4P-HT
 To interact with the KV4P-HT device, establish a serial connection using the following parameters:
 
 - **Port**: The serial port connected to the KV4P-HT device (e.g., `COM3`, `/dev/ttyUSB0`).
-- **Baud Rate**: `921600` bits per second.
+- **Baud Rate**: `230400` bits per second.
 - **Data Bits**: `8` bits.
 - **Parity**: `None`.
 - **Stop Bits**: `1` bit.
@@ -96,6 +96,7 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
   - **Receive Frequency**: 8 ASCII characters.
   - **Tone**: 2 ASCII characters representing an integer (e.g., `00` for none).
   - **Squelch**: 1 ASCII character (`0` thru `8`).
+  - **Bandwidth**: 1 ASCII character (`W` or `N`).
 - **Usage**:
   - Send the delimiter.
   - Send the command code `0x03`.
@@ -109,6 +110,7 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
 | Receive Frequency     | 8      | Frequency in MHz                                     |
 | Tone                  | 2      | CTCSS tone frequency code (`00` for none)            |
 | Squelch               | 1      | `0` through `8` (off through maximum squelch)        |
+| Bandwidth             | 1      | `W` or `N` (wide 25kHz or narrow 12.5kHz)            |
 
 ### 3.4. COMMAND_FILTERS (0x04)
 
@@ -144,7 +146,7 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
 
 ### 4.1. Changing Frequencies
 
-**Objective**: Set the transmit frequency to `146.5200` MHz, receive frequency to `146.5200` MHz, no tone, and squelch off.
+**Objective**: Set the transmit frequency to `146.5200` MHz, receive frequency to `146.5200` MHz, no tone, squelch off, and wide bandwidth.
 
 **Command Sequence**:
 
@@ -166,11 +168,12 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
    - Receive Frequency: `146.5200` (ASCII)
    - Tone: `00` (ASCII)
    - Squelch: `0` (ASCII)
+   - Bandwidth: `W` (ASCII)
 
 **Full Byte Sequence** (in hexadecimal):
 
 ```plaintext
-FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30 30
+FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30 30 57
 ```
 
 **Explanation**:
@@ -178,6 +181,7 @@ FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30
 - `31 34 36 2E 35 32 30 30` is ASCII for `146.5200`.
 - Tone `00`: `30 30`.
 - Squelch `0`: `30`.
+- Bandwidth `W`: `57`
 
 ### 4.2. Starting Transmission
 
