@@ -84,8 +84,11 @@ h1 {
 }
 
 #kits {
-	width: 320px;
+	width: 326px;
 	flex: 0 0 auto; /* prevents flex from shrinking it */
+    background-color: #eee;
+    padding: 8px 16px;
+    margin-right: 16px;
 }
 
 #loose {
@@ -94,13 +97,16 @@ h1 {
 	list-style: decimal outside none;
 }
 
+#kit-vendors {
+	text-align: center;
+} 
+
 .kit-vendor {
 	border: 1px #fefefe;
 	border-radius: 16px;	
 	padding: 24px 32px;
 	background: #fff;
-	display: block;
-	border: 1px solid #eee;
+	display: inline-block;
 	text-decoration: none;
 	margin: 0 0 24px 0;
 	vertical-align: top;
