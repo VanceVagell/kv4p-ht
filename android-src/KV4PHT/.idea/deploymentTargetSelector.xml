@@ -4,21 +4,6 @@
     <selectionStates>
       <SelectionState runConfigName="app">
         <option name="selectionMode" value="DROPDOWN" />
-<<<<<<< HEAD
-        <DropdownSelection timestamp="2024-12-14T23:14:49.603926Z">
-          <Target type="DEFAULT_BOOT">
-            <handle>
-              <DeviceId pluginId="Default" identifier="serial=192.168.1.43:35331;connection=c85ceabe" />
-=======
-        <DropdownSelection timestamp="2024-12-14T00:05:55.491007900Z">
-          <Target type="DEFAULT_BOOT">
-            <handle>
-              <DeviceId pluginId="Default" identifier="serial=192.168.1.43:45557;connection=4f3c97eb" />
->>>>>>> parent of b3433b7 (Add new settings to control rx and tx sampling rates, as well as an rx multipler (to account for varying ESP32 dev module ADC performance / clocks). Implements issue #138.)
-            </handle>
-          </Target>
-        </DropdownSelection>
-        <DialogSelection />
       </SelectionState>
     </selectionStates>
   </component>
