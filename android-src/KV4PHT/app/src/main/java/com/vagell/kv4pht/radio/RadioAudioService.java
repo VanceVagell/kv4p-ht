@@ -641,6 +641,10 @@ public class RadioAudioService extends Service {
 
         setMode(MODE_TX);
 
+        if (null != callbacks) {
+            callbacks.sMeterUpdate(0);
+        }
+
         // Setup runaway tx safety measures.
         startTxTimeSec = System.currentTimeMillis() / 1000;
         threadPoolExecutor.execute(new Runnable() {
