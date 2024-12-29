@@ -6,6 +6,6 @@
         android:icon="@drawable/ic_voice_mode"/>
     <item
         android:id="@+id/text_chat_mode"
-        android:title="Text chat"
+        android:title="APRS chat"
         android:icon="@drawable/ic_text_chat_mode"/>
 </menu>
