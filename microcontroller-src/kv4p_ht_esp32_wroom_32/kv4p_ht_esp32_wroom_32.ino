@@ -35,9 +35,16 @@ const uint8_t COMMAND_FILTERS = 4; // toggle filters on/off
 const uint8_t COMMAND_STOP = 5; // stop everything, just wait for next command
 const uint8_t COMMAND_GET_FIRMWARE_VER = 6; // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
 
+// Outgoing commands (ESP32 -> Android)
+const byte COMMAND_SMETER_REPORT = 0x53;
+
+// S-meter interval
+long lastSMeterReport = -1;
+#define SMETER_REPORT_INTERVAL_MS 500
+
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
-const uint8_t delimiter[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
+const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
 int matchedDelimiterTokens = 0;
 
 // Mode of the app, which is essentially a state machine
@@ -136,6 +143,7 @@ void setup() {
 
   // Communication with DRA818V radio module via GPIO pins
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
+  Serial2.setTimeout(100);
 
   int result = -1;
   while (result != 1) {
@@ -400,6 +408,31 @@ void loop() {
         }
       }
 
+      // If it's been a while since our last S-meter report, send one back to Android app.
+      if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
+        // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
+        // return value from the module, and just tells us success/fail.
+        // int rssi = dra->rssi();
+
+        Serial2.println("RSSI?");
+        String rssiResponse = Serial2.readString(); // Should be like "RSSI=X\n\r", where X is 1-3 digits, 0-255
+
+        if (rssiResponse.length() > 7) {
+          String rssiStr = rssiResponse.substring(5);
+          int rssiInt = rssiStr.toInt();
+
+          if (rssiInt >= 0 && rssiInt <= 255) {
+            byte sMeterReportBytes[DELIMITER_LENGTH + 2]; // 2 = 1 byte for command, 1 byte for report
+            memcpy(sMeterReportBytes, COMMAND_DELIMITER, DELIMITER_LENGTH);
+            sMeterReportBytes[DELIMITER_LENGTH] = COMMAND_SMETER_REPORT;
+            sMeterReportBytes[DELIMITER_LENGTH + 1] = (uint8_t) rssiInt;
+
+            Serial.write(sMeterReportBytes, sizeof(sMeterReportBytes));
+            lastSMeterReport = millis();
+          }
+        }
+      }
+
       size_t bytesRead = 0;
       uint8_t buffer32[I2S_READ_LEN * 4] = {0};
       ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
@@ -504,7 +537,7 @@ void loop() {
                 break;
             }
           } else {
-            if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
+            if (tempBuffer[i] == COMMAND_DELIMITER[matchedDelimiterTokens]) { // This byte may be part of the delimiter
               matchedDelimiterTokens++;
             } else { // This byte is not consistent with the command delimiter, reset counter
               matchedDelimiterTokens = 0;

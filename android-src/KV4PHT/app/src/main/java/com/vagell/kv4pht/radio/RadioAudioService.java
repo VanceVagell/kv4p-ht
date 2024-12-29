@@ -136,6 +136,7 @@ public class RadioAudioService extends Service {
 
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
+    private static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
 
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
@@ -351,6 +352,7 @@ public class RadioAudioService extends Service {
         public void txStarted();
         public void txEnded();
         public void chatError(String snackbarText);
+        public void sMeterUpdate(int value);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -476,7 +478,7 @@ public class RadioAudioService extends Service {
         Float freq;
         try {
             freq = Float.parseFloat(strFreq);
-        } catch (NumberFormatException nfe) { // Not sure how some people are breaking this, but default to FM calling frequency if we can't understand strFreq.
+        } catch (NumberFormatException nfe) {
             return "144.0000";
         }
         while (freq > 500.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
@@ -1110,6 +1112,45 @@ public class RadioAudioService extends Service {
         }
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
+            // TODO look for embedded s-meter updates in the audio, and if so apply them
+            // then discard those bytes since they aren't audio. TODOV
+            // Check for COMMAND_DELIMITER + "Sx" (where x is 0-9) + COMMAND_DELIMITER
+
+            // Check for any S-meter updates embedded in the audio.
+            // Note that this is best effort. There's a small chance an S-meter report could
+            // be split across a serial read, but it's not worth the extra buffering to avoid this.
+            // TODO If we ever need more commands coming back from the ESP32 app, improve this.
+
+            // TODOV replace this approach with the way we do the version string handling.
+            // This seems to almost always be split across reads, so we'll need some intermediate
+            // cache before audio gets played, so we can find and remove commands.
+            byte[] dataWithoutCommands = new byte[data.length];
+            int dataWithoutCommandsLength = 0;
+            for (int i = 0; i < data.length; i++) { // 2 = 1 command byte, 1 payload byte
+                if (i < (data.length - COMMAND_DELIMITER.length + 2) &&
+                    data[i] == COMMAND_DELIMITER[0] &&
+                    data[i + 1] == COMMAND_DELIMITER[1] &&
+                    data[i + 2] == COMMAND_DELIMITER[2] &&
+                    data[i + 3] == COMMAND_DELIMITER[3] &&
+                    data[i + 4] == COMMAND_DELIMITER[4] &&
+                    data[i + 5] == COMMAND_DELIMITER[5] &&
+                    data[i + 6] == COMMAND_DELIMITER[6] &&
+                    data[i + 7] == COMMAND_DELIMITER[7]) {
+                    int command = data[i + 8];
+                    if (command == COMMAND_SMETER_REPORT) {
+                        int sMeter255Value = data[i + 9];
+                        int sMeter9Value = (sMeter255Value * 10) / 256;
+                        callbacks.sMeterUpdate(sMeter9Value);
+                    }
+                    i += COMMAND_DELIMITER.length + 1; // 1 instead of 2 here because i++ in for-loop already added 1
+                } else {
+                    dataWithoutCommands[dataWithoutCommandsLength++] = data[i];
+                }
+            }
+            if (dataWithoutCommandsLength > 0) {
+                data = Arrays.copyOfRange(dataWithoutCommands, 0, dataWithoutCommandsLength);
+            }
+
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
                     if (afskDemodulator != null) { // Avoid race condition at app start.
