@@ -314,6 +314,7 @@ public class MainActivity extends AppCompatActivity {
             RadioAudioService.RadioAudioServiceCallbacks callbacks = new RadioAudioService.RadioAudioServiceCallbacks() {
                 @Override
                 public void radioMissing() {
+                    sMeterUpdate(0); // No rx when no radio
                     showUSBSnackbar();
                     findViewById(R.id.pttButton).setClickable(false);
                 }
