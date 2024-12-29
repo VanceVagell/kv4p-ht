@@ -422,12 +422,8 @@ void loop() {
           int rssiInt = rssiStr.toInt();
 
           if (rssiInt >= 0 && rssiInt <= 255) {
-            byte sMeterReportBytes[DELIMITER_LENGTH + 2]; // 2 = 1 byte for command, 1 byte for report
-            memcpy(sMeterReportBytes, COMMAND_DELIMITER, DELIMITER_LENGTH);
-            sMeterReportBytes[DELIMITER_LENGTH] = COMMAND_SMETER_REPORT;
-            sMeterReportBytes[DELIMITER_LENGTH + 1] = (uint8_t) rssiInt;
-
-            Serial.write(sMeterReportBytes, sizeof(sMeterReportBytes));
+            byte params[1] = { (uint8_t) rssiInt };
+            sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
             lastSMeterReport = millis();
           }
         }
@@ -553,6 +549,46 @@ void loop() {
     // Disregard, we don't want to crash. Just pick up at next loop().)
     // Serial.println("Exception in loop(), skipping cycle.");
   }
+}
+
+/**
+ * Example: 
+ *   [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
+ *
+ * Where:
+ *   - DELIMITER is {0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00}
+ *   - CMD is e.g. 0x53 for your S-meter
+ *   - paramLen is up to 255
+ *   - param data is 'paramLen' bytes
+ */
+void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
+{
+    // Safety check: limit paramsLen to 255 for 1-byte length
+    if (paramsLen > 255) {
+        paramsLen = 255;  // or handle differently (split, or error, etc.)
+    }
+
+    const size_t totalSize = DELIMITER_LENGTH + 1 + 1 + paramsLen;
+    byte outBytes[totalSize];
+
+    // 1. Leading delimiter
+    memcpy(outBytes, COMMAND_DELIMITER, DELIMITER_LENGTH);
+
+    // 2. Command byte
+    outBytes[DELIMITER_LENGTH] = cmdByte;
+
+    // 3. Parameter length
+    outBytes[DELIMITER_LENGTH + 1] = (byte)(paramsLen & 0xFF);
+
+    // 4. Parameter bytes
+    memcpy(
+        outBytes + DELIMITER_LENGTH + 2, // position after delim+cmd+paramLen
+        params,
+        paramsLen
+    );
+
+    Serial.write(outBytes, totalSize);
+    Serial.flush();
 }
 
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth) {

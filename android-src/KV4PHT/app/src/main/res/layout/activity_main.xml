@@ -133,7 +133,7 @@
                         android:id="@+id/sMeter1"
                         android:layout_width="12dp"
                         android:layout_height="2dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 
@@ -141,7 +141,7 @@
                         android:id="@+id/sMeter2"
                         android:layout_width="12dp"
                         android:layout_height="3dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 
@@ -149,7 +149,7 @@
                         android:id="@+id/sMeter3"
                         android:layout_width="12dp"
                         android:layout_height="4dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 
@@ -157,7 +157,7 @@
                         android:id="@+id/sMeter4"
                         android:layout_width="12dp"
                         android:layout_height="5dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 
@@ -165,7 +165,7 @@
                         android:id="@+id/sMeter5"
                         android:layout_width="12dp"
                         android:layout_height="6dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 
@@ -173,7 +173,7 @@
                         android:id="@+id/sMeter6"
                         android:layout_width="12dp"
                         android:layout_height="7dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 
@@ -181,7 +181,7 @@
                         android:id="@+id/sMeter7"
                         android:layout_width="12dp"
                         android:layout_height="8dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 
@@ -189,7 +189,7 @@
                         android:id="@+id/sMeter8"
                         android:layout_width="12dp"
                         android:layout_height="9dp"
-                        android:layout_marginRight="4dp"
+                        android:layout_marginRight="6dp"
                         android:background="@color/primary"
                         android:alpha="0.2"/>
 

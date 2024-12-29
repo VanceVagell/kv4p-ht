@@ -67,6 +67,7 @@ import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -137,6 +138,9 @@ public class RadioAudioService extends Service {
     // Delimiter must match ESP32 code
     private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
     private static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
+
+    // This buffer holds leftover data that wasn’t fully parsed yet (from ESP32 audio stream)
+    private final ByteArrayOutputStream leftoverBuffer = new ByteArrayOutputStream();
 
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
@@ -1082,6 +1086,8 @@ public class RadioAudioService extends Service {
 
         if (mode == MODE_STARTUP) {
             try {
+                // TODO rework this to use same command-handling as s-meter updates
+                //  (below)
                 String dataStr = new String(data, "UTF-8");
                 versionStrBuffer += dataStr;
                 if (versionStrBuffer.contains(VERSION_PREFIX)) {
@@ -1112,44 +1118,8 @@ public class RadioAudioService extends Service {
         }
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            // TODO look for embedded s-meter updates in the audio, and if so apply them
-            // then discard those bytes since they aren't audio. TODOV
-            // Check for COMMAND_DELIMITER + "Sx" (where x is 0-9) + COMMAND_DELIMITER
-
-            // Check for any S-meter updates embedded in the audio.
-            // Note that this is best effort. There's a small chance an S-meter report could
-            // be split across a serial read, but it's not worth the extra buffering to avoid this.
-            // TODO If we ever need more commands coming back from the ESP32 app, improve this.
-
-            // TODOV replace this approach with the way we do the version string handling.
-            // This seems to almost always be split across reads, so we'll need some intermediate
-            // cache before audio gets played, so we can find and remove commands.
-            byte[] dataWithoutCommands = new byte[data.length];
-            int dataWithoutCommandsLength = 0;
-            for (int i = 0; i < data.length; i++) { // 2 = 1 command byte, 1 payload byte
-                if (i < (data.length - COMMAND_DELIMITER.length + 2) &&
-                    data[i] == COMMAND_DELIMITER[0] &&
-                    data[i + 1] == COMMAND_DELIMITER[1] &&
-                    data[i + 2] == COMMAND_DELIMITER[2] &&
-                    data[i + 3] == COMMAND_DELIMITER[3] &&
-                    data[i + 4] == COMMAND_DELIMITER[4] &&
-                    data[i + 5] == COMMAND_DELIMITER[5] &&
-                    data[i + 6] == COMMAND_DELIMITER[6] &&
-                    data[i + 7] == COMMAND_DELIMITER[7]) {
-                    int command = data[i + 8];
-                    if (command == COMMAND_SMETER_REPORT) {
-                        int sMeter255Value = data[i + 9];
-                        int sMeter9Value = (sMeter255Value * 10) / 256;
-                        callbacks.sMeterUpdate(sMeter9Value);
-                    }
-                    i += COMMAND_DELIMITER.length + 1; // 1 instead of 2 here because i++ in for-loop already added 1
-                } else {
-                    dataWithoutCommands[dataWithoutCommandsLength++] = data[i];
-                }
-            }
-            if (dataWithoutCommandsLength > 0) {
-                data = Arrays.copyOfRange(dataWithoutCommands, 0, dataWithoutCommandsLength);
-            }
+            // Handle and remove any commands (e.g. S-meter updates) embedded in the audio.
+            data = extractAudioAndHandleCommands(data);
 
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
@@ -1214,6 +1184,189 @@ public class RadioAudioService extends Service {
         if (mode == MODE_BAD_FIRMWARE) {
             // Log.d("DEBUG", "Warning: Received data from ESP32 which was thought to have bad firmware.");
             // Just ignore any data we get in this mode, who knows what is programmed on the ESP32.
+        }
+    }
+
+    private synchronized byte[] extractAudioAndHandleCommands(byte[] newData) {
+        // 1. Append the new data to leftover.
+        leftoverBuffer.write(newData, 0, newData.length);
+        byte[] buffer = leftoverBuffer.toByteArray();
+
+        ByteArrayOutputStream audioOut = new ByteArrayOutputStream();
+        int parsePos = 0;
+
+        while (true) {
+            int startDelim = indexOf(buffer, COMMAND_DELIMITER, parsePos);
+            if (startDelim == -1) {
+                // -- NO FULL DELIMITER FOUND IN [buffer] STARTING AT parsePos --
+
+                // We might have a *partial* delimiter at the tail of [buffer].
+                // Figure out how many trailing bytes might match the start of the next command.
+                int partialLen = findPartialDelimiterTail(buffer, parsePos, buffer.length);
+
+                // "pureAudioEnd" is where pure audio stops and partial leftover begins.
+                int pureAudioEnd = buffer.length - partialLen;
+
+                // Write the "definitely audio" portion to our output.
+                if (pureAudioEnd > parsePos) {
+                    audioOut.write(buffer, parsePos, pureAudioEnd - parsePos);
+                }
+
+                // Store ONLY the partial leftover so we can complete the delimiter/command next time.
+                leftoverBuffer.reset();
+                if (partialLen > 0) {
+                    leftoverBuffer.write(buffer, pureAudioEnd, partialLen);
+                }
+
+                // Return everything we've decoded as audio so far.
+                return audioOut.toByteArray();
+            }
+
+            // -- FOUND A DELIMITER --
+            // Everything from parsePos..(startDelim) is audio
+            if (startDelim > parsePos) {
+                audioOut.write(buffer, parsePos, startDelim - parsePos);
+            }
+
+            // Check if we have enough bytes for "delimiter + cmd + paramLen"
+            int neededBeforeParams = COMMAND_DELIMITER.length + 2;
+            // (1 for cmd byte, 1 for paramLen byte)
+            if (startDelim + neededBeforeParams > buffer.length) {
+                // Not enough data => partial command leftover
+                storeTailForNextTime(buffer, startDelim);
+                return audioOut.toByteArray();
+            }
+
+            int cmdPos   = startDelim + COMMAND_DELIMITER.length;
+            byte cmd     = buffer[cmdPos];
+            int paramLen = (buffer[cmdPos + 1] & 0xFF);
+            int paramStart = cmdPos + 2;
+            int paramEnd   = paramStart + paramLen; // one past the last param byte
+
+            if (paramEnd > buffer.length) {
+                // Again, partial command leftover
+                storeTailForNextTime(buffer, startDelim);
+                return audioOut.toByteArray();
+            }
+
+            // We have a full command => handle it
+            byte[] param = Arrays.copyOfRange(buffer, paramStart, paramEnd);
+            handleParsedCommand(cmd, param);
+
+            // Advance parsePos beyond this entire command block
+            parsePos = paramEnd;
+        }
+    }
+
+    /**
+     * Stores the tail of 'buffer' from 'startIndex' to end into leftoverBuffer,
+     * for the next invocation of extractAudioAndHandleCommands().
+     */
+    private void storeTailForNextTime(byte[] buffer, int startIndex) {
+        leftoverBuffer.reset();
+        leftoverBuffer.write(buffer, startIndex, buffer.length - startIndex);
+    }
+
+    /**
+     * Finds the first occurrence of 'pattern' in 'data' at or after 'start'.
+     * Returns -1 if not found.
+     */
+    private int indexOf(byte[] data, byte[] pattern, int start) {
+        if (pattern.length == 0 || start >= data.length) {
+            return -1;
+        }
+        for (int i = start; i <= data.length - pattern.length; i++) {
+            boolean found = true;
+            for (int j = 0; j < pattern.length; j++) {
+                if (data[i + j] != pattern[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Checks how many trailing bytes in [data, from parsePos..end) might match the
+     * *start* of our delimiter (or partial command).
+     *
+     * For example, if COMMAND_DELIMITER = { (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00 },
+     * we see if the tail ends with 1, 2, or 3 bytes that match the first 1, 2, or 3 bytes
+     * of COMMAND_DELIMITER.
+     *
+     * Return value: the number of trailing bytes that match
+     * (range 0..COMMAND_DELIMITER.length - 1).
+     */
+    private int findPartialDelimiterTail(byte[] data, int start, int end) {
+        final int dataLen = end - start;
+        // We'll check from the largest possible partial (delimiter.length - 1) down to 1
+        // because if a bigger partial matches, that's our answer.
+        for (int checkSize = COMMAND_DELIMITER.length - 1; checkSize >= 1; checkSize--) {
+            if (checkSize > dataLen) {
+                continue; // can't match if leftover is too small
+            }
+            boolean match = true;
+            // Compare data[end-checkSize .. end-1] to delimiter[0..checkSize-1]
+            for (int j = 0; j < checkSize; j++) {
+                if (data[end - checkSize + j] != COMMAND_DELIMITER[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                // We found the largest partial match
+                return checkSize;
+            }
+        }
+        // If no partial match, return 0
+        return 0;
+    }
+
+    private void handleParsedCommand(byte cmd, byte[] param) {
+        if (cmd == COMMAND_SMETER_REPORT) {
+            if (param.length >= 1) {
+                int sMeter255Value = (param[0] & 0xFF);
+                // Log.d("DEBUG", "Raw s-meter value from ESP32 (0-255) = " + sMeter255Value);
+
+                // Through empirical testing, it seems to scale from ~50 with no signal, and ~120 with a transmitter
+                // right near it. So we normalize to match that to an S1-S9 scale. Note, we start more granular at
+                // lower S-values so people can get a better sense of weak signals. This isn't a scientific db measurement...
+                int sMeter9Value = 1;
+                if (sMeter255Value >= 46) {
+                    sMeter9Value = 2;
+                }
+                if (sMeter255Value >= 50) {
+                    sMeter9Value = 3;
+                }
+                if (sMeter255Value >= 55) {
+                    sMeter9Value = 4;
+                }
+                if (sMeter255Value >= 61) {
+                    sMeter9Value = 5;
+                }
+                if (sMeter255Value >= 68) {
+                    sMeter9Value = 6;
+                }
+                if (sMeter255Value >= 76) {
+                    sMeter9Value = 7;
+                }
+                if (sMeter255Value >= 87) {
+                    sMeter9Value = 8;
+                }
+                if (sMeter255Value >= 101) {
+                    sMeter9Value = 9;
+                }
+                // Log.d("DEBUG", "Normalized s-meter (0-9) = " + sMeter9Value);
+
+                callbacks.sMeterUpdate(sMeter9Value);
+            }
+        } else {
+            Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
+                    " paramLen=" + param.length);
         }
     }
 
