@@ -54,7 +54,7 @@ int matchedDelimiterTokens = 0;
 int mode = MODE_STOPPED;
 
 // Audio sampling rate, must match what Android app expects (and sends).
-#define AUDIO_SAMPLE_RATE 16000
+#define AUDIO_SAMPLE_RATE 22050
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
@@ -143,7 +143,7 @@ void setup() {
 
   // Communication with DRA818V radio module via GPIO pins
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
-  Serial2.setTimeout(100);
+  Serial2.setTimeout(10); // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
   int result = -1;
   while (result != 1) {

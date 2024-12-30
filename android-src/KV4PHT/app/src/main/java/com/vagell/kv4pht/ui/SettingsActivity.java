@@ -26,7 +26,6 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
@@ -70,6 +69,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateBandwidths();
         populateMaxFrequencies();
         populateMicGainOptions();
+        populateAprsOptions();
         attachListeners();
     }
 
@@ -122,6 +122,17 @@ public class SettingsActivity extends AppCompatActivity {
         micGainBoostTextView.setAdapter(arrayAdapter);
     }
 
+    private void populateAprsOptions() {
+        AutoCompleteTextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
+
+        List<String> positionAccuracyOptions = new ArrayList<String>();
+        positionAccuracyOptions.add("Exact");
+        positionAccuracyOptions.add("Approx");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, positionAccuracyOptions);
+        aprsPositionAccuracyTextView.setAdapter(arrayAdapter);
+    }
+
     private void populateOriginalValues() {
         if (threadPoolExecutor == null) {
             return;
@@ -137,6 +148,8 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting aprsBeaconPosition = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
+                AppSetting aprsPositionAccuracy = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
                 AppSetting bandwidthSetting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
                 AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
                 AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
@@ -179,9 +192,19 @@ public class SettingsActivity extends AppCompatActivity {
                             noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
                         }
 
+                        if (aprsBeaconPosition != null) {
+                            Switch aprsPositionSwitch = (Switch) (findViewById(R.id.aprsPositionSwitch));
+                            aprsPositionSwitch.setChecked(Boolean.parseBoolean(aprsBeaconPosition.value));
+                        }
+
+                        if (aprsPositionAccuracy != null) {
+                            AutoCompleteTextView aprsPositionAccuracyTextView = (AutoCompleteTextView) findViewById(R.id.aprsPositionAccuracyTextView);
+                            aprsPositionAccuracyTextView.setText(aprsPositionAccuracy.value, false);
+                        }
+
                         if (bandwidthSetting != null) {
-                            AutoCompleteTextView bandwidthTextVIew = (AutoCompleteTextView) findViewById(R.id.bandwidthTextView);
-                            bandwidthTextVIew.setText(bandwidthSetting.value, false);
+                            AutoCompleteTextView bandwidthTextView = (AutoCompleteTextView) findViewById(R.id.bandwidthTextView);
+                            bandwidthTextView.setText(bandwidthSetting.value, false);
                         }
 
                         if (maxFreqSetting != null) {
@@ -288,6 +311,31 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
+        Switch aprsPositionSwitch = findViewById(R.id.aprsPositionSwitch);
+        aprsPositionSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                setAprsBeaconPosition(isChecked);
+            }
+        });
+
+        TextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
+        aprsPositionAccuracyTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.aprsPositionAccuracyTextView)).getText().toString().trim();
+                setAprsPositionAccuracy(newText);
+            }
+        });
+
         TextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
         bandwidthTextView.addTextChangedListener(new TextWatcher() {
             @Override
@@ -336,6 +384,51 @@ public class SettingsActivity extends AppCompatActivity {
             public void afterTextChanged(Editable s) {
                 String newText = ((TextView) findViewById(R.id.micGainBoostTextView)).getText().toString().trim();
                 setMicGainBoost(newText);
+            }
+        });
+    }
+
+    private void setAprsBeaconPosition(boolean enabled) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
+
+                if (setting == null) {
+                    setting = new AppSetting("aprsBeaconPosition", "" + enabled);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = "" + enabled;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param aprsPositionAccuracy "Exact" or "Approx"
+     */
+    private void setAprsPositionAccuracy(String aprsPositionAccuracy) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
+
+                if (setting == null) {
+                    setting = new AppSetting("aprsPositionAccuracy", aprsPositionAccuracy);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = aprsPositionAccuracy;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
             }
         });
     }

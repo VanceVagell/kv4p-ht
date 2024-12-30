@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <application
         android:allowBackup="true"
@@ -46,7 +48,7 @@
             android:name=".ui.AddEditMemoryActivity"
             android:exported="true"
             android:theme="@style/Theme.KV4PHT"
-            android:windowSoftInputMode="stateVisible|adjustResize"> <!-- There's an issue where fields are not scrollable, likely caused by an Android bug not honoring adjustResize on fullscreen apps, see similar bug in another project: https://github.com/dotnet/maui/issues/14281 -->
+            android:windowSoftInputMode="stateVisible|adjustResize">
             <intent-filter>
                 <action android:name="com.vagell.kv4pht.ADD_MEMORY_ACTION" />
                 <action android:name="com.vagell.kv4pht.EDIT_MEMORY_ACTION" />

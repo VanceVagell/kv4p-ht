@@ -29,6 +29,8 @@ import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.location.Location;
+import android.location.LocationManager;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -36,15 +38,25 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.LiveData;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.CancellationTokenSource;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.hoho.android.usbserial.driver.SerialTimeoutException;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -52,10 +64,13 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
+import com.vagell.kv4pht.aprs.parser.APRSTypes;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
 import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
+import com.vagell.kv4pht.aprs.parser.Position;
+import com.vagell.kv4pht.aprs.parser.PositionField;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
@@ -115,10 +130,10 @@ public class RadioAudioService extends Service {
     private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
-    public static final int AUDIO_SAMPLE_RATE = 16000;
+    public static final int AUDIO_SAMPLE_RATE = 22050;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
     public static final  int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
+    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 4;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private static UsbSerialPort serialPort;
@@ -149,6 +164,15 @@ public class RadioAudioService extends Service {
     private static final int MS_SILENCE_BEFORE_DATA = 300;
     private static final int MS_SILENCE_AFTER_DATA = 700;
     private static final int APRS_MAX_MESSAGE_NUM =  99999;
+
+    // APRS position settings
+    public static final int APRS_POSITION_EXACT = 0;
+    public static final int APRS_POSITION_APPROX = 1;
+    public static final int APRS_BEACON_MINS = 1;
+    private boolean aprsBeaconPosition = false;
+    private int aprsPositionAccuracy = APRS_POSITION_EXACT;
+    private Handler aprsBeaconHandler = null;
+    private Runnable aprsBeaconRunnable = null;
 
     // Radio params and related settings
     private String activeFrequencyStr = "144.000";
@@ -262,6 +286,53 @@ public class RadioAudioService extends Service {
         maxFreq = newMaxFreq;
     }
 
+    public void setAprsBeaconPosition(boolean aprsBeaconPosition) {
+        if (!this.aprsBeaconPosition && aprsBeaconPosition) { // If it was off, and now turned on...
+            Log.d("DEBUG", "Starting APRS position beaconing every " + APRS_BEACON_MINS + " mins");
+            // Start beaconing
+            aprsBeaconHandler = new Handler(Looper.getMainLooper());
+            aprsBeaconRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    sendPositionBeacon();
+                    aprsBeaconHandler.postDelayed(this,  60 * APRS_BEACON_MINS * 1000);
+                }
+            };
+            aprsBeaconHandler.postDelayed(aprsBeaconRunnable, 60 * APRS_BEACON_MINS * 1000);
+
+            // Tell callback we started (e.g. so it can show a snackbar letting user know)
+            callbacks.aprsBeaconing(true, aprsPositionAccuracy);
+        }
+
+        if (!aprsBeaconPosition) {
+            Log.d("DEBUG", "Stopping APRS position beaconing");
+
+            // Stop beaconing
+            if (null != aprsBeaconHandler) {
+                aprsBeaconHandler.removeCallbacks(aprsBeaconRunnable);
+            }
+            aprsBeaconHandler = null;
+            aprsBeaconRunnable = null;
+        }
+
+        this.aprsBeaconPosition = aprsBeaconPosition;
+    }
+
+    public boolean getAprsBeaconPosition() {
+        return aprsBeaconPosition;
+    }
+
+    /**
+     * @param aprsPositionAccuracy APRS_POSITION_EXACT or APRS_POSITION_APPROX
+     */
+    public void setAprsPositionAccuracy(int aprsPositionAccuracy) {
+        this.aprsPositionAccuracy = aprsPositionAccuracy;
+    }
+
+    public int getAprsPositionAccuracy() {
+        return aprsPositionAccuracy;
+    }
+
     public void setMode(int mode) {
         switch (mode) {
             case MODE_FLASHING:
@@ -357,6 +428,9 @@ public class RadioAudioService extends Service {
         public void txEnded();
         public void chatError(String snackbarText);
         public void sMeterUpdate(int value);
+        public void aprsBeaconing(boolean beaconing, int accuracy);
+        public void sentAprsBeacon(double latitude, double longitude);
+        public void unknownLocation();
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -1422,7 +1496,15 @@ public class RadioAudioService extends Service {
                         if (!messagePacket.isAck() && messagePacket.getTargetCallsign().trim().toUpperCase().equals(callsign.toUpperCase())) {
                             showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
                                     aprsPacket.getSourceCall() + " messaged you", messagePacket.getMessageBody(), MainActivity.INTENT_OPEN_CHAT);
-                            sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), messagePacket.getMessageNumber());
+
+                            // Send ack after a brief delay (to let the sender keyup and start decooding again)
+                            final Handler handler = new Handler(Looper.getMainLooper());
+                            handler.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), messagePacket.getMessageNumber());
+                                }
+                            }, 1000);
                         }
                     }
                 } catch (Exception e) {
@@ -1445,9 +1527,87 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public void sendAckMessage(String targetCallsign, String remoteMessageNum) {
-        // TODOV
+    public void sendPositionBeacon() {
+        if (getMode() != MODE_RX) { // Can only beacon in rx mode (e.g. not tx or scan)
+            Log.d("DEBUG", "Skipping position beacon because not in RX mode");
+            return;
+        }
 
+        LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+        Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); // Try to get cached location (fast)
+
+        if (location == null) {
+            if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
+                Log.d("DEBUG", "Unable to beacon position because Android device is missing Google Play Services, needed to get GPS location.");
+                callbacks.unknownLocation();
+                return;
+            }
+
+            // Otherwise, manually retrieve a new location for user.
+            FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+            fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
+                    .addOnSuccessListener(new OnSuccessListener<Location>() {
+                        @Override
+                        public void onSuccess(Location location) {
+                            if (location != null) {
+                                // Use the location
+                                double latitude = location.getLatitude();
+                                double longitude = location.getLongitude();
+                                sendPositionBeacon(latitude, longitude);
+                            } else {
+                                callbacks.unknownLocation();
+                            }
+                        }
+                    }).addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            callbacks.unknownLocation();
+                        }
+                    });
+            return;
+        }
+
+        double latitude = location.getLatitude();
+        double longitude = location.getLongitude();
+        sendPositionBeacon(latitude, longitude);
+    }
+
+    private void sendPositionBeacon(double latitude, double longitude) {
+        if (getMode() != MODE_RX) { // Can only beacon in rx mode (e.g. not tx or scan)
+            Log.d("DEBUG", "Skipping position beacon because not in RX mode");
+            return;
+        }
+
+        Log.d("DEBUG", "Beaconing position via APRS now");
+
+        if (aprsPositionAccuracy == APRS_POSITION_APPROX) {
+            // Fuzz the location (2 decimal places gives a spot in the neighborhood)
+            longitude = Double.valueOf(String.format("%.2f", longitude));
+            latitude = Double.valueOf(String.format("%.2f", latitude));
+        }
+
+        ArrayList<Digipeater> digipeaters = new ArrayList<>();
+        digipeaters.add(new Digipeater("WIDE1*"));
+        digipeaters.add(new Digipeater("WIDE2-1"));
+        Position myPos = new Position(latitude, longitude);
+        try {
+            PositionField posField = new PositionField(("=" + myPos.toCompressedString()).getBytes(), "", 1);
+            APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", digipeaters, posField.getRawBytes());
+            aprsPacket.getAprsInformation().addAprsData(APRSTypes.T_POSITION, posField);
+            Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
+
+            txAX25Packet(ax25Packet);
+
+            callbacks.sentAprsBeacon(latitude, longitude);
+        } catch (Exception e) {
+            Log.d("DEBUG", "Exception while trying to beacon APRS location.");
+            e.printStackTrace();
+        }
+    }
+
+    public void sendAckMessage(String targetCallsign, String remoteMessageNum) {
         // Prepare APRS packet, and use its bytes to populate an AX.25 packet.
         MessagePacket msgPacket = new MessagePacket(targetCallsign, "ack" + remoteMessageNum, remoteMessageNum);
         ArrayList<Digipeater> digipeaters = new ArrayList<>();
@@ -1459,7 +1619,12 @@ public class RadioAudioService extends Service {
         txAX25Packet(ax25Packet);
     }
 
-    public void sendChatMessage(String targetCallsign, String outText) {
+    /**
+     * @param targetCallsign
+     * @param outText
+     * @return The message number that was used for the message, or -1 if there was a problem.
+     */
+    public int sendChatMessage(String targetCallsign, String outText) {
         // Remove reserved APRS characters.
         outText = outText.replace('|', ' ');
         outText = outText.replace('~', ' ');
@@ -1475,7 +1640,7 @@ public class RadioAudioService extends Service {
         digipeaters.add(new Digipeater("WIDE2-1"));
         if (null == callsign || callsign.trim().equals("")) {
             Log.d("DEBUG", "Error: Tried to send a chat message with no sender callsign.");
-            return;
+            return -1;
         }
         if (null == targetCallsign || targetCallsign.trim().equals("")) {
             Log.d("DEBUG", "Warning: Tried to send a chat message with no recipient callsign, defaulted to 'CQ'.");
@@ -1488,11 +1653,13 @@ public class RadioAudioService extends Service {
             ax25Packet = new Packet(aprsPacket.toAX25Frame());
         } catch (IllegalArgumentException iae) {
             callbacks.chatError("Error in your callsign or To: callsign.");
-            return;
+            return -1;
         }
 
         // TODO start a timer to re-send this packet (up to a few times) if we don't receive an ACK for it.
         txAX25Packet(ax25Packet);
+
+        return messageNumber - 1;
     }
 
     private void txAX25Packet(Packet ax25Packet) {

@@ -377,6 +377,17 @@
                         android:imeOptions="actionDone">
                     </EditText>
 
+                    <ImageButton
+                        android:id="@+id/singleBeaconButton"
+                        android:alpha="0.8"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginRight="8dp"
+                        android:background="@drawable/ic_pin"
+                        android:layout_gravity="right"
+                        android:contentDescription="Send APRS position beacon"
+                        android:onClick="singleBeaconButtonClicked"/>
+
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
                 <androidx.appcompat.widget.LinearLayoutCompat

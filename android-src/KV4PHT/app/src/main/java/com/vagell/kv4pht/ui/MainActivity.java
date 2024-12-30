@@ -90,7 +90,6 @@ import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 
-import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -117,6 +116,7 @@ public class MainActivity extends AppCompatActivity {
     // Android permission stuff
     private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
     private static final int REQUEST_NOTIFICATIONS_PERMISSION_CODE = 2;
+    private static final int REQUEST_LOCATION_PERMISSION_CODE = 3;
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
     // Radio params and related settings
@@ -432,6 +432,47 @@ public class MainActivity extends AppCompatActivity {
                 public void sMeterUpdate(int value) {
                     updateSMeter(value);
                 }
+
+                @Override
+                public void aprsBeaconing(boolean beaconing, int accuracy) {
+                    // If beaconing just started, let user know in case they didn't want this
+                    // or forgot they turned it on. And warn them if they haven't set their callsign.
+                    if (beaconing && (null == callsign || callsign.trim().length() == 0)) {
+                        showCallsignSnackbar("Set your callsign to beacon your position");
+                    } else if (beaconing) {
+                        showBeaconingOnSnackbar(accuracy);
+                    }
+                }
+
+                @Override
+                public void sentAprsBeacon(double latitude, double longitude) {
+                    // Show a mock-up of the beacon we sent, in our own chat log
+                    APRSMessage myBeacon = new APRSMessage();
+                    myBeacon.type = APRSMessage.POSITION_TYPE;
+                    myBeacon.fromCallsign = callsign;
+                    myBeacon.positionLat = latitude;
+                    myBeacon.positionLong = longitude;
+                    myBeacon.timestamp = java.time.Instant.now().getEpochSecond();
+
+                    threadPoolExecutor.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            MainViewModel.appDb.aprsMessageDao().insertAll(myBeacon);
+                            viewModel.loadData();
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    aprsAdapter.notifyDataSetChanged();
+                                }
+                            });
+                        }
+                    });
+                }
+
+                @Override
+                public void unknownLocation() {
+                    showSimpleSnackbar("Can't find your location, no beacon sent");
+                }
             };
 
             radioAudioService.setCallbacks(callbacks);
@@ -584,6 +625,7 @@ public class MainActivity extends AppCompatActivity {
         } else if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
             aprsMessage.type = APRSMessage.MESSAGE_TYPE;
             MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
+            aprsMessage.toCallsign = messagePacket.getTargetCallsign();
 
             if (messagePacket.isAck()) {
                 aprsMessage.wasAcknowledged = true;
@@ -599,7 +641,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 // Log.d("DEBUG", "Message ack received");
             } else {
-                aprsMessage.toCallsign = messagePacket.getTargetCallsign();
                 aprsMessage.msgBody = messagePacket.getMessageBody();
                 // Log.d("DEBUG", "Message packet received");
             }
@@ -631,9 +672,9 @@ public class MainActivity extends AppCompatActivity {
                 APRSMessage oldAPRSMessage = null;
                 if (aprsMessage.wasAcknowledged) {
                     // When this is an ack, we don't insert anything in the DB, we try to find that old message to ack it.
-                    oldAPRSMessage = MainViewModel.appDb.aprsMessageDao().getMsgToAck(aprsMessage.fromCallsign, aprsMessage.msgNum);
+                    oldAPRSMessage = MainViewModel.appDb.aprsMessageDao().getMsgToAck(aprsMessage.toCallsign, aprsMessage.msgNum);
                     if (null == oldAPRSMessage) {
-                        Log.d("DEBUG", "Can't ack unknown APRS message with number: " + aprsMessage.msgNum);
+                        Log.d("DEBUG", "Can't ack unknown APRS message from: " + aprsMessage.toCallsign + " with msg number: " + aprsMessage.msgNum);
                         return;
                     } else {
                         // Ack an old message
@@ -685,7 +726,7 @@ public class MainActivity extends AppCompatActivity {
             // If their callsign is not set, display a snackbar asking them to set it before they
             // can transmit.
             if (callsign == null || callsign.length() == 0) {
-                showCallsignSnackbar();
+                showCallsignSnackbar("Set your callsign to send text chat");
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(false);
                 findViewById(R.id.sendButtonOverlay).setVisibility(View.VISIBLE);
@@ -710,19 +751,19 @@ public class MainActivity extends AppCompatActivity {
         activeScreenType = screenType;
     }
 
-    private void showCallsignSnackbar() {
-        CharSequence snackbarMsg = "Set your callsign to send text chat";
-        callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
+    private void showCallsignSnackbar(CharSequence snackbarMsg) {
+        callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                 .setAction("Set now", new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
+                        callsignSnackbar.dismiss();
                         settingsClicked(null);
                     }
                 })
                 .setBackgroundTint(getResources().getColor(R.color.primary))
                 .setTextColor(getResources().getColor(R.color.medium_gray))
                 .setActionTextColor(getResources().getColor(R.color.black))
-                .setAnchorView(findViewById(R.id.textChatInput));
+                .setAnchorView(findViewById(R.id.bottomNavigationView));
 
         // Make the text of the snackbar larger.
         TextView snackbarActionTextView = (TextView) callsignSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
@@ -733,9 +774,37 @@ public class MainActivity extends AppCompatActivity {
         callsignSnackbar.show();
     }
 
+    private void showBeaconingOnSnackbar(int accuracy) {
+        if (null != usbSnackbar && usbSnackbar.isShown()) { // No radio connected, that's more important.
+            return;
+        }
+
+        String accuracyStr = (accuracy == RadioAudioService.APRS_POSITION_EXACT) ? "exact" : "approx";
+        CharSequence snackbarMsg = "Beaconing your " + accuracyStr + " position on active frequency";
+        Snackbar beaconingSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
+                .setAction("Settings", new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        settingsClicked(null);
+                    }
+                })
+                .setBackgroundTint(getResources().getColor(R.color.primary))
+                .setTextColor(getResources().getColor(R.color.medium_gray))
+                .setActionTextColor(getResources().getColor(R.color.black))
+                .setAnchorView(findViewById(R.id.bottomNavigationView));
+
+        // Make the text of the snackbar larger.
+        TextView snackbarActionTextView = (TextView) beaconingSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        snackbarActionTextView.setTextSize(20);
+        TextView snackbarTextView = (TextView) beaconingSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        beaconingSnackbar.show();
+    }
+
     public void sendButtonOverlayClicked(View view) {
         if (callsign == null || callsign.length() == 0) {
-            showCallsignSnackbar();
+            showCallsignSnackbar("Set your callsign to send text chat");
             ImageButton sendButton = findViewById(R.id.sendButton);
             sendButton.setEnabled(false);
         }
@@ -755,8 +824,9 @@ public class MainActivity extends AppCompatActivity {
             return; // Nothing to send.
         }
 
+        int msgNum = -1;
         if (radioAudioService != null) {
-            radioAudioService.sendChatMessage(targetCallsign, outText);
+            msgNum = radioAudioService.sendChatMessage(targetCallsign, outText);
         }
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
@@ -771,7 +841,7 @@ public class MainActivity extends AppCompatActivity {
         aprsMessage.toCallsign = targetCallsign.toUpperCase().trim();
         aprsMessage.msgBody = outText.trim();
         aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
-        // TODO include position once we add GPS support, if the user has enabled this setting
+        aprsMessage.msgNum = msgNum;
 
         threadPoolExecutor.execute(new Runnable() {
             @Override
@@ -842,6 +912,8 @@ public class MainActivity extends AppCompatActivity {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
 
+        Activity thisActivity = this;
+
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -852,6 +924,8 @@ public class MainActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = viewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting aprsBeaconPosition = viewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
+                AppSetting aprsPositionAccuracy = viewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
                 AppSetting bandwidthSetting = viewModel.appDb.appSettingDao().getByName("bandwidth");
                 AppSetting maxFreqSetting = viewModel.appDb.appSettingDao().getByName("maxFreq");
                 AppSetting micGainBoostSetting = viewModel.appDb.appSettingDao().getByName("micGainBoost");
@@ -989,6 +1063,38 @@ public class MainActivity extends AppCompatActivity {
 
                                 // Hide the tx audio visualization
                                 updateRecordingVisualization(100, RadioAudioService.SILENT_BYTE);
+                            }
+                        }
+
+                        // Get this first, since we show a butter if beaconing is enabled afterwards, and want to include accuracy in it.
+                        if (aprsPositionAccuracy != null) {
+                            if (threadPoolExecutor != null)
+                                threadPoolExecutor.execute(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (radioAudioService != null) {
+                                            radioAudioService.setAprsPositionAccuracy(
+                                                    aprsPositionAccuracy.value.equals("Exact") ?
+                                                            RadioAudioService.APRS_POSITION_EXACT :
+                                                            RadioAudioService.APRS_POSITION_APPROX);
+                                        }
+                                    }
+                                });
+                        }
+
+                        if (aprsBeaconPosition != null) {
+                            if (threadPoolExecutor != null)
+                                threadPoolExecutor.execute(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (radioAudioService != null) {
+                                            radioAudioService.setAprsBeaconPosition(Boolean.parseBoolean(aprsBeaconPosition.value));
+                                        }
+                                    }
+                                });
+
+                            if (Boolean.parseBoolean(aprsBeaconPosition.value)) {
+                                requestPositionPermissions();
                             }
                         }
                     }
@@ -1323,6 +1429,35 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    protected void requestPositionPermissions() {
+        // Check that the user allows our app to get position, otherwise ask for the permission.
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.RECORD_AUDIO)) {
+
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission needed")
+                        .setMessage("This app needs the fine location permission")
+                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                ActivityCompat.requestPermissions(MainActivity.this,
+                                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                                        REQUEST_LOCATION_PERMISSION_CODE);
+                            }
+                        })
+                        .create()
+                        .show();
+
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                        REQUEST_LOCATION_PERMISSION_CODE);
+            }
+        }
+    }
+
     protected void requestNotificationPermissions() {
         if (ContextCompat.checkSelfPermission(this,
                 Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -1385,6 +1520,16 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     // Permission denied
                     Log.d("DEBUG", "Warning: Need notifications permission to be able to send APRS chat message notifications");
+                }
+                return;
+            }
+            case REQUEST_LOCATION_PERMISSION_CODE: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted.
+                } else {
+                    // Permission denied
+                    Log.d("DEBUG", "Warning: Need fine location permission to include in APRS messages (user turned this setting on)");
                 }
                 return;
             }
@@ -1538,6 +1683,22 @@ public class MainActivity extends AppCompatActivity {
         setScanningUi((radioAudioService != null) && (radioAudioService.getMode()) != RadioAudioService.MODE_SCAN); // Toggle scanning on/off
         if (radioAudioService != null) {
             radioAudioService.setScanning(radioAudioService.getMode() != RadioAudioService.MODE_SCAN, true);
+        }
+    }
+
+    public void singleBeaconButtonClicked(View view) {
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPositionPermissions();
+            return;
+        }
+
+        if (null != radioAudioService) {
+            if (null == callsign || callsign.trim().length() == 0) {
+                showCallsignSnackbar("Set your callsign to beacon your position");
+                return;
+            }
+
+            radioAudioService.sendPositionBeacon();
         }
     }
 
