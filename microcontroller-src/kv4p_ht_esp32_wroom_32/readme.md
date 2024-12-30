@@ -10,20 +10,22 @@ This document provides detailed instructions on how to interact with the KV4P-HT
 2. [Communication Protocol](#2-communication-protocol)
    - [2.1. Delimiter](#21-delimiter)
    - [2.2. Command Structure](#22-command-structure)
-3. [Commands](#3-commands)
+3. [Commands from Android](#3-commands)
    - [3.1. COMMAND_PTT_DOWN (0x01)](#31-command_ptt_down-0x01)
    - [3.2. COMMAND_PTT_UP (0x02)](#32-command_ptt_up-0x02)
    - [3.3. COMMAND_TUNE_TO (0x03)](#33-command_tune_to-0x03)
    - [3.4. COMMAND_FILTERS (0x04)](#34-command_filters-0x04)
    - [3.5. COMMAND_STOP (0x05)](#35-command_stop-0x05)
    - [3.6. COMMAND_GET_FIRMWARE_VER (0x06)](#36-command_get_firmware_ver-0x06)
-4. [Examples](#4-examples)
-   - [4.1. Changing Frequencies](#41-changing-frequencies)
-   - [4.2. Starting Transmission](#42-starting-transmission)
-   - [4.3. Stopping Transmission](#43-stopping-transmission)
-   - [4.4. Configuring Filters](#44-configuring-filters)
-   - [4.5. Retrieving Firmware Version](#45-retrieving-firmware-version)
-5. [Additional Notes](#5-additional-notes)
+4. [Commands from ESP32](#4-esp32-commands)
+   - [4.1. COMMAND_SMETER (0x53)](#41-command_smeter-0x53)
+5. [Examples](#5-examples)
+   - [5.1. Changing Frequencies](#51-changing-frequencies)
+   - [5.2. Starting Transmission](#52-starting-transmission)
+   - [5.3. Stopping Transmission](#53-stopping-transmission)
+   - [5.4. Configuring Filters](#54-configuring-filters)
+   - [5.5. Retrieving Firmware Version](#55-retrieving-firmware-version)
+6. [Additional Notes](#6-additional-notes)
 
 ---
 
@@ -68,7 +70,7 @@ After the delimiter, send a single-byte command code followed by any required pa
 
 ---
 
-## 3. Commands
+## 3. Commands from Android (to ESP32)
 
 Below is a list of commands supported by the KV4P-HT device, along with their descriptions and parameter requirements.
 
@@ -142,9 +144,22 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
 
 ---
 
-## 4. Examples
+## 4. Commands from ESP32 (to Android)
 
-### 4.1. Changing Frequencies
+These commands may be sent by the ESP32 firmware, often embedded in the audio stream. Like the Android to ESP32 commands, these are prefixed with the same delimiter. 
+However, since these commands are embedded in an audio stream, they also include a count of parameter bytes. The overall format is:
+
+DELIMITER + COMMAND BYTE + PARAM SIZE BYTE + PARAM BYTE(S)
+
+Since the param size is stored in a byte, params can have a maximum of 255 bytes.
+
+### 4.1. COMMAND_SMETER (0x53)
+
+This command reports how strong the current signal reception (RSSI) is, from 0-255. It is sent periodically by the firmware to the Android device, via the audio stream.
+
+## 5. Examples
+
+### 5.1. Changing Frequencies
 
 **Objective**: Set the transmit frequency to `146.5200` MHz, receive frequency to `146.5200` MHz, no tone, squelch off, and wide bandwidth.
 
@@ -183,7 +198,7 @@ FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30
 - Squelch `0`: `30`.
 - Bandwidth `W`: `57`
 
-### 4.2. Starting Transmission
+### 5.2. Starting Transmission
 
 **Objective**: Begin transmitting audio data.
 
@@ -204,9 +219,9 @@ FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30
 **Following Data**:
 
 - Send the audio data bytes immediately after the command.
-- Audio data should be raw 8-bit PCM audio sampled at **44.1 kHz**.
+- Audio data should be raw 8-bit PCM audio sampled at **22050Hz**.
 
-### 4.3. Stopping Transmission
+### 5.3. Stopping Transmission
 
 **Objective**: Stop transmitting and return to receive mode.
 
@@ -220,7 +235,7 @@ FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30
 
 **Note**: There may be a brief delay (~40 ms) to allow final audio data to be transmitted.
 
-### 4.4. Configuring Filters
+### 5.4. Configuring Filters
 
 **Objective**: Enable emphasis and disable high-pass and low-pass filters.
 
@@ -250,7 +265,7 @@ FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30
 FF 00 FF 00 FF 00 FF 00 04 31 30 30
 ```
 
-### 4.5. Retrieving Firmware Version
+### 5.5. Retrieving Firmware Version
 
 **Objective**: Get the firmware version from the device.
 
@@ -274,10 +289,10 @@ FF 00 FF 00 FF 00 FF 00 04 31 30 30
 
 ---
 
-## 5. Additional Notes
+## 6. Additional Notes
 
 - **Audio Data Format**:
-  - When transmitting (after `COMMAND_PTT_DOWN`), send raw 8-bit PCM audio data sampled at **44.1 kHz**.
+  - When transmitting (after `COMMAND_PTT_DOWN`), send raw 8-bit PCM audio data sampled at **22050Hz**.
   - Ensure continuous data flow to prevent underruns or audio glitches.
 
 - **Runaway Transmission Prevention**:
