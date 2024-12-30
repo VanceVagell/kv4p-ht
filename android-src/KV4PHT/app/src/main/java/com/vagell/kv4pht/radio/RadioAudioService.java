@@ -543,7 +543,6 @@ public class RadioAudioService extends Service {
             Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
             if (freq < 144.0f || freq > offsetMaxFreq) {
                 txAllowed = false;
-
             } else {
                 txAllowed = true;
             }
@@ -635,7 +634,6 @@ public class RadioAudioService extends Service {
             Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
             if (txFreq < 144.0f || txFreq > offsetMaxFreq) {
                 txAllowed = false;
-
             } else {
                 txAllowed = true;
             }
@@ -1663,6 +1661,11 @@ public class RadioAudioService extends Service {
     }
 
     private void txAX25Packet(Packet ax25Packet) {
+        if (!txAllowed) {
+            Log.d("DEBUG", "Tried to send an AX.25 packet when tx is not allowed, did not send.");
+            return;
+        }
+
         Log.d("DEBUG", "Sending AX25 packet: " + ax25Packet.toString());
 
         // This strange approach to getting bytes seems to be a state machine in the AFSK library.
