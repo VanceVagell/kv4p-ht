@@ -40,6 +40,16 @@
         </nav>
         <main>
 			<div class="main-content-area">
+				<h1>Dec 30, 2024: Android app update v1.6.0, ESP32 firmware v5</h1>
+				<ul>
+					<li>Adds an S-meter (signal strength meter) to the main screen.</li>
+					<li>Adds the ability to beacon your position in the APRS chat. You can tap the map pin icon to beacon once, or you can turn on the "Beacon my position" setting to have it sent automatically every 5 minutes on the active channel. You can also adjust how precise your position is, either exact or approximate.</li>
+					<li>Increase audio sampling rate to 22050Hz, which significantly improves APRS encoding and decoding accuracy.</li>
+					<li>Got message ACK'ing working, so you now see a checkmark if you receive an ACK to a message you sent.</li>
+					<li>Renamed "Text chat" section to "APRS chat" to clarify that's what it is, so people realize they can go to 144.39MHz and watch all the APRS traffic.</li>
+					<li>Fixes a choppy audio bug on certain ESP32s.</li>
+					<li>Various small bug fixes.</li>
+				</ul>
 				<h1>Dec 25, 2024: Android app update v1.5.0, ESP32 firmware v4</h1>
 				<ul>
 					<li>Fixed significant audio issues on the majority of ESP32 dev boards (including most knockoffs).</li>
