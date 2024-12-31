@@ -168,7 +168,7 @@ public class RadioAudioService extends Service {
     // APRS position settings
     public static final int APRS_POSITION_EXACT = 0;
     public static final int APRS_POSITION_APPROX = 1;
-    public static final int APRS_BEACON_MINS = 1;
+    public static final int APRS_BEACON_MINS = 5;
     private boolean aprsBeaconPosition = false;
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
     private Handler aprsBeaconHandler = null;
