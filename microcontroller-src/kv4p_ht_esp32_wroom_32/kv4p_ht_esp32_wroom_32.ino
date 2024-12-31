@@ -122,9 +122,9 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 
 void setup() {
   // Communication with Android via USB cable
-  Serial.begin(230400);
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
+  Serial.begin(230400);
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true); // Reboot if locked up for a bit
