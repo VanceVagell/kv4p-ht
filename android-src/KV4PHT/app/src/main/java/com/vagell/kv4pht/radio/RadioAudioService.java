@@ -39,7 +39,6 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.os.Binder;
 import android.os.Bundle;
-import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -83,7 +82,6 @@ import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
-import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -158,9 +156,6 @@ public class RadioAudioService extends Service {
     static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
 
     private final RxStreamParser rxStreamParser = new RxStreamParser(this::handleParsedCommand);
-
-    // This buffer holds leftover data that wasn’t fully parsed yet (from ESP32 audio stream)
-    private final ByteArrayOutputStream leftoverBuffer = new ByteArrayOutputStream();
 
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
