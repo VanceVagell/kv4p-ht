@@ -45,7 +45,7 @@ long lastSMeterReport = -1;
 
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
-const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
+const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
 int matchedDelimiterTokens = 0;
 
 // Mode of the app, which is essentially a state machine
@@ -240,6 +240,23 @@ int16_t iir_lowpass(int16_t x) {
 int16_t remove_dc(int16_t x) {
     return x - iir_lowpass(x);
 }
+
+void parseSSI() {
+  static char buf[5];
+  if (dra->serial->available()){
+    buf[0] = buf[1];
+    buf[1] = buf[2];
+    buf[2] = buf[3];
+    buf[3] = buf[4];
+    buf[4] = dra->serial->read();  
+    if ((buf[4] == 0xA)) {
+      uint8_t rssiInt = ( (buf[0]-'0')*100 + (buf[1]-'0')*10 + (buf[2]-'0') ); // convert RSSI measurement to int
+      if (rssiInt >= 0 && rssiInt <= 255) {
+        sendCmdToAndroid(COMMAND_SMETER_REPORT, &rssiInt, /* paramsLen */ 1);
+      }
+    }  
+  }
+}  
 
 void loop() {
    {
@@ -439,17 +456,6 @@ void loop() {
         }
       }
 
-      // If it's been a while since our last S-meter report, send one back to Android app.
-      if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
-        int rssiInt = dra->rssi();
-        if (rssiInt >= 0 && rssiInt <= 255) {
-            byte params[1] = { (uint8_t) rssiInt };
-            sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
-        }
-        lastSMeterReport = millis();
-      }
-      
-
       size_t bytesRead = 0;
       uint16_t buffer16[I2S_READ_LEN] = {0};
       ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, portMAX_DELAY));
@@ -489,6 +495,13 @@ void loop() {
       }
 
       Serial.write((uint8_t*)buffer16, bytesRead);
+
+      // If it's been a while since our last S-meter report, send one back to Android app.
+      if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
+        dra->serial->write("RSSI?\r\n");
+        lastSMeterReport = millis();
+      }
+      parseSSI();
     } else if (mode == MODE_TX) {
       // Check for runaway tx
       int txSeconds = (micros() - txStartTime) / 1000000;

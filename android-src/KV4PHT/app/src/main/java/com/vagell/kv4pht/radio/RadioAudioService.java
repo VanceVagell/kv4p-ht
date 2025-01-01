@@ -153,9 +153,11 @@ public class RadioAudioService extends Service {
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
 
-    // Delimiter must match ESP32 code
-    private static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00, (byte)0xFF, (byte)0x00};
-    private static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
+    // Delimiter must match ESP32 code 0xDEADBEEFDEADBEEF
+    static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF, (byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF};
+    static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
+
+    private final RxStreamParser rxStreamParser = new RxStreamParser(this::handleParsedCommand);
 
     // This buffer holds leftover data that wasn’t fully parsed yet (from ESP32 audio stream)
     private final ByteArrayOutputStream leftoverBuffer = new ByteArrayOutputStream();
@@ -1199,7 +1201,7 @@ public class RadioAudioService extends Service {
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
             // Handle and remove any commands (e.g. S-meter updates) embedded in the audio.
-            data = extractAudioAndHandleCommands(data);
+            data = rxStreamParser.extractAudioAndHandleCommands(data);
 
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
@@ -1264,136 +1266,6 @@ public class RadioAudioService extends Service {
             // Log.d("DEBUG", "Warning: Received data from ESP32 which was thought to have bad firmware.");
             // Just ignore any data we get in this mode, who knows what is programmed on the ESP32.
         }
-    }
-
-    private synchronized byte[] extractAudioAndHandleCommands(byte[] newData) {
-        // 1. Append the new data to leftover.
-        leftoverBuffer.write(newData, 0, newData.length);
-        byte[] buffer = leftoverBuffer.toByteArray();
-
-        ByteArrayOutputStream audioOut = new ByteArrayOutputStream();
-        int parsePos = 0;
-
-        while (true) {
-            int startDelim = indexOf(buffer, COMMAND_DELIMITER, parsePos);
-            if (startDelim == -1) {
-                // -- NO FULL DELIMITER FOUND IN [buffer] STARTING AT parsePos --
-
-                // We might have a *partial* delimiter at the tail of [buffer].
-                // Figure out how many trailing bytes might match the start of the next command.
-                int partialLen = findPartialDelimiterTail(buffer, parsePos, buffer.length);
-
-                // "pureAudioEnd" is where pure audio stops and partial leftover begins.
-                int pureAudioEnd = buffer.length - partialLen;
-
-                // Write the "definitely audio" portion to our output.
-                if (pureAudioEnd > parsePos) {
-                    audioOut.write(buffer, parsePos, pureAudioEnd - parsePos);
-                }
-
-                // Store ONLY the partial leftover so we can complete the delimiter/command next time.
-                leftoverBuffer.reset();
-                if (partialLen > 0) {
-                    leftoverBuffer.write(buffer, pureAudioEnd, partialLen);
-                }
-
-                // Return everything we've decoded as audio so far.
-                return audioOut.toByteArray();
-            }
-
-            // -- FOUND A DELIMITER --
-            // Everything from parsePos..(startDelim) is audio
-            if (startDelim > parsePos) {
-                audioOut.write(buffer, parsePos, startDelim - parsePos);
-            }
-
-            // Check if we have enough bytes for "delimiter + cmd + paramLen"
-            int neededBeforeParams = COMMAND_DELIMITER.length + 2;
-            // (1 for cmd byte, 1 for paramLen byte)
-            if (startDelim + neededBeforeParams > buffer.length) {
-                // Not enough data => partial command leftover
-                storeTailForNextTime(buffer, startDelim);
-                return audioOut.toByteArray();
-            }
-
-            int cmdPos   = startDelim + COMMAND_DELIMITER.length;
-            byte cmd     = buffer[cmdPos];
-            int paramLen = (buffer[cmdPos + 1] & 0xFF);
-            int paramStart = cmdPos + 2;
-            int paramEnd   = paramStart + paramLen; // one past the last param byte
-
-            if (paramEnd > buffer.length) {
-                // Again, partial command leftover
-                storeTailForNextTime(buffer, startDelim);
-                return audioOut.toByteArray();
-            }
-
-            // We have a full command => handle it
-            byte[] param = Arrays.copyOfRange(buffer, paramStart, paramEnd);
-            handleParsedCommand(cmd, param);
-
-            // Advance parsePos beyond this entire command block
-            parsePos = paramEnd;
-        }
-    }
-
-    /**
-     * Stores the tail of 'buffer' from 'startIndex' to end into leftoverBuffer,
-     * for the next invocation of extractAudioAndHandleCommands().
-     */
-    private void storeTailForNextTime(byte[] buffer, int startIndex) {
-        leftoverBuffer.reset();
-        leftoverBuffer.write(buffer, startIndex, buffer.length - startIndex);
-    }
-
-    /**
-     * Finds the first occurrence of 'pattern' in 'data' at or after 'start'.
-     * Returns -1 if not found.
-     */
-    private int indexOf(byte[] data, byte[] pattern, int start) {
-        if (pattern.length == 0 || start >= data.length) {
-            return -1;
-        }
-        for (int i = start; i <= data.length - pattern.length; i++) {
-            boolean found = true;
-            for (int j = 0; j < pattern.length; j++) {
-                if (data[i + j] != pattern[j]) {
-                    found = false;
-                    break;
-                }
-            }
-            if (found) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private int findPartialDelimiterTail(byte[] data, int start, int end) {
-        final int dataLen = end - start;
-        final int minPartialLength = COMMAND_DELIMITER.length / 2;  // Ignore partials shorter than half
-
-        for (int checkSize = COMMAND_DELIMITER.length - 1; checkSize >= minPartialLength; checkSize--) {
-            if (checkSize > dataLen) {
-                continue;
-            }
-
-            // Validate if buffer end matches start of delimiter
-            if (startsWith(data, end - checkSize, COMMAND_DELIMITER, 0, checkSize)) {
-                return checkSize;
-            }
-        }
-        return 0;
-    }
-
-    // Helper method to check prefix match
-    private boolean startsWith(byte[] data, int offset, byte[] prefix, int prefixOffset, int length) {
-        for (int i = 0; i < length; i++) {
-            if (data[offset + i] != prefix[prefixOffset + i]) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private void handleParsedCommand(byte cmd, byte[] param) {
