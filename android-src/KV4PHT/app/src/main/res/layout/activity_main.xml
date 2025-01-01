@@ -88,7 +88,8 @@
                 android:id="@+id/frequencyContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:layout_marginTop="-16dp">
 
                 <TextView
                     android:id="@+id/activeMemoryName"
@@ -106,6 +107,7 @@
                     android:id="@+id/activeFrequency"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="-8dp"
                     android:fontFamily="@font/jost"
                     android:gravity="center"
                     android:textColor="@color/primary"
@@ -116,6 +118,88 @@
                     android:maxLines="1"
                     android:singleLine="true"
                     android:inputType="numberDecimal" />
+
+                <LinearLayout
+                    android:id="@+id/sMeter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_gravity="center"
+                    android:gravity="bottom"
+                    android:paddingTop="4dp"
+                    android:contentDescription="Signal strength meter">
+
+                    <View
+                        android:id="@+id/sMeter1"
+                        android:layout_width="12dp"
+                        android:layout_height="2dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter2"
+                        android:layout_width="12dp"
+                        android:layout_height="3dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter3"
+                        android:layout_width="12dp"
+                        android:layout_height="4dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter4"
+                        android:layout_width="12dp"
+                        android:layout_height="5dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter5"
+                        android:layout_width="12dp"
+                        android:layout_height="6dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter6"
+                        android:layout_width="12dp"
+                        android:layout_height="7dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter7"
+                        android:layout_width="12dp"
+                        android:layout_height="8dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter8"
+                        android:layout_width="12dp"
+                        android:layout_height="9dp"
+                        android:layout_marginRight="6dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+
+                    <View
+                        android:id="@+id/sMeter9"
+                        android:layout_width="12dp"
+                        android:layout_height="10dp"
+                        android:background="@color/primary"
+                        android:alpha="0.2"/>
+                </LinearLayout>
 
                 <androidx.appcompat.widget.LinearLayoutCompat
                     android:id="@+id/voiceModeLineHolder"
@@ -292,6 +376,17 @@
                         android:text="CQ"
                         android:imeOptions="actionDone">
                     </EditText>
+
+                    <ImageButton
+                        android:id="@+id/singleBeaconButton"
+                        android:alpha="0.8"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginRight="8dp"
+                        android:background="@drawable/ic_pin"
+                        android:layout_gravity="right"
+                        android:contentDescription="Send APRS position beacon"
+                        android:onClick="singleBeaconButtonClicked"/>
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 

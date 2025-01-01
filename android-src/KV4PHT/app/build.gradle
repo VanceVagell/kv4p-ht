@@ -10,8 +10,8 @@ android {
         applicationId "com.vagell.kv4pht"
         minSdk 26
         targetSdk 34
-        versionCode 22
-        versionName "1.4.0"
+        versionCode 25
+        versionName "1.6.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -55,7 +55,6 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.5.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    // implementation 'com.github.mik3y:usb-serial-for-android:3.7.0'
     implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
     implementation 'androidx.lifecycle:lifecycle-common-java8:2.2.0'
     testImplementation 'junit:junit:4.13.2'
@@ -66,4 +65,6 @@ dependencies {
     implementation 'com.google.zxing:core:3.4.1'
 
     implementation(platform("org.jetbrains.kotlin:kotlin-bom:1.8.0"))
+
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
 }

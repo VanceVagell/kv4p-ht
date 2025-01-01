@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Contribute - kv4p HT</title>
+	<link rel="icon" type="image/x-icon" href="img/favicon-16x16.png">
+
+    <!-- kv4p HT is an open source project, I'm not selling anything or showing ads. I use Google Analytics only to understand how people are using the website. - KV4P -->
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-485V3MK16Y"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+
+	  gtag('config', 'G-485V3MK16Y');
+	</script>
+
+	<link rel="stylesheet" href="base.css">
+	<link rel="stylesheet" href="contribute.css">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <nav>
+			<a href="index.html">
+				<img src="img/icon-lg-dark.png" alt="App icon for kv4p HT, a white handheld radio on a black background">
+			</a>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="quick_start.html">Quickstart</a></li>
+                <li><a href="contribute.html" class="selected">Contribute</a></li>
+                <li><a href="updates.html">Release notes</a></li>
+                <li><a href="feedback.html">Feedback</a></li>
+				<li><a href="testing.html">Testing</a></li>
+				<li><a href="donate.html">Donate</a></li>
+            </ul>
+			<p class="copyright">&copy; 2024 <a href="https://www.qrz.com/db/kv4p" target="_new">Vance Vagell</a></p>
+        </nav>
+        <main>
+			<div class="main-content-area">
+				<h1>Overview</h1>
+				<p>
+				I welcome contributions to this project! Or feel free to just fork it and make your own version, so long as you release the full source code (kv4p HT is licensed under <a href="https://www.gnu.org/licenses/gpl-3.0.en.html#license-text" target="_new">GPL3</a>).
+				</p>
+				<h1>Discord</h1>
+				<p>There is a <a href="https://discord.gg/WKTEhuEZhp" target="_new">kv4p HT Discord contributor channel</a> to ask more technical questions, share ideas, or just discuss the project.</p>
+				<h1>Project files</h1>
+				<ul>
+					<li>Tinkercad 3D printer designs: <a href="https://www.tinkercad.com/things/cwNcvy6ERiB-sleek-kv4p-ht-case" target="_new">case</a>, <a href="https://www.tinkercad.com/things/erENnWnwz09-sleek-kv4p-ht-stand" target="_new">stand</a></li>
+					<li>EasyEDA <a href="https://oshwlab.com/vvagell/kv4p-ht_copy_copy" target="_new">PCB design</a></li>
+					<li><a href="https://github.com/VanceVagell/kv4p-ht" target="_new">Github project</a> (Android and ESP32 source, .STL 3D print designs, PCB files)</li>
+					<ul>
+						<li>NOTE: For the ESP32 app use Arduino IDE, and these settings:</li>
+						<ul>
+							<li>Board: Install v2.0.17 of <b>esp32</b> by Espressif Systems from Boards Manager - DO NOT use newer versions, the code is not compatible with the API changes that were made. The board may not be auto-detected when plugged in, make sure it says <i>ESP32 Dev Module</i> in the drop-down at the top of the IDE or select it manually.</li>
+							<li>Library: EspSoftwareSerial (8.1.0) - get this from the built-in library installer</li>
+							<li>Library: <a href="https://github.com/fatpat/arduino-dra818/releases/tag/v1.0.1" target="_new">arduino-dra818 v1.0.1</a> - DO NOT use version 1.0.0 that's included in Arduino package installer, it's old and broken. Install with <i>Sketch > Include Library > Add .ZIP Library.</i></li>
+							<li>Configuration: Choose <i>Tools > Events Run On > Core 0</i> so audio processing interrupts run on a separate thread for maximum stability.</li>
+						</ul>
+					</ul>
+				</ul>
+				<h1>Contribution ideas</h1>
+				<p>There are dozens of great project ideas for how you can help kv4P HT. Check out the <a href="https://github.com/VanceVagell/kv4p-ht/issues" target="_new">enhnancement requests and bugs</a> in the GitHub project.</p>
+				<h1>Overview docs</h1>
+				<ul>
+					<li><a href="https://docs.google.com/document/d/1hrF1S9hgp2G4o_5u1upVB2yBLNHKhvh6hwXB1uhMeoc/edit?usp=sharing" target="_new">Guiding principles for contributors</a></li>
+				</ul>
+			</div>
+        </main>
+    </div>
+</body>
+</html>

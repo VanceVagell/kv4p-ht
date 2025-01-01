@@ -1,0 +1,26 @@
+.main-content-area {
+	padding: 0 32px;
+	max-width: 1024px;
+}
+
+.main-content-area p {
+	line-height: 1.5em;
+}
+
+.main-content-area li {
+	line-height: 1.5em;
+}
+
+.main-content-area ul li {
+	margin-bottom: 8px;
+}
+
+.main-content-area h1 {
+	margin-top: 24px;
+	font-size: 24px;
+	font-weight: 500;
+}
+
+.main-content-area h2 {
+	margin-top: 16px;
+}

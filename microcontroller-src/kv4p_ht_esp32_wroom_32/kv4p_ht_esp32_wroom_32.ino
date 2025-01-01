@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 
-const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '3'}; // Should be 8 characters representing a zero-padded version, like 00000001.
+const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '5'}; // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
 
 // Commands defined here must match the Android app
@@ -36,9 +36,16 @@ const uint8_t COMMAND_FILTERS = 4; // toggle filters on/off
 const uint8_t COMMAND_STOP = 5; // stop everything, just wait for next command
 const uint8_t COMMAND_GET_FIRMWARE_VER = 6; // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
 
+// Outgoing commands (ESP32 -> Android)
+const byte COMMAND_SMETER_REPORT = 0x53;
+
+// S-meter interval
+long lastSMeterReport = -1;
+#define SMETER_REPORT_INTERVAL_MS 500
+
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
-const uint8_t delimiter[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
+const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
 int matchedDelimiterTokens = 0;
 
 // Mode of the app, which is essentially a state machine
@@ -47,10 +54,12 @@ int matchedDelimiterTokens = 0;
 #define MODE_STOPPED 2
 int mode = MODE_STOPPED;
 
-// Audio sampling rate and baud rates must match what Android app expects.
-uint32_t rxAudioSampleRate = 44100 * 1.22; // May be changed by TUNE_TO
-uint32_t txAudioSampleRate = 44100 * 1.22; // Ditto
-int baudRate = 921600; // Variable because may be dynamic / configurable in the future.
+// Audio sampling rate, must match what Android app expects (and sends).
+#define AUDIO_SAMPLE_RATE 22050
+
+// Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
+// But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
+#define SAMPLING_RATE_OFFSET 79
 
 // Buffer for outgoing audio bytes to send to radio module
 #define TX_TEMP_AUDIO_BUFFER_SIZE 4096 // Holds data we already got off of USB serial from Android app
@@ -101,22 +110,23 @@ int fadeDirection = 0; // 0: no fade, 1: fade in, -1: fade out
 int attenuation = ATTENUATION_MAX; // Full volume
 bool lastSquelched = false;
 
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
 ////////////////////////////////////////////////////////////////////////////////
 
 void initI2SRx();
 void initI2STx();
-void tuneTo(float freqTx, float freqRx, int tone, int squelch, int newRxSampleRate, int newTxSampleRate);
+void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
 
 void setup() {
-    // Communication with Android via USB cable
-  Serial.begin(baudRate);
+  // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
+  Serial.begin(230400 * 2);
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(30, true); // Reboot if locked up for a bit
@@ -135,6 +145,7 @@ void setup() {
 
   // Communication with DRA818V radio module via GPIO pins
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
+  Serial2.setTimeout(10); // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
   int result = -1;
   while (result != 1) {
@@ -161,9 +172,9 @@ void initI2SRx() {
   adc1_config_width(ADC_WIDTH_BIT_12);
   adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
 
-  i2s_config_t i2sRxConfig = {
+  static const i2s_config_t i2sRxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-      .sample_rate = rxAudioSampleRate,
+      .sample_rate = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
@@ -188,9 +199,9 @@ void initI2STx() {
   }
   i2sStarted = true;
 
-  i2s_config_t i2sTxConfig = {
+  static const i2s_config_t i2sTxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
-      .sample_rate = txAudioSampleRate,
+      .sample_rate = AUDIO_SAMPLE_RATE,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
       .intr_alloc_flags = 0,
@@ -207,9 +218,8 @@ void initI2STx() {
 
 // Scale factor for fixed-point math (Q15 format)
 #define FIXED_POINT_SHIFT 15
-#define SAMPLE_RATE 44100
 #define DECAY_TIME 0.25 // seconds
-#define ALPHA (1.0f - expf(-1.0f / (SAMPLE_RATE * (DECAY_TIME / logf(2.0f)))))
+#define ALPHA (1.0f - expf(-1.0f / (AUDIO_SAMPLE_RATE * (DECAY_TIME / logf(2.0f)))))
 
 static float prev_y = 0.0f;
 
@@ -268,7 +278,7 @@ void loop() {
           // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
           // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
           // putting them in there. If so, we take byte-by-byte until we get the full params.
-          int paramBytesMissing = 30;
+          int paramBytesMissing = 20;
           String paramsStr = "";
           if (paramBytesMissing > 0) {
             uint8_t paramPartsBuffer[paramBytesMissing];
@@ -288,17 +298,17 @@ void loop() {
           }
 
           // Example:
-          // 145.4500144.85000614410044100W
-          // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 5 char for rx sample rate, 5 char for tx sample rate, 1 for bandwidth W/N (30 bytes total for params)
+          // 145.4500144.8500061W
+          // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
           float freqTxFloat = paramsStr.substring(0, 8).toFloat();
           float freqRxFloat = paramsStr.substring(8, 16).toFloat();
           int toneInt = paramsStr.substring(16, 18).toInt();
           int squelchInt = paramsStr.substring(18, 19).toInt();
-          int newRxSampleRate = paramsStr.substring(19, 24).toInt();
-          int newTxSampleRate = paramsStr.substring(24, 29).toInt();
-          String bandwidth = paramsStr.substring(29, 30);
+          String bandwidth = paramsStr.substring(19, 20);
 
-          tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, newRxSampleRate, newTxSampleRate, bandwidth);
+          tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
+
+          // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
         }
           break;
         case COMMAND_FILTERS:
@@ -364,7 +374,7 @@ void loop() {
             // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
             // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
             // putting them in there. If so, we take byte-by-byte until we get the full params.
-            int paramBytesMissing = 30;
+            int paramBytesMissing = 20;
             String paramsStr = "";
             if (paramBytesMissing > 0) {
               uint8_t paramPartsBuffer[paramBytesMissing];
@@ -384,17 +394,14 @@ void loop() {
             }
 
             // Example:
-            // 145.4500144.85000614410044100W
-            // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 5 char for rx sample rate, 5 char for tx sample rate, 1 for bandwidth W/N (30 bytes total for params)
+            // 145.4500144.8500061W
+            // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
             float freqTxFloat = paramsStr.substring(0, 8).toFloat();
             float freqRxFloat = paramsStr.substring(8, 16).toFloat();
             int toneInt = paramsStr.substring(16, 18).toInt();
             int squelchInt = paramsStr.substring(18, 19).toInt();
-            int newRxSampleRate = paramsStr.substring(19, 24).toInt();
-            int newTxSampleRate = paramsStr.substring(24, 29).toInt();
-            String bandwidth = paramsStr.substring(29, 30);
-
-            tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, newRxSampleRate, newTxSampleRate, bandwidth);
+            String bandwidth = paramsStr.substring(19, 20);
+            tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
           }
             break;
           case COMMAND_FILTERS:
@@ -431,6 +438,17 @@ void loop() {
             break;
         }
       }
+
+      // If it's been a while since our last S-meter report, send one back to Android app.
+      if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
+        int rssiInt = dra->rssi();
+        if (rssiInt >= 0 && rssiInt <= 255) {
+            byte params[1] = { (uint8_t) rssiInt };
+            sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
+        }
+        lastSMeterReport = millis();
+      }
+      
 
       size_t bytesRead = 0;
       uint16_t buffer16[I2S_READ_LEN] = {0};
@@ -527,7 +545,7 @@ void loop() {
                 break;
             }
           } else {
-            if (tempBuffer[i] == delimiter[matchedDelimiterTokens]) { // This byte may be part of the delimiter
+            if (tempBuffer[i] == COMMAND_DELIMITER[matchedDelimiterTokens]) { // This byte may be part of the delimiter
               matchedDelimiterTokens++;
             } else { // This byte is not consistent with the command delimiter, reset counter
               matchedDelimiterTokens = 0;
@@ -542,10 +560,47 @@ void loop() {
   }
 }
 
-void tuneTo(float freqTx, float freqRx, int tone, int squelch, int newRxSampleRate, int newTxSampleRate, String bandwidth) {
-  rxAudioSampleRate = newRxSampleRate;
-  txAudioSampleRate = newTxSampleRate;
+/**
+ * Example: 
+ *   [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
+ *
+ * Where:
+ *   - DELIMITER is {0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00}
+ *   - CMD is e.g. 0x53 for your S-meter
+ *   - paramLen is up to 255
+ *   - param data is 'paramLen' bytes
+ */
+void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
+{
+    // Safety check: limit paramsLen to 255 for 1-byte length
+    if (paramsLen > 255) {
+        paramsLen = 255;  // or handle differently (split, or error, etc.)
+    }
 
+    const size_t totalSize = DELIMITER_LENGTH + 1 + 1 + paramsLen;
+    byte outBytes[totalSize];
+
+    // 1. Leading delimiter
+    memcpy(outBytes, COMMAND_DELIMITER, DELIMITER_LENGTH);
+
+    // 2. Command byte
+    outBytes[DELIMITER_LENGTH] = cmdByte;
+
+    // 3. Parameter length
+    outBytes[DELIMITER_LENGTH + 1] = (byte)(paramsLen & 0xFF);
+
+    // 4. Parameter bytes
+    memcpy(
+        outBytes + DELIMITER_LENGTH + 2, // position after delim+cmd+paramLen
+        params,
+        paramsLen
+    );
+
+    Serial.write(outBytes, totalSize);
+    Serial.flush();
+}
+
+void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth) {
   initI2SRx();
 
   // Tell radio module to tune

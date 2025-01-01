@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Quickstart - kv4p HT</title>
+	<link rel="icon" type="image/x-icon" href="img/favicon-16x16.png">
+
+	<script>
+		// Check if the current hostname starts with "www.", if so redirect to remove it (it breaks the web-based firmware flasher library).
+		if (window.location.hostname.startsWith("www.")) {
+		  const newHostname = window.location.hostname.slice(4);
+		  const newURL = `${window.location.protocol}//${newHostname}${window.location.pathname}${window.location.search}`;
+		  window.location.replace(newURL); // Use replace to avoid adding the redirect to the history
+		}
+	</script>
+	
+    <!-- kv4p HT is an open source project, I'm not selling anything or showing ads. I use Google Analytics only to understand how people are using the website. - KV4P -->
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-485V3MK16Y"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+
+	  gtag('config', 'G-485V3MK16Y');
+	</script>
+	<script type="module" src="https://kv4p.com/esp-web-tools/dist/esp-web-tools.min.js?module"></script>
+
+	<link rel="stylesheet" href="base.css">
+	<link rel="stylesheet" href="quick_start.css">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <nav>
+			<a href="index.html">
+				<img src="img/icon-lg-dark.png" alt="App icon for kv4p HT, a white handheld radio on a black background">
+			</a>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="quick_start.html" class="selected">Quickstart</a></li>
+                <li><a href="contribute.html">Contribute</a></li>
+                <li><a href="updates.html">Release notes</a></li>
+                <li><a href="feedback.html">Feedback</a></li>
+				<li><a href="testing.html">Testing</a></li>
+				<li><a href="donate.html">Donate</a></li>
+            </ul>
+			<p class="copyright">&copy; 2024 <a href="https://www.qrz.com/db/kv4p" target="_new">Vance Vagell</a></p>
+        </nav>
+        <main>
+			<div class="main-content-area compact-lists">
+				<iframe width="800" height="450" src="https://www.youtube.com/embed/TTboBthcY18?si=1QlrYJJHVByPtxnj" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+				<ol>
+				<li><h3>Order the parts</h3>
+					<div id="parts-columns">
+						<div id="kits" class="parts-column">
+							<h2>Buy a kit</h2>
+							<p>kv4p HT makes no money from these sites, but they provide convenient kits:</p>
+							<br>
+							<div id="kit-vendors">
+								<a href="https://electronics.halibut.com/product/kv4p-ht-v2/" target="_new" class="kit-vendor">
+									<span class="vendor-name">Halibut Electronics</span>
+									<img src="img/halibut-logo.jpg" alt="Logo resembling a fish">
+								</a>
+								<a href="https://newdiytech.com/products/kv4p-ht-homebrew-vhf-radio-android-phone-into-ham-radio-transceiver-pcb-v1-7-sa818-v-sa818s-radio-module" target="_new" class="kit-vendor">
+									<span class="vendor-name">New DIY</span>
+									<img src="img/newdiy-logo.avif" alt="Logo that is a red circle with the words New DIY inside it">
+								</a>
+							</div>
+						</div>
+						
+						<div id="loose" class="parts-column">
+							<h2>Or loose parts</h2>
+							<ul>
+								<li><a href="https://www.aliexpress.com/i/2251832119661277.html" target="_new">SA818-V radio module</a> (DRA818V may be substituted)</li>
+								<li><a href="https://www.aliexpress.us/item/3256807630806447.html" target="_new">ESP-WROOM-32 Development Board Type-C USB</a> (<b>choose "Color: 38Pin Type-C"</b>)</li>
+								<li>SMA male antenna of your choice. e.g. <a href="https://a.co/d/7bbVemg" target="_new">pocket-size antenna</a> or <a href="https://signalstuff.com/products/st-sma-m/?band=2m70cm-dual-band" target="_new">1/4 wave Signal Stick</a></li>
+								<li>Choose one of these 2 connectors (either works, they have the 5.1k ohm pull-down resistors needed to make problem ESP32s work):</li>
+								<ul>
+									<li>Option 1 (Recommended): <a href="https://www.amazon.com/dp/B0744BKDRD" target="_new">this short cable</a> and  <a href="https://www.amazon.com/dp/B0B8PGDFFV" target="_new">this adapter</a> from Amazon</a>. This option may have better audio quality.</li>
+									<li>Option 2: <a href="https://www.aliexpress.us/item/3256806668421477.html" target="_new">this small connector from AliExpress</a> (<b>choose "Color: C female-C-C"</b>, be careful because they have similar names!)</li>
+								</ul>
+								<li><a href="https://a.co/d/cDwCeES" target="_new">SMA female 90 degree connector</a></li>
+								<li><a href="https://www.amazon.com/dp/B07PFW5SXB" target="_new">Sticky gel pads</a></li>
+								<li>PCB v1.7b</li>
+								<ul>
+									<li>Option 1 (recommended): order on <a href="https://cart.jlcpcb.com/quote" target="_new">JLCPCB</a>, use default settings, <b>choose "PCBA"</b>, and provide these <a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb/v1.7b" target="_new">3 design files</a></b>
+									<li>Option 2: <a href="https://www.pcbway.com/project/shareproject/kv4p_HT_v1_6_8d625758.html" target="_new">order on PCBWay, <b>choose "PCB+Assembly"</b></a> on the right. NOTE: They might send you a kit with all parts, check the follow up email they send you.</li>
+								</ul>
+							</ul>
+						</div>
+					</div>
+				</li>
+				<li><h3>Solder the parts</h3>
+					<ul>
+					<li>Solder the SA818-V, ESP32, and SMA connector to the PCB.</li>
+					<li>Then, trim all of the ESP32's legs as short as possible (so they don't contact your phone).</li>
+					</ul>
+				<li><h3>3D print the case, and optionally the stand</h3>
+					<ul>
+					<li>Find the <a href="https://www.thingiverse.com/thing:6782580" target="_new">3D printer files on Thingiverse</a></li>
+					<ul>
+						<li>If you're using the 3-port U-shaped USB connector (linked in step 1), use the design ending in "...for_3_port_connector".</li>
+					</ul>
+					<li>The case looks cooler with 2-colors, which most 3D printers can do (<a href="https://www.youtube.com/watch?v=vL4hiZ1ZvJQ" target="_new">see how</a>)</li>
+
+					</ul>
+				</li>
+				<li><h3>Assemble the parts</h3>
+					<ul>
+					<li>Insert the PCB into the case until it snaps in</li>
+					<li>Cut a strip of sticky gel pad to attach the kv4p HT to the back of your phone</li>
+					<li>Screw on the antenna</li>
+					</ul>
+				</li>
+				<li><h3>Install the Android app</h3>
+					<ul>
+						<li>The app requires Android 8 or higher, which came out in 2017 and pretty much all phones with a USB C connector will have.</li>
+						<li>You can search the Play store for "kv4p HT", use this link to the <a href="https://play.google.com/store/apps/details?id=com.vagell.kv4pht" target="_new">kv4p HT app</a>, or scan this QR code:</li>
+						<li>NOTE: The first time you run the Android app, it will flash the firmware onto your kv4p HT. It takes about 5-10 minutes.</li>
+						<br>
+						<p><img width="128px" height="128px" src="img/install-app-qr-code.png" alt="QR code for the kv4p HT app on the Google Play store."></p>
+
+					</ul>
+				</li>
+				</ol>
+				<h1>Need some help?</h1>
+				<p>Visit the <a href="https://discord.gg/Ev9R9uFeCq" target="_new">kv4p HT Discord general channel</a> and ask for advice.</p>
+				<h1>Optional: Web-based firmware flasher</h1>
+				<p>If for some reason the Android app can't flash your kv4p HT firmware, you can use this web-based flasher. It's not usually necessary.</p>
+				<ul>
+					<li>Plug USB C cable from kv4p HT to your computer (your phone's browser won't work)</li>
+					<li>Use this online flash tool to install the latest firmware, which requires Chrome, Chromium, or Edge.</li>
+					<ul>
+						<li><b>If you don't see a red button below, your browser doesn't support flashing.</b></li>
+					</ul>
+					<li><b>Select the device "CP2102 USB to UART Bridge Controller"</b>: <esp-web-install-button manifest="https://kv4p.com/esp-web-tools/manifest-v5.json"><button slot="activate">Flash firmware v5</button></esp-web-install-button>
+					<esp-web-install-button manifest="https://kv4p.com/esp-web-tools/manifest-v4.json"><button slot="activate">Flash firmware v4</button></esp-web-install-button></li>
+					<li>If the button doesn't seem to work, make sure you visited <a href="https://kv4p.com/quick_start.html">kv4p.com</a> (without "www").</li>
+					<li>Device not showing up? You might need to install the <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads" target="_new">CP210x device driver</a>.</li>
+				</ul>
+			</div>
+        </main>
+    </div>
+</body>
+</html>

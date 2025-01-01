@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Testing - kv4p HT</title>
+	<link rel="icon" type="image/x-icon" href="img/favicon-16x16.png">
+
+    <!-- kv4p HT is an open source project, I'm not selling anything or showing ads. I use Google Analytics only to understand how people are using the website. - KV4P -->
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-485V3MK16Y"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+
+	  gtag('config', 'G-485V3MK16Y');
+	</script>
+
+	<link rel="stylesheet" href="base.css">
+	<link rel="stylesheet" href="contribute.css">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <nav>
+			<a href="index.html">
+				<img src="img/icon-lg-dark.png" alt="App icon for kv4p HT, a white handheld radio on a black background">
+			</a>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="quick_start.html">Quickstart</a></li>
+                <li><a href="contribute.html">Contribute</a></li>
+                <li><a href="updates.html">Release notes</a></li>
+                <li><a href="feedback.html">Feedback</a></li>
+				<li><a href="testing.html" class="selected">Testing</a></li>
+				<li><a href="donate.html">Donate</a></li>
+			</ul>
+			<p class="copyright">&copy; 2024 <a href="https://www.qrz.com/db/kv4p" target="_new">Vance Vagell</a></p>
+        </nav>
+        <main>
+			<div class="main-content-area">
+				<h1>Test results</h1>
+				<p>I've tested harmonic filtering with a TinySA spectrum analyzer to ensure it meets FCC part 97 spurious emissions requirements (which for VHF must be at least -40dBc for 2nd harmonic and below 10uW).<p>
+				<h2>PCB v1.7b</h2>
+				<p>v1.7b of the PCB is -52.9dBc for the 2nd harmonic, and 5uW of harmonic power, fully FCC part 97 compliant (tested with 56dB of attenuation):</p>
+				<p>
+					<img src="img/v1.7b-harmonics.jpg" alt="A photo of a TinySA measuring the spurious emissions of the kv4p HT, the graph shows a single large spike at the transmitting frequency." width="800px">
+				</p>
+				<h2>PCB v1.7</h2>
+				<p>v1.7 of the PCB is -52.7dBc for the 2nd harmonic, and below 4uW of harmonic power, fully FCC part 97 compliant (tested with 56dB of attenuation):</p>
+				<br/>
+				<p>
+					<img src="img/tinysa-spurious-v1.7.jpg" alt="A photo of a TinySA measuring the spurious emissions of the kv4p HT, the graph shows a single large spike at the transmitting frequency." width="800px">
+				</p>
+			</div>
+        </main>
+    </div>
+</body>
+</html>

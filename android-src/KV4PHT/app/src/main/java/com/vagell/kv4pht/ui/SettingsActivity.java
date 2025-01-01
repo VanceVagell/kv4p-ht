@@ -26,7 +26,6 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
@@ -44,7 +43,6 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
-import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +69,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateBandwidths();
         populateMaxFrequencies();
         populateMicGainOptions();
-        populateSampleRateOptions();
+        populateAprsOptions();
         attachListeners();
     }
 
@@ -124,18 +122,15 @@ public class SettingsActivity extends AppCompatActivity {
         micGainBoostTextView.setAdapter(arrayAdapter);
     }
 
-    private void populateSampleRateOptions() {
-        AutoCompleteTextView rxSampleRateTextView = findViewById(R.id.rxSampleRateTextView);
-        AutoCompleteTextView txSampleRateTextView = findViewById(R.id.txSampleRateTextView);
+    private void populateAprsOptions() {
+        AutoCompleteTextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
 
-        List<String> sampleRateOptions = new ArrayList<String>();
-        sampleRateOptions.add("44.1kHz");
-        sampleRateOptions.add("22kHz");
-        sampleRateOptions.add("16kHz");
+        List<String> positionAccuracyOptions = new ArrayList<String>();
+        positionAccuracyOptions.add("Exact");
+        positionAccuracyOptions.add("Approx");
 
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, sampleRateOptions);
-        rxSampleRateTextView.setAdapter(arrayAdapter);
-        txSampleRateTextView.setAdapter(arrayAdapter);
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, positionAccuracyOptions);
+        aprsPositionAccuracyTextView.setAdapter(arrayAdapter);
     }
 
     private void populateOriginalValues() {
@@ -153,12 +148,11 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
                 AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
                 AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
+                AppSetting aprsBeaconPosition = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
+                AppSetting aprsPositionAccuracy = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
                 AppSetting bandwidthSetting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
                 AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
                 AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
-                AppSetting rxSampleRateSetting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRate");
-                AppSetting txSampleRateSetting = MainViewModel.appDb.appSettingDao().getByName("txSampleRate");
-                AppSetting rxSampleRateMultSetting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -198,9 +192,19 @@ public class SettingsActivity extends AppCompatActivity {
                             noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
                         }
 
+                        if (aprsBeaconPosition != null) {
+                            Switch aprsPositionSwitch = (Switch) (findViewById(R.id.aprsPositionSwitch));
+                            aprsPositionSwitch.setChecked(Boolean.parseBoolean(aprsBeaconPosition.value));
+                        }
+
+                        if (aprsPositionAccuracy != null) {
+                            AutoCompleteTextView aprsPositionAccuracyTextView = (AutoCompleteTextView) findViewById(R.id.aprsPositionAccuracyTextView);
+                            aprsPositionAccuracyTextView.setText(aprsPositionAccuracy.value, false);
+                        }
+
                         if (bandwidthSetting != null) {
-                            AutoCompleteTextView bandwidthTextVIew = (AutoCompleteTextView) findViewById(R.id.bandwidthTextView);
-                            bandwidthTextVIew.setText(bandwidthSetting.value, false);
+                            AutoCompleteTextView bandwidthTextView = (AutoCompleteTextView) findViewById(R.id.bandwidthTextView);
+                            bandwidthTextView.setText(bandwidthSetting.value, false);
                         }
 
                         if (maxFreqSetting != null) {
@@ -211,21 +215,6 @@ public class SettingsActivity extends AppCompatActivity {
                         if (micGainBoostSetting != null) {
                             AutoCompleteTextView micGainBoostTextView = (AutoCompleteTextView) findViewById(R.id.micGainBoostTextView);
                             micGainBoostTextView.setText(micGainBoostSetting.value, false);
-                        }
-
-                        if (rxSampleRateSetting != null) {
-                            AutoCompleteTextView rxSampleRateTextView = (AutoCompleteTextView) findViewById(R.id.rxSampleRateTextView);
-                            rxSampleRateTextView.setText(rxSampleRateSetting.value, false);
-                        }
-
-                        if (txSampleRateSetting != null) {
-                            AutoCompleteTextView txSampleRateTextView = (AutoCompleteTextView) findViewById(R.id.txSampleRateTextView);
-                            txSampleRateTextView.setText(txSampleRateSetting.value, false);
-                        }
-
-                        if (rxSampleRateMultSetting != null) {
-                            TextView rxSampleRateMultTextView = (TextView) findViewById(R.id.rxSampleRateMultTextView);
-                            rxSampleRateMultTextView.setText(rxSampleRateMultSetting.value);
                         }
                     }
                 });
@@ -322,6 +311,31 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
+        Switch aprsPositionSwitch = findViewById(R.id.aprsPositionSwitch);
+        aprsPositionSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                setAprsBeaconPosition(isChecked);
+            }
+        });
+
+        TextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
+        aprsPositionAccuracyTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.aprsPositionAccuracyTextView)).getText().toString().trim();
+                setAprsPositionAccuracy(newText);
+            }
+        });
+
         TextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
         bandwidthTextView.addTextChangedListener(new TextWatcher() {
             @Override
@@ -372,55 +386,49 @@ public class SettingsActivity extends AppCompatActivity {
                 setMicGainBoost(newText);
             }
         });
+    }
 
-        TextView rxSampleRateTextView = findViewById(R.id.rxSampleRateTextView);
-        rxSampleRateTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
+    private void setAprsBeaconPosition(boolean enabled) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
 
+        threadPoolExecutor.execute(new Runnable() {
             @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
 
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.rxSampleRateTextView)).getText().toString().trim();
-                setRxSampleRate(newText);
-            }
-        });
-
-        TextView txSampleRateTextView = findViewById(R.id.txSampleRateTextView);
-        txSampleRateTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.txSampleRateTextView)).getText().toString().trim();
-                setTxSampleRate(newText);
+                if (setting == null) {
+                    setting = new AppSetting("aprsBeaconPosition", "" + enabled);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = "" + enabled;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
             }
         });
+    }
 
-        TextView rxSampleRateMultTextView = findViewById(R.id.rxSampleRateMultTextView);
-        rxSampleRateMultTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
+    /**
+     * @param aprsPositionAccuracy "Exact" or "Approx"
+     */
+    private void setAprsPositionAccuracy(String aprsPositionAccuracy) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
 
+        threadPoolExecutor.execute(new Runnable() {
             @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
 
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.rxSampleRateMultTextView)).getText().toString().trim();
-                setRxSampleRateMult(newText);
+                if (setting == null) {
+                    setting = new AppSetting("aprsPositionAccuracy", aprsPositionAccuracy);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = aprsPositionAccuracy;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
             }
         });
     }
@@ -492,99 +500,6 @@ public class SettingsActivity extends AppCompatActivity {
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
                     setting.value = micGainBoost;
-                    MainViewModel.appDb.appSettingDao().update(setting);
-                }
-            }
-        });
-    }
-
-    /**
-     * @param rxSampleRate The rate at which rx audio should be sampled by the ESP32 firmware, e.g. "44.1kHz", "16kHz"
-     */
-    private void setRxSampleRate(String rxSampleRate) {
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRate");
-
-                if (setting == null) {
-                    setting = new AppSetting("rxSampleRate", rxSampleRate);
-                    MainViewModel.appDb.appSettingDao().insertAll(setting);
-                } else {
-                    setting.value = rxSampleRate;
-                    MainViewModel.appDb.appSettingDao().update(setting);
-                }
-            }
-        });
-    }
-
-    /**
-     * @param txSampleRate The rate at which tx audio should be sampled by the ESP32 firmware, e.g. "44.1kHz", "16kHz"
-     */
-    private void setTxSampleRate(String txSampleRate) {
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("txSampleRate");
-
-                if (setting == null) {
-                    setting = new AppSetting("txSampleRate", txSampleRate);
-                    MainViewModel.appDb.appSettingDao().insertAll(setting);
-                } else {
-                    setting.value = txSampleRate;
-                    MainViewModel.appDb.appSettingDao().update(setting);
-                }
-            }
-        });
-    }
-
-    /**
-     * @param rxSampleRateMult A multipler (with baseline of 1.0) to apply to the rx sample rate.
-     *                         This can be used to adjust for ESP32 dev boards that aren't sampling
-     *                         at exactly the right rate.
-     */
-    private void setRxSampleRateMult(String rxSampleRateMult) {
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
-        // If the given value has any issues, revert to default.
-        if (null == rxSampleRateMult || rxSampleRateMult.trim().length() == 0) {
-            rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
-            ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
-        } else {
-            try {
-                float multFloat = Float.parseFloat(rxSampleRateMult);
-                if (multFloat < 0.5 || multFloat > 1.5) {
-                    rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
-                    ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
-                }
-            } catch (Exception e) {
-                rxSampleRateMult = DEFAULT_RX_SAMPLE_RATE_MULT;
-                ((TextView) findViewById(R.id.rxSampleRateMultTextView)).setText(rxSampleRateMult);
-            }
-        }
-
-        final String fixedMult = rxSampleRateMult;
-
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("rxSampleRateMult");
-
-                if (setting == null) {
-                    setting = new AppSetting("rxSampleRateMult", fixedMult);
-                    MainViewModel.appDb.appSettingDao().insertAll(setting);
-                } else {
-                    setting.value = fixedMult;
                     MainViewModel.appDb.appSettingDao().update(setting);
                 }
             }

@@ -509,15 +509,13 @@ public class CommandInterfaceESP32 {
      * @name flash_defl_block Send one compressed block of data to program into SPI Flash memory
      */
 
-    public void flash_defl_block(byte data[], int seq, int timeout) {
-
+    public cmdRet flash_defl_block(byte data[], int seq, int timeout) {
         byte pkt[] = _appendArray(_int_to_bytearray(data.length),_int_to_bytearray(seq));
         pkt = _appendArray(pkt,_int_to_bytearray(0));
         pkt = _appendArray(pkt,_int_to_bytearray(0));
         pkt = _appendArray(pkt, data);
 
-        sendCommand((byte) ESP_FLASH_DEFL_DATA, pkt, _checksum(data), timeout);
-
+        return sendCommand((byte) ESP_FLASH_DEFL_DATA, pkt, _checksum(data), timeout);
     }
 
     public void init() {
@@ -589,7 +587,17 @@ public class CommandInterfaceESP32 {
                 block = _appendArray(block, tempArray);*/
             }
 
-            flash_defl_block(block, seq, FLASH_TIMEOUT_MS);
+            int attempts = 0;
+            final int MAX_ATTEMPTS = 10;
+            cmdRet retVal;
+            do {
+                attempts++;
+                retVal = flash_defl_block(block, seq, FLASH_TIMEOUT_MS);
+                if (retVal.retCode == -1) {
+                    mUpCallback.onInfo("Retry #" + attempts + " because Ret code: " + retVal.retCode + "\n");
+                }
+            } while (attempts < MAX_ATTEMPTS && retVal.retCode == -1);
+
             seq += 1;
             written += block.length;
             position += (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE);

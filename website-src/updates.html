@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Release notes - kv4p HT</title>
+	<link rel="icon" type="image/x-icon" href="img/favicon-16x16.png">
+
+    <!-- kv4p HT is an open source project, I'm not selling anything or showing ads. I use Google Analytics only to understand how people are using the website. - KV4P -->
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-485V3MK16Y"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+
+	  gtag('config', 'G-485V3MK16Y');
+	</script>
+
+	<link rel="stylesheet" href="base.css">
+	<link rel="stylesheet" href="updates.css">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <nav>
+			<a href="index.html">
+				<img src="img/icon-lg-dark.png" alt="App icon for kv4p HT, a white handheld radio on a black background">
+			</a>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="quick_start.html">Quickstart</a></li>
+                <li><a href="contribute.html">Contribute</a></li>
+                <li><a href="updates.html" class="selected">Release notes</a></li>
+                <li><a href="feedback.html">Feedback</a></li>
+				<li><a href="testing.html">Testing</a></li>
+				<li><a href="donate.html">Donate</a></li>
+            </ul>
+			<p class="copyright">&copy; 2024 <a href="https://www.qrz.com/db/kv4p" target="_new">Vance Vagell</a></p>
+        </nav>
+        <main>
+			<div class="main-content-area">
+				<h1>Dec 30, 2024: Android app update v1.6.0, ESP32 firmware v5</h1>
+				<ul>
+					<li>Adds an S-meter (signal strength meter) to the main screen.</li>
+					<li>Adds the ability to beacon your position in the APRS chat. You can tap the map pin icon to beacon once, or you can turn on the "Beacon my position" setting to have it sent automatically every 5 minutes on the active channel. You can also adjust how precise your position is, either exact or approximate.</li>
+					<li>Increase audio sampling rate to 22050Hz, which significantly improves APRS encoding and decoding accuracy.</li>
+					<li>Got message ACK'ing working, so you now see a checkmark if you receive an ACK to a message you sent.</li>
+					<li>Renamed "Text chat" section to "APRS chat" to clarify that's what it is, so people realize they can go to 144.39MHz and watch all the APRS traffic.</li>
+					<li>Fixes a choppy audio bug on certain ESP32s.</li>
+					<li>Various small bug fixes.</li>
+				</ul>
+				<h1>Dec 25, 2024: Android app update v1.5.0, ESP32 firmware v4</h1>
+				<ul>
+					<li>Fixed significant audio issues on the majority of ESP32 dev boards (including most knockoffs).</li>
+					<li>Better enforcements of tx limits to amateur band.</li>
+					<li>Fix bug where APRS message ACKs could get stuck in a loop.</li>
+					<li>Cherry-picked an improvement to the third-party firmware flashing library, that should improve reliability.</li>
+					<li>Remove (now unecessary) sampling rate settings.</li>
+				</ul>
+				<h1>Dec 14, 2024: Android app update v1.4.0, ESP32 firmware v3</h1>
+				<ul>
+					<li>Add new mic gain option to settings</li>
+					<li>Add new settings to control rx and tx sampling rates</li>
+					<li>Add setting to change bandwidth, narrow or wide</li>
+				</ul>
+				<h1>Dec 5, 2024: Android app update v1.3.1, case without USB connector holder</h1>
+				<ul>
+					<li>Screen now stays on as long as kv4p HT app is in the foreground, you can still turn screen off manually.</li>
+					<li>Add ability to tune to any frequency 134-174MHz (e.g. NOAA weather frequencies), while limiting tx to ham band.</li>
+					<li>Tx frequency is now displayed while holding down PTT, including any offset for the active channel memory.</li>
+					<li>Other small bug fixes.</li>
+					<li>Added an alternative 3D printed case design without the USB connector holder, for people using a wire intead.</li>
+				</ul>
+				<h1>Nov 23, 2024: Android app update v1.2.3</h1>
+				<ul>
+					<li>Much better APRS UI when decoding APRS messages in the "Text chat" view (such as on 144.39 or your local APRS frequency).</li>
+					<li>Numerous bug fixes.</li>
+                </ul>
+				<h1>Nov 20, 2024: Android app update v1.1.1</h1>
+				<ul>
+					<li>The Android app can now flash or upgrade firmware on your kv4p HT (no computer necessary).</li>
+					<li>Tuning in 500Hz increments is now possible, with a 4th decimal place allowed. This supports regions with 12.5kHz channel spacing.</li>
+					<li>You can set a maximum frequency in Settings, for regions with 146MHz as the top of the 2M amateur band.</li>
+					<li>Numerous bug fixes.</li>
+                    <li>Website: Updated Quick Start page with latest hardware options, and a new 3D printable case that supports the new U-shaped adapter.</li>
+                </ul>
+				<h1>Oct 26, 2024: Android app published to play store as v1.0</h1>
+				<ul>
+					<li>Now that the beta is complete, the app is approved for the Google Play store. It has been renumbered to 1.0.</li>
+					<li>Bug fix: APRS message IDs will no longer exceed what the APRS spec allows.</li>
+					<li>Published <a href="https://docs.google.com/document/d/1hrF1S9hgp2G4o_5u1upVB2yBLNHKhvh6hwXB1uhMeoc/edit?usp=sharing" target="_new">Guiding Principles for Contributors doc</a></li>
+				</ul>
+				<h1>Oct 23, 2024: PCB versions 1.7 and 1.7b</h1>
+				<ul>
+				    <li>Released PCB versions 1.7 and 1.7b, which have far better harmonic suppression than earlier PCB versions. Either version is fine to use, but 1.7b has components that are usually more readily available.</li>
+				</ul>
+				<h1>Oct 18, 2024: Android app version beta 12</h1>
+				<ul>
+				    <li>FIXED - [Android] Text chat input field may be obscured on phones with shorter screens</li>
+				    <li>FXIED - [Android] 2 exceptions in the wild with beta version 11</li>
+				    <li>FIXED - [Android] Fix PTT button for screen reader (TalkBack) users</li>
+					<li>Also removed PCB v1.6 tentative design from GitHub since harmonic filtering was worse. PCB v1.7 is under development now.</li>
+				</ul>
+				<h1>Oct 8, 2024: Android app version beta 11, PCB version 1.6</h1>
+				<ul>
+				    <li>Expand beta to include US, UK, and Australia (was just US previously).</li>
+					<li>Bug fix: Address a couple more rare exceptions that Google Play automated testing found.</li>
+					<li>PCB: Significant improvement to harmonic suppression by tweaking some of the LC filter values. Not yet verified empirically, awaiting prototype PCBs.</li>
+				</ul>
+				<h1>Oct 5, 2024: Android app version beta 10</h1>
+				<ul>
+					<li>Website full release and announced, with YouTube demo and quickstart videos.</li>
+					<li>Bug fix: Deleting a memory now automatically removes it from the UI (doesn't require restart).</li>
+					<li>Bug fix: Starting the app without the USB C connection in place, and then connecting it with app running, now detects the connection.</li>
+					<li>Bug fix: Add a couple guard conditions for rare corner cases that Google Play's automated testing found.</li>
+				</ul>
+				<h1>Sep 29, 2024: Android app version beta 5, ESP32 firmware version 1</h1>
+				<ul>
+					<li>Initial closed beta release, which the Android Play Store requires until you have 20 installed users testing the app.</li>
+					<li>Got this website up and running, including the web-based firmware installer.</li>
+				</ul>
+			</div>
+        </main>
+    </div>
+</body>
+</html>

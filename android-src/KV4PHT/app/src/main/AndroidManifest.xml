@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <application
         android:allowBackup="true"
@@ -35,7 +37,7 @@
             android:name=".ui.SettingsActivity"
             android:exported="true"
             android:theme="@style/Theme.KV4PHT"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="stateVisible">
             <intent-filter>
                 <action android:name="com.vagell.kv4pht.SETTINGS_ACTION" />
 
@@ -46,7 +48,7 @@
             android:name=".ui.AddEditMemoryActivity"
             android:exported="true"
             android:theme="@style/Theme.KV4PHT"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="stateVisible|adjustResize">
             <intent-filter>
                 <action android:name="com.vagell.kv4pht.ADD_MEMORY_ACTION" />
                 <action android:name="com.vagell.kv4pht.EDIT_MEMORY_ACTION" />
