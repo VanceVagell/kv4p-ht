@@ -180,7 +180,7 @@ public class RadioAudioService extends Service {
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
-    private static int maxFreq = 148; // in MHz
+    private static int maxFreq = 174; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
