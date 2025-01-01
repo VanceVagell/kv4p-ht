@@ -104,6 +104,7 @@ public class SettingsActivity extends AppCompatActivity {
         List<String> maxFreqs = new ArrayList<String>();
         maxFreqs.add("148MHz");
         maxFreqs.add("146MHz");
+        maxFreqs.add("174MHz");
 
         ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, maxFreqs);
         maxFreqTextView.setAdapter(arrayAdapter);
