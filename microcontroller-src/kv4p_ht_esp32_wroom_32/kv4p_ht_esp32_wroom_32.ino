@@ -216,7 +216,6 @@ void initI2STx() {
 }
 
 // Scale factor for fixed-point math (Q15 format)
-#define FIXED_POINT_SHIFT 15
 #define DECAY_TIME 0.25 // seconds
 #define ALPHA (1.0f - expf(-1.0f / (AUDIO_SAMPLE_RATE * (DECAY_TIME / logf(2.0f)))))
 
@@ -334,7 +333,7 @@ void loop() {
           bool highpass = (paramsStr.charAt(1) == '1');
           bool lowpass = (paramsStr.charAt(2) == '1');
 
-          dra->filters(emphasis, highpass, lowpass);
+          while (!dra->filters(emphasis, highpass, lowpass));
         }
           break;
       }
@@ -368,8 +367,6 @@ void loop() {
             break;
           case COMMAND_TUNE_TO:
           {
-            setMode(MODE_RX);
-
             // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
             // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
             // putting them in there. If so, we take byte-by-byte until we get the full params.
@@ -460,8 +457,8 @@ void loop() {
       }
 
       size_t bytesRead = 0;
-      uint16_t buffer16[I2S_READ_LEN] = {0};
-      uint8_t buffer8[I2S_READ_LEN] = {0};
+      static uint16_t buffer16[I2S_READ_LEN];
+      static uint8_t buffer8[I2S_READ_LEN];
       ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 100));
       size_t samplesRead = bytesRead / 2;
 
@@ -512,7 +509,7 @@ void loop() {
 
       // Check for incoming commands or audio from Android
       int bytesRead = 0;
-      uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
+      static uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
       int bytesAvailable = Serial.available();
       if (bytesAvailable > 0) {
         bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
@@ -616,14 +613,14 @@ void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
 }
 
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth) {
-  initI2SRx();
-
   // Tell radio module to tune
   int result = 0;
-  if (bandwidth.equals("W")) {
-    result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
-  } else if (bandwidth.equals("N")) {
-    result = dra->group(DRA818_12K5, freqTx, freqRx, tone, squelch, 0);
+  while (!result) {
+    if (bandwidth.equals("W")) {
+      result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
+    } else if (bandwidth.equals("N")) {
+      result = dra->group(DRA818_12K5, freqTx, freqRx, tone, squelch, 0);
+    }
   }
   // Serial.println("tuneTo: " + String(result));
 }
