@@ -215,7 +215,6 @@ void initI2STx() {
   i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);           
 }
 
-// Scale factor for fixed-point math (Q15 format)
 #define DECAY_TIME 0.25 // seconds
 #define ALPHA (1.0f - expf(-1.0f / (AUDIO_SAMPLE_RATE * (DECAY_TIME / logf(2.0f)))))
 
