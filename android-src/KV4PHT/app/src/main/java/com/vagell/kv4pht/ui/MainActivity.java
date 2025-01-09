@@ -1548,7 +1548,7 @@ public class MainActivity extends AppCompatActivity {
             audioRecord = null;
         }
 
-        audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
+        audioRecord = new AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
                 audioFormat, minBufferSize);
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
