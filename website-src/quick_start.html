@@ -97,14 +97,10 @@
 					<li>Solder the SA818-V, ESP32, and SMA connector to the PCB.</li>
 					<li>Then, trim all of the ESP32's legs as short as possible (so they don't contact your phone).</li>
 					</ul>
-				<li><h3>3D print the case, and optionally the stand</h3>
+				<li><h3>3D print the case</h3>
 					<ul>
-					<li>Find the <a href="https://www.thingiverse.com/thing:6782580" target="_new">3D printer files on Thingiverse</a></li>
-					<ul>
-						<li>If you're using the 3-port U-shaped USB connector (linked in step 1), use the design ending in "...for_3_port_connector".</li>
-					</ul>
+					<li>Choose a <a href="https://www.thingiverse.com/tag:kv4p_ht" target="_new">kv4p HT case on Thingiverse</a> (make sure it matches the PCB version 1.x or 2.x)</li>
 					<li>The case looks cooler with 2-colors, which most 3D printers can do (<a href="https://www.youtube.com/watch?v=vL4hiZ1ZvJQ" target="_new">see how</a>)</li>
-
 					</ul>
 				</li>
 				<li><h3>Assemble the parts</h3>
@@ -136,7 +132,7 @@
 						<li><b>If you don't see a red button below, your browser doesn't support flashing.</b></li>
 					</ul>
 					<li><b>Select the device "CP2102 USB to UART Bridge Controller"</b>: <esp-web-install-button manifest="https://kv4p.com/esp-web-tools/manifest-v5.json"><button slot="activate">Flash firmware v5</button></esp-web-install-button>
-					<esp-web-install-button manifest="https://kv4p.com/esp-web-tools/manifest-v4.json"><button slot="activate">Flash firmware v4</button></esp-web-install-button></li>
+					<esp-web-install-button manifest="https://kv4p.com/esp-web-tools/manifest-v6.json"><button slot="activate">Flash firmware v6 (beta users only)</button></esp-web-install-button></li></li>
 					<li>If the button doesn't seem to work, make sure you visited <a href="https://kv4p.com/quick_start.html">kv4p.com</a> (without "www").</li>
 					<li>Device not showing up? You might need to install the <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads" target="_new">CP210x device driver</a>.</li>
 				</ul>
