@@ -37,6 +37,7 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.media.audiofx.Visualizer;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -1548,8 +1549,13 @@ public class MainActivity extends AppCompatActivity {
             audioRecord = null;
         }
 
-        audioRecord = new AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
-                audioFormat, minBufferSize);
+        if ("Samsung".equalsIgnoreCase(Build.MANUFACTURER)) {
+            audioRecord = new AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
+                    audioFormat, minBufferSize);
+        } else {
+            audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
+                    audioFormat, minBufferSize);
+        }
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.d("DEBUG", "Audio init error");
