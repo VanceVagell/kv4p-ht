@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <DRA818.h>
 #include <driver/adc.h>
 #include <driver/i2s.h>
+#include <driver/dac.h>
 #include <esp_task_wdt.h>
 
 const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '6'}; // Should be 8 characters representing a zero-padded version, like 00000001.
@@ -168,7 +169,7 @@ void initI2SRx() {
 
   // Initialize ADC
   adc1_config_width(ADC_WIDTH_BIT_12);
-  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
+  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
 
   static const i2s_config_t i2sRxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
@@ -186,6 +187,8 @@ void initI2SRx() {
 
   ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sRxConfig, 0, NULL));
   ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
+  dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
+  dac_output_voltage(DAC_CHANNEL_2, 138);
 }
 
 void initI2STx() {
