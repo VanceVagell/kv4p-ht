@@ -410,7 +410,7 @@ void loop() {
             break;
         }
       }
-
+ 
       // If it's been a while since our last S-meter report, send one back to Android app.
       if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
         // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
@@ -433,6 +433,7 @@ void loop() {
         // It doesn't matter if we successfully got the S-meter reading, we only want to check at most once every SMETER_REPORT_INTERVAL_MS
         lastSMeterReport = millis();
       }
+
 
       size_t bytesRead = 0;
       uint8_t buffer32[I2S_READ_LEN * 4] = {0};
@@ -593,7 +594,7 @@ void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
     );
 
     Serial.write(outBytes, totalSize);
-      Serial.flush();
+    Serial.flush();
 }
 
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth) {
