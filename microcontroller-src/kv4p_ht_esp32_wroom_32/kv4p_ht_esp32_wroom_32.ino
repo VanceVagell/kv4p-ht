@@ -427,9 +427,11 @@ void loop() {
           if (rssiInt >= 0 && rssiInt <= 255) {
             byte params[1] = { (uint8_t) rssiInt };
             sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
-            lastSMeterReport = millis();
           }
         }
+
+        // It doesn't matter if we successfully got the S-meter reading, we only want to check at most once every SMETER_REPORT_INTERVAL_MS
+        lastSMeterReport = millis();
       }
 
       size_t bytesRead = 0;
@@ -591,7 +593,7 @@ void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
     );
 
     Serial.write(outBytes, totalSize);
-    Serial.flush();
+      Serial.flush();
 }
 
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth) {
