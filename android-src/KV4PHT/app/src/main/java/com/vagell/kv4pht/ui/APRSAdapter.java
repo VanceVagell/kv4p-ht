@@ -124,7 +124,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             @Override
             public void onClick(View v) {
                 // Show this location on a map
-                String geoUri = "https://www.google.com/maps/search/?api=1&query=" + aprsMessage.positionLat + "," + aprsMessage.positionLong;
+                String geoUri = "geo:" + aprsMessage.positionLat + "," + aprsMessage.positionLong + "?q=" + aprsMessage.positionLat + "," + aprsMessage.positionLong;
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(geoUri));
                 v.getContext().startActivity(intent);
             }

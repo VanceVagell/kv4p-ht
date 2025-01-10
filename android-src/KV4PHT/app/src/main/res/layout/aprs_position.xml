@@ -61,6 +61,7 @@
             android:textColor="@android:color/darker_gray"
             android:textStyle="italic"
             android:textSize="16sp"
-            android:paddingLeft="24dp"/>
+            android:paddingLeft="24dp"
+            android:textIsSelectable="true"/>
     </LinearLayout>
 </LinearLayout>
