@@ -1549,13 +1549,11 @@ public class MainActivity extends AppCompatActivity {
             audioRecord = null;
         }
 
-        if ("Samsung".equalsIgnoreCase(Build.MANUFACTURER)) {
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
-                    audioFormat, minBufferSize);
-        } else {
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
-                    audioFormat, minBufferSize);
-        }
+        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC,
+                RadioAudioService.AUDIO_SAMPLE_RATE,
+                channelConfig,
+                audioFormat,
+                minBufferSize);
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.d("DEBUG", "Audio init error");
