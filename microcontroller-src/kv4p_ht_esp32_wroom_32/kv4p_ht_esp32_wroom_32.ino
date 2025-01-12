@@ -319,10 +319,11 @@ void loop() {
       while (Serial.available()) {
         uint8_t inByte = Serial.read();        
         if (matchedDelimiterTokensRx < DELIMITER_LENGTH) {
-            if (inByte == COMMAND_DELIMITER[matchedDelimiterTokensRx]) { // This byte may be part of the delimiter
+            // Match delimiter sequence
+            if (inByte == COMMAND_DELIMITER[matchedDelimiterTokensRx]) {
               matchedDelimiterTokensRx++;
-            } else { // This byte is not consistent with the command delimiter, reset counter
-              matchedDelimiterTokensRx = 0;
+            } else {
+              matchedDelimiterTokensRx = 0; // Reset on mismatch
             }
         } else {
            switch (inByte) {
