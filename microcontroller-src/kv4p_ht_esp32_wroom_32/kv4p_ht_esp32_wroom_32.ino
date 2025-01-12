@@ -47,6 +47,7 @@ long lastSMeterReport = -1;
 #define DELIMITER_LENGTH 8
 const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
 int matchedDelimiterTokens = 0;
+int matchedDelimiterTokensRx = 0;
 
 // Mode of the app, which is essentially a state machine
 #define MODE_TX 0
@@ -315,99 +316,94 @@ void loop() {
       esp_task_wdt_reset();
       return;
     } else if (mode == MODE_RX) {
-      if (Serial.available()) {
-        // Read a command from Android app
-        uint8_t tempBuffer[100]; // Big enough for a command and params, won't hold audio data
-        int bytesRead = 0;
-
-        while (bytesRead < (DELIMITER_LENGTH + 1)) { // Read the delimiter and the command byte only (no params yet)
-          tempBuffer[bytesRead++] = Serial.read();
-        }
-        switch (tempBuffer[DELIMITER_LENGTH]) {
-          case COMMAND_STOP: 
-          {
-            setMode(MODE_STOPPED);
-            Serial.flush();
-            esp_task_wdt_reset();
-            return;
-          }
-            break;
-          case COMMAND_PTT_DOWN:
-          {
-            setMode(MODE_TX);
-            esp_task_wdt_reset();
-            return;
-          }
-            break;
-          case COMMAND_TUNE_TO:
-          {
-            setMode(MODE_RX);
-
-            // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
-            // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
-            // putting them in there. If so, we take byte-by-byte until we get the full params.
-            int paramBytesMissing = 20;
-            String paramsStr = "";
-            if (paramBytesMissing > 0) {
-              uint8_t paramPartsBuffer[paramBytesMissing];
-              for (int j = 0; j < paramBytesMissing; j++) {
-                unsigned long waitStart = micros();
-                while (!Serial.available()) { 
-                  // Wait for a byte.
-                  if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
-                    esp_task_wdt_reset();
-                    return;
-                  }
-                }
-                paramPartsBuffer[j] = Serial.read();
-              }
-              paramsStr += String((char *)paramPartsBuffer);
-              paramBytesMissing--;
+      while (Serial.available()) {
+        uint8_t inByte = Serial.read();        
+        if (matchedDelimiterTokensRx < DELIMITER_LENGTH) {
+            if (inByte == COMMAND_DELIMITER[matchedDelimiterTokensRx]) { // This byte may be part of the delimiter
+              matchedDelimiterTokensRx++;
+            } else { // This byte is not consistent with the command delimiter, reset counter
+              matchedDelimiterTokensRx = 0;
             }
-
-            // Example:
-            // 145.4500144.8500061W
-            // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
-            float freqTxFloat = paramsStr.substring(0, 8).toFloat();
-            float freqRxFloat = paramsStr.substring(8, 16).toFloat();
-            int toneInt = paramsStr.substring(16, 18).toInt();
-            int squelchInt = paramsStr.substring(18, 19).toInt();
-            String bandwidth = paramsStr.substring(19, 20);
-            tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
-          }
-            break;
-          case COMMAND_FILTERS:
-          {
-            int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
-            String paramsStr = "";
-            if (paramBytesMissing > 0) {
-              uint8_t paramPartsBuffer[paramBytesMissing];
-              for (int j = 0; j < paramBytesMissing; j++) {
-                unsigned long waitStart = micros();
-                while (!Serial.available()) { 
-                  // Wait for a byte.
-                  if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
-                    esp_task_wdt_reset();
-                    return;
+        } else {
+           switch (inByte) {
+            case COMMAND_STOP: 
+              matchedDelimiterTokensRx = 0;
+              setMode(MODE_STOPPED);
+              Serial.flush();
+              esp_task_wdt_reset();
+              return;
+            case COMMAND_PTT_DOWN: 
+              matchedDelimiterTokensRx = 0;
+              setMode(MODE_TX);
+              esp_task_wdt_reset();
+              return;
+            case COMMAND_TUNE_TO: {
+            
+              // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
+              // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
+              // putting them in there. If so, we take byte-by-byte until we get the full params.
+              int paramBytesMissing = 20;
+              String paramsStr = "";
+              if (paramBytesMissing > 0) {
+                uint8_t paramPartsBuffer[paramBytesMissing];
+                for (int j = 0; j < paramBytesMissing; j++) {
+                  unsigned long waitStart = micros();
+                  while (!Serial.available()) { 
+                    // Wait for a byte.
+                    if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
+                      esp_task_wdt_reset();
+                      return;
+                    }
                   }
+                  paramPartsBuffer[j] = Serial.read();
                 }
-                paramPartsBuffer[j] = Serial.read();
+                paramsStr += String((char *)paramPartsBuffer);
+                paramBytesMissing--;
               }
-              paramsStr += String((char *)paramPartsBuffer);
-              paramBytesMissing--;
-            }
-            bool emphasis = (paramsStr.charAt(0) == '1');
-            bool highpass = (paramsStr.charAt(1) == '1');
-            bool lowpass = (paramsStr.charAt(2) == '1');
 
-            dra->filters(emphasis, highpass, lowpass);
+              // Example:
+              // 145.4500144.8500061W
+              // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
+              float freqTxFloat = paramsStr.substring(0, 8).toFloat();
+              float freqRxFloat = paramsStr.substring(8, 16).toFloat();
+              int toneInt = paramsStr.substring(16, 18).toInt();
+              int squelchInt = paramsStr.substring(18, 19).toInt();
+              String bandwidth = paramsStr.substring(19, 20);
+              tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
+              matchedDelimiterTokensRx = 0;
+            }
+              break;
+            case COMMAND_FILTERS: {
+              int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
+              String paramsStr = "";
+              if (paramBytesMissing > 0) {
+                uint8_t paramPartsBuffer[paramBytesMissing];
+                for (int j = 0; j < paramBytesMissing; j++) {
+                  unsigned long waitStart = micros();
+                  while (!Serial.available()) { 
+                    // Wait for a byte.
+                    if ((micros() - waitStart) > 500000) { // Give the Android app 0.5 second max before giving up on the command
+                      esp_task_wdt_reset();
+                      return;
+                    }
+                  }
+                  paramPartsBuffer[j] = Serial.read();
+                }
+                paramsStr += String((char *)paramPartsBuffer);
+                paramBytesMissing--;
+              }
+              bool emphasis = (paramsStr.charAt(0) == '1');
+              bool highpass = (paramsStr.charAt(1) == '1');
+              bool lowpass = (paramsStr.charAt(2) == '1');
+
+              dra->filters(emphasis, highpass, lowpass);
+              matchedDelimiterTokensRx = 0;
+            }
+              break;
+            default:
+              matchedDelimiterTokensRx = 0;
+              break;
           }
-            break;
-          default:
-          {
-            // Unexpected.
-          }
-            break;
         }
       }
 
@@ -618,6 +614,7 @@ void setMode(int newMode) {
       digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       initI2SRx();
+      matchedDelimiterTokensRx = 0;
       break;
     case MODE_TX:
       txStartTime = micros();
