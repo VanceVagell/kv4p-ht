@@ -338,8 +338,6 @@ void loop() {
               esp_task_wdt_reset();
               return;
             case COMMAND_TUNE_TO: {
-              setMode(MODE_RX);
-              
               // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
               // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
               // putting them in there. If so, we take byte-by-byte until we get the full params.
