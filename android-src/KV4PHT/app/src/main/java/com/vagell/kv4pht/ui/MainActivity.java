@@ -1549,13 +1549,11 @@ public class MainActivity extends AppCompatActivity {
             audioRecord = null;
         }
 
-        if ("Samsung".equalsIgnoreCase(Build.MANUFACTURER)) {
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.UNPROCESSED, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
-                    audioFormat, minBufferSize);
-        } else {
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig,
-                    audioFormat, minBufferSize);
-        }
+        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC,
+                RadioAudioService.AUDIO_SAMPLE_RATE,
+                channelConfig,
+                audioFormat,
+                minBufferSize);
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.d("DEBUG", "Audio init error");
@@ -1566,6 +1564,11 @@ public class MainActivity extends AppCompatActivity {
         if (audioRecord == null) {
             initAudioRecorder();
         }
+
+        // Whenever we start recording we immediately silence any audio playback so the mic
+        // doesn't pick it up.
+        radioAudioService.getAudioTrack().pause();
+        radioAudioService.getAudioTrack().flush();
 
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button_on));
@@ -1619,6 +1622,8 @@ public class MainActivity extends AppCompatActivity {
             recordingThread = null;
             updateRecordingVisualization(100, RadioAudioService.SILENT_BYTE);
         }
+
+        radioAudioService.getAudioTrack().play();
 
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button));

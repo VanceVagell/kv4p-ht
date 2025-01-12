@@ -539,7 +539,7 @@ public class RadioAudioService extends Service {
         restartAudioPrebuffer();
 
         try {
-            Float freq = Float.parseFloat(activeFrequencyStr);
+            Float freq = Float.parseFloat(makeSafe2MFreq(activeFrequencyStr));
             Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
             if (freq < 144.0f || freq > offsetMaxFreq) {
                 txAllowed = false;
@@ -708,6 +708,8 @@ public class RadioAudioService extends Service {
 
     public void startPtt() {
         if (!txAllowed) { // Extra precauation, though MainActivity should enforce this.
+            Log.d("DEBUG", "Warning: Attempted startPtt when txAllowed was false (should not happen).");
+            new Throwable().printStackTrace();
             return;
         }
 
