@@ -311,7 +311,7 @@ void loop() {
           bool highpass = (paramsStr.charAt(1) == '1');
           bool lowpass = (paramsStr.charAt(2) == '1');
 
-          dra->filters(emphasis, highpass, lowpass);
+          while (!dra->filters(emphasis, highpass, lowpass));
           break;
         }
       }
@@ -408,7 +408,7 @@ void loop() {
               bool highpass = (paramsStr.charAt(1) == '1');
               bool lowpass = (paramsStr.charAt(2) == '1');
 
-              dra->filters(emphasis, highpass, lowpass);
+              while (!dra->filters(emphasis, highpass, lowpass));
               break;
             }
 
@@ -611,10 +611,12 @@ void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth)
 
   // Tell radio module to tune
   int result = 0;
-  if (bandwidth.equals("W")) {
-    result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
-  } else if (bandwidth.equals("N")) {
-    result = dra->group(DRA818_12K5, freqTx, freqRx, tone, squelch, 0);
+  while (!result) {
+    if (bandwidth.equals("W")) {
+      result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
+    } else if (bandwidth.equals("N")) {
+      result = dra->group(DRA818_12K5, freqTx, freqRx, tone, squelch, 0);
+    }
   }
   // Serial.println("tuneTo: " + String(result));
 }
