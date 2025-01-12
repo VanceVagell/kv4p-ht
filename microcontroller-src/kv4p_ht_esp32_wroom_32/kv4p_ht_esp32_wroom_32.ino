@@ -252,11 +252,13 @@ void loop() {
         }
       }
       switch (tempBuffer[DELIMITER_LENGTH]) {
+
         case COMMAND_STOP:
         { 
           Serial.flush();
-        }
           break;
+        }
+
         case COMMAND_GET_FIRMWARE_VER: 
         {
           Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));
@@ -265,7 +267,7 @@ void loop() {
           esp_task_wdt_reset();
           return;
         }
-          break;
+
         // TODO get rid of the code duplication here and in MODE_RX below to handle COMMAND_TUNE_TO and COMMAND_FILTERS.
         // Should probably just have one standardized way to read any incoming bytes from Android app here, and handle
         // commands appropriately. Or at least extract the business logic from them to avoid that duplication.
@@ -307,8 +309,9 @@ void loop() {
           tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
 
           // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
-        }
           break;
+        }
+
         case COMMAND_FILTERS:
         {
           int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
@@ -336,6 +339,7 @@ void loop() {
           while (!dra->filters(emphasis, highpass, lowpass));
         }
           break;
+        }
       }
 
       esp_task_wdt_reset();
@@ -352,17 +356,26 @@ void loop() {
             }
         } else {
           matchedDelimiterTokensRx = 0;
+
           switch (inByte) {
-            case COMMAND_STOP: 
+
+            case COMMAND_STOP:
+            {
               setMode(MODE_STOPPED);
               Serial.flush();
               esp_task_wdt_reset();
               return;
+            }
+
             case COMMAND_PTT_DOWN: 
+            {
               setMode(MODE_TX);
               esp_task_wdt_reset();
               return;
-            case COMMAND_TUNE_TO: {
+            }
+
+            case COMMAND_TUNE_TO:
+            {
               // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
               // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
               // putting them in there. If so, we take byte-by-byte until we get the full params.
@@ -394,9 +407,11 @@ void loop() {
               int squelchInt = paramsStr.substring(18, 19).toInt();
               String bandwidth = paramsStr.substring(19, 20);
               tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
-            }
               break;
-            case COMMAND_FILTERS: {
+            }
+
+            case COMMAND_FILTERS:
+            {
               int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
               String paramsStr = "";
               if (paramBytesMissing > 0) {
@@ -419,11 +434,14 @@ void loop() {
               bool highpass = (paramsStr.charAt(1) == '1');
               bool lowpass = (paramsStr.charAt(2) == '1');
 
-              dra->filters(emphasis, highpass, lowpass);
+              while (!dra->filters(emphasis, highpass, lowpass));
+              break;
             }
-              break;
+
             default:
+            {
               break;
+            }
           }
         }
       }
