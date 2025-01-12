@@ -326,20 +326,20 @@ void loop() {
               matchedDelimiterTokensRx = 0; // Reset on mismatch
             }
         } else {
-           switch (inByte) {
+          matchedDelimiterTokensRx = 0;
+          switch (inByte) {
             case COMMAND_STOP: 
-              matchedDelimiterTokensRx = 0;
               setMode(MODE_STOPPED);
               Serial.flush();
               esp_task_wdt_reset();
               return;
             case COMMAND_PTT_DOWN: 
-              matchedDelimiterTokensRx = 0;
               setMode(MODE_TX);
               esp_task_wdt_reset();
               return;
             case COMMAND_TUNE_TO: {
-            
+              setMode(MODE_RX);
+              
               // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
               // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
               // putting them in there. If so, we take byte-by-byte until we get the full params.
@@ -371,7 +371,6 @@ void loop() {
               int squelchInt = paramsStr.substring(18, 19).toInt();
               String bandwidth = paramsStr.substring(19, 20);
               tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
-              matchedDelimiterTokensRx = 0;
             }
               break;
             case COMMAND_FILTERS: {
@@ -398,11 +397,9 @@ void loop() {
               bool lowpass = (paramsStr.charAt(2) == '1');
 
               dra->filters(emphasis, highpass, lowpass);
-              matchedDelimiterTokensRx = 0;
             }
               break;
             default:
-              matchedDelimiterTokensRx = 0;
               break;
           }
         }
