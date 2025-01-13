@@ -137,7 +137,6 @@ public class PositionField extends APRSData {
 		this.type = APRSTypes.T_POSITION;
 		// this.comment = comment;
 		compressedFormat = false;
-		// TODOV
 	}
 
 	public PositionField(Position position, String comment, boolean msgCapable) {
