@@ -1155,7 +1155,7 @@ public class RadioAudioService extends Service {
         byte[] pcm16 = new byte[pcm8.length * 2];  // 2 bytes per 16-bit sample
         for (int i = 0; i < pcm8.length; i++) {
             int unsignedSample = pcm8[i] & 0xFF;  // Convert to unsigned
-            short sample16 = (short)((unsignedSample - 128) << 8);  // Scale and shift
+            short sample16 = (short)((unsignedSample) << 8);  // Scale and shift
             // Store as little-endian (least significant byte first)
             pcm16[i * 2] = (byte)(sample16 & 0xFF);          // LSB
             pcm16[i * 2 + 1] = (byte)((sample16 >> 8) & 0xFF); // MSB
