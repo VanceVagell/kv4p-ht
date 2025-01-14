@@ -338,10 +338,8 @@ void loop() {
 
           while (!dra->filters(emphasis, highpass, lowpass));
         }
-          break;
-        }
+        break;
       }
-
       esp_task_wdt_reset();
       return;
     } else if (mode == MODE_RX) {
