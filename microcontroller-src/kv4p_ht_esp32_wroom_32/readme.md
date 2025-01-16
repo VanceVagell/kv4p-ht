@@ -7,6 +7,7 @@ This document provides detailed instructions on how to interact with the KV4P-HT
 ## Table of Contents
 
 1. [Serial Connection Setup](#1-serial-connection-setup)
+   - [1.1. BLE Serial Connection Setup](#11-ble-serial-connection-setup)
 2. [Communication Protocol](#2-communication-protocol)
    - [2.1. Delimiter](#21-delimiter)
    - [2.2. Command Structure](#22-command-structure)
@@ -17,6 +18,7 @@ This document provides detailed instructions on how to interact with the KV4P-HT
    - [3.4. COMMAND_FILTERS (0x04)](#34-command_filters-0x04)
    - [3.5. COMMAND_STOP (0x05)](#35-command_stop-0x05)
    - [3.6. COMMAND_GET_FIRMWARE_VER (0x06)](#36-command_get_firmware_ver-0x06)
+   - [3.7. COMMAND_SET_BLE_SERIAL (0x07)](#37-command_set_ble_serial-0x07)
 4. [Commands from ESP32 (to Android)](#4-esp32-commands)
    - [4.1. COMMAND_SMETER (0x53)](#41-command_smeter-0x53)
 5. [Examples](#5-examples)
@@ -41,6 +43,17 @@ To interact with the KV4P-HT device, establish a serial connection using the fol
 - **Flow Control**: `None`.
 
 **Note**: Ensure that your serial communication software or terminal emulator supports the high baud rate of 921600 bps.
+
+
+## 1.1. BLE Serial Connection Setup
+
+To interact with the KV4P-HT device over BLE, communicate with the device using the following UUIDs:
+
+- **Service UUID**: `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`
+- **Write UUID**: `6E400002-B5A3-F393-E0A9-E50E24DCCA9E`
+- **Read UUID**: `6E400003-B5A3-F393-E0A9-E50E24DCCA9E`
+
+**Note**: You can use the [Light Blue](https://punchthrough.com/how-to-use-lightblue/) app to communicate with the device.
 
 ---
 
@@ -142,6 +155,15 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
   - Send the delimiter.
   - Send the command code `0x06`.
 
+### 3.7. COMMAND_SET_BLE_SERIAL (0x07)
+
+- **Description**: Enables BLE serial and save the state to EEPROM
+- **Parameters**: 1 byte.
+   - Parameter is either `0` (disable) or `1` (enable).
+- **Usage**:
+  - Send the delimiter.
+  - Send the command code `0x07`.
+  - Send the 1-byte parameter string.
 ---
 
 ## 4. Commands from ESP32 (to Android)
