@@ -104,13 +104,13 @@ public:
 };
 int DummyDRA818::group(uint8_t bw, float freq_tx, float freq_rx, uint8_t ctcss_tx, uint8_t squelch, uint8_t ctcss_rx)
 {
-  Serial.printf("DRA818 group: %d %d %d\n", bw, freq_tx, freq_rx);
-  return 0;
+  Serial.printf("DRA818 group: %d %f %f\n", bw, freq_tx, freq_rx);
+  return 1;
 }
 int DummyDRA818::filters(bool pre, bool high, bool low)
 {
   Serial.printf("DRA818 filters: %d %d %d\n", pre, high, low);
-  return 0;
+  return 1;
 }
 int DummyDRA818::handshake()
 {
@@ -120,7 +120,7 @@ int DummyDRA818::handshake()
 int DummyDRA818::volume(uint8_t volume)
 {
   Serial.printf("DRA818 volume: %d\n", volume);
-  return 0;
+  return 1;
 }
 
 DummyDRA818 *dra = new DummyDRA818(&Serial2, DRA818_VHF);
@@ -175,8 +175,8 @@ void setup()
   Serial.begin(230400);
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
-  esp_task_wdt_init(100, true); // Reboot if locked up for a bit
-  esp_task_wdt_add(NULL);       // Add the current task to WDT watch
+  esp_task_wdt_init(10, true); // Reboot if locked up for a bit
+  esp_task_wdt_add(NULL);      // Add the current task to WDT watch
 
   // Debug LED
   pinMode(LED_PIN, OUTPUT);
@@ -288,13 +288,14 @@ void loop()
 
       case COMMAND_STOP:
       {
+        // Serial.write("Received CmdStop");
         SerialDevice->flush();
         break;
       }
 
       case COMMAND_GET_FIRMWARE_VER:
       {
-        printf("Received CmdGetFirmwareVer");
+        // Serial.write("Received CmdGetFirmwareVer");
         SerialDevice->write(VERSION_PREFIX, sizeof(VERSION_PREFIX));
         SerialDevice->write(FIRMWARE_VER, sizeof(FIRMWARE_VER));
         SerialDevice->flush();
@@ -307,6 +308,8 @@ void loop()
       // commands appropriately. Or at least extract the business logic from them to avoid that duplication.
       case COMMAND_TUNE_TO:
       {
+        // Serial.write("Received CmdTuneTo");
+
         setMode(MODE_RX);
 
         // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
@@ -352,6 +355,8 @@ void loop()
 
       case COMMAND_FILTERS:
       {
+        // Serial.write("Received CmdFilters");
+
         int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
         String paramsStr = "";
         if (paramBytesMissing > 0)
@@ -385,6 +390,8 @@ void loop()
 
       case COMMAND_SET_BLE_SERIAL:
       {
+        // Serial.write("Received CmdSetBleSerial");
+
         int paramBytesMissing = 1; // 1 enables BLE, 0 disable BLE
         String paramsStr = "";
         if (paramBytesMissing > 0)
@@ -444,6 +451,8 @@ void loop()
 
           case COMMAND_STOP:
           {
+            // Serial.write("Received CmdStop");
+
             setMode(MODE_STOPPED);
             SerialDevice->flush();
             esp_task_wdt_reset();
@@ -452,6 +461,8 @@ void loop()
 
           case COMMAND_PTT_DOWN:
           {
+            // Serial.write("Received CmdPttDown");
+
             setMode(MODE_TX);
             esp_task_wdt_reset();
             return;
@@ -459,6 +470,8 @@ void loop()
 
           case COMMAND_TUNE_TO:
           {
+            // Serial.write("Received CmdTuneTo");
+
             // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
             // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
             // putting them in there. If so, we take byte-by-byte until we get the full params.
@@ -499,6 +512,8 @@ void loop()
 
           case COMMAND_FILTERS:
           {
+            // Serial.write("Received CmdFilters");
+
             int paramBytesMissing = 3; // e.g. 000, in order of emphasis, highpass, lowpass
             String paramsStr = "";
             if (paramBytesMissing > 0)
@@ -672,6 +687,8 @@ void loop()
             {
             case COMMAND_STOP:
             {
+              printf("Received CmdStop");
+
               delay(MS_WAIT_BEFORE_PTT_UP); // Wait just a moment so final tx audio data in DMA buffer can be transmitted.
               setMode(MODE_STOPPED);
               esp_task_wdt_reset();
@@ -680,6 +697,8 @@ void loop()
             break;
             case COMMAND_PTT_UP:
             {
+              printf("Received CmdPttUp");
+
               delay(MS_WAIT_BEFORE_PTT_UP); // Wait just a moment so final tx audio data in DMA buffer can be transmitted.
               setMode(MODE_RX);
               esp_task_wdt_reset();
@@ -770,7 +789,7 @@ void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth)
       result = dra->group(DRA818_12K5, freqTx, freqRx, tone, squelch, 0);
     }
   }
-  // Serial.println("tuneTo: " + String(result));
+  Serial.println("tuneTo: " + String(result));
 }
 
 void setMode(int newMode)
@@ -806,13 +825,13 @@ void initSerialDevice()
     // Communication with over BLE
     SerialBLE.begin("K4VP-HT");
     SerialDevice = &SerialBLE;
-    Serial.println("Set serial device to BLE");
+    // Serial.println("Set serial device to BLE");
   }
   else
   {
     // Communication with over HardwareSerial
     SerialDevice = &Serial;
-    Serial.println("Set serial device to HardwareSerial");
+    // Serial.println("Set serial device to HardwareSerial");
   }
 }
 
