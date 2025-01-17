@@ -6,3 +6,5 @@ backups/
 ~*
 *.lck
 *.swp
+
+.DS_Store
