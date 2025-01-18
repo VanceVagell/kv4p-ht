@@ -121,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
     // Radio params and related settings
-    private String activeFrequencyStr = "144.0000";
+    private String activeFrequencyStr = "146.0000";
     private int squelch = 0;
     private String callsign = null;
     private boolean stickyPTT = false;
@@ -501,6 +501,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Binding to the RadioAudioService causes it to start (e.g. play back audio).
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
+
+        activeFrequencyStr = radioAudioService.getActiveFrequencyStr();
+        intent.putExtra("activeFrequencyStr", activeFrequencyStr);
     }
 
     @Override
@@ -560,6 +563,9 @@ public class MainActivity extends AppCompatActivity {
 
             // Binding to the RadioAudioService causes it to start (e.g. play back audio).
             bindService(intent, connection, Context.BIND_AUTO_CREATE);
+
+            activeFrequencyStr = radioAudioService.getActiveFrequencyStr();
+            intent.putExtra("activeFrequencyStr", activeFrequencyStr);
         }
     }
 
@@ -969,7 +975,10 @@ public class MainActivity extends AppCompatActivity {
                             if (lastFreq != null) {
                                 activeFrequencyStr = lastFreq.value;
                             } else {
-                                activeFrequencyStr = "144.0000";
+                                activeFrequencyStr = "146.0000";
+                                if (radioAudioService != null) {
+                                    activeFrequencyStr = radioAudioService.getActiveFrequencyStr();
+                                }
                             }
 
                             if (radioAudioService != null) {

@@ -25,8 +25,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 
+// define UHF for a UHF DRA818-type module, otherwise VHF
+//#define UHF
+
 const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '8'}; // Should be 8 characters representing a zero-padded version, like 00000001.
-const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
+#ifdef UHF
+const byte VERSION_PREFIX[7] = {'V', 'E', 'R', '_', 'U', 'H', 'F'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
+#else
+const byte VERSION_PREFIX[7] = {'V', 'E', 'R', '_', 'V', 'H', 'F'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
+#endif
 
 // Commands defined here must match the Android app
 const uint8_t COMMAND_PTT_DOWN = 1; // start transmitting audio that Android app will send
@@ -88,7 +95,11 @@ boolean isTxCacheSatisfied = false; // Will be true when the DAC has enough cach
 #define LED_PIN 2
 
 // Object used for radio module serial comms
+#ifdef UHF
+DRA818* dra = new DRA818(&Serial2, DRA818_UHF);
+#else
 DRA818* dra = new DRA818(&Serial2, DRA818_VHF);
+#endif
 
 // Tx runaway detection stuff
 long txStartTime = -1;
