@@ -176,25 +176,25 @@ public class RadioAudioService extends Service {
     private Runnable aprsBeaconRunnable = null;
 
     // Radio params and related settings
-    private static final float VHF_MIN_FREQ    = 134.0; // DRA818V lower limit, in MHz
-    private static final float VHF_MIN_FREQ_US = 144.0; // US 2m band lower limit, in MHz
-    private static final float VHF_MAX_FREQ_US = 148.0; // US 2m band upper limit, in MHz
-    private static final float VHF_MAX_FREQ    = 174.0; // DRA818V upper limit, in MHz
+    private static final float VHF_MIN_FREQ    = 134.0f; // DRA818V lower limit, in MHz
+    private static final float VHF_MIN_FREQ_US = 144.0f; // US 2m band lower limit, in MHz
+    private static final float VHF_MAX_FREQ_US = 148.0f; // US 2m band upper limit, in MHz
+    private static final float VHF_MAX_FREQ    = 174.0f; // DRA818V upper limit, in MHz
 
-    private static final float UHF_MIN_FREQ    = 400.0; // DRA818U lower limit, in MHz
-    private static final float UHF_MIN_FREQ_US = 420.0; // US 70cm band lower limit, in MHz
-    private static final float UHF_MAX_FREQ_US = 450.0; // US 70cm band upper limit, in MHz
-    private static final float UHF_MAX_FREQ    = 470.0; // DRA818U upper limit, in MHz
+    private static final float UHF_MIN_FREQ    = 400.0f; // DRA818U lower limit, in MHz
+    private static final float UHF_MIN_FREQ_US = 420.0f; // US 70cm band lower limit, in MHz
+    private static final float UHF_MAX_FREQ_US = 450.0f; // US 70cm band upper limit, in MHz
+    private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
 
-    private String activeFrequencyStr = String.format("%.3f", VHF_MIN_FREQ_US); // 3 decimal places, in MHz
+    private String activeFrequencyStr = String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 4 decimal places, in MHz
     private int squelch = 0;
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
-    private static int minRadioFreq = VHF_MIN_FREQ; // in MHz
-    private static int maxRadioFreq = VHF_MAX_FREQ; // in MHz
-    private static int minHamFreq = VHF_MIN_FREQ_US; // in MHz
-    private static int maxHamFreq = VHF_MAX_FREQ_US; // in MHz
+    private static float minRadioFreq = VHF_MIN_FREQ; // in MHz
+    private static float maxRadioFreq = VHF_MAX_FREQ; // in MHz
+    private static float minHamFreq = VHF_MIN_FREQ_US; // in MHz
+    private static float maxHamFreq = VHF_MAX_FREQ_US; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
@@ -582,7 +582,7 @@ public class RadioAudioService extends Service {
         try {
             freq = Float.parseFloat(strFreq);
         } catch (NumberFormatException nfe) {
-            return String.format("%.3f", VHF_MIN_FREQ_US); // 3 decimal places, in MHz
+            return String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 3 decimal places, in MHz
         }
         while (freq > 500.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
@@ -1195,13 +1195,13 @@ public class RadioAudioService extends Service {
                 String dataStr = new String(data, "UTF-8");
                 versionStrBuffer += dataStr;
                 if (versionStrBuffer.contains(VERSION_PREFIX_VHF) || versionStrBuffer.contains(VERSION_PREFIX_UHF)) {
-                    int startIdx;
+                    int startIdx = 0;
                     if(versionStrBuffer.contains(VERSION_PREFIX_VHF)) {
                         setMinRadioFreq(VHF_MIN_FREQ);
                         setMinFreq(VHF_MIN_FREQ_US);
                         setMaxFreq(VHF_MAX_FREQ_US);
                         setMaxRadioFreq(VHF_MAX_FREQ);
-                        setActiveFrequencyStr(VHF_MIN_FREQ_US);
+                        setActiveFrequencyStr(String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US));
                         startIdx = versionStrBuffer.indexOf(VERSION_PREFIX_VHF) + VERSION_PREFIX_VHF.length();
                     }
                     else if(versionStrBuffer.contains(VERSION_PREFIX_UHF)) {
@@ -1209,7 +1209,7 @@ public class RadioAudioService extends Service {
                         setMinFreq(UHF_MIN_FREQ_US);
                         setMaxFreq(UHF_MAX_FREQ_US);
                         setMaxRadioFreq(UHF_MAX_FREQ);
-                        setActiveFrequencyStr(UHF_MIN_FREQ_US);
+                        setActiveFrequencyStr(String.format(java.util.Locale.US, "%.4f", UHF_MIN_FREQ_US));
                         startIdx = versionStrBuffer.indexOf(VERSION_PREFIX_UHF) + VERSION_PREFIX_UHF.length();
                     }
                     String verStr = "";
@@ -1626,8 +1626,8 @@ public class RadioAudioService extends Service {
 
         if (aprsPositionAccuracy == APRS_POSITION_APPROX) {
             // Fuzz the location (2 decimal places gives a spot in the neighborhood)
-            longitude = Double.valueOf(String.format("%.2f", longitude));
-            latitude = Double.valueOf(String.format("%.2f", latitude));
+            longitude = Double.parseDouble(String.format(java.util.Locale.US, "%.2f", longitude));
+            latitude = Double.parseDouble(String.format(java.util.Locale.US, "%.2f", latitude));
         }
 
         ArrayList<Digipeater> digipeaters = new ArrayList<>();

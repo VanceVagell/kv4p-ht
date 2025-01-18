@@ -28,7 +28,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.lifecycle.ViewModelProvider;
+//import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
@@ -195,7 +195,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                 // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
                 for (int i = 0; i < memoryGroups.size(); i++) {
                     String name = memoryGroups.get(i);
-                    if (name == null || name.trim().length() == 0) {
+                    if (name == null || name.trim().isEmpty()) {
                         memoryGroups.remove(i);
                         i--;
                     }
@@ -285,19 +285,19 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         String tone = editToneTextView.getText().toString().trim();
 
         // Validate form fields
-        if (name.length() == 0) {
+        if (name.isEmpty()) {
             editNameTextInputEditText.setError("Name this memory");
             editNameTextInputEditText.requestFocus();
             return;
         }
 
-        if (frequency.length() == 0) {
+        if (frequency.isEmpty()) {
             editFrequencyTextInputEditText.setError("Enter a frequency");
             editFrequencyTextInputEditText.requestFocus();
             return;
         } else {
             String formattedFrequency = RadioAudioService.makeSafe2MFreq(frequency);
-            if (formattedFrequency == null) {
+            if (formattedFrequency.isEmpty() || formattedFrequency.isBlank()) {
                 editFrequencyTextInputEditText.setError("Enter a frequency like 144.0000");
                 editFrequencyTextInputEditText.requestFocus();
                 return;
@@ -306,7 +306,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             }
         }
 
-        ChannelMemory memory = null;
+        ChannelMemory memory;
         if (isAdd) {
             memory = new ChannelMemory();
         } else {
