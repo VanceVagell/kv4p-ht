@@ -121,6 +121,7 @@ void initI2STx();
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
+void iir_lowpass_reset();
 
 void setup() {
   // Communication with Android via USB cable
@@ -175,7 +176,7 @@ void initI2SRx() {
   static const i2s_config_t i2sRxConfig = {
       .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
       .sample_rate = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
-      .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
       .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
       .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
@@ -190,6 +191,7 @@ void initI2SRx() {
   ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
   dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
   dac_output_voltage(DAC_CHANNEL_2, 138);
+  iir_lowpass_reset();
 }
 
 void initI2STx() {
@@ -212,6 +214,29 @@ void initI2STx() {
 
   i2s_driver_install(I2S_NUM_0, &i2sTxConfig, 0, NULL);
   i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);           
+}
+
+#define DECAY_TIME 0.25 // seconds
+#define ALPHA (1.0f - expf(-1.0f / (AUDIO_SAMPLE_RATE * (DECAY_TIME / logf(2.0f)))))
+
+static float prev_y = 0.0f;
+
+void iir_lowpass_reset() {
+  prev_y = 0.0f;
+}
+
+// IIR Low-pass filter (float state)
+int16_t iir_lowpass(int16_t x) {
+  float x_f = (float)x;
+  // IIR calculation: y[n] = α * x[n] + (1 - α) * y[n-1]
+  prev_y = ALPHA * x_f + (1.0f - ALPHA) * prev_y;
+  // Convert result back to int16
+  return (int16_t)prev_y;
+}
+
+// High-pass: x[n] - LPF(x[n])
+int16_t remove_dc(int16_t x) {
+    return x - iir_lowpass(x);
 }
 
 void loop() {
@@ -312,10 +337,9 @@ void loop() {
           bool lowpass = (paramsStr.charAt(2) == '1');
 
           while (!dra->filters(emphasis, highpass, lowpass));
-          break;
         }
+        break;
       }
-
       esp_task_wdt_reset();
       return;
     } else if (mode == MODE_RX) {
@@ -445,11 +469,11 @@ void loop() {
 
 
       size_t bytesRead = 0;
-      uint8_t buffer32[I2S_READ_LEN * 4] = {0};
-      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer32, sizeof(buffer32), &bytesRead, 100));
-      size_t samplesRead = bytesRead / 4;
+      static uint16_t buffer16[I2S_READ_LEN];
+      static uint8_t buffer8[I2S_READ_LEN];
+      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 100));
+      size_t samplesRead = bytesRead / 2;
 
-      byte buffer8[I2S_READ_LEN] = {0};
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
 
       // Check for squelch status change
@@ -469,11 +493,6 @@ void loop() {
       int attenuationIncrement = ATTENUATION_MAX / FADE_SAMPLES;
 
       for (int i = 0; i < samplesRead; i++) {
-        uint8_t sampleValue;
-
-        // Extract 8-bit sample from 32-bit buffer
-        sampleValue = buffer32[i * 4 + 3] << 4;
-        sampleValue |= buffer32[i * 4 + 2] >> 4;
 
         // Adjust attenuation during fade
         if (fadeCounter > 0) {
@@ -486,9 +505,8 @@ void loop() {
         }
 
         // Apply attenuation to the sample
-        int adjustedSample = (((int)sampleValue - 128) * attenuation) >> 8;
-        adjustedSample += 128;
-        buffer8[i] = (uint8_t)adjustedSample;
+        int16_t sample = (int32_t)remove_dc(((2048 - (buffer16[i] & 0xfff)) << 4)) * attenuation >> 8;
+        buffer8[i] = (sample >> 8) + 128; // Unsigned PCM8
       }
 
       Serial.write(buffer8, samplesRead);
@@ -503,7 +521,7 @@ void loop() {
 
       // Check for incoming commands or audio from Android
       int bytesRead = 0;
-      uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
+      static uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
       int bytesAvailable = Serial.available();
       if (bytesAvailable > 0) {
         bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
@@ -607,8 +625,6 @@ void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
 }
 
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth) {
-  initI2SRx();
-
   // Tell radio module to tune
   int result = 0;
   while (!result) {
