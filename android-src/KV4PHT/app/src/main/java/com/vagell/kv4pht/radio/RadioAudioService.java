@@ -140,6 +140,7 @@ public class RadioAudioService extends Service {
     private SerialInputOutputManager usbIoManager;
     private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a single USB write
     private Map<String, Integer> mTones = new HashMap<>();
+    private static final int MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP = 400;
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
@@ -751,10 +752,19 @@ public class RadioAudioService extends Service {
             return;
         }
         setMode(MODE_RX);
-        sendCommandToESP32(ESP32Command.PTT_UP);
-        audioTrack.flush();
-        restartAudioPrebuffer();
-        callbacks.txEnded();
+
+        // Hold off on telling the ESP32 firmware to PTT_UP, because we want the last bit of
+        // tx audio to be transmitted first (it's stuck in buffers).
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                sendCommandToESP32(ESP32Command.PTT_UP);
+                audioTrack.flush();
+                restartAudioPrebuffer();
+                callbacks.txEnded();
+            }
+        }, MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP);
     }
 
     public void reconnectViaUSB() {
