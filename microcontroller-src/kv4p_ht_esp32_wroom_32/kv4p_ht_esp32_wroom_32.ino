@@ -94,7 +94,13 @@ DRA818* dra = new DRA818(&Serial2, DRA818_VHF);
 long txStartTime = -1;
 #define RUNAWAY_TX_SEC 200
 
-// have we installed an I2S driver at least once?
+// Were we able to communicate with the radio module during setup()?
+const char RADIO_MODULE_UNKNOWN = 'x';
+const char RADIO_MODULE_VHF = 'v';
+const char RADIO_MODULE_UHF = 'u';
+char radioModuleType = RADIO_MODULE_UNKNOWN;
+
+// Have we installed an I2S driver at least once?
 bool i2sStarted = false;
 
 // I2S audio sampling stuff
@@ -149,14 +155,42 @@ void setup() {
   Serial2.setTimeout(10); // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
   int result = -1;
+  unsigned long waitStart = micros();
   while (result != 1) {
     result = dra->handshake(); // Wait for module to start up
+    // Serial.println("handshake: " + String(result));
+
+    if ((micros() - waitStart) > 2000000) { // Give the radio module 2 seconds max before giving up on it
+      break; // radioModuleType will remain at default of RADIO_MODULE_UNKNOWN
+    }
   }
-  // Serial.println("handshake: " + String(result));
-  result = dra->volume(8);
-  // Serial.println("volume: " + String(result));
-  result = dra->filters(false, false, false);
-  // Serial.println("filters: " + String(result));
+
+  if (result == 1) {
+    // Figure out if the radio is VHF or UHF
+    Serial2.println("AT+VERSION");
+    Serial2.setTimeout(2000); // This command takes longer.
+    String versionResponse = Serial2.readString(); // Should be like "+VERSION:SA818_VX\r\n" (where X is version of module)
+    Serial2.setTimeout(10); 
+
+    // Serial.println(versionResponse);
+
+    if (versionResponse.length() > 9) {
+      char typeChar = versionResponse.charAt(versionResponse.indexOf("_") + 1);
+
+      if (typeChar == 'v' || typeChar == 'V') {
+        radioModuleType = RADIO_MODULE_VHF;
+      } else if (typeChar == 'u' || typeChar == 'U') {
+        radioModuleType = RADIO_MODULE_UHF;
+      } else {
+        // Unexpected version response. We leave radioModuleType as RADIO_MODULE_UNKNOWN.
+      }
+    }
+
+    result = dra->volume(8);
+    // Serial.println("volume: " + String(result));
+    result = dra->filters(false, false, false);
+    // Serial.println("filters: " + String(result));
+  }
 
   // Begin in STOPPED mode
   setMode(MODE_STOPPED);
@@ -263,6 +297,11 @@ void loop() {
         {
           Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));
           Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));
+
+          // Append radio module info to end. "v" (VHF), "u" (UHF), "x" (can't contact module).
+          uint8_t radioModuleTypeArray[1] = { radioModuleType };
+          Serial.write(radioModuleTypeArray, 1);
+
           Serial.flush();
           esp_task_wdt_reset();
           return;

@@ -38,7 +38,6 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.os.Binder;
 import android.os.Bundle;
-import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -185,6 +184,11 @@ public class RadioAudioService extends Service {
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
+    private static final String RADIO_MODULE_UNKNOWN = "x"; // These 3 constants must match firmware code
+    private static final String RADIO_MODULE_VHF = "v";
+    private static final String RADIO_MODULE_UHF = "u";
+    private String radioType = RADIO_MODULE_UNKNOWN;
+    private boolean radioModuleNotFound = false;
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -419,6 +423,7 @@ public class RadioAudioService extends Service {
     public interface RadioAudioServiceCallbacks {
         public void radioMissing();
         public void radioConnected();
+        public void radioModuleNotFound();
         public void audioTrackCreated();
         public void packetReceived(APRSPacket aprsPacket);
         public void scannedToMemory(int memoryId);
@@ -912,7 +917,7 @@ public class RadioAudioService extends Service {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (mode != MODE_STARTUP) {
+                if (mode != MODE_STARTUP || radioModuleNotFound) {
                     return;
                 } else {
                     Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
@@ -1174,8 +1179,7 @@ public class RadioAudioService extends Service {
 
         if (mode == MODE_STARTUP) {
             try {
-                // TODO rework this to use same command-handling as s-meter updates
-                //  (below)
+                // TODO rework this to use same command-handling as s-meter updates (below)
                 String dataStr = new String(data, "UTF-8");
                 versionStrBuffer += dataStr;
                 if (versionStrBuffer.contains(VERSION_PREFIX)) {
@@ -1195,7 +1199,31 @@ public class RadioAudioService extends Service {
                         }
                     } else {
                         Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + verInt + ").");
+
+                        String radioTypeStr = versionStrBuffer.substring(startIdx + VERSION_LENGTH, startIdx + VERSION_LENGTH + 1);
+                        Log.d("DEBUG", "Radio type: '" + radioTypeStr + "'");
+
+                        if (radioTypeStr.equals(RADIO_MODULE_UNKNOWN)) {
+                            radioType = RADIO_MODULE_UNKNOWN;
+                        } else if (radioTypeStr.equals(RADIO_MODULE_VHF)) {
+                            radioType = RADIO_MODULE_VHF;
+                        } else if (radioTypeStr.equals(RADIO_MODULE_UHF)) {
+                            radioType = RADIO_MODULE_UHF;
+                        } else {
+                            Log.d("DEBUG", "Error: unexpected radio type received '" + radioTypeStr + "'");
+                            radioType = RADIO_MODULE_UNKNOWN;
+                        }
+
                         versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
+
+                        if (radioType.equals(RADIO_MODULE_UNKNOWN)) {
+                            radioModuleNotFound = true;
+                            callbacks.radioModuleNotFound();
+                            return;
+                        } else {
+                            radioModuleNotFound = false;
+                        }
+
                         initAfterESP32Connected();
                     }
                     return;
