@@ -1272,6 +1272,9 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.sMeter7).setAlpha(value > 6 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
         findViewById(R.id.sMeter8).setAlpha(value > 7 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
         findViewById(R.id.sMeter9).setAlpha(value > 8 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+
+        View sMeterView = findViewById(R.id.sMeter);
+        sMeterView.setContentDescription("S meter " + value + " of 9");
     }
 
     private void hideKeyboard() {
