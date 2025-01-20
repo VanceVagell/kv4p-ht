@@ -397,7 +397,7 @@ public class MainActivity extends AppCompatActivity {
                             }
 
                             Float freq = Float.parseFloat(memory.frequency);
-                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + 0.6f) : (freq - 0.6f);
+                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + (0f + memory.offsetKhz / 1000f)) : (freq - (0f + memory.offsetKhz / 1000f));
                             showFrequency(radioAudioService.validateFrequency("" + freq));
                             break;
                         }

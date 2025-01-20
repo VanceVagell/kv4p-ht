@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 
-const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '8'}; // Should be 8 characters representing a zero-padded version, like 00000001.
+const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '0', '9'}; // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
 
 // Commands defined here must match the Android app
@@ -317,7 +317,7 @@ void loop() {
           // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
           // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
           // putting them in there. If so, we take byte-by-byte until we get the full params.
-          int paramBytesMissing = 20;
+          int paramBytesMissing = 22;
           String paramsStr = "";
           if (paramBytesMissing > 0) {
             uint8_t paramPartsBuffer[paramBytesMissing];
@@ -338,14 +338,15 @@ void loop() {
 
           // Example:
           // 145.4500144.8500061W
-          // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
+          // 8 chars for tx, 8 chars for rx, 2 chars for tx tone, 2 chars for rx tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
           float freqTxFloat = paramsStr.substring(0, 8).toFloat();
           float freqRxFloat = paramsStr.substring(8, 16).toFloat();
-          int toneInt = paramsStr.substring(16, 18).toInt();
-          int squelchInt = paramsStr.substring(18, 19).toInt();
-          String bandwidth = paramsStr.substring(19, 20);
+          int txToneInt = paramsStr.substring(16, 18).toInt();
+          int rxToneInt = paramsStr.substring(18, 20).toInt();
+          int squelchInt = paramsStr.substring(20, 21).toInt();
+          String bandwidth = paramsStr.substring(21, 22);
 
-          tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
+          tuneTo(freqTxFloat, freqRxFloat, txToneInt, rxToneInt, squelchInt, bandwidth);
 
           // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
           break;
@@ -416,7 +417,7 @@ void loop() {
               // If we haven't received all the parameters needed for COMMAND_TUNE_TO, wait for them before continuing.
               // This can happen if ESP32 has pulled part of the command+params from the buffer before Android has completed
               // putting them in there. If so, we take byte-by-byte until we get the full params.
-              int paramBytesMissing = 20;
+              int paramBytesMissing = 22;
               String paramsStr = "";
               if (paramBytesMissing > 0) {
                 uint8_t paramPartsBuffer[paramBytesMissing];
@@ -437,13 +438,15 @@ void loop() {
 
               // Example:
               // 145.4500144.8500061W
-              // 8 chars for tx, 8 chars for rx, 2 chars for tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
+              // 8 chars for tx, 8 chars for rx, 2 chars for tx tone, 2 chars for rx tone, 1 char for squelch, 1 for bandwidth W/N (20 bytes total for params)
               float freqTxFloat = paramsStr.substring(0, 8).toFloat();
               float freqRxFloat = paramsStr.substring(8, 16).toFloat();
-              int toneInt = paramsStr.substring(16, 18).toInt();
-              int squelchInt = paramsStr.substring(18, 19).toInt();
-              String bandwidth = paramsStr.substring(19, 20);
-              tuneTo(freqTxFloat, freqRxFloat, toneInt, squelchInt, bandwidth);
+              int txToneInt = paramsStr.substring(16, 18).toInt();
+              int rxToneInt = paramsStr.substring(18, 20).toInt();
+              int squelchInt = paramsStr.substring(20, 21).toInt();
+              String bandwidth = paramsStr.substring(21, 22);
+
+              tuneTo(freqTxFloat, freqRxFloat, txToneInt, rxToneInt, squelchInt, bandwidth);
               break;
             }
 
@@ -663,14 +666,14 @@ void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
     Serial.flush();
 }
 
-void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth) {
+void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth) {
   // Tell radio module to tune
   int result = 0;
   while (!result) {
     if (bandwidth.equals("W")) {
-      result = dra->group(DRA818_25K, freqTx, freqRx, tone, squelch, 0);
+      result = dra->group(DRA818_25K, freqTx, freqRx, txTone, squelch, rxTone);
     } else if (bandwidth.equals("N")) {
-      result = dra->group(DRA818_12K5, freqTx, freqRx, tone, squelch, 0);
+      result = dra->group(DRA818_12K5, freqTx, freqRx, txTone, squelch, rxTone);
     }
   }
   // Serial.println("tuneTo: " + String(result));
