@@ -80,7 +80,7 @@
         <service
             android:name=".radio.RadioAudioService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback"></service>
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
 </manifest>

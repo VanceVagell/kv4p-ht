@@ -502,8 +502,8 @@ public class MainActivity extends AppCompatActivity {
         // Binding to the RadioAudioService causes it to start (e.g. play back audio).
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
 
-        activeFrequencyStr = radioAudioService.getActiveFrequencyStr();
-        intent.putExtra("activeFrequencyStr", activeFrequencyStr);
+        //activeFrequencyStr = radioAudioService.getActiveFrequencyStr();
+        //intent.putExtra("activeFrequencyStr", activeFrequencyStr);
     }
 
     @Override
@@ -564,8 +564,8 @@ public class MainActivity extends AppCompatActivity {
             // Binding to the RadioAudioService causes it to start (e.g. play back audio).
             bindService(intent, connection, Context.BIND_AUTO_CREATE);
 
-            activeFrequencyStr = radioAudioService.getActiveFrequencyStr();
-            intent.putExtra("activeFrequencyStr", activeFrequencyStr);
+            //activeFrequencyStr = radioAudioService.getActiveFrequencyStr();
+            //intent.putExtra("activeFrequencyStr", activeFrequencyStr);
         }
     }
 
