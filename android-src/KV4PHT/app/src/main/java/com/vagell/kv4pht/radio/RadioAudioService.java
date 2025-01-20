@@ -1229,7 +1229,7 @@ public class RadioAudioService extends Service {
                         audioTrack.write(pcm16, 0, pcm16.length);
 
                         // Add the audio samples to the AFSK demodulator.
-                        float[] audioAsFloats = convertPCM8ToFloatArray(data);
+                        float[] audioAsFloats = convertPCM8SignedToFloatArray(data);
                         afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
                     }
 
@@ -1472,17 +1472,14 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private float[] convertPCM8ToFloatArray(byte[] pcm8Data) {
+    private float[] convertPCM8SignedToFloatArray(byte[] pcm8Data) {
         // Create a float array of the same length as the input byte array
         float[] floatData = new float[pcm8Data.length];
 
         // Iterate through the byte array and convert each sample
         for (int i = 0; i < pcm8Data.length; i++) {
-            // Convert unsigned 8-bit PCM to signed 8-bit value
-            int signedValue = (pcm8Data[i] & 0xFF) - 128;
-
             // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = signedValue / 128.0f;
+            floatData[i] = pcm8Data[i] / 128.0f;
         }
 
         return floatData;
