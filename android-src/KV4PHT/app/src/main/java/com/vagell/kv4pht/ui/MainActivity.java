@@ -1795,7 +1795,7 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
         intent.putExtra("selectedMemoryGroup", selectedMemoryGroup);
         intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RADIO_MODULE_VHF)));
-        
+
         startActivityForResult(intent, REQUEST_ADD_MEMORY);
     }
 
