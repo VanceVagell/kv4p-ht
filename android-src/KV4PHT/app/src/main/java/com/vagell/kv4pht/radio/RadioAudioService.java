@@ -180,15 +180,17 @@ public class RadioAudioService extends Service {
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
-    private static int maxFreq = 148; // in MHz
+    private static int maxFreq = 148; // in MHz // TODO replace this with getMaxFreq() and base it on radioType. also need getMinFreq().
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
-    private static final String RADIO_MODULE_UNKNOWN = "x"; // These 3 constants must match firmware code
-    private static final String RADIO_MODULE_VHF = "v";
-    private static final String RADIO_MODULE_UHF = "u";
-    private String radioType = RADIO_MODULE_UNKNOWN;
+    private static final String RADIO_MODULE_NOT_FOUND = "x";
+    private static final String RADIO_MODULE_FOUND = "f";
+    public static final String RADIO_MODULE_VHF = "v";
+    public static final String RADIO_MODULE_UHF = "u";
+    private String radioType = RADIO_MODULE_VHF;
     private boolean radioModuleNotFound = false;
+    private boolean checkedFirmwareVersion = false;
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -537,7 +539,7 @@ public class RadioAudioService extends Service {
 
         if (serialPort != null) {
             sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) +
-                    makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel +
+                    makeSafe2MFreq(activeFrequencyStr) + "0000" + squelchLevel +
                     (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
@@ -891,6 +893,7 @@ public class RadioAudioService extends Service {
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
+        checkedFirmwareVersion = false;
 
         Log.d("DEBUG", "Connected to ESP32.");
 
@@ -899,16 +902,36 @@ public class RadioAudioService extends Service {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                checkFirmwareVersion();
+                if (!checkedFirmwareVersion) {
+                    checkFirmwareVersion();
+                }
             }
         }, 3000);
     }
 
+    /**
+     * @param radioType should be RADIO_TYPE_UHF or RADIO_TYPE_VHF
+     */
+    public void setRadioType(String radioType) {
+        if (this.radioType.equals(radioType)) {
+            this.radioType = radioType;
+        } else { // If we're changing radio type, need to reinit connection to ESP32 so it knows what kind of module it has.
+            this.radioType = radioType;
+            setMode(MODE_STARTUP);
+            checkedFirmwareVersion = false;
+            checkFirmwareVersion();
+        }
+    }
+
     private void checkFirmwareVersion() {
+        checkedFirmwareVersion = true; // To prevent multiple USB connect events from spamming the ESP32 with requests (which can cause logic errors).
+
         // Verify that the firmware of the ESP32 app is supported.
         setMode(MODE_STARTUP);
         sendCommandToESP32(ESP32Command.STOP); // Tell ESP32 app to stop whatever it's doing.
         sendCommandToESP32(ESP32Command.GET_FIRMWARE_VER); // Ask for firmware ver.
+        Log.d("DEBUG", "Telling firmware that radio is: " + (radioType.equals(RADIO_MODULE_UHF) ? "UHF" : "VHF"));
+        sendBytesToESP32(radioType.getBytes());
         // The version is actually evaluated in handleESP32Data().
 
         // If we don't hear back from the ESP32, it means the firmware is either not
@@ -1212,28 +1235,22 @@ public class RadioAudioService extends Service {
                     } else {
                         Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + verInt + ").");
 
-                        String radioTypeStr = versionStrBuffer.substring(startIdx + VERSION_LENGTH, startIdx + VERSION_LENGTH + 1);
-                        Log.d("DEBUG", "Radio type: '" + radioTypeStr + "'");
+                        String radioStatusStr = versionStrBuffer.substring(startIdx + VERSION_LENGTH, startIdx + VERSION_LENGTH + 1);
+                        Log.d("DEBUG", "Radio status: '" + radioStatusStr + "'");
 
-                        if (radioTypeStr.equals(RADIO_MODULE_UNKNOWN)) {
-                            radioType = RADIO_MODULE_UNKNOWN;
-                        } else if (radioTypeStr.equals(RADIO_MODULE_VHF)) {
-                            radioType = RADIO_MODULE_VHF;
-                        } else if (radioTypeStr.equals(RADIO_MODULE_UHF)) {
-                            radioType = RADIO_MODULE_UHF;
+                        if (radioStatusStr.equals(RADIO_MODULE_NOT_FOUND)) {
+                            radioModuleNotFound = true;
+                        } else if (radioStatusStr.equals(RADIO_MODULE_FOUND)) {
+                            radioModuleNotFound = false;
                         } else {
-                            Log.d("DEBUG", "Error: unexpected radio type received '" + radioTypeStr + "'");
-                            radioType = RADIO_MODULE_UNKNOWN;
+                            Log.d("DEBUG", "Error: unexpected radio status received '" + radioStatusStr + "'");
                         }
 
                         versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
 
-                        if (radioType.equals(RADIO_MODULE_UNKNOWN)) {
-                            radioModuleNotFound = true;
+                        if (radioModuleNotFound) {
                             callbacks.radioModuleNotFound();
                             return;
-                        } else {
-                            radioModuleNotFound = false;
                         }
 
                         initAfterESP32Connected();

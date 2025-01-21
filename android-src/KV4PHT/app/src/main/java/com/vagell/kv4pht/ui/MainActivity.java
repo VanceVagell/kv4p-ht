@@ -930,6 +930,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 AppSetting callsignSetting = viewModel.appDb.appSettingDao().getByName("callsign");
                 AppSetting squelchSetting = viewModel.appDb.appSettingDao().getByName("squelch");
+                AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
                 AppSetting emphasisSetting = viewModel.appDb.appSettingDao().getByName("emphasis");
                 AppSetting highpassSetting = viewModel.appDb.appSettingDao().getByName("highpass");
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
@@ -947,6 +948,15 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        // The module type setting is most important, because if it changed then
+                        // we need to reconnect to the ESP32 (it had incorrect module type).
+                        if (moduleTypeSetting != null) {
+                            if (radioAudioService != null) {
+                                radioAudioService.setRadioType(moduleTypeSetting.value.equals("UHF") ?
+                                        RadioAudioService.RADIO_MODULE_UHF : RadioAudioService.RADIO_MODULE_VHF);
+                            }
+                        }
+
                         if (callsignSetting != null) {
                             callsign = callsignSetting.value;
 
