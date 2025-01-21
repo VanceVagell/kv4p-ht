@@ -226,6 +226,7 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
                 intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
                 intent.putExtra("memoryId", memory.memoryId);
+                intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RADIO_MODULE_VHF)));
                 startActivityForResult(intent, REQUEST_EDIT_MEMORY);
             }
         });
@@ -483,6 +484,13 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void unknownLocation() {
                     showSimpleSnackbar("Can't find your location, no beacon sent");
+                }
+
+                @Override
+                public void forceTunedToFreq(String newFreqStr) {
+                    // This is called when RadioAudioService is changing bands, and we need
+                    // to reflect that in the UI.
+                    tuneToFreqUi(newFreqStr);
                 }
             };
 
@@ -1006,7 +1014,9 @@ public class MainActivity extends AppCompatActivity {
 
                         if (maxFreqSetting != null) {
                             int maxFreq = Integer.parseInt(maxFreqSetting.value);
-                            RadioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
+                            if (radioAudioService != null) {
+                                radioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
+                            }
                         }
 
                         if (micGainBoostSetting != null) {
@@ -1784,7 +1794,8 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("requestCode", REQUEST_ADD_MEMORY);
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
         intent.putExtra("selectedMemoryGroup", selectedMemoryGroup);
-
+        intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RADIO_MODULE_VHF)));
+        
         startActivityForResult(intent, REQUEST_ADD_MEMORY);
     }
 

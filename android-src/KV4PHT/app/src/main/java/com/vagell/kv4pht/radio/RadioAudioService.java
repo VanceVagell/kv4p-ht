@@ -175,12 +175,25 @@ public class RadioAudioService extends Service {
     private Runnable aprsBeaconRunnable = null;
 
     // Radio params and related settings
-    private String activeFrequencyStr = "144.000";
+    private static final float VHF_MIN_FREQ    = 134.0f; // DRA818V lower limit, in MHz
+    private static final float VHF_MIN_FREQ_US = 144.0f; // US 2m band lower limit, in MHz
+    private static final float VHF_MAX_FREQ_US = 148.0f; // US 2m band upper limit, in MHz
+    private static final float VHF_MAX_FREQ    = 174.0f; // DRA818V upper limit, in MHz
+
+    private static final float UHF_MIN_FREQ    = 400.0f; // DRA818U lower limit, in MHz
+    private static final float UHF_MIN_FREQ_US = 420.0f; // US 70cm band lower limit, in MHz
+    private static final float UHF_MAX_FREQ_US = 450.0f; // US 70cm band upper limit, in MHz
+    private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
+
+    private String activeFrequencyStr = String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 4 decimal places, in MHz
     private int squelch = 0;
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
-    private static int maxFreq = 148; // in MHz // TODO replace this with getMaxFreq() and base it on radioType. also need getMinFreq().
+    private static float minRadioFreq = VHF_MIN_FREQ; // in MHz
+    private static float maxRadioFreq = VHF_MAX_FREQ; // in MHz
+    private static float minHamFreq = VHF_MIN_FREQ_US; // in MHz
+    private static float maxHamFreq = VHF_MAX_FREQ_US; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
@@ -289,8 +302,32 @@ public class RadioAudioService extends Service {
         this.bandwidth = bandwidth;
     }
 
-    public static void setMaxFreq(int newMaxFreq) {
-        maxFreq = newMaxFreq;
+    public void setMinRadioFreq(float newMinFreq) {
+        minRadioFreq = newMinFreq;
+
+        // Detect if we're moving from VHF to UHF, and move fix active frequency to within band.
+        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
+            tuneToFreq(String.format(java.util.Locale.US, "%.4f", UHF_MIN_FREQ_US), squelch, true);
+            callbacks.forceTunedToFreq(activeFrequencyStr);
+        }
+    }
+
+    public void setMaxRadioFreq(float newMaxFreq) {
+        maxRadioFreq = newMaxFreq;
+
+        // Detect if we're moving from UHF to VHF, and move fix active frequency to within band.
+        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
+            tuneToFreq(String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US), squelch, true);
+            callbacks.forceTunedToFreq(activeFrequencyStr);
+        }
+    }
+
+    public void setMinFreq(float newMinFreq) {
+        minHamFreq = newMinFreq;
+    }
+
+    public void setMaxFreq(float newMaxFreq) {
+        maxHamFreq = newMaxFreq;
     }
 
     public void setAprsBeaconPosition(boolean aprsBeaconPosition) {
@@ -439,6 +476,7 @@ public class RadioAudioService extends Service {
         public void aprsBeaconing(boolean beaconing, int accuracy);
         public void sentAprsBeacon(double latitude, double longitude);
         public void unknownLocation();
+        public void forceTunedToFreq(String newFreqStr);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -548,8 +586,8 @@ public class RadioAudioService extends Service {
 
         try {
             Float freq = Float.parseFloat(makeSafe2MFreq(activeFrequencyStr));
-            Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
-            if (freq < 144.0f || freq > offsetMaxFreq) {
+            Float offsetMaxFreq = maxHamFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
+            if (freq < minHamFreq|| freq > offsetMaxFreq) {
                 txAllowed = false;
             } else {
                 txAllowed = true;
@@ -564,16 +602,16 @@ public class RadioAudioService extends Service {
         try {
             freq = Float.parseFloat(strFreq);
         } catch (NumberFormatException nfe) {
-            return "144.0000";
+            return String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 4 decimal places, in MHz
         }
         while (freq > 500.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
         }
 
-        if (freq < 134.0f) {
-            freq = 134.0f; // Lowest freq supported by radio module
-        } else if (freq > 174.0f) {
-            freq = 174.0f; // Highest freq supported
+        if (freq < minRadioFreq) {
+            freq = minRadioFreq; // Lowest freq supported by radio module
+        } else if (freq > maxRadioFreq) {
+            freq = maxRadioFreq; // Highest freq supported
         }
 
         strFreq = String.format(java.util.Locale.US,"%.4f", freq);
@@ -639,8 +677,8 @@ public class RadioAudioService extends Service {
 
         try {
             Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
-            Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
-            if (txFreq < 144.0f || txFreq > offsetMaxFreq) {
+            Float offsetMaxFreq = maxHamFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
+            if (txFreq < minHamFreq || txFreq > offsetMaxFreq) {
                 txAllowed = false;
             } else {
                 txAllowed = true;
@@ -913,14 +951,31 @@ public class RadioAudioService extends Service {
      * @param radioType should be RADIO_TYPE_UHF or RADIO_TYPE_VHF
      */
     public void setRadioType(String radioType) {
-        if (this.radioType.equals(radioType)) {
+        if (!this.radioType.equals(radioType)) {
             this.radioType = radioType;
-        } else { // If we're changing radio type, need to reinit connection to ESP32 so it knows what kind of module it has.
-            this.radioType = radioType;
+
+            // Ensure frequencies we're using match the radioType
+            if (radioType.equals(RADIO_MODULE_VHF)) {
+                setMinRadioFreq(VHF_MIN_FREQ);
+                setMinFreq(VHF_MIN_FREQ_US);
+                setMaxFreq(VHF_MAX_FREQ_US);
+                setMaxRadioFreq(VHF_MAX_FREQ);
+            } else if (radioType.equals(RADIO_MODULE_UHF)) {
+                setMinRadioFreq(UHF_MIN_FREQ);
+                setMinFreq(UHF_MIN_FREQ_US);
+                setMaxFreq(UHF_MAX_FREQ_US);
+                setMaxRadioFreq(UHF_MAX_FREQ);
+            }
+
+            // Re-init connection to ESP32 so it knows what kind of module it has.
             setMode(MODE_STARTUP);
             checkedFirmwareVersion = false;
             checkFirmwareVersion();
         }
+    }
+
+    public String getRadioType() {
+        return radioType;
     }
 
     private void checkFirmwareVersion() {
@@ -1202,7 +1257,7 @@ public class RadioAudioService extends Service {
     }
 
     private void handleESP32Data(byte[] data) {
-            // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
+        // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
          /* try {
             String dataStr = new String(data, "UTF-8");
             if (dataStr.length() < 100 && dataStr.length() > 0)
@@ -1210,7 +1265,7 @@ public class RadioAudioService extends Service {
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             } */
-            // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
+        // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
 
         if (mode == MODE_STARTUP) {
             try {
