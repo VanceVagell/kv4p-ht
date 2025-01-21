@@ -113,6 +113,7 @@ public class MainActivity extends AppCompatActivity {
     private Snackbar usbSnackbar = null;
     private Snackbar callsignSnackbar = null;
     private Snackbar versionSnackbar = null;
+    private Snackbar radioModuleNotFoundSnackbar = null;
 
     // Android permission stuff
     private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
@@ -330,8 +331,17 @@ public class MainActivity extends AppCompatActivity {
                         versionSnackbar.dismiss();
                         versionSnackbar = null;
                     }
+                    if (radioModuleNotFoundSnackbar != null) {
+                        radioModuleNotFoundSnackbar.dismiss();
+                        radioModuleNotFoundSnackbar = null;
+                    }
                     applySettings();
                     findViewById(R.id.pttButton).setClickable(true);
+                }
+
+                @Override
+                public void radioModuleNotFound() {
+                    showRadioModuleNotFoundSnackbar();
                 }
 
                 @Override
@@ -387,7 +397,7 @@ public class MainActivity extends AppCompatActivity {
                             }
 
                             Float freq = Float.parseFloat(memory.frequency);
-                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + 0.6f) : (freq - 0.6f);
+                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + (0f + memory.offsetKhz / 1000f)) : (freq - (0f + memory.offsetKhz / 1000f));
                             showFrequency(radioAudioService.validateFrequency("" + freq));
                             break;
                         }
@@ -1645,6 +1655,21 @@ public class MainActivity extends AppCompatActivity {
         snackbarTextView.setTextSize(20);
 
         usbSnackbar.show();
+    }
+
+    private void showRadioModuleNotFoundSnackbar() {
+        CharSequence snackbarMsg = "Radio module not responding to ESP32, check PCB solder joints";
+        radioModuleNotFoundSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
+                .setAnchorView(findViewById(R.id.bottomNavigationView));
+
+        // Make the text of the snackbar larger.
+        TextView snackbarActionTextView = (TextView) radioModuleNotFoundSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        snackbarActionTextView.setTextSize(20);
+        TextView snackbarTextView = (TextView) radioModuleNotFoundSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        radioModuleNotFoundSnackbar.show();
     }
 
     /**
