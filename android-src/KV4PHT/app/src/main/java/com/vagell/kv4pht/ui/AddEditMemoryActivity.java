@@ -43,6 +43,7 @@ import java.util.concurrent.TimeUnit;
 
 public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isAdd = true; // false means we're editing a memory, not adding
+    private boolean isVhfRadio = true; // false means UHF radio
     private List<String> mTones;
     private ThreadPoolExecutor threadPoolExecutor = null;
     private int mMemoryId;
@@ -103,6 +104,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         Bundle extras = getIntent().getExtras();
         if (extras != null) {
             isAdd = (extras.getInt("requestCode") == MainActivity.REQUEST_ADD_MEMORY);
+            isVhfRadio = (extras.getBoolean("isVhfRadio"));
             if (!isAdd) { // Edit
                 mMemoryId = extras.getInt("memoryId");
                 threadPoolExecutor.execute(new Runnable() {
@@ -113,6 +115,8 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                        }
                 });
             } else { // Add
+                populateDefaults();
+
                 mMemoryId = -1; // This ID is never used, just to help with debugging.
 
                 String activeFrequencyStr = extras.getString("activeFrequencyStr");
@@ -236,6 +240,16 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         AutoCompleteTextView editToneRxTextView = findViewById(R.id.editToneRxTextView);
         ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, mTones);
         editToneRxTextView.setAdapter(arrayAdapter2);
+    }
+
+    private void populateDefaults() {
+        TextInputEditText customOffsetTextInputEditText = findViewById(R.id.customOffsetTextInputEditText);
+
+        if (isVhfRadio) {
+            customOffsetTextInputEditText.setText("600");
+        } else {
+            customOffsetTextInputEditText.setText("5000");
+        }
     }
 
     private void populateOriginalValues() {

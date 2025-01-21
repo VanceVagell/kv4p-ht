@@ -81,6 +81,54 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/jost"
+                android:text="Radio"
+                android:textColor="@color/primary_deselected"
+                android:textSize="16dp"
+                android:layout_marginTop="16dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/jost"
+                    android:text="Radio module type"
+                    android:textColor="@color/primary"
+                    android:textSize="18dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_weight="1"
+                    android:labelFor="@id/radioModuleTypeTextView"/>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:padding="0dp"
+                    android:layout_weight="0"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    app:hintTextColor="@color/primary_deselected"
+                    app:boxStrokeColor="@color/primary"
+                    android:textColorHint="@color/primary_deselected">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/radioModuleTypeTextView"
+                        android:layout_width="160dp"
+                        android:layout_height="wrap_content"
+                        android:padding="0dp"
+                        android:layout_weight="1"
+                        android:inputType="none"
+                        android:text="VHF"
+                        android:textSize="20dp"
+                        android:textColor="@color/primary"/>
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/jost"
                 android:text="Filters"
                 android:textColor="@color/primary_deselected"
                 android:textSize="16dp"
