@@ -306,8 +306,6 @@ void loop() {
 
           Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX)); // "VERSION"
           Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));     // "00000007" (or whatever)
-
-          // Append radio module info to end, "f" (found) or "x" (can't contact module).
           uint8_t radioModuleStatusArray[1] = { radioModuleStatus };
           Serial.write(radioModuleStatusArray, 1);              // "f" (or "x" if there's a problem with radio module)
 

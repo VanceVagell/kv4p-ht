@@ -967,10 +967,12 @@ public class RadioAudioService extends Service {
                 setMaxRadioFreq(UHF_MAX_FREQ);
             }
 
-            // Re-init connection to ESP32 so it knows what kind of module it has.
-            setMode(MODE_STARTUP);
-            checkedFirmwareVersion = false;
-            checkFirmwareVersion();
+            if (mode != MODE_STARTUP) {
+                // Re-init connection to ESP32 so it knows what kind of module it has.
+                setMode(MODE_STARTUP);
+                checkedFirmwareVersion = false;
+                checkFirmwareVersion();
+            }
         }
     }
 

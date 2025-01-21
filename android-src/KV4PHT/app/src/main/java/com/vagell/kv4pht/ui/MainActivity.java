@@ -496,7 +496,23 @@ public class MainActivity extends AppCompatActivity {
 
             radioAudioService.setCallbacks(callbacks);
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
-            radioAudioService.start();
+
+            // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
+            threadPoolExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            radioAudioService.setRadioType(moduleTypeSetting.value.equals("UHF") ?
+                                    RadioAudioService.RADIO_MODULE_UHF : RadioAudioService.RADIO_MODULE_VHF);
+                            radioAudioService.start();
+                        }
+                    });
+                }
+            });
         }
 
         @Override
