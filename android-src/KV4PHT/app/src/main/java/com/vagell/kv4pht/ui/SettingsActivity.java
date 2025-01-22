@@ -64,6 +64,7 @@ public class SettingsActivity extends AppCompatActivity {
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         populateOriginalValues();
+        populateRadioModuleTypes();
         populateBandwidths();
         populateMaxFrequencies();
         populateMicGainOptions();
@@ -94,6 +95,17 @@ public class SettingsActivity extends AppCompatActivity {
 
         ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
         bandwidthTextView.setAdapter(arrayAdapter);
+    }
+
+    private void populateRadioModuleTypes() {
+        AutoCompleteTextView radioModuleTypeTextView = findViewById(R.id.radioModuleTypeTextView);
+
+        List<String> bandwidths = new ArrayList<String>();
+        bandwidths.add("VHF");
+        bandwidths.add("UHF");
+
+        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
+        radioModuleTypeTextView.setAdapter(arrayAdapter);
     }
 
     private void populateMaxFrequencies() {
@@ -141,6 +153,7 @@ public class SettingsActivity extends AppCompatActivity {
             public void run() {
                 AppSetting callsignSetting = MainViewModel.appDb.appSettingDao().getByName("callsign");
                 AppSetting squelchSetting = MainViewModel.appDb.appSettingDao().getByName("squelch");
+                AppSetting moduleTypeSetting = MainViewModel.appDb.appSettingDao().getByName("moduleType");
                 AppSetting emphasisSetting = MainViewModel.appDb.appSettingDao().getByName("emphasis");
                 AppSetting highpassSetting = MainViewModel.appDb.appSettingDao().getByName("highpass");
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
@@ -163,6 +176,11 @@ public class SettingsActivity extends AppCompatActivity {
                         if (squelchSetting != null) {
                             Slider squelchSlider = (Slider) (findViewById(R.id.squelchSlider));
                             squelchSlider.setValue(Float.parseFloat(squelchSetting.value));
+                        }
+
+                        if (moduleTypeSetting != null) {
+                            AutoCompleteTextView radioModuleTypeTextView = (AutoCompleteTextView) findViewById(R.id.radioModuleTypeTextView);
+                            radioModuleTypeTextView.setText(moduleTypeSetting.value, false);
                         }
 
                         if (emphasisSetting != null) {
@@ -266,6 +284,23 @@ public class SettingsActivity extends AppCompatActivity {
             @SuppressLint("RestrictedApi")
             public void onValueChange(@NonNull Slider slider, float v, boolean b) {
                 setSquelch((int)slider.getValue());
+            }
+        });
+
+        TextView radioModuleTypeTextView = findViewById(R.id.radioModuleTypeTextView);
+        radioModuleTypeTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.radioModuleTypeTextView)).getText().toString().trim();
+                setRadioModuleType(newText);
             }
         });
 
@@ -425,6 +460,30 @@ public class SettingsActivity extends AppCompatActivity {
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
                     setting.value = aprsPositionAccuracy;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param radioModuleType "VHF" or "UHF"
+     */
+    private void setRadioModuleType(String radioModuleType) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("moduleType");
+
+                if (setting == null) {
+                    setting = new AppSetting("moduleType", radioModuleType);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = radioModuleType;
                     MainViewModel.appDb.appSettingDao().update(setting);
                 }
             }

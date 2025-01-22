@@ -113,6 +113,7 @@ public class MainActivity extends AppCompatActivity {
     private Snackbar usbSnackbar = null;
     private Snackbar callsignSnackbar = null;
     private Snackbar versionSnackbar = null;
+    private Snackbar radioModuleNotFoundSnackbar = null;
 
     // Android permission stuff
     private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
@@ -225,6 +226,7 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
                 intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
                 intent.putExtra("memoryId", memory.memoryId);
+                intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RADIO_MODULE_VHF)));
                 startActivityForResult(intent, REQUEST_EDIT_MEMORY);
             }
         });
@@ -330,8 +332,17 @@ public class MainActivity extends AppCompatActivity {
                         versionSnackbar.dismiss();
                         versionSnackbar = null;
                     }
+                    if (radioModuleNotFoundSnackbar != null) {
+                        radioModuleNotFoundSnackbar.dismiss();
+                        radioModuleNotFoundSnackbar = null;
+                    }
                     applySettings();
                     findViewById(R.id.pttButton).setClickable(true);
+                }
+
+                @Override
+                public void radioModuleNotFound() {
+                    showRadioModuleNotFoundSnackbar();
                 }
 
                 @Override
@@ -387,7 +398,7 @@ public class MainActivity extends AppCompatActivity {
                             }
 
                             Float freq = Float.parseFloat(memory.frequency);
-                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + 0.6f) : (freq - 0.6f);
+                            freq = (memory.offset == ChannelMemory.OFFSET_UP) ? (freq + (0f + memory.offsetKhz / 1000f)) : (freq - (0f + memory.offsetKhz / 1000f));
                             showFrequency(radioAudioService.validateFrequency("" + freq));
                             break;
                         }
@@ -474,11 +485,34 @@ public class MainActivity extends AppCompatActivity {
                 public void unknownLocation() {
                     showSimpleSnackbar("Can't find your location, no beacon sent");
                 }
+
+                @Override
+                public void forceTunedToFreq(String newFreqStr) {
+                    // This is called when RadioAudioService is changing bands, and we need
+                    // to reflect that in the UI.
+                    tuneToFreqUi(newFreqStr);
+                }
             };
 
             radioAudioService.setCallbacks(callbacks);
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
-            radioAudioService.start();
+
+            // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
+            threadPoolExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            radioAudioService.setRadioType(moduleTypeSetting.value.equals("UHF") ?
+                                    RadioAudioService.RADIO_MODULE_UHF : RadioAudioService.RADIO_MODULE_VHF);
+                            radioAudioService.start();
+                        }
+                    });
+                }
+            });
         }
 
         @Override
@@ -920,6 +954,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 AppSetting callsignSetting = viewModel.appDb.appSettingDao().getByName("callsign");
                 AppSetting squelchSetting = viewModel.appDb.appSettingDao().getByName("squelch");
+                AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
                 AppSetting emphasisSetting = viewModel.appDb.appSettingDao().getByName("emphasis");
                 AppSetting highpassSetting = viewModel.appDb.appSettingDao().getByName("highpass");
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
@@ -937,6 +972,15 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        // The module type setting is most important, because if it changed then
+                        // we need to reconnect to the ESP32 (it had incorrect module type).
+                        if (moduleTypeSetting != null) {
+                            if (radioAudioService != null) {
+                                radioAudioService.setRadioType(moduleTypeSetting.value.equals("UHF") ?
+                                        RadioAudioService.RADIO_MODULE_UHF : RadioAudioService.RADIO_MODULE_VHF);
+                            }
+                        }
+
                         if (callsignSetting != null) {
                             callsign = callsignSetting.value;
 
@@ -986,7 +1030,9 @@ public class MainActivity extends AppCompatActivity {
 
                         if (maxFreqSetting != null) {
                             int maxFreq = Integer.parseInt(maxFreqSetting.value);
-                            RadioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
+                            if (radioAudioService != null) {
+                                radioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
+                            }
                         }
 
                         if (micGainBoostSetting != null) {
@@ -1272,6 +1318,9 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.sMeter7).setAlpha(value > 6 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
         findViewById(R.id.sMeter8).setAlpha(value > 7 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
         findViewById(R.id.sMeter9).setAlpha(value > 8 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+
+        View sMeterView = findViewById(R.id.sMeter);
+        sMeterView.setContentDescription("S meter " + value + " of 9");
     }
 
     private void hideKeyboard() {
@@ -1644,6 +1693,21 @@ public class MainActivity extends AppCompatActivity {
         usbSnackbar.show();
     }
 
+    private void showRadioModuleNotFoundSnackbar() {
+        CharSequence snackbarMsg = "Radio module not responding to ESP32, check PCB solder joints";
+        radioModuleNotFoundSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
+                .setAnchorView(findViewById(R.id.bottomNavigationView));
+
+        // Make the text of the snackbar larger.
+        TextView snackbarActionTextView = (TextView) radioModuleNotFoundSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        snackbarActionTextView.setTextSize(20);
+        TextView snackbarTextView = (TextView) radioModuleNotFoundSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        radioModuleNotFoundSnackbar.show();
+    }
+
     /**
      * Alerts the user to missing or old firmware with the option to flash the latest.
      * @param firmwareVer The currently installed firmware version, or -1 if no firmware installed.
@@ -1746,6 +1810,7 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("requestCode", REQUEST_ADD_MEMORY);
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
         intent.putExtra("selectedMemoryGroup", selectedMemoryGroup);
+        intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RADIO_MODULE_VHF)));
 
         startActivityForResult(intent, REQUEST_ADD_MEMORY);
     }

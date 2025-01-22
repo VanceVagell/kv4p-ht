@@ -118,7 +118,7 @@
                         android:layout_weight="0"
                         android:layout_marginTop="8dp"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        android:hint="Offset"
+                        android:hint="Offset direction"
                         app:hintTextColor="@color/primary_deselected"
                         app:boxStrokeColor="@color/primary"
                         android:textColorHint="@color/primary_deselected"
@@ -141,14 +141,14 @@
                         android:layout_weight="0"
                         android:layout_marginTop="8dp"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        android:hint="Tone"
+                        android:hint="Tone (TX)"
                         app:hintTextColor="@color/primary_deselected"
                         app:boxStrokeColor="@color/primary"
                         android:textColorHint="@color/primary_deselected"
                         android:paddingBottom="16dp">
 
                         <AutoCompleteTextView
-                            android:id="@+id/editToneTextView"
+                            android:id="@+id/editToneTxTextView"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
                             android:layout_weight="1"
@@ -158,6 +158,83 @@
                             android:textColor="@color/primary"/>
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
+
+                <Button
+                    android:id="@+id/advancedMemoryOptionsButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="56dp"
+                    android:layout_weight="0"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:text="Show advanced options"
+                    android:textSize="20dp"
+                    android:textFontWeight="500"
+                    android:textColor="@color/primary"
+                    android:textAllCaps="false"
+                    android:enabled="true"
+                    android:onClick="advancedMemoryOptionsButtonClicked"/>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/editToneRxTextInputLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:layout_marginTop="8dp"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    android:hint="Tone (RX)"
+                    app:hintTextColor="@color/primary_deselected"
+                    app:boxStrokeColor="@color/primary"
+                    android:textColorHint="@color/primary_deselected"
+                    android:paddingBottom="16dp"
+                    android:visibility="gone">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/editToneRxTextView"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:inputType="none"
+                        android:text="None"
+                        android:textSize="20dp"
+                        android:textColor="@color/primary"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/customOffsetTextInputLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0"
+                    android:layout_marginTop="8dp"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:hint="Custom offset (kHz)"
+                    app:hintTextColor="@color/primary_deselected"
+                    app:boxStrokeColor="@color/primary"
+                    android:textColorHint="@color/primary_deselected"
+                    android:paddingBottom="16dp"
+                    android:visibility="gone">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/customOffsetTextInputEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:textSize="20dp"
+                        android:inputType="numberDecimal"
+                        android:textColor="@color/primary"
+                        android:text="600">
+                    </com.google.android.material.textfield.TextInputEditText>
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <Switch
+                    android:id="@+id/skipDuringScanSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Skip during scan"
+                    android:textSize="18dp"
+                    android:textColor="@color/primary"
+                    android:layout_marginTop="8dp"
+                    android:trackTintMode="add"
+                    android:visibility="gone"/>
+
             </LinearLayout>
         </ScrollView>
     </LinearLayout>
