@@ -138,6 +138,7 @@ public class RadioAudioService extends Service {
     private SerialInputOutputManager usbIoManager;
     private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a single USB write
     private Map<String, Integer> mTones = new HashMap<>();
+    private static final int MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP = 400;
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
@@ -172,15 +173,35 @@ public class RadioAudioService extends Service {
     private Runnable aprsBeaconRunnable = null;
 
     // Radio params and related settings
-    private String activeFrequencyStr = "144.000";
+    private static final float VHF_MIN_FREQ    = 134.0f; // DRA818V lower limit, in MHz
+    private static final float VHF_MIN_FREQ_US = 144.0f; // US 2m band lower limit, in MHz
+    private static final float VHF_MAX_FREQ_US = 148.0f; // US 2m band upper limit, in MHz
+    private static final float VHF_MAX_FREQ    = 174.0f; // DRA818V upper limit, in MHz
+
+    private static final float UHF_MIN_FREQ    = 400.0f; // DRA818U lower limit, in MHz
+    private static final float UHF_MIN_FREQ_US = 420.0f; // US 70cm band lower limit, in MHz
+    private static final float UHF_MAX_FREQ_US = 450.0f; // US 70cm band upper limit, in MHz
+    private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
+
+    private String activeFrequencyStr = String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 4 decimal places, in MHz
     private int squelch = 0;
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
-    private static int maxFreq = 148; // in MHz
+    private static float minRadioFreq = VHF_MIN_FREQ; // in MHz
+    private static float maxRadioFreq = VHF_MAX_FREQ; // in MHz
+    private static float minHamFreq = VHF_MIN_FREQ_US; // in MHz
+    private static float maxHamFreq = VHF_MAX_FREQ_US; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
+    private static final String RADIO_MODULE_NOT_FOUND = "x";
+    private static final String RADIO_MODULE_FOUND = "f";
+    public static final String RADIO_MODULE_VHF = "v";
+    public static final String RADIO_MODULE_UHF = "u";
+    private String radioType = RADIO_MODULE_VHF;
+    private boolean radioModuleNotFound = false;
+    private boolean checkedFirmwareVersion = false;
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -279,8 +300,32 @@ public class RadioAudioService extends Service {
         this.bandwidth = bandwidth;
     }
 
-    public static void setMaxFreq(int newMaxFreq) {
-        maxFreq = newMaxFreq;
+    public void setMinRadioFreq(float newMinFreq) {
+        minRadioFreq = newMinFreq;
+
+        // Detect if we're moving from VHF to UHF, and move fix active frequency to within band.
+        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
+            tuneToFreq(String.format(java.util.Locale.US, "%.4f", UHF_MIN_FREQ_US), squelch, true);
+            callbacks.forceTunedToFreq(activeFrequencyStr);
+        }
+    }
+
+    public void setMaxRadioFreq(float newMaxFreq) {
+        maxRadioFreq = newMaxFreq;
+
+        // Detect if we're moving from UHF to VHF, and move fix active frequency to within band.
+        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
+            tuneToFreq(String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US), squelch, true);
+            callbacks.forceTunedToFreq(activeFrequencyStr);
+        }
+    }
+
+    public void setMinFreq(float newMinFreq) {
+        minHamFreq = newMinFreq;
+    }
+
+    public void setMaxFreq(float newMaxFreq) {
+        maxHamFreq = newMaxFreq;
     }
 
     public void setAprsBeaconPosition(boolean aprsBeaconPosition) {
@@ -415,6 +460,7 @@ public class RadioAudioService extends Service {
     public interface RadioAudioServiceCallbacks {
         public void radioMissing();
         public void radioConnected();
+        public void radioModuleNotFound();
         public void audioTrackCreated();
         public void packetReceived(APRSPacket aprsPacket);
         public void scannedToMemory(int memoryId);
@@ -428,6 +474,7 @@ public class RadioAudioService extends Service {
         public void aprsBeaconing(boolean beaconing, int accuracy);
         public void sentAprsBeacon(double latitude, double longitude);
         public void unknownLocation();
+        public void forceTunedToFreq(String newFreqStr);
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -528,7 +575,7 @@ public class RadioAudioService extends Service {
 
         if (serialPort != null) {
             sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) +
-                    makeSafe2MFreq(activeFrequencyStr) + "00" + squelchLevel +
+                    makeSafe2MFreq(activeFrequencyStr) + "0000" + squelchLevel +
                     (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
@@ -537,8 +584,8 @@ public class RadioAudioService extends Service {
 
         try {
             Float freq = Float.parseFloat(makeSafe2MFreq(activeFrequencyStr));
-            Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
-            if (freq < 144.0f || freq > offsetMaxFreq) {
+            Float offsetMaxFreq = maxHamFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
+            if (freq < minHamFreq|| freq > offsetMaxFreq) {
                 txAllowed = false;
             } else {
                 txAllowed = true;
@@ -553,16 +600,16 @@ public class RadioAudioService extends Service {
         try {
             freq = Float.parseFloat(strFreq);
         } catch (NumberFormatException nfe) {
-            return "144.0000";
+            return String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 4 decimal places, in MHz
         }
         while (freq > 500.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
         }
 
-        if (freq < 134.0f) {
-            freq = 134.0f; // Lowest freq supported by radio module
-        } else if (freq > 174.0f) {
-            freq = 174.0f; // Highest freq supported
+        if (freq < minRadioFreq) {
+            freq = minRadioFreq; // Lowest freq supported by radio module
+        } else if (freq > maxRadioFreq) {
+            freq = maxRadioFreq; // Highest freq supported
         }
 
         strFreq = String.format(java.util.Locale.US,"%.4f", freq);
@@ -618,8 +665,8 @@ public class RadioAudioService extends Service {
 
         if (serialPort != null) {
             sendCommandToESP32(ESP32Command.TUNE_TO,
-                    getTxFreq(memory.frequency, memory.offset) + makeSafe2MFreq(memory.frequency) +
-                            getToneIdxStr(memory.tone) + squelchLevel +
+                    getTxFreq(memory.frequency, memory.offset, memory.offsetKhz) + makeSafe2MFreq(memory.frequency) +
+                            getToneIdxStr(memory.txTone) + getToneIdxStr(memory.rxTone) + squelchLevel +
                             (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
@@ -627,9 +674,9 @@ public class RadioAudioService extends Service {
         restartAudioPrebuffer();
 
         try {
-            Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset));
-            Float offsetMaxFreq = maxFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
-            if (txFreq < 144.0f || txFreq > offsetMaxFreq) {
+            Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
+            Float offsetMaxFreq = maxHamFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
+            if (txFreq < minHamFreq || txFreq > offsetMaxFreq) {
                 txAllowed = false;
             } else {
                 txAllowed = true;
@@ -649,15 +696,15 @@ public class RadioAudioService extends Service {
         return toneIdx < 10 ? "0" + toneIdx : toneIdx.toString();
     }
 
-    private String getTxFreq(String txFreq, int offset) {
+    private String getTxFreq(String txFreq, int offset, int khz) {
         if (offset == ChannelMemory.OFFSET_NONE) {
             return txFreq;
         } else {
             Float freqFloat = Float.parseFloat(txFreq);
             if (offset == ChannelMemory.OFFSET_UP) {
-                freqFloat += .600f;
+                freqFloat += 0f + (khz / 1000f);
             } else if (offset == ChannelMemory.OFFSET_DOWN){
-                freqFloat -= .600f;
+                freqFloat -= 0f + (khz / 1000f);
             }
             return makeSafe2MFreq(freqFloat.toString());
         }
@@ -748,10 +795,19 @@ public class RadioAudioService extends Service {
             return;
         }
         setMode(MODE_RX);
-        sendCommandToESP32(ESP32Command.PTT_UP);
-        audioTrack.flush();
-        restartAudioPrebuffer();
-        callbacks.txEnded();
+
+        // Hold off on telling the ESP32 firmware to PTT_UP, because we want the last bit of
+        // tx audio to be transmitted first (it's stuck in buffers).
+        final Handler handler = new Handler(Looper.getMainLooper());
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                sendCommandToESP32(ESP32Command.PTT_UP);
+                audioTrack.flush();
+                restartAudioPrebuffer();
+                callbacks.txEnded();
+            }
+        }, MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP);
     }
 
     public void reconnectViaUSB() {
@@ -873,6 +929,7 @@ public class RadioAudioService extends Service {
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
         usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.start();
+        checkedFirmwareVersion = false;
 
         Log.d("DEBUG", "Connected to ESP32.");
 
@@ -881,16 +938,55 @@ public class RadioAudioService extends Service {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                checkFirmwareVersion();
+                if (!checkedFirmwareVersion) {
+                    checkFirmwareVersion();
+                }
             }
         }, 3000);
     }
 
+    /**
+     * @param radioType should be RADIO_TYPE_UHF or RADIO_TYPE_VHF
+     */
+    public void setRadioType(String radioType) {
+        if (!this.radioType.equals(radioType)) {
+            this.radioType = radioType;
+
+            // Ensure frequencies we're using match the radioType
+            if (radioType.equals(RADIO_MODULE_VHF)) {
+                setMinRadioFreq(VHF_MIN_FREQ);
+                setMinFreq(VHF_MIN_FREQ_US);
+                setMaxFreq(VHF_MAX_FREQ_US);
+                setMaxRadioFreq(VHF_MAX_FREQ);
+            } else if (radioType.equals(RADIO_MODULE_UHF)) {
+                setMinRadioFreq(UHF_MIN_FREQ);
+                setMinFreq(UHF_MIN_FREQ_US);
+                setMaxFreq(UHF_MAX_FREQ_US);
+                setMaxRadioFreq(UHF_MAX_FREQ);
+            }
+
+            if (mode != MODE_STARTUP) {
+                // Re-init connection to ESP32 so it knows what kind of module it has.
+                setMode(MODE_STARTUP);
+                checkedFirmwareVersion = false;
+                checkFirmwareVersion();
+            }
+        }
+    }
+
+    public String getRadioType() {
+        return radioType;
+    }
+
     private void checkFirmwareVersion() {
+        checkedFirmwareVersion = true; // To prevent multiple USB connect events from spamming the ESP32 with requests (which can cause logic errors).
+
         // Verify that the firmware of the ESP32 app is supported.
         setMode(MODE_STARTUP);
         sendCommandToESP32(ESP32Command.STOP); // Tell ESP32 app to stop whatever it's doing.
         sendCommandToESP32(ESP32Command.GET_FIRMWARE_VER); // Ask for firmware ver.
+        Log.d("DEBUG", "Telling firmware that radio is: " + (radioType.equals(RADIO_MODULE_UHF) ? "UHF" : "VHF"));
+        sendBytesToESP32(radioType.getBytes());
         // The version is actually evaluated in handleESP32Data().
 
         // If we don't hear back from the ESP32, it means the firmware is either not
@@ -899,7 +995,7 @@ public class RadioAudioService extends Service {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (mode != MODE_STARTUP) {
+                if (mode != MODE_STARTUP || radioModuleNotFound) {
                     return;
                 } else {
                     Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
@@ -949,49 +1045,61 @@ public class RadioAudioService extends Service {
     }
 
     public void nextScan() {
+        // Only proceed if actually in SCAN mode.
         if (mode != MODE_SCAN) {
             return;
         }
 
+        // Make sure channelMemoriesLiveData is set and has items.
+        if (channelMemoriesLiveData == null) {
+            Log.d("DEBUG", "Error: attempted nextScan() but channelMemories was never set.");
+            return;
+        }
         List<ChannelMemory> channelMemories = channelMemoriesLiveData.getValue();
-        ChannelMemory memoryToScanNext = null;
-
-        // If we're in simplex, start by scanning to the first memory
-        if (activeMemoryId == -1) {
-            try {
-                memoryToScanNext = channelMemories.get(0);
-            } catch (IndexOutOfBoundsException e) {
-                return; // No memories to scan.
-            }
-        }
-
-        if (memoryToScanNext == null) {
-            // Find the next memory after the one we last scanned
-            for (int i = 0; i < channelMemories.size() - 1; i++) {
-                if (channelMemories.get(i).memoryId == activeMemoryId) {
-                    memoryToScanNext = channelMemories.get(i + 1);
-                    break;
-                }
-            }
-        }
-
-        if (memoryToScanNext == null && channelMemories.size() > 0) {
-            // If we hit the end of memories, go back to scanning from the start
-            memoryToScanNext = channelMemories.get(0);
-        }
-
-        consecutiveSilenceBytes = 0;
-
-        if (null == memoryToScanNext) { // Unclear how this could happen, but exception occurred in the wild (GitHub issue #99).
-            Log.d("DEBUG", "Warning: Tried to scan to null memory, skipping it.");
+        if (channelMemories == null || channelMemories.isEmpty()) {
             return;
         }
 
-        // Log.d("DEBUG", "Scanning to: " + memoryToScanNext.name);
-        tuneToMemory(memoryToScanNext, squelch > 0 ? squelch : 1, true); // If user turned off squelch, set it to 1 during scan.
-        if (callbacks != null) {
-            callbacks.scannedToMemory(memoryToScanNext.memoryId);
+        // Find the index of our current active memory in the list,
+        // or -1 if we didn't find it (e.g. simplex mode).
+        int currentIndex = -1;
+        for (int i = 0; i < channelMemories.size(); i++) {
+            if (channelMemories.get(i).memoryId == activeMemoryId) {
+                currentIndex = i;
+                break;
+            }
         }
+
+        // If we’re in simplex (activeMemoryId == -1), treat it as if
+        // the "current index" is -1 so the next index starts at 0.
+        int nextIndex = (currentIndex + 1) % channelMemories.size();
+        int firstTriedIndex = nextIndex;  // So we know when we've looped around.
+
+        do {
+            ChannelMemory candidate = channelMemories.get(nextIndex);
+
+            // If not marked as skipped, we tune to it and return.
+            if (!candidate.skipDuringScan) {
+                // Reset silence since we found an active memory.
+                consecutiveSilenceBytes = 0;
+
+                // If squelch is off (0), use squelch=1 during scanning.
+                tuneToMemory(candidate, squelch > 0 ? squelch : 1, true);
+
+                if (callbacks != null) {
+                    callbacks.scannedToMemory(candidate.memoryId);
+                }
+                return;
+            }
+
+            // Otherwise, move on to the next memory in the list.
+            nextIndex = (nextIndex + 1) % channelMemories.size();
+
+            // Repeat until we loop back to the first tried index.
+        } while (nextIndex != firstTriedIndex);
+
+        // If we reach here, all memories are marked skipDuringScan.
+        Log.d("DEBUG", "Warning: All memories are skipDuringScan, no next memory found to scan to.");
     }
 
     private byte[] applyMicGain(byte[] audioBuffer) {
@@ -1161,7 +1269,7 @@ public class RadioAudioService extends Service {
     }
 
     private void handleESP32Data(byte[] data) {
-            // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
+        // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
          /* try {
             String dataStr = new String(data, "UTF-8");
             if (dataStr.length() < 100 && dataStr.length() > 0)
@@ -1169,12 +1277,11 @@ public class RadioAudioService extends Service {
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             } */
-            // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
+        // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
 
         if (mode == MODE_STARTUP) {
             try {
-                // TODO rework this to use same command-handling as s-meter updates
-                //  (below)
+                // TODO rework this to use same command-handling as s-meter updates (below)
                 String dataStr = new String(data, "UTF-8");
                 versionStrBuffer += dataStr;
                 if (versionStrBuffer.contains(VERSION_PREFIX)) {
@@ -1194,7 +1301,25 @@ public class RadioAudioService extends Service {
                         }
                     } else {
                         Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + verInt + ").");
+
+                        String radioStatusStr = versionStrBuffer.substring(startIdx + VERSION_LENGTH, startIdx + VERSION_LENGTH + 1);
+                        Log.d("DEBUG", "Radio status: '" + radioStatusStr + "'");
+
+                        if (radioStatusStr.equals(RADIO_MODULE_NOT_FOUND)) {
+                            radioModuleNotFound = true;
+                        } else if (radioStatusStr.equals(RADIO_MODULE_FOUND)) {
+                            radioModuleNotFound = false;
+                        } else {
+                            Log.d("DEBUG", "Error: unexpected radio status received '" + radioStatusStr + "'");
+                        }
+
                         versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
+
+                        if (radioModuleNotFound) {
+                            callbacks.radioModuleNotFound();
+                            return;
+                        }
+
                         initAfterESP32Connected();
                     }
                     return;
@@ -1216,7 +1341,7 @@ public class RadioAudioService extends Service {
                         audioTrack.write(pcm16, 0, pcm16.length);
 
                         // Add the audio samples to the AFSK demodulator.
-                        float[] audioAsFloats = convertPCM8ToFloatArray(data);
+                        float[] audioAsFloats = convertPCM8SignedToFloatArray(data);
                         afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
                     }
 
@@ -1320,17 +1445,14 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private float[] convertPCM8ToFloatArray(byte[] pcm8Data) {
+    private float[] convertPCM8SignedToFloatArray(byte[] pcm8Data) {
         // Create a float array of the same length as the input byte array
         float[] floatData = new float[pcm8Data.length];
 
         // Iterate through the byte array and convert each sample
         for (int i = 0; i < pcm8Data.length; i++) {
-            // Convert unsigned 8-bit PCM to signed 8-bit value
-            int signedValue = (pcm8Data[i] & 0xFF) - 128;
-
             // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = signedValue / 128.0f;
+            floatData[i] = pcm8Data[i] / 128.0f;
         }
 
         return floatData;

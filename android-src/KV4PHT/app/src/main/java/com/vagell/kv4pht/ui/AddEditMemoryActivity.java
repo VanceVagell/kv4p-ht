@@ -25,10 +25,10 @@ import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
+import android.widget.Switch;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
@@ -43,6 +43,7 @@ import java.util.concurrent.TimeUnit;
 
 public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isAdd = true; // false means we're editing a memory, not adding
+    private boolean isVhfRadio = true; // false means UHF radio
     private List<String> mTones;
     private ThreadPoolExecutor threadPoolExecutor = null;
     private int mMemoryId;
@@ -103,6 +104,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         Bundle extras = getIntent().getExtras();
         if (extras != null) {
             isAdd = (extras.getInt("requestCode") == MainActivity.REQUEST_ADD_MEMORY);
+            isVhfRadio = (extras.getBoolean("isVhfRadio"));
             if (!isAdd) { // Edit
                 mMemoryId = extras.getInt("memoryId");
                 threadPoolExecutor.execute(new Runnable() {
@@ -113,6 +115,8 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                        }
                 });
             } else { // Add
+                populateDefaults();
+
                 mMemoryId = -1; // This ID is never used, just to help with debugging.
 
                 String activeFrequencyStr = extras.getString("activeFrequencyStr");
@@ -135,7 +139,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
                 String tone = extras.getString("tone");
                 if (tone != null) {
-                    AutoCompleteTextView editTone = findViewById(R.id.editToneTextView);
+                    AutoCompleteTextView editTone = findViewById(R.id.editToneTxTextView);
                     editTone.setText(tone, false);
                 }
 
@@ -151,6 +155,9 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         // Setup the title
         TextView titleTextView = findViewById(R.id.addEditToolbarTitle);
         titleTextView.setText(isAdd ? "Add memory" : "Edit memory");
+
+        // Hide advanced options until user chooses to show them
+        setAdvancedOptionsVisible(false);
 
         // Populate initial UI data
         populateMemoryGroups();
@@ -226,9 +233,23 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     }
 
     private void populateTones() {
-        AutoCompleteTextView editToneTextView = findViewById(R.id.editToneTextView);
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, mTones);
-        editToneTextView.setAdapter(arrayAdapter);
+        AutoCompleteTextView editToneTxTextView = findViewById(R.id.editToneTxTextView);
+        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, mTones);
+        editToneTxTextView.setAdapter(arrayAdapter1);
+
+        AutoCompleteTextView editToneRxTextView = findViewById(R.id.editToneRxTextView);
+        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, mTones);
+        editToneRxTextView.setAdapter(arrayAdapter2);
+    }
+
+    private void populateDefaults() {
+        TextInputEditText customOffsetTextInputEditText = findViewById(R.id.customOffsetTextInputEditText);
+
+        if (isVhfRadio) {
+            customOffsetTextInputEditText.setText("600");
+        } else {
+            customOffsetTextInputEditText.setText("5000");
+        }
     }
 
     private void populateOriginalValues() {
@@ -239,15 +260,19 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                // Name
                 TextInputEditText editNameTextInputEditText = findViewById(R.id.editNameTextInputEditText);
                 editNameTextInputEditText.setText(mMemory.name);
 
+                // Group
                 AutoCompleteTextView editMemoryGroupTextInputEditText = findViewById(R.id.editMemoryGroupTextInputEditText);
                 editMemoryGroupTextInputEditText.setText(mMemory.group, false);
 
+                // Frequency
                 TextInputEditText editFrequencyTextInputEditText = findViewById(R.id.editFrequencyTextInputEditText);
                 editFrequencyTextInputEditText.setText(mMemory.frequency);
 
+                // Offset direction
                 AutoCompleteTextView editOffsetTextView = findViewById(R.id.editOffsetTextView);
                 if (mMemory.offset == ChannelMemory.OFFSET_NONE) {
                     editOffsetTextView.setText("None", false);
@@ -257,8 +282,21 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                     editOffsetTextView.setText("Up", false);
                 }
 
-                AutoCompleteTextView editToneTextView = findViewById(R.id.editToneTextView);
-                editToneTextView.setText(mMemory.tone, false);
+                // Tone (TX)
+                AutoCompleteTextView editToneTxTextView = findViewById(R.id.editToneTxTextView);
+                editToneTxTextView.setText(mMemory.txTone, false);
+
+                // Tone (RX)
+                AutoCompleteTextView editToneRxTextView = findViewById(R.id.editToneRxTextView);
+                editToneRxTextView.setText(mMemory.rxTone, false);
+
+                // Custom offset (kHz)
+                TextInputEditText customOffsetTextInputEditText = findViewById(R.id.customOffsetTextInputEditText);
+                customOffsetTextInputEditText.setText("" + mMemory.offsetKhz);
+
+                // Skip during scan
+                Switch skipDuringScanSwitch = findViewById(R.id.skipDuringScanSwitch);
+                skipDuringScanSwitch.setChecked(mMemory.skipDuringScan);
             }
         });
     }
@@ -269,20 +307,37 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     }
 
     public void saveButtonClicked(View view) {
+        // Name
         TextInputEditText editNameTextInputEditText = findViewById(R.id.editNameTextInputEditText);
         String name = editNameTextInputEditText.getText().toString().trim();
 
+        // Group
         AutoCompleteTextView editMemoryGroupTextInputEditText = findViewById(R.id.editMemoryGroupTextInputEditText);
         String group = editMemoryGroupTextInputEditText.getText().toString().trim();
 
+        // Frequency
         TextInputEditText editFrequencyTextInputEditText = findViewById(R.id.editFrequencyTextInputEditText);
         String frequency = editFrequencyTextInputEditText.getText().toString().trim();
 
+        // Offset direction
         AutoCompleteTextView editOffsetTextView = findViewById(R.id.editOffsetTextView);
         String offset = editOffsetTextView.getText().toString().trim();
 
-        AutoCompleteTextView editToneTextView = findViewById(R.id.editToneTextView);
-        String tone = editToneTextView.getText().toString().trim();
+        // Tone (TX)
+        AutoCompleteTextView editToneTxTextView = findViewById(R.id.editToneTxTextView);
+        String txTone = editToneTxTextView.getText().toString().trim();
+
+        // Tone (RX)
+        AutoCompleteTextView editToneRxTextView = findViewById(R.id.editToneRxTextView);
+        String rxTone = editToneRxTextView.getText().toString().trim();
+
+        // Custom offset (kHz)
+        TextInputEditText customOffsetTextInputEditText = findViewById(R.id.customOffsetTextInputEditText);
+        String offsetKhz = customOffsetTextInputEditText.getText().toString().trim();
+
+        // Skip during scan
+        Switch skipDuringScanSwitch = findViewById(R.id.skipDuringScanSwitch);
+        boolean skipDuringScan = skipDuringScanSwitch.isChecked();
 
         // Validate form fields
         if (name.length() == 0) {
@@ -306,6 +361,23 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             }
         }
 
+        int offsetKhzInt = -1;
+        if (offsetKhz.length() == 0) {
+            customOffsetTextInputEditText.setError("Enter a custom offset");
+            return;
+        } else {
+            try {
+                offsetKhzInt = Integer.parseInt(offsetKhz);
+                if (offsetKhzInt > 30000 || offsetKhzInt < 0) { // Hard to say what a legit offset would look like, but it has to be smaller than 30MHz (width of 70cm band).
+                    customOffsetTextInputEditText.setError("Enter a custom offset like 600");
+                    return;
+                }
+            } catch (NumberFormatException nfe) {
+                customOffsetTextInputEditText.setError("Enter a custom offset like 600");
+                return;
+            }
+        }
+
         ChannelMemory memory = null;
         if (isAdd) {
             memory = new ChannelMemory();
@@ -323,7 +395,10 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         } else {
             memory.offset = ChannelMemory.OFFSET_NONE;
         }
-        memory.tone = tone;
+        memory.txTone = txTone;
+        memory.rxTone = rxTone;
+        memory.offsetKhz = offsetKhzInt;
+        memory.skipDuringScan = skipDuringScan;
 
         final ChannelMemory finalMemory = memory;
         threadPoolExecutor.execute(new Runnable() {
@@ -338,5 +413,16 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                 finish();
             }
         });
+    }
+
+    public void advancedMemoryOptionsButtonClicked(View view) {
+        setAdvancedOptionsVisible(true);
+    }
+
+    private void setAdvancedOptionsVisible(boolean visible) {
+        findViewById(R.id.advancedMemoryOptionsButton).setVisibility(visible ? View.GONE : View.VISIBLE);
+        findViewById(R.id.skipDuringScanSwitch).setVisibility(visible ? View.VISIBLE: View.GONE);
+        findViewById(R.id.customOffsetTextInputLayout).setVisibility(visible ? View.VISIBLE: View.GONE);
+        findViewById(R.id.editToneRxTextInputLayout).setVisibility(visible ? View.VISIBLE: View.GONE);
     }
 }
