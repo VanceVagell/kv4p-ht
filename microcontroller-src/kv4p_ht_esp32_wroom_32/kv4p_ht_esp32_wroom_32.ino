@@ -555,7 +555,7 @@ void loop() {
 
         // Apply attenuation to the sample
         int16_t sample = (int32_t)remove_dc(((2048 - (buffer16[i] & 0xfff)) << 4)) * attenuation >> 8;
-        buffer8[i] = (sample >> 8) + 128; // Unsigned PCM8
+        buffer8[i] = (sample >> 8); // Signed
       }
 
       Serial.write(buffer8, samplesRead);
