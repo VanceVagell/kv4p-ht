@@ -136,11 +136,13 @@ Below is a list of commands supported by the KV4P-HT device, along with their de
 ### 3.6. COMMAND_GET_FIRMWARE_VER (0x06)
 
 - **Description**: Requests the firmware version from the device.
-- **Parameters**: None.
-- **Response**: The device will send back the string `VERSION` followed by an 8-character firmware version (e.g., `00000002`).
+- **Parameters**: 1 byte
+   - Inform the firmware whether it should be in VHF or UHF mode with "v" or "u" (ASCII byte)
+- **Response**: The device will send back the string `VERSION` followed by an 8-character firmware version (e.g., `00000002`), and "f" for "radio module found" or "x" for "can't contact radio module"
 - **Usage**:
   - Send the delimiter.
   - Send the command code `0x06`.
+  - Send the radio module type the device has, either "v' or "u" (VHF or UHF, respectively)
 
 ---
 

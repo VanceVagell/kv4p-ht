@@ -10,8 +10,8 @@ android {
         applicationId "com.vagell.kv4pht"
         minSdk 26
         targetSdk 34
-        versionCode 25
-        versionName "1.6.1"
+        versionCode 31
+        versionName "1.6.7"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 

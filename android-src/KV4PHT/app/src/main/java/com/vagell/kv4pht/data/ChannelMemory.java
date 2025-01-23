@@ -41,11 +41,20 @@ public class ChannelMemory {
     @ColumnInfo(name = "offset")
     public int offset; // 0 = none, 1 = down, 2 = up
 
-    @ColumnInfo(name = "tone")
-    public String tone; // Float as a string (e.g. "82.5"), where "0" = none
+    @ColumnInfo(name = "tx_tone")
+    public String txTone; // Float as a string (e.g. "82.5"), or "None"
 
     @ColumnInfo(name = "group")
     public String group; // Optional
+
+    @ColumnInfo(name = "rx_tone", defaultValue = "None")
+    public String rxTone; // Optional. Float as a string (e.g. "82.5"), or "None"
+
+    @ColumnInfo(name = "offset_khz", defaultValue = "600")
+    public int offsetKhz; // Optional. If not specified, defaults to 600 (kHz).
+
+    @ColumnInfo(name = "skip_during_scan", defaultValue = "0")
+    public boolean skipDuringScan; // Optional. If not specified, treated as false.
 
     @Ignore
     private boolean highlighted = false;
