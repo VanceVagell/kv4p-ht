@@ -387,9 +387,6 @@ public class RadioAudioService extends Service {
                 usbIoManager.stop();
                 break;
             default:
-                if (null != usbIoManager && usbIoManager.getState() == SerialInputOutputManager.State.STOPPED) {
-                    usbIoManager.start();
-                }
                 break;
         }
 
