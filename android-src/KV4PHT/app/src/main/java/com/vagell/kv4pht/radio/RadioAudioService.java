@@ -174,24 +174,24 @@ public class RadioAudioService extends Service {
 
     // Radio params and related settings
     private static final float VHF_MIN_FREQ    = 134.0f; // DRA818V lower limit, in MHz
-    private static final float VHF_MIN_FREQ_US = 144.0f; // US 2m band lower limit, in MHz
-    private static final float VHF_MAX_FREQ_US = 148.0f; // US 2m band upper limit, in MHz
+    private static float min2mTxFreq           = 144.0f; // US 2m band lower limit, in MHz (will be overwritten by user setting)
+    private static float max2mTxFreq           = 148.0f; // US 2m band upper limit, in MHz (will be overwritten by user setting)
     private static final float VHF_MAX_FREQ    = 174.0f; // DRA818V upper limit, in MHz
 
     private static final float UHF_MIN_FREQ    = 400.0f; // DRA818U lower limit, in MHz
-    private static final float UHF_MIN_FREQ_US = 420.0f; // US 70cm band lower limit, in MHz
-    private static final float UHF_MAX_FREQ_US = 450.0f; // US 70cm band upper limit, in MHz
+    private static float min70cmTxFreq         = 420.0f; // US 70cm band lower limit, in MHz (will be overwritten by user setting)
+    private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
     private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
 
-    private String activeFrequencyStr = String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 4 decimal places, in MHz
+    private String activeFrequencyStr = String.format(java.util.Locale.US, "%.4f", min2mTxFreq); // 4 decimal places, in MHz
     private int squelch = 0;
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
     private static float minRadioFreq = VHF_MIN_FREQ; // in MHz
     private static float maxRadioFreq = VHF_MAX_FREQ; // in MHz
-    private static float minHamFreq = VHF_MIN_FREQ_US; // in MHz
-    private static float maxHamFreq = VHF_MAX_FREQ_US; // in MHz
+    private static float minHamFreq = min2mTxFreq; // in MHz
+    private static float maxHamFreq = max2mTxFreq; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
@@ -305,7 +305,7 @@ public class RadioAudioService extends Service {
 
         // Detect if we're moving from VHF to UHF, and move fix active frequency to within band.
         if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
-            tuneToFreq(String.format(java.util.Locale.US, "%.4f", UHF_MIN_FREQ_US), squelch, true);
+            tuneToFreq(String.format(java.util.Locale.US, "%.4f", min70cmTxFreq), squelch, true);
             callbacks.forceTunedToFreq(activeFrequencyStr);
         }
     }
@@ -315,18 +315,22 @@ public class RadioAudioService extends Service {
 
         // Detect if we're moving from UHF to VHF, and move fix active frequency to within band.
         if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
-            tuneToFreq(String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US), squelch, true);
+            tuneToFreq(String.format(java.util.Locale.US, "%.4f", min2mTxFreq), squelch, true);
             callbacks.forceTunedToFreq(activeFrequencyStr);
         }
     }
 
-    public void setMinFreq(float newMinFreq) {
-        minHamFreq = newMinFreq;
-    }
-
-    public void setMaxFreq(float newMaxFreq) {
+    // These methods enforce the limits below (which change when we switch bands)
+    public void setMinHamFreq(float newMinFreq) { minHamFreq = newMinFreq; }
+    public void setMaxHamFreq(float newMaxFreq) {
         maxHamFreq = newMaxFreq;
     }
+
+    // These will come from user settings
+    public void setMin2mTxFreq(float newMinFreq) { min2mTxFreq = newMinFreq; }
+    public void setMax2mTxFreq(float newMaxFreq) { max2mTxFreq = newMaxFreq; }
+    public void setMin70cmTxFreq(float newMinFreq) { min70cmTxFreq = newMinFreq; }
+    public void setMax70cmTxFreq(float newMaxFreq) { max70cmTxFreq = newMaxFreq; }
 
     public void setAprsBeaconPosition(boolean aprsBeaconPosition) {
         if (!this.aprsBeaconPosition && aprsBeaconPosition) { // If it was off, and now turned on...
@@ -574,8 +578,8 @@ public class RadioAudioService extends Service {
         squelch = squelchLevel;
 
         if (serialPort != null) {
-            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafe2MFreq(activeFrequencyStr) +
-                    makeSafe2MFreq(activeFrequencyStr) + "0000" + squelchLevel +
+            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafeHamFreq(activeFrequencyStr) +
+                    makeSafeHamFreq(activeFrequencyStr) + "0000" + squelchLevel +
                     (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
@@ -583,7 +587,7 @@ public class RadioAudioService extends Service {
         restartAudioPrebuffer();
 
         try {
-            Float freq = Float.parseFloat(makeSafe2MFreq(activeFrequencyStr));
+            Float freq = Float.parseFloat(makeSafeHamFreq(activeFrequencyStr));
             Float offsetMaxFreq = maxHamFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
             if (freq < minHamFreq|| freq > offsetMaxFreq) {
                 txAllowed = false;
@@ -595,12 +599,12 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public static String makeSafe2MFreq(String strFreq) {
+    public static String makeSafeHamFreq(String strFreq) {
         Float freq;
         try {
             freq = Float.parseFloat(strFreq);
         } catch (NumberFormatException nfe) {
-            return String.format(java.util.Locale.US, "%.4f", VHF_MIN_FREQ_US); // 4 decimal places, in MHz
+            return String.format(java.util.Locale.US, "%.4f", minHamFreq); // 4 decimal places, in MHz
         }
         while (freq > 500.0f) { // Handle cases where user inputted "1467" or "14670" but meant "146.7".
             freq /= 10;
@@ -618,7 +622,7 @@ public class RadioAudioService extends Service {
     }
 
     public String validateFrequency(String tempFrequency) {
-        String newFrequency = makeSafe2MFreq(tempFrequency);
+        String newFrequency = makeSafeHamFreq(tempFrequency);
 
         // Resort to the old frequency, the one the user inputted is unsalvageable.
         return newFrequency == null ? activeFrequencyStr : newFrequency;
@@ -665,7 +669,7 @@ public class RadioAudioService extends Service {
 
         if (serialPort != null) {
             sendCommandToESP32(ESP32Command.TUNE_TO,
-                    getTxFreq(memory.frequency, memory.offset, memory.offsetKhz) + makeSafe2MFreq(memory.frequency) +
+                    getTxFreq(memory.frequency, memory.offset, memory.offsetKhz) + makeSafeHamFreq(memory.frequency) +
                             getToneIdxStr(memory.txTone) + getToneIdxStr(memory.rxTone) + squelchLevel +
                             (bandwidth.equals("Wide") ? "W" : "N"));
         }
@@ -706,7 +710,7 @@ public class RadioAudioService extends Service {
             } else if (offset == ChannelMemory.OFFSET_DOWN){
                 freqFloat -= 0f + (khz / 1000f);
             }
-            return makeSafe2MFreq(freqFloat.toString());
+            return makeSafeHamFreq(freqFloat.toString());
         }
     }
 
@@ -955,13 +959,13 @@ public class RadioAudioService extends Service {
             // Ensure frequencies we're using match the radioType
             if (radioType.equals(RADIO_MODULE_VHF)) {
                 setMinRadioFreq(VHF_MIN_FREQ);
-                setMinFreq(VHF_MIN_FREQ_US);
-                setMaxFreq(VHF_MAX_FREQ_US);
+                setMinHamFreq(min2mTxFreq);
+                setMaxHamFreq(max2mTxFreq);
                 setMaxRadioFreq(VHF_MAX_FREQ);
             } else if (radioType.equals(RADIO_MODULE_UHF)) {
                 setMinRadioFreq(UHF_MIN_FREQ);
-                setMinFreq(UHF_MIN_FREQ_US);
-                setMaxFreq(UHF_MAX_FREQ_US);
+                setMinHamFreq(min70cmTxFreq);
+                setMaxHamFreq(max70cmTxFreq);
                 setMaxRadioFreq(UHF_MAX_FREQ);
             }
 
