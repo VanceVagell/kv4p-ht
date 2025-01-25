@@ -152,6 +152,8 @@ public class RadioAudioService extends Service {
     // Delimiter must match ESP32 code
     static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF, (byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF};
     private static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
+    private static final byte COMMAND_PHYS_PTT_DOWN = 0x44; // Ascii "D"
+    private static final byte COMMAND_PHYS_PTT_UP = 0x55;   // Ascii "U"
 
     private final RxStreamParser rxStreamParser = new RxStreamParser(this::handleParsedCommand);
 
@@ -183,7 +185,7 @@ public class RadioAudioService extends Service {
     private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
     private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
 
-    private String activeFrequencyStr = String.format(java.util.Locale.US, "%.4f", min2mTxFreq); // 4 decimal places, in MHz
+    private String activeFrequencyStr = null;
     private int squelch = 0;
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
@@ -303,8 +305,8 @@ public class RadioAudioService extends Service {
     public void setMinRadioFreq(float newMinFreq) {
         minRadioFreq = newMinFreq;
 
-        // Detect if we're moving from VHF to UHF, and move fix active frequency to within band.
-        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
+        // Detect if we're moving from VHF to UHF, and move active frequency to within band.
+        if (mode != MODE_STARTUP && activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
             tuneToFreq(String.format(java.util.Locale.US, "%.4f", min70cmTxFreq), squelch, true);
             callbacks.forceTunedToFreq(activeFrequencyStr);
         }
@@ -313,8 +315,8 @@ public class RadioAudioService extends Service {
     public void setMaxRadioFreq(float newMaxFreq) {
         maxRadioFreq = newMaxFreq;
 
-        // Detect if we're moving from UHF to VHF, and move fix active frequency to within band.
-        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
+        // Detect if we're moving from UHF to VHF, and move active frequency to within band.
+        if (mode != MODE_STARTUP && activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
             tuneToFreq(String.format(java.util.Locale.US, "%.4f", min2mTxFreq), squelch, true);
             callbacks.forceTunedToFreq(activeFrequencyStr);
         }
@@ -1443,6 +1445,10 @@ public class RadioAudioService extends Service {
 
                 callbacks.sMeterUpdate(sMeter9Value);
             }
+        } else if (cmd == COMMAND_PHYS_PTT_DOWN) {
+            Log.d("DEBUG", "Physical PTT down received.");
+        } else if (cmd == COMMAND_PHYS_PTT_UP) {
+            Log.d("DEBUG", "Physical PTT up received.");
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
                     " paramLen=" + param.length);

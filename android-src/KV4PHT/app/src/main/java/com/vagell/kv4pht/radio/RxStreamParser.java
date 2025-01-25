@@ -20,6 +20,8 @@ public class RxStreamParser {
     }
 
     public byte[] extractAudioAndHandleCommands(byte[] newData) {
+        //commandParamLen = -1;
+
         ByteArrayOutputStream audioOut = new ByteArrayOutputStream();
         for (byte b : newData) {
             lookaheadBuffer.write(b);
@@ -37,6 +39,12 @@ public class RxStreamParser {
                 commandParamLen = b;
                 commandParams.reset();
                 matchedDelimiterTokens++;
+
+                if (commandParamLen == 0) { // If this command has no params...
+                    lookaheadBuffer.reset();
+                    onCommand.accept(command, commandParams.toByteArray());
+                    resetParser(audioOut);
+                }
             } else {
                 commandParams.write(b);
                 matchedDelimiterTokens++;
