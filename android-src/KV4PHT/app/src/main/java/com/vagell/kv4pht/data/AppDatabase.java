@@ -28,9 +28,10 @@ import androidx.room.migration.Migration;
 import com.vagell.kv4pht.data.migrations.MigrationFrom1To2;
 import com.vagell.kv4pht.data.migrations.MigrationFrom2To3;
 import com.vagell.kv4pht.data.migrations.MigrationFrom3To4;
+import com.vagell.kv4pht.data.migrations.MigrationFrom4To5;
 
 @Database(
-        version = 4,
+        version = 5,
         entities = {AppSetting.class, ChannelMemory.class, APRSMessage.class})
 public abstract class AppDatabase extends RoomDatabase {
     public abstract AppSettingDao appSettingDao();
@@ -40,12 +41,14 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final Migration MIGRATION_1_2 = new MigrationFrom1To2();
     public static final Migration MIGRATION_2_3 = new MigrationFrom2To3();
     public static final Migration MIGRATION_3_4 = new MigrationFrom3To4();
+    public static final Migration MIGRATION_4_5 = new MigrationFrom4To5();
 
     public static AppDatabase getInstance(Context context) {
         return Room.databaseBuilder(context.getApplicationContext(), AppDatabase.class, "kv4pht-db")
                 .addMigrations(MIGRATION_1_2)
                 .addMigrations(MIGRATION_2_3)
                 .addMigrations(MIGRATION_3_4)
+                .addMigrations(MIGRATION_4_5)
                 .fallbackToDestructiveMigration()
                 .build();
     }

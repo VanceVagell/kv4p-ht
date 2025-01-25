@@ -37,7 +37,6 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.media.audiofx.Visualizer;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -963,7 +962,10 @@ public class MainActivity extends AppCompatActivity {
                 AppSetting aprsBeaconPosition = viewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
                 AppSetting aprsPositionAccuracy = viewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
                 AppSetting bandwidthSetting = viewModel.appDb.appSettingDao().getByName("bandwidth");
-                AppSetting maxFreqSetting = viewModel.appDb.appSettingDao().getByName("maxFreq");
+                AppSetting min2mTxFreqSetting = viewModel.appDb.appSettingDao().getByName("min2mTxFreq");
+                AppSetting max2mTxFreqSetting = viewModel.appDb.appSettingDao().getByName("max2mTxFreq");
+                AppSetting min70cmTxFreqSetting = viewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
+                AppSetting max70cmTxFreqSetting = viewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
                 AppSetting micGainBoostSetting = viewModel.appDb.appSettingDao().getByName("micGainBoost");
                 AppSetting lastMemoryId = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
                 AppSetting lastFreq = viewModel.appDb.appSettingDao().getByName("lastFreq");
@@ -1028,10 +1030,31 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
 
-                        if (maxFreqSetting != null) {
-                            int maxFreq = Integer.parseInt(maxFreqSetting.value);
+                        if (min2mTxFreqSetting != null) {
+                            int min2mTxFreq = Integer.parseInt(min2mTxFreqSetting.value);
                             if (radioAudioService != null) {
-                                radioAudioService.setMaxFreq(maxFreq); // Called statically so static frequency formatter can use it.
+                                radioAudioService.setMin2mTxFreq(min2mTxFreq);
+                            }
+                        }
+
+                        if (max2mTxFreqSetting != null) {
+                            int max2mTxFreq = Integer.parseInt(max2mTxFreqSetting.value);
+                            if (radioAudioService != null) {
+                                radioAudioService.setMax2mTxFreq(max2mTxFreq);
+                            }
+                        }
+
+                        if (min70cmTxFreqSetting != null) {
+                            int min70cmTxFreq = Integer.parseInt(min70cmTxFreqSetting.value);
+                            if (radioAudioService != null) {
+                                radioAudioService.setMin70cmTxFreq(min70cmTxFreq);
+                            }
+                        }
+
+                        if (max70cmTxFreqSetting != null) {
+                            int max70cmTxFreq = Integer.parseInt(max70cmTxFreqSetting.value);
+                            if (radioAudioService != null) {
+                                radioAudioService.setMax70cmTxFreq(max70cmTxFreq);
                             }
                         }
 
@@ -1247,7 +1270,7 @@ public class MainActivity extends AppCompatActivity {
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (radioAudioService != null) {
                     radioAudioService.tuneToFreq(activeFrequencyField.getText().toString(), squelch, false);
-                    tuneToFreqUi(RadioAudioService.makeSafe2MFreq(activeFrequencyField.getText().toString())); // Fixes any invalid freq user may have entered.
+                    tuneToFreqUi(RadioAudioService.makeSafeHamFreq(activeFrequencyField.getText().toString())); // Fixes any invalid freq user may have entered.
                 }
 
                 hideKeyboard();

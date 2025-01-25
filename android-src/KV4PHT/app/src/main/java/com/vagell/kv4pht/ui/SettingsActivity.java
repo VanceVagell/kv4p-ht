@@ -66,6 +66,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateOriginalValues();
         populateRadioModuleTypes();
         populateBandwidths();
+        populateMinFrequencies();
         populateMaxFrequencies();
         populateMicGainOptions();
         populateAprsOptions();
@@ -108,15 +109,43 @@ public class SettingsActivity extends AppCompatActivity {
         radioModuleTypeTextView.setAdapter(arrayAdapter);
     }
 
+    private void populateMinFrequencies() {
+        AutoCompleteTextView min2mFreqTextView = findViewById(R.id.min2mFreqTextView);
+
+        List<String> min2mFreqs = new ArrayList<String>();
+        min2mFreqs.add("144MHz");
+
+        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, min2mFreqs);
+        min2mFreqTextView.setAdapter(arrayAdapter1);
+
+        AutoCompleteTextView min70cmFreqTextView = findViewById(R.id.min70cmFreqTextView);
+
+        List<String> min70cmFreqs = new ArrayList<String>();
+        min70cmFreqs.add("420MHz");
+        min70cmFreqs.add("430MHz");
+
+        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, min70cmFreqs);
+        min70cmFreqTextView.setAdapter(arrayAdapter2);
+    }
+
     private void populateMaxFrequencies() {
-        AutoCompleteTextView maxFreqTextView = findViewById(R.id.maxFreqTextView);
+        AutoCompleteTextView max2mFreqTextView = findViewById(R.id.max2mFreqTextView);
 
-        List<String> maxFreqs = new ArrayList<String>();
-        maxFreqs.add("148MHz");
-        maxFreqs.add("146MHz");
+        List<String> max2mFreqs = new ArrayList<String>();
+        max2mFreqs.add("148MHz");
+        max2mFreqs.add("146MHz");
 
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, maxFreqs);
-        maxFreqTextView.setAdapter(arrayAdapter);
+        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, max2mFreqs);
+        max2mFreqTextView.setAdapter(arrayAdapter1);
+
+        AutoCompleteTextView max70cmFreqTextView = findViewById(R.id.max70cmFreqTextView);
+
+        List<String> max70cmFreqs = new ArrayList<String>();
+        max70cmFreqs.add("450MHz");
+        max70cmFreqs.add("440MHz");
+
+        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, max70cmFreqs);
+        max70cmFreqTextView.setAdapter(arrayAdapter2);
     }
 
     private void populateMicGainOptions() {
@@ -162,7 +191,10 @@ public class SettingsActivity extends AppCompatActivity {
                 AppSetting aprsBeaconPosition = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
                 AppSetting aprsPositionAccuracy = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
                 AppSetting bandwidthSetting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
-                AppSetting maxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
+                AppSetting min2mTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("min2mTxFreq");
+                AppSetting max2mTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("max2mTxFreq");
+                AppSetting min70cmTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
+                AppSetting max70cmTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
                 AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
 
                 runOnUiThread(new Runnable() {
@@ -223,9 +255,24 @@ public class SettingsActivity extends AppCompatActivity {
                             bandwidthTextView.setText(bandwidthSetting.value, false);
                         }
 
-                        if (maxFreqSetting != null) {
-                            AutoCompleteTextView maxFreqTextView = (AutoCompleteTextView) findViewById(R.id.maxFreqTextView);
-                            maxFreqTextView.setText(maxFreqSetting.value + "MHz", false);
+                        if (min2mTxFreqSetting != null) {
+                            AutoCompleteTextView min2mFreqTextView = (AutoCompleteTextView) findViewById(R.id.min2mFreqTextView);
+                            min2mFreqTextView.setText(min2mTxFreqSetting.value + "MHz", false);
+                        }
+
+                        if (max2mTxFreqSetting != null) {
+                            AutoCompleteTextView max2mFreqTextView = (AutoCompleteTextView) findViewById(R.id.max2mFreqTextView);
+                            max2mFreqTextView.setText(max2mTxFreqSetting.value + "MHz", false);
+                        }
+
+                        if (min70cmTxFreqSetting != null) {
+                            AutoCompleteTextView min70cmFreqTextView = (AutoCompleteTextView) findViewById(R.id.min70cmFreqTextView);
+                            min70cmFreqTextView.setText(min70cmTxFreqSetting.value + "MHz", false);
+                        }
+
+                        if (max70cmTxFreqSetting != null) {
+                            AutoCompleteTextView max70cmFreqTextView = (AutoCompleteTextView) findViewById(R.id.max70cmFreqTextView);
+                            max70cmFreqTextView.setText(max70cmTxFreqSetting.value + "MHz", false);
                         }
 
                         if (micGainBoostSetting != null) {
@@ -386,8 +433,8 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
-        TextView maxFreqTextView = findViewById(R.id.maxFreqTextView);
-        maxFreqTextView.addTextChangedListener(new TextWatcher() {
+        TextView min2mFreqTextView = findViewById(R.id.min2mFreqTextView);
+        min2mFreqTextView.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
             }
@@ -398,8 +445,59 @@ public class SettingsActivity extends AppCompatActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.maxFreqTextView)).getText().toString().trim();
-                setMaxFreq(newText.substring(0, 3));
+                String newText = ((TextView) findViewById(R.id.min2mFreqTextView)).getText().toString().trim();
+                setMin2mTxFreq(newText.substring(0, 3));
+            }
+        });
+
+        TextView max2mFreqTextView = findViewById(R.id.max2mFreqTextView);
+        max2mFreqTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.max2mFreqTextView)).getText().toString().trim();
+                setMax2mTxFreq(newText.substring(0, 3));
+            }
+        });
+
+        TextView min70cmFreqTextView = findViewById(R.id.min70cmFreqTextView);
+        min70cmFreqTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.min70cmFreqTextView)).getText().toString().trim();
+                setMin70cmTxFreq(newText.substring(0, 3));
+            }
+        });
+
+        TextView max70cmFreqTextView = findViewById(R.id.max70cmFreqTextView);
+        max70cmFreqTextView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String newText = ((TextView) findViewById(R.id.max70cmFreqTextView)).getText().toString().trim();
+                setMax70cmTxFreq(newText.substring(0, 3));
             }
         });
 
@@ -515,9 +613,9 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     /**
-     * @param maxFreq Megahertz as a string, e.g. "148".
+     * @param minFreq Megahertz as a string, e.g. "148".
      */
-    private void setMaxFreq(String maxFreq) {
+    private void setMin2mTxFreq(String minFreq) {
         if (threadPoolExecutor == null) {
             return;
         }
@@ -525,10 +623,82 @@ public class SettingsActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("maxFreq");
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("min2mTxFreq");
 
                 if (setting == null) {
-                    setting = new AppSetting("maxFreq", maxFreq);
+                    setting = new AppSetting("min2mTxFreq", minFreq);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = minFreq;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param maxFreq Megahertz as a string, e.g. "148".
+     */
+    private void setMax2mTxFreq(String maxFreq) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("max2mTxFreq");
+
+                if (setting == null) {
+                    setting = new AppSetting("max2mTxFreq", maxFreq);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = maxFreq;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param minFreq Megahertz as a string, e.g. "420".
+     */
+    private void setMin70cmTxFreq(String minFreq) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
+
+                if (setting == null) {
+                    setting = new AppSetting("min70cmTxFreq", minFreq);
+                    MainViewModel.appDb.appSettingDao().insertAll(setting);
+                } else {
+                    setting.value = minFreq;
+                    MainViewModel.appDb.appSettingDao().update(setting);
+                }
+            }
+        });
+    }
+
+    /**
+     * @param maxFreq Megahertz as a string, e.g. "450".
+     */
+    private void setMax70cmTxFreq(String maxFreq) {
+        if (threadPoolExecutor == null) {
+            return;
+        }
+
+        threadPoolExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
+
+                if (setting == null) {
+                    setting = new AppSetting("max70cmTxFreq", maxFreq);
                     MainViewModel.appDb.appSettingDao().insertAll(setting);
                 } else {
                     setting.value = maxFreq;
