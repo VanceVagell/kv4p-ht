@@ -45,7 +45,7 @@ long lastSMeterReport = -1;
 
 // Delimeter must also match Android app
 #define DELIMITER_LENGTH 8
-const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
+const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
 int matchedDelimiterTokens = 0;
 int matchedDelimiterTokensRx = 0;
 
@@ -643,34 +643,20 @@ void loop() {
  *   - paramLen is up to 255
  *   - param data is 'paramLen' bytes
  */
-void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen)
-{
-    // Safety check: limit paramsLen to 255 for 1-byte length
-    if (paramsLen > 255) {
-        paramsLen = 255;  // or handle differently (split, or error, etc.)
-    }
-
-    const size_t totalSize = DELIMITER_LENGTH + 1 + 1 + paramsLen;
-    byte outBytes[totalSize];
-
-    // 1. Leading delimiter
-    memcpy(outBytes, COMMAND_DELIMITER, DELIMITER_LENGTH);
-
-    // 2. Command byte
-    outBytes[DELIMITER_LENGTH] = cmdByte;
-
-    // 3. Parameter length
-    outBytes[DELIMITER_LENGTH + 1] = (byte)(paramsLen & 0xFF);
-
-    // 4. Parameter bytes
-    memcpy(
-        outBytes + DELIMITER_LENGTH + 2, // position after delim+cmd+paramLen
-        params,
-        paramsLen
-    );
-
-    Serial.write(outBytes, totalSize);
-    Serial.flush();
+void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen) {
+  // Safety check: limit paramsLen to 255 for 1-byte length
+  if (paramsLen > 255) {
+      paramsLen = 255;  // or handle differently (split, or error, etc.)
+  }
+  // 1. Leading delimiter
+  Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
+  // 2. Command byte
+  Serial.write(&cmdByte, 1);
+  // 3. Parameter length
+  uint8_t len = paramsLen;
+  Serial.write(&len, 1);
+  // 4. Parameter bytes
+  Serial.write(params, paramsLen);
 }
 
 void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth) {
