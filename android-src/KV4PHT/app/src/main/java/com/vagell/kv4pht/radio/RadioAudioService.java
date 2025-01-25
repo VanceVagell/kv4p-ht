@@ -931,8 +931,8 @@ public class RadioAudioService extends Service {
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
-        usbIoManager.start();
+        usbIoManager.setReadBufferSize(1024/4); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
+        usbIoManager.setReadBufferCount(16*4);
         checkedFirmwareVersion = false;
 
         Log.d("DEBUG", "Connected to ESP32.");
@@ -1217,43 +1217,7 @@ public class RadioAudioService extends Service {
             Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 while in the process of flashing a new firmware.");
             return;
         }
-
-        int usbRetries = 0;
-        try {
-            // usbIoManager.writeAsync(newBytes); // On MCUs like the ESP32 S2 this causes USB failures with concurrent USB rx/tx.
-            int bytesWritten = 0;
-            int totalBytes = newBytes.length;
-            final int MAX_BYTES_PER_USB_WRITE = 128;
-            do {
-                try {
-                    byte[] arrayPart = Arrays.copyOfRange(newBytes, bytesWritten, Math.min(bytesWritten + MAX_BYTES_PER_USB_WRITE, totalBytes));
-                    serialPort.write(arrayPart, 200);
-                    bytesWritten += MAX_BYTES_PER_USB_WRITE;
-                    usbRetries = 0;
-                } catch (SerialTimeoutException ste) {
-                    // Do nothing, we'll try again momentarily. ESP32's serial buffer may be full.
-                    usbRetries++;
-                    Log.d("DEBUG", "usbRetries: " + usbRetries);
-                }
-            } while (bytesWritten < totalBytes && usbRetries < 10);
-            // Log.d("DEBUG", "Wrote data: " + Arrays.toString(newBytes));
-        } catch (Exception e) {
-            e.printStackTrace();
-            try {
-                serialPort.close();
-            } catch (Exception ex) {
-                // Ignore. We did our best to close it!
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ex) {
-                // Ignore. This should only happen if the app is paused in this brief moment between USB retries, not a serious issue.
-            }
-            findESP32Device(); // Attempt to reconnect after the brief pause above.
-        }
-        if (usbRetries == 10) {
-            Log.d("DEBUG", "sendBytesToESP32: Connected to ESP32 via USB serial, but could not send data after 10 retries.");
-        }
+        usbIoManager.writeAsync(newBytes);
     }
 
     public static UsbSerialPort getUsbSerialPort() {
