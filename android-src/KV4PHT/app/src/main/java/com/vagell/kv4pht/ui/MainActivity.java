@@ -121,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
     // Radio params and related settings
-    private String activeFrequencyStr = "144.0000";
+    private String activeFrequencyStr = "0.0000";
     private int squelch = 0;
     private String callsign = null;
     private boolean stickyPTT = false;
@@ -209,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
 
                                 if (radioAudioService != null) {
                                     radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
-                                    tuneToFreqUi(freq);
+                                    tuneToFreqUi(freq, false);
                                 }
 
                                 viewModel.setCallback(null);
@@ -489,7 +489,17 @@ public class MainActivity extends AppCompatActivity {
                 public void forceTunedToFreq(String newFreqStr) {
                     // This is called when RadioAudioService is changing bands, and we need
                     // to reflect that in the UI.
-                    tuneToFreqUi(newFreqStr);
+                    tuneToFreqUi(newFreqStr, true);
+                }
+
+                @Override
+                public void forcedPttStart() { // When user pushes physical PTT.
+                    startPttUi(false);
+                }
+
+                @Override
+                public void forcedPttEnd() { // When user releases physical PTT.
+                    endPttUi();
                 }
             };
 
@@ -1004,32 +1014,6 @@ public class MainActivity extends AppCompatActivity {
                             selectMemoryGroup(lastGroupSetting.value);
                         }
 
-                        if (lastMemoryId != null && !lastMemoryId.value.equals("-1")) {
-                            activeMemoryId = Integer.parseInt(lastMemoryId.value);
-
-                            if (radioAudioService != null) {
-                                radioAudioService.setActiveMemoryId(activeMemoryId);
-                            }
-                        } else {
-                            activeMemoryId = -1;
-                            if (lastFreq != null) {
-                                activeFrequencyStr = lastFreq.value;
-                            } else {
-                                activeFrequencyStr = "144.0000";
-                            }
-
-                            if (radioAudioService != null) {
-                                radioAudioService.setActiveMemoryId(activeMemoryId);
-                                radioAudioService.setActiveFrequencyStr(activeFrequencyStr);
-                            }
-                        }
-
-                        if (bandwidthSetting != null) {
-                            if (radioAudioService != null) {
-                                radioAudioService.setBandwidth(bandwidthSetting.value);
-                            }
-                        }
-
                         if (min2mTxFreqSetting != null) {
                             int min2mTxFreq = Integer.parseInt(min2mTxFreqSetting.value);
                             if (radioAudioService != null) {
@@ -1058,6 +1042,27 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
 
+                        if (lastMemoryId != null && !lastMemoryId.value.equals("-1")) {
+                            activeMemoryId = Integer.parseInt(lastMemoryId.value);
+
+                            if (radioAudioService != null) {
+                                radioAudioService.setActiveMemoryId(activeMemoryId);
+                            }
+                        } else {
+                            activeMemoryId = -1;
+                            if (lastFreq != null) {
+                                activeFrequencyStr = lastFreq.value;
+                            } else {
+                                activeFrequencyStr = "0.0000"; // Will force radioAudioService to use minimum freq in current band
+                            }
+                        }
+
+                        if (bandwidthSetting != null) {
+                            if (radioAudioService != null) {
+                                radioAudioService.setBandwidth(bandwidthSetting.value);
+                            }
+                        }
+
                         if (micGainBoostSetting != null) {
                             String micGainBoost = micGainBoostSetting.value;
                             if (radioAudioService != null) {
@@ -1076,7 +1081,7 @@ public class MainActivity extends AppCompatActivity {
                         } else {
                             if (radioAudioService != null) {
                                 radioAudioService.tuneToFreq(activeFrequencyStr, squelch, radioAudioService.getMode() == RadioAudioService.MODE_RX);
-                                tuneToFreqUi(activeFrequencyStr);
+                                tuneToFreqUi(activeFrequencyStr, radioAudioService.getMode() == RadioAudioService.MODE_RX);
                             }
                         }
                         if (radioAudioService != null) {
@@ -1270,7 +1275,7 @@ public class MainActivity extends AppCompatActivity {
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (radioAudioService != null) {
                     radioAudioService.tuneToFreq(activeFrequencyField.getText().toString(), squelch, false);
-                    tuneToFreqUi(RadioAudioService.makeSafeHamFreq(activeFrequencyField.getText().toString())); // Fixes any invalid freq user may have entered.
+                    tuneToFreqUi(RadioAudioService.makeSafeHamFreq(activeFrequencyField.getText().toString()), false); // Fixes any invalid freq user may have entered.
                 }
 
                 hideKeyboard();
@@ -1357,13 +1362,20 @@ public class MainActivity extends AppCompatActivity {
      * Updates the UI to represent that we've tuned to the given frequency. Does not actually
      * interact with the radio (use RadioAudioService for that).
      */
-    private void tuneToFreqUi(String frequencyStr) {
+    private void tuneToFreqUi(String frequencyStr, boolean wasForced) {
         final Context ctx = this;
         activeFrequencyStr = radioAudioService.validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
+        showMemoryName("Simplex");
+        showFrequency(activeFrequencyStr);
+
+        // Unhighlight all memory rows, since this is a simplex frequency.
+        viewModel.highlightMemory(null);
+        memoriesAdapter.notifyDataSetChanged();
+
         // Save most recent freq so we can restore it on app restart
-        if (threadPoolExecutor == null) {
+        if (threadPoolExecutor == null || wasForced) { // wasForced means user didn't actually type in the frequency (we shouldn't save it)
             return;
         }
         threadPoolExecutor.execute(new Runnable() {
@@ -1391,13 +1403,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-
-        showMemoryName("Simplex");
-        showFrequency(activeFrequencyStr);
-
-        // Unhighlight all memory rows, since this is a simplex frequency.
-        viewModel.highlightMemory(null);
-        memoriesAdapter.notifyDataSetChanged();
     }
 
     /**
@@ -1452,7 +1457,6 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                Log.d("DEBUG", "showFrequency: " + frequency);
                 EditText activeFrequencyField = findViewById(R.id.activeFrequency);
                 activeFrequencyField.setText(frequency);
                 activeFrequencyStr = frequency;

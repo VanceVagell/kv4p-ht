@@ -37,7 +37,9 @@ const uint8_t COMMAND_STOP = 5; // stop everything, just wait for next command
 const uint8_t COMMAND_GET_FIRMWARE_VER = 6; // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
 
 // Outgoing commands (ESP32 -> Android)
-const byte COMMAND_SMETER_REPORT = 0x53;
+const byte COMMAND_SMETER_REPORT = 0x53; // 'S'
+const byte COMMAND_PHYS_PTT_DOWN = 0x44; // 'D'
+const byte COMMAND_PHYS_PTT_UP = 0x55;   // 'U'
 
 // S-meter interval
 long lastSMeterReport = -1;
@@ -80,9 +82,15 @@ boolean isTxCacheSatisfied = false; // Will be true when the DAC has enough cach
 #define TXD2_PIN 17
 #define DAC_PIN 25 // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
 #define ADC_PIN 34 // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
-#define PTT_PIN 18
+#define PTT_PIN 18 // Keys up the radio module
 #define PD_PIN 19
 #define SQ_PIN 32
+#define PHYS_PTT_PIN1 5  // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
+#define PHYS_PTT_PIN2 33 // Optional. See above.
+
+#define DEBOUNCE_MS 50 // Minimum ms between PHYS_PTT_PIN1/2 down and then up, to avoid bouncing from spotty electrical contact.
+boolean isPhysPttDown = false;
+long buttonDebounceMillis = -1;
 
 // Built in LED
 #define LED_PIN 2
@@ -141,6 +149,10 @@ void setup() {
   // Debug LED
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
+
+  // Optional physical PTT buttons
+  pinMode(PHYS_PTT_PIN1, INPUT_PULLUP);
+  pinMode(PHYS_PTT_PIN2, INPUT_PULLUP);
 
   // Set up radio module defaults
   pinMode(PD_PIN, OUTPUT);
@@ -236,6 +248,27 @@ int16_t remove_dc(int16_t x) {
 
 void loop() {
   try {
+    // Report any physical PTT button presses or releases back to Android app (note that
+    // we don't start tx here, Android app decides what to do, since the user could be in
+    // some mode where tx doesn't make sense, like in Settings).
+    long msSincePhysButtonChange = millis() - buttonDebounceMillis;
+    if (buttonDebounceMillis == -1 || msSincePhysButtonChange > DEBOUNCE_MS) {      
+      // If EITHER physical PTT button has just become "down", let Android app know
+      if (!isPhysPttDown && 
+          (digitalRead(PHYS_PTT_PIN1) == LOW || 
+           digitalRead(PHYS_PTT_PIN2) == LOW)) {
+        isPhysPttDown = true;
+        reportPhysPttState();
+        buttonDebounceMillis = millis();
+      } else if (isPhysPttDown && // If BOTH PTT buttons are now "up", let Android app know
+          (digitalRead(PHYS_PTT_PIN1) == HIGH && 
+           digitalRead(PHYS_PTT_PIN2) == HIGH)) {
+        isPhysPttDown = false;
+        reportPhysPttState();
+        buttonDebounceMillis = millis();
+      }
+    }
+
     if (mode == MODE_STOPPED) {
       // Read a command from Android app
       uint8_t tempBuffer[100]; // Big enough for a command and params, won't hold audio data
@@ -634,29 +667,43 @@ void loop() {
 }
 
 /**
- * Example: 
- *   [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
- *
- * Where:
- *   - DELIMITER is {0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00}
- *   - CMD is e.g. 0x53 for your S-meter
- *   - paramLen is up to 255
- *   - param data is 'paramLen' bytes
+ * Send a command with params
+ * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
  */
 void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
   if (paramsLen > 255) {
       paramsLen = 255;  // or handle differently (split, or error, etc.)
   }
+
   // 1. Leading delimiter
   Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
+
   // 2. Command byte
   Serial.write(&cmdByte, 1);
+
   // 3. Parameter length
   uint8_t len = paramsLen;
   Serial.write(&len, 1);
+
   // 4. Parameter bytes
   Serial.write(params, paramsLen);
+}
+
+/**
+ * Send a command without params
+ * Format: [DELIMITER(8 bytes)] [CMD(1 byte)]
+ */
+void sendCmdToAndroid(byte cmdByte) {
+  // 1. Leading delimiter
+  Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
+
+  // 2. Command byte
+  Serial.write(&cmdByte, 1);
+
+    // 3. Parameter length
+  uint8_t len = 0;
+  Serial.write(&len, 1);
 }
 
 void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth) {
@@ -715,4 +762,8 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
     totalBytesWritten += bytesWritten;
     bytesToWrite -= bytesWritten;
   } while (bytesToWrite > 0);
+}
+
+void reportPhysPttState() {
+  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
 }
