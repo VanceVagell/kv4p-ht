@@ -5,7 +5,7 @@ import static com.vagell.kv4pht.radio.RadioAudioService.COMMAND_DELIMITER;
 import java.io.ByteArrayOutputStream;
 import java.util.function.BiConsumer;
 
-public class RxStreamParser {
+public class ESP32DataStreamParser {
 
     private int matchedDelimiterTokens = 0;
     private byte command;
@@ -15,13 +15,11 @@ public class RxStreamParser {
 
     private final BiConsumer<Byte, byte[]> onCommand;
 
-    public RxStreamParser(BiConsumer<Byte, byte[]> onCommand) {
+    public ESP32DataStreamParser(BiConsumer<Byte, byte[]> onCommand) {
         this.onCommand = onCommand;
     }
 
     public byte[] extractAudioAndHandleCommands(byte[] newData) {
-        //commandParamLen = -1;
-
         ByteArrayOutputStream audioOut = new ByteArrayOutputStream();
         for (byte b : newData) {
             lookaheadBuffer.write(b);
@@ -34,6 +32,7 @@ public class RxStreamParser {
                 }
             } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length) {
                 command = b;
+                // Log.d("DEBUG", "command: " + command);
                 matchedDelimiterTokens++;
             } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
                 commandParamLen = b;
@@ -50,6 +49,7 @@ public class RxStreamParser {
                 matchedDelimiterTokens++;
                 lookaheadBuffer.reset();
                 if (commandParams.size() == commandParamLen) {
+                    // Log.d("DEBUG", "commandParams: " + commandParams);
                     onCommand.accept(command, commandParams.toByteArray());
                     resetParser(audioOut);
                 }

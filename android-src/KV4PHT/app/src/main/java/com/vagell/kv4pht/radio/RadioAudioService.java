@@ -155,7 +155,7 @@ public class RadioAudioService extends Service {
     private static final byte COMMAND_PHYS_PTT_DOWN = 0x44; // Ascii "D"
     private static final byte COMMAND_PHYS_PTT_UP = 0x55;   // Ascii "U"
 
-    private final RxStreamParser rxStreamParser = new RxStreamParser(this::handleParsedCommand);
+    private final ESP32DataStreamParser esp32DataStreamParser = new ESP32DataStreamParser(this::handleParsedCommand);
 
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
@@ -481,6 +481,8 @@ public class RadioAudioService extends Service {
         public void sentAprsBeacon(double latitude, double longitude);
         public void unknownLocation();
         public void forceTunedToFreq(String newFreqStr);
+        public void forcedPttStart();
+        public void forcedPttEnd();
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -1285,6 +1287,10 @@ public class RadioAudioService extends Service {
             } */
         // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
 
+        // Handle and remove any commands (e.g. S-meter updates, physical PTT up/down)
+        // which may be intermixed with audio bytes.
+        data = esp32DataStreamParser.extractAudioAndHandleCommands(data);
+
         if (mode == MODE_STARTUP) {
             try {
                 // TODO rework this to use same command-handling as s-meter updates (below)
@@ -1336,9 +1342,6 @@ public class RadioAudioService extends Service {
         }
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            // Handle and remove any commands (e.g. S-meter updates) embedded in the audio.
-            data = rxStreamParser.extractAudioAndHandleCommands(data);
-
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
                     if (afskDemodulator != null) { // Avoid race condition at app start.
@@ -1392,13 +1395,8 @@ public class RadioAudioService extends Service {
                 }
             }
         } else if (mode == MODE_TX) {
-            // Print any data we get in MODE_TX (we're not expecting any, this is either leftover rx bytes or debug info).
-            /* try {
-                String dataStr = new String(data, "UTF-8");
-                Log.d("DEBUG", "Unexpected data from ESP32 during MODE_TX: " + dataStr);
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            } */
+            // We only expect physical PTT up and down commands in this mode, but it's already
+            // been handled by esp32DataStreamParser() earlier in this method.
         }
 
         if (mode == MODE_BAD_FIRMWARE) {
@@ -1446,9 +1444,15 @@ public class RadioAudioService extends Service {
                 callbacks.sMeterUpdate(sMeter9Value);
             }
         } else if (cmd == COMMAND_PHYS_PTT_DOWN) {
-            Log.d("DEBUG", "Physical PTT down received.");
+            if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
+                startPtt();
+                callbacks.forcedPttStart();
+            }
         } else if (cmd == COMMAND_PHYS_PTT_UP) {
-            Log.d("DEBUG", "Physical PTT up received.");
+            if (mode == MODE_TX) {
+                endPtt();
+                callbacks.forcedPttEnd();
+            }
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
                     " paramLen=" + param.length);

@@ -491,6 +491,16 @@ public class MainActivity extends AppCompatActivity {
                     // to reflect that in the UI.
                     tuneToFreqUi(newFreqStr, true);
                 }
+
+                @Override
+                public void forcedPttStart() { // When user pushes physical PTT.
+                    startPttUi(false);
+                }
+
+                @Override
+                public void forcedPttEnd() { // When user releases physical PTT.
+                    endPttUi();
+                }
             };
 
             radioAudioService.setCallbacks(callbacks);

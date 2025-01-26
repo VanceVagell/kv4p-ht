@@ -90,7 +90,7 @@ boolean isTxCacheSatisfied = false; // Will be true when the DAC has enough cach
 
 #define DEBOUNCE_MS 50 // Minimum ms between PHYS_PTT_PIN1/2 down and then up, to avoid bouncing from spotty electrical contact.
 boolean isPhysPttDown = false;
-long buttonDebounceTimer = -1;
+long buttonDebounceMillis = -1;
 
 // Built in LED
 #define LED_PIN 2
@@ -248,25 +248,26 @@ int16_t remove_dc(int16_t x) {
 
 void loop() {
   try {
-    // Report any physical PTT button presses or releases back to Android app (we 
-    // don't start tx here, Android app decides what to do).
-    /* long msSincePhysButtonChange = (micros() - buttonDebounceTimer) / 1000;
-    if (buttonDebounceTimer == -1 || msSincePhysButtonChange > DEBOUNCE_MS) {      
+    // Report any physical PTT button presses or releases back to Android app (note that
+    // we don't start tx here, Android app decides what to do, since the user could be in
+    // some mode where tx doesn't make sense, like in Settings).
+    long msSincePhysButtonChange = millis() - buttonDebounceMillis;
+    if (buttonDebounceMillis == -1 || msSincePhysButtonChange > DEBOUNCE_MS) {      
       // If EITHER physical PTT button has just become "down", let Android app know
       if (!isPhysPttDown && 
           (digitalRead(PHYS_PTT_PIN1) == LOW || 
            digitalRead(PHYS_PTT_PIN2) == LOW)) {
         isPhysPttDown = true;
-        reportPhysPttDown();
-        buttonDebounceTimer = micros();
+        reportPhysPttState();
+        buttonDebounceMillis = millis();
       } else if (isPhysPttDown && // If BOTH PTT buttons are now "up", let Android app know
           (digitalRead(PHYS_PTT_PIN1) == HIGH && 
            digitalRead(PHYS_PTT_PIN2) == HIGH)) {
         isPhysPttDown = false;
-        reportPhysPttDown();
-        buttonDebounceTimer = micros();
+        reportPhysPttState();
+        buttonDebounceMillis = millis();
       }
-    } */
+    }
 
     if (mode == MODE_STOPPED) {
       // Read a command from Android app
@@ -666,6 +667,7 @@ void loop() {
 }
 
 /**
+ * Send a command with params
  * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
  */
 void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen) {
@@ -680,13 +682,28 @@ void sendCmdToAndroid(byte cmdByte, const byte* params, size_t paramsLen) {
   // 2. Command byte
   Serial.write(&cmdByte, 1);
 
-  if (paramsLen > 0) {
+  // 3. Parameter length
+  uint8_t len = paramsLen;
+  Serial.write(&len, 1);
+
+  // 4. Parameter bytes
+  Serial.write(params, paramsLen);
+}
+
+/**
+ * Send a command without params
+ * Format: [DELIMITER(8 bytes)] [CMD(1 byte)]
+ */
+void sendCmdToAndroid(byte cmdByte) {
+  // 1. Leading delimiter
+  Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
+
+  // 2. Command byte
+  Serial.write(&cmdByte, 1);
+
     // 3. Parameter length
-    uint8_t len = paramsLen;
-    Serial.write(&len, 1);
-    // 4. Parameter bytes
-    Serial.write(params, paramsLen);
-  }
+  uint8_t len = 0;
+  Serial.write(&len, 1);
 }
 
 void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth) {
@@ -747,7 +764,6 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
   } while (bytesToWrite > 0);
 }
 
-void reportPhysPttDown() {
-  byte params[0] = { };
-  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP, params, /* paramsLen */ 0);
+void reportPhysPttState() {
+  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
 }
