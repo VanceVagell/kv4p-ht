@@ -152,8 +152,10 @@ public class RadioAudioService extends Service {
     // Delimiter must match ESP32 code
     static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF, (byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF};
     private static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
+    private static final byte COMMAND_PHYS_PTT_DOWN = 0x44; // Ascii "D"
+    private static final byte COMMAND_PHYS_PTT_UP = 0x55;   // Ascii "U"
 
-    private final RxStreamParser rxStreamParser = new RxStreamParser(this::handleParsedCommand);
+    private final ESP32DataStreamParser esp32DataStreamParser = new ESP32DataStreamParser(this::handleParsedCommand);
 
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
@@ -183,7 +185,7 @@ public class RadioAudioService extends Service {
     private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
     private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
 
-    private String activeFrequencyStr = String.format(java.util.Locale.US, "%.4f", min2mTxFreq); // 4 decimal places, in MHz
+    private String activeFrequencyStr = null;
     private int squelch = 0;
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
@@ -303,8 +305,8 @@ public class RadioAudioService extends Service {
     public void setMinRadioFreq(float newMinFreq) {
         minRadioFreq = newMinFreq;
 
-        // Detect if we're moving from VHF to UHF, and move fix active frequency to within band.
-        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
+        // Detect if we're moving from VHF to UHF, and move active frequency to within band.
+        if (mode != MODE_STARTUP && activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
             tuneToFreq(String.format(java.util.Locale.US, "%.4f", min70cmTxFreq), squelch, true);
             callbacks.forceTunedToFreq(activeFrequencyStr);
         }
@@ -313,8 +315,8 @@ public class RadioAudioService extends Service {
     public void setMaxRadioFreq(float newMaxFreq) {
         maxRadioFreq = newMaxFreq;
 
-        // Detect if we're moving from UHF to VHF, and move fix active frequency to within band.
-        if (activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
+        // Detect if we're moving from UHF to VHF, and move active frequency to within band.
+        if (mode != MODE_STARTUP && activeFrequencyStr != null && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
             tuneToFreq(String.format(java.util.Locale.US, "%.4f", min2mTxFreq), squelch, true);
             callbacks.forceTunedToFreq(activeFrequencyStr);
         }
@@ -479,6 +481,8 @@ public class RadioAudioService extends Service {
         public void sentAprsBeacon(double latitude, double longitude);
         public void unknownLocation();
         public void forceTunedToFreq(String newFreqStr);
+        public void forcedPttStart();
+        public void forcedPttEnd();
     }
 
     public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
@@ -1283,6 +1287,10 @@ public class RadioAudioService extends Service {
             } */
         // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
 
+        // Handle and remove any commands (e.g. S-meter updates, physical PTT up/down)
+        // which may be intermixed with audio bytes.
+        data = esp32DataStreamParser.extractAudioAndHandleCommands(data);
+
         if (mode == MODE_STARTUP) {
             try {
                 // TODO rework this to use same command-handling as s-meter updates (below)
@@ -1334,9 +1342,6 @@ public class RadioAudioService extends Service {
         }
 
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            // Handle and remove any commands (e.g. S-meter updates) embedded in the audio.
-            data = rxStreamParser.extractAudioAndHandleCommands(data);
-
             if (prebufferComplete && audioTrack != null) {
                 synchronized (audioTrack) {
                     if (afskDemodulator != null) { // Avoid race condition at app start.
@@ -1390,13 +1395,8 @@ public class RadioAudioService extends Service {
                 }
             }
         } else if (mode == MODE_TX) {
-            // Print any data we get in MODE_TX (we're not expecting any, this is either leftover rx bytes or debug info).
-            /* try {
-                String dataStr = new String(data, "UTF-8");
-                Log.d("DEBUG", "Unexpected data from ESP32 during MODE_TX: " + dataStr);
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            } */
+            // We only expect physical PTT up and down commands in this mode, but it's already
+            // been handled by esp32DataStreamParser() earlier in this method.
         }
 
         if (mode == MODE_BAD_FIRMWARE) {
@@ -1442,6 +1442,16 @@ public class RadioAudioService extends Service {
                 // Log.d("DEBUG", "Normalized s-meter (0-9) = " + sMeter9Value);
 
                 callbacks.sMeterUpdate(sMeter9Value);
+            }
+        } else if (cmd == COMMAND_PHYS_PTT_DOWN) {
+            if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
+                startPtt();
+                callbacks.forcedPttStart();
+            }
+        } else if (cmd == COMMAND_PHYS_PTT_UP) {
+            if (mode == MODE_TX) {
+                endPtt();
+                callbacks.forcedPttEnd();
             }
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
