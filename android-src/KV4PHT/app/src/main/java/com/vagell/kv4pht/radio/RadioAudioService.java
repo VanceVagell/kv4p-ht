@@ -182,8 +182,8 @@ public class RadioAudioService extends Service {
 
     private static final float UHF_MIN_FREQ    = 400.0f; // DRA818U lower limit, in MHz
     private static float min70cmTxFreq         = 420.0f; // US 70cm band lower limit, in MHz (will be overwritten by user setting)
-    private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
-    private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
+    private static float max70cmTxFreq         = 480.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
+    private static final float UHF_MAX_FREQ    = 480.0f; // DRA818U upper limit, in MHz
 
     private String activeFrequencyStr = null;
     private int squelch = 0;

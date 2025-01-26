@@ -309,9 +309,9 @@ void loop() {
             paramBytesMissing--;
           }
           if (paramsStr.charAt(0) == 'v') {
-              dra = new DRA818(&Serial2, DRA818_VHF);
+              dra = new DRA818(&Serial2, SA818_VHF);
           } else if (paramsStr.charAt(0) == 'u') {
-              dra = new DRA818(&Serial2, DRA818_UHF);
+              dra = new DRA818(&Serial2, SA818_UHF);
           } else {
             // Unexpected.
           }
