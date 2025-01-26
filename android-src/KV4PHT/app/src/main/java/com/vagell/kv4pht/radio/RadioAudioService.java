@@ -174,15 +174,15 @@ public class RadioAudioService extends Service {
     private Runnable aprsBeaconRunnable = null;
 
     // Radio params and related settings
-    private static final float VHF_MIN_FREQ    = 134.0f; // DRA818V lower limit, in MHz
+    private static final float VHF_MIN_FREQ    = 134.0f; // SA818U lower limit, in MHz
     private static float min2mTxFreq           = 144.0f; // US 2m band lower limit, in MHz (will be overwritten by user setting)
     private static float max2mTxFreq           = 148.0f; // US 2m band upper limit, in MHz (will be overwritten by user setting)
-    private static final float VHF_MAX_FREQ    = 174.0f; // DRA818V upper limit, in MHz
+    private static final float VHF_MAX_FREQ    = 174.0f; // SA818U upper limit, in MHz
 
-    private static final float UHF_MIN_FREQ    = 400.0f; // DRA818U lower limit, in MHz
+    private static final float UHF_MIN_FREQ    = 400.0f; // SA818U lower limit, in MHz
     private static float min70cmTxFreq         = 420.0f; // US 70cm band lower limit, in MHz (will be overwritten by user setting)
     private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
-    private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
+    private static final float UHF_MAX_FREQ    = 480.0f; // SA818U upper limit, in MHz (DRA818U can only go to 470MHz)
 
     private String activeFrequencyStr = null;
     private int squelch = 0;
