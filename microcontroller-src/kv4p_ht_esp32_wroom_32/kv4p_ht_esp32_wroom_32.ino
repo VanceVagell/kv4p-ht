@@ -25,8 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 
-const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '0', '9'};  // Should be 8 characters representing a zero-padded version, like 00000001.
-const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
+const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '1', '0'}; // Should be 8 characters representing a zero-padded version, like 00000001.
+const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
 
 // Commands defined here must match the Android app
 const uint8_t COMMAND_PTT_DOWN         = 1;  // start transmitting audio that Android app will send

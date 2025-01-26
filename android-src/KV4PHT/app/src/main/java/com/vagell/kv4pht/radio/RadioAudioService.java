@@ -56,7 +56,6 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.CancellationTokenSource;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.hoho.android.usbserial.driver.SerialTimeoutException;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
@@ -175,15 +174,15 @@ public class RadioAudioService extends Service {
     private Runnable aprsBeaconRunnable = null;
 
     // Radio params and related settings
-    private static final float VHF_MIN_FREQ    = 134.0f; // DRA818V lower limit, in MHz
+    private static final float VHF_MIN_FREQ    = 134.0f; // SA818U lower limit, in MHz
     private static float min2mTxFreq           = 144.0f; // US 2m band lower limit, in MHz (will be overwritten by user setting)
     private static float max2mTxFreq           = 148.0f; // US 2m band upper limit, in MHz (will be overwritten by user setting)
-    private static final float VHF_MAX_FREQ    = 174.0f; // DRA818V upper limit, in MHz
+    private static final float VHF_MAX_FREQ    = 174.0f; // SA818U upper limit, in MHz
 
-    private static final float UHF_MIN_FREQ    = 400.0f; // DRA818U lower limit, in MHz
+    private static final float UHF_MIN_FREQ    = 400.0f; // SA818U lower limit, in MHz
     private static float min70cmTxFreq         = 420.0f; // US 70cm band lower limit, in MHz (will be overwritten by user setting)
     private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
-    private static final float UHF_MAX_FREQ    = 470.0f; // DRA818U upper limit, in MHz
+    private static final float UHF_MAX_FREQ    = 480.0f; // SA818U upper limit, in MHz (DRA818U can only go to 470MHz)
 
     private String activeFrequencyStr = null;
     private int squelch = 0;
@@ -389,9 +388,6 @@ public class RadioAudioService extends Service {
                 usbIoManager.stop();
                 break;
             default:
-                if (null != usbIoManager && usbIoManager.getState() == SerialInputOutputManager.State.STOPPED) {
-                    usbIoManager.start();
-                }
                 break;
         }
 
@@ -935,7 +931,8 @@ public class RadioAudioService extends Service {
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadTimeout(1000); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
+        usbIoManager.setReadBufferSize(1024/4); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
+        usbIoManager.setReadBufferCount(16*4);
         usbIoManager.start();
         checkedFirmwareVersion = false;
 
@@ -1222,42 +1219,12 @@ public class RadioAudioService extends Service {
             return;
         }
 
-        int usbRetries = 0;
-        try {
-            // usbIoManager.writeAsync(newBytes); // On MCUs like the ESP32 S2 this causes USB failures with concurrent USB rx/tx.
-            int bytesWritten = 0;
-            int totalBytes = newBytes.length;
-            final int MAX_BYTES_PER_USB_WRITE = 128;
-            do {
-                try {
-                    byte[] arrayPart = Arrays.copyOfRange(newBytes, bytesWritten, Math.min(bytesWritten + MAX_BYTES_PER_USB_WRITE, totalBytes));
-                    serialPort.write(arrayPart, 200);
-                    bytesWritten += MAX_BYTES_PER_USB_WRITE;
-                    usbRetries = 0;
-                } catch (SerialTimeoutException ste) {
-                    // Do nothing, we'll try again momentarily. ESP32's serial buffer may be full.
-                    usbRetries++;
-                    Log.d("DEBUG", "usbRetries: " + usbRetries);
-                }
-            } while (bytesWritten < totalBytes && usbRetries < 10);
-            // Log.d("DEBUG", "Wrote data: " + Arrays.toString(newBytes));
-        } catch (Exception e) {
-            e.printStackTrace();
-            try {
-                serialPort.close();
-            } catch (Exception ex) {
-                // Ignore. We did our best to close it!
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ex) {
-                // Ignore. This should only happen if the app is paused in this brief moment between USB retries, not a serious issue.
-            }
-            findESP32Device(); // Attempt to reconnect after the brief pause above.
+        if (null == usbIoManager) {
+            Log.d("DEBUG", "Warning: usbIoManager was null when trying to send bytes to ESP32.");
+            return;
         }
-        if (usbRetries == 10) {
-            Log.d("DEBUG", "sendBytesToESP32: Connected to ESP32 via USB serial, but could not send data after 10 retries.");
-        }
+
+        usbIoManager.writeAsync(newBytes);
     }
 
     public static UsbSerialPort getUsbSerialPort() {
