@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/i2s.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
+#include <BleSerial.h>
 
 const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '0', '9'};  // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
@@ -87,6 +88,29 @@ boolean isTxCacheSatisfied                               = false;  // Will be tr
 // Built in LED
 #define LED_PIN 2
 
+#ifdef DUMMY_DRA818
+DRA818::DRA818(HardwareSerial *serial, uint8_t type) {
+  Serial.println("Using Dummy DRA818");
+}
+
+int DRA818::group(uint8_t bw, float freq_tx, float freq_rx, uint8_t ctcss_tx, uint8_t squelch, uint8_t ctcss_rx) {
+  Serial.printf("Dummy DRA818 group: %d %f %f\n", bw, freq_tx, freq_rx);
+  return 1;
+}
+int DRA818::filters(bool pre, bool high, bool low) {
+  Serial.printf("Dummy DRA818 filters: %d %d %d\n", pre, high, low);
+  return 1;
+}
+int DRA818::handshake() {
+  Serial.printf("Dummy DRA818 handshake\n");
+  return 1;
+}
+int DRA818::volume(uint8_t volume) {
+  Serial.printf("Dummy DRA818 volume: %d\n", volume);
+  return 1;
+}
+#endif
+
 // Object used for radio module serial comms
 DRA818 *dra;
 
@@ -116,6 +140,9 @@ int fadeDirection  = 0;                // 0: no fade, 1: fade in, -1: fade out
 int attenuation    = ATTENUATION_MAX;  // Full volume
 bool lastSquelched = false;
 
+BleSerial SerialBle;
+
+Stream *SerialDevice;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
@@ -153,8 +180,33 @@ void setup() {
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
+  // Default to HardwareSerial.
+  // BleSerial is enabled when it is connected to.
+  setSerialDevice(&Serial);
+  initBleSerial();
+
   // Begin in STOPPED mode
   setMode(MODE_STOPPED);
+}
+
+void setSerialDevice(Stream *s) {
+  SerialDevice = s;
+}
+
+void bleConnectCallback(bool connected) {
+  if (connected) {
+    // Serial.println("BLE Connected");
+    setSerialDevice(&SerialBle);
+  } else {
+    // Serial.println("BLE Disconnected");
+    setSerialDevice(&Serial);
+  }
+}
+
+void initBleSerial() {
+  // Serial.println("Starting BLE");
+  SerialBle.begin("kv4p HT");
+  SerialBle.setConnectCallback(bleConnectCallback);
 }
 
 void initI2SRx() {
@@ -240,15 +292,15 @@ void loop() {
       int bytesRead = 0;
 
       while (bytesRead < (DELIMITER_LENGTH + 1)) {  // Read the delimiter and the command byte only (no params yet)
-        if (Serial.available()) {
-          tempBuffer[bytesRead++] = Serial.read();
+        if (SerialDevice->available()) {
+          tempBuffer[bytesRead++] = SerialDevice->read();
         }
       }
       switch (tempBuffer[DELIMITER_LENGTH]) {
 
         case COMMAND_STOP:
           {
-            Serial.flush();
+            SerialDevice->flush();
             break;
           }
 
@@ -261,14 +313,14 @@ void loop() {
               uint8_t paramPartsBuffer[paramBytesMissing];
               for (int j = 0; j < paramBytesMissing; j++) {
                 unsigned long waitStart = micros();
-                while (!Serial.available()) {
+                while (!SerialDevice->available()) {
                   // Wait for a byte.
                   if ((micros() - waitStart) > 500000) {  // Give the Android app 0.5 second max before giving up on the command
                     esp_task_wdt_reset();
                     return;
                   }
                 }
-                paramPartsBuffer[j] = Serial.read();
+                paramPartsBuffer[j] = SerialDevice->read();
               }
               paramsStr += String((char *)paramPartsBuffer);
               paramBytesMissing--;
@@ -285,7 +337,7 @@ void loop() {
             unsigned long waitStart = micros();
             while (result != 1) {
               result = dra->handshake();  // Wait for module to start up
-              // Serial.println("handshake: " + String(result));
+              // SerialDevice->println("handshake: " + String(result));
 
               if ((micros() - waitStart) > 2000000) {  // Give the radio module 2 seconds max before giving up on it
                 radioModuleStatus = RADIO_MODULE_NOT_FOUND;
@@ -298,16 +350,16 @@ void loop() {
             }
 
             result = dra->volume(8);
-            // Serial.println("volume: " + String(result));
+            // SerialDevice->println("volume: " + String(result));
             result = dra->filters(false, false, false);
-            // Serial.println("filters: " + String(result));
+            // SerialDevice->println("filters: " + String(result));
 
-            Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));  // "VERSION"
-            Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));      // "00000007" (or whatever)
+            SerialDevice->write(VERSION_PREFIX, sizeof(VERSION_PREFIX));  // "VERSION"
+            SerialDevice->write(FIRMWARE_VER, sizeof(FIRMWARE_VER));      // "00000007" (or whatever)
             uint8_t radioModuleStatusArray[1] = {radioModuleStatus};
-            Serial.write(radioModuleStatusArray, 1);  // "f" (or "x" if there's a problem with radio module)
+            SerialDevice->write(radioModuleStatusArray, 1);  // "f" (or "x" if there's a problem with radio module)
 
-            Serial.flush();
+            SerialDevice->flush();
             esp_task_wdt_reset();
             return;
           }
@@ -328,14 +380,14 @@ void loop() {
               uint8_t paramPartsBuffer[paramBytesMissing];
               for (int j = 0; j < paramBytesMissing; j++) {
                 unsigned long waitStart = micros();
-                while (!Serial.available()) {
+                while (!SerialDevice->available()) {
                   // Wait for a byte.
                   if ((micros() - waitStart) > 500000) {  // Give the Android app 0.5 second max before giving up on the command
                     esp_task_wdt_reset();
                     return;
                   }
                 }
-                paramPartsBuffer[j] = Serial.read();
+                paramPartsBuffer[j] = SerialDevice->read();
               }
               paramsStr += String((char *)paramPartsBuffer);
               paramBytesMissing--;
@@ -353,7 +405,7 @@ void loop() {
 
             tuneTo(freqTxFloat, freqRxFloat, txToneInt, rxToneInt, squelchInt, bandwidth);
 
-            // Serial.println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
+            // SerialDevice->println("PARAMS: " + paramsStr.substring(0, 16) + " freqTxFloat: " + String(freqTxFloat) + " freqRxFloat: " + String(freqRxFloat) + " toneInt: " + String(toneInt));
             break;
           }
 
@@ -365,14 +417,14 @@ void loop() {
               uint8_t paramPartsBuffer[paramBytesMissing];
               for (int j = 0; j < paramBytesMissing; j++) {
                 unsigned long waitStart = micros();
-                while (!Serial.available()) {
+                while (!SerialDevice->available()) {
                   // Wait for a byte.
                   if ((micros() - waitStart) > 500000) {  // Give the Android app 0.5 second max before giving up on the command
                     esp_task_wdt_reset();
                     return;
                   }
                 }
-                paramPartsBuffer[j] = Serial.read();
+                paramPartsBuffer[j] = SerialDevice->read();
               }
               paramsStr += String((char *)paramPartsBuffer);
               paramBytesMissing--;
@@ -388,8 +440,8 @@ void loop() {
       esp_task_wdt_reset();
       return;
     } else if (mode == MODE_RX) {
-      while (Serial.available()) {
-        uint8_t inByte = Serial.read();
+      while (SerialDevice->available()) {
+        uint8_t inByte = SerialDevice->read();
         if (matchedDelimiterTokensRx < DELIMITER_LENGTH) {
           // Match delimiter sequence
           if (inByte == COMMAND_DELIMITER[matchedDelimiterTokensRx]) {
@@ -405,7 +457,7 @@ void loop() {
             case COMMAND_STOP:
               {
                 setMode(MODE_STOPPED);
-                Serial.flush();
+                SerialDevice->flush();
                 esp_task_wdt_reset();
                 return;
               }
@@ -428,14 +480,14 @@ void loop() {
                   uint8_t paramPartsBuffer[paramBytesMissing];
                   for (int j = 0; j < paramBytesMissing; j++) {
                     unsigned long waitStart = micros();
-                    while (!Serial.available()) {
+                    while (!SerialDevice->available()) {
                       // Wait for a byte.
                       if ((micros() - waitStart) > 500000) {  // Give the Android app 0.5 second max before giving up on the command
                         esp_task_wdt_reset();
                         return;
                       }
                     }
-                    paramPartsBuffer[j] = Serial.read();
+                    paramPartsBuffer[j] = SerialDevice->read();
                   }
                   paramsStr += String((char *)paramPartsBuffer);
                   paramBytesMissing--;
@@ -463,14 +515,14 @@ void loop() {
                   uint8_t paramPartsBuffer[paramBytesMissing];
                   for (int j = 0; j < paramBytesMissing; j++) {
                     unsigned long waitStart = micros();
-                    while (!Serial.available()) {
+                    while (!SerialDevice->available()) {
                       // Wait for a byte.
                       if ((micros() - waitStart) > 500000) {  // Give the Android app 0.5 second max before giving up on the command
                         esp_task_wdt_reset();
                         return;
                       }
                     }
-                    paramPartsBuffer[j] = Serial.read();
+                    paramPartsBuffer[j] = SerialDevice->read();
                   }
                   paramsStr += String((char *)paramPartsBuffer);
                   paramBytesMissing--;
@@ -556,7 +608,7 @@ void loop() {
         buffer8[i]     = (sample >> 8);  // Signed
       }
 
-      Serial.write(buffer8, samplesRead);
+      SerialDevice->write(buffer8, samplesRead);
     } else if (mode == MODE_TX) {
       // Check for runaway tx
       int txSeconds = (micros() - txStartTime) / 1000000;
@@ -569,9 +621,9 @@ void loop() {
       // Check for incoming commands or audio from Android
       int bytesRead = 0;
       static uint8_t tempBuffer[TX_TEMP_AUDIO_BUFFER_SIZE];
-      int bytesAvailable = Serial.available();
+      int bytesAvailable = SerialDevice->available();
       if (bytesAvailable > 0) {
-        bytesRead = Serial.readBytes(tempBuffer, bytesAvailable);
+        bytesRead = SerialDevice->readBytes(tempBuffer, bytesAvailable);
 
         // Pre-cache transmit audio to ensure precise timing (required for any data encoding to work, such as BFSK).
         if (!isTxCacheSatisfied) {
@@ -627,7 +679,7 @@ void loop() {
     esp_task_wdt_reset();
   } catch (int e) {
     // Disregard, we don't want to crash. Just pick up at next loop().)
-    // Serial.println("Exception in loop(), skipping cycle.");
+    // SerialDevice->println("Exception in loop(), skipping cycle.");
   }
 }
 
@@ -667,7 +719,7 @@ void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, Str
       result = dra->group(DRA818_12K5, freqTx, freqRx, txTone, squelch, rxTone);
     }
   }
-  // Serial.println("tuneTo: " + String(result));
+  // SerialDevice->println("tuneTo: " + String(result));
 }
 
 void setMode(int newMode) {
