@@ -1218,6 +1218,12 @@ public class RadioAudioService extends Service {
             Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 while in the process of flashing a new firmware.");
             return;
         }
+
+        if (null == usbIoManager) {
+            Log.d("DEBUG", "Warning: usbIoManager was null when trying to send bytes to ESP32.");
+            return;
+        }
+
         usbIoManager.writeAsync(newBytes);
     }
 
