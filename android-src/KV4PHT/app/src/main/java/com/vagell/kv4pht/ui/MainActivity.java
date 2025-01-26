@@ -92,6 +92,7 @@ import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -515,8 +516,11 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            radioAudioService.setRadioType(moduleTypeSetting.value.equals("UHF") ?
-                                    RadioAudioService.RADIO_MODULE_UHF : RadioAudioService.RADIO_MODULE_VHF);
+                            radioAudioService.setRadioType(
+                                "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
+                                    ? RadioAudioService.RADIO_MODULE_UHF
+                                    : RadioAudioService.RADIO_MODULE_VHF
+                            );
                             radioAudioService.start();
                         }
                     });
