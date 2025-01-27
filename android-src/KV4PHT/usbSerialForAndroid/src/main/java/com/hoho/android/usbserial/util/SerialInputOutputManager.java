@@ -15,6 +15,8 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -165,7 +167,16 @@ public class SerialInputOutputManager {
      */
     public void writeAsync(byte[] data) {
         synchronized (mWriteBufferLock) {
+            while (mWriteBuffer.remaining() < data.length) {
+                try {
+                    mWriteBufferLock.wait(); // Block until space is available in the buffer
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // Restore the interrupt flag
+                    return; // Exit gracefully
+                }
+            }
             mWriteBuffer.put(data);
+            mWriteBufferLock.notifyAll(); // Notify waiting threads
         }
     }
 
@@ -195,6 +206,9 @@ public class SerialInputOutputManager {
      */
     public void stop() {
         if(mState.compareAndSet(State.RUNNING, State.STOPPING)) {
+            synchronized (mWriteBufferLock) {
+                mWriteBufferLock.notifyAll(); // Wake up any waiting thread to check the stop condition
+            }
             Log.i(TAG, "Stop requested");
         }
     }
@@ -217,7 +231,7 @@ public class SerialInputOutputManager {
         }
 
         private void notifyErrorListener(Throwable e) {
-            if (getListener() != null) {
+            if ((getListener() != null) && (mState.get() == SerialInputOutputManager.State.RUNNING)) {
                 try {
                     getListener().onRunError(e instanceof Exception ? (Exception) e : new Exception(e));
                 } catch (Throwable t) {
@@ -248,7 +262,7 @@ public class SerialInputOutputManager {
         }
 
         abstract void init();
-        abstract void step() throws IOException;
+        abstract void step() throws IOException, InterruptedException;
 
         @Override
         public void run() {
@@ -274,6 +288,8 @@ public class SerialInputOutputManager {
 
     class ServiceReadThread extends ServiceThread {
 
+        private final List<UsbRequest> mReadPool = new ArrayList<>();
+
         ServiceReadThread(String name) {
             super(name);
         }
@@ -287,6 +303,20 @@ public class SerialInputOutputManager {
                 request.setClientData(buffer);
                 request.initialize(mSerialPort.getConnection(), mSerialPort.getReadEndpoint());
                 request.queue(buffer, buffer.capacity());
+                mReadPool.add(request);
+            }
+        }
+
+        @Override
+        public void run() {
+            try {
+                super.run();
+            } finally {
+                // Clean up read pool
+                for (UsbRequest request : mReadPool) {
+                    request.cancel();
+                    request.close();
+                }
             }
         }
 
@@ -326,7 +356,7 @@ public class SerialInputOutputManager {
         }
 
         @Override
-        void step() throws IOException {
+        void step() throws IOException, InterruptedException {
             // Handle outgoing data.
             byte[] buffer = null;
             synchronized (mWriteBufferLock) {
@@ -336,6 +366,9 @@ public class SerialInputOutputManager {
                     mWriteBuffer.rewind();
                     mWriteBuffer.get(buffer, 0, len);
                     mWriteBuffer.clear();
+                    mWriteBufferLock.notifyAll(); // Notify writeAsync that there is space in the buffer
+                } else {
+                    mWriteBufferLock.wait();
                 }
             }
             if (buffer != null) {
