@@ -1206,7 +1206,6 @@ public class DeviceTest {
             writeAhead = 50;
 
         usb.open(EnumSet.of(UsbWrapper.OpenCloseFlags.NO_IOMANAGER_START));
-        usb.ioManager.setReadTimeout(readTimeout);
         if(readBufferSize > 0)
             usb.ioManager.setReadBufferSize(readBufferSize);
         usb.ioManager.start();
@@ -1383,9 +1382,6 @@ public class DeviceTest {
         usb.ioManager = new SerialInputOutputManager(usb.serialPort, usb);
         assertEquals(usb, usb.ioManager.getListener());
 
-        assertEquals(0, usb.ioManager.getReadTimeout());
-        usb.ioManager.setReadTimeout(10);
-        assertEquals(10, usb.ioManager.getReadTimeout());
         assertEquals(0, usb.ioManager.getWriteTimeout());
         usb.ioManager.setWriteTimeout(11);
         assertEquals(11, usb.ioManager.getWriteTimeout());
@@ -1399,7 +1395,6 @@ public class DeviceTest {
 
         usb.ioManager.setReadBufferSize(usb.ioManager.getReadBufferSize());
         usb.ioManager.setWriteBufferSize(usb.ioManager.getWriteBufferSize());
-        usb.ioManager.setReadTimeout(usb.ioManager.getReadTimeout());
         usb.ioManager.setWriteTimeout(usb.ioManager.getWriteTimeout());
         usb.close();
 
@@ -1416,7 +1411,7 @@ public class DeviceTest {
         } catch (IllegalStateException ignored) {
         }
         try {
-            usb.ioManager.run();
+            usb.ioManager.start();
             fail("already running error expected");
         } catch (IllegalStateException ignored) {
         }
@@ -1424,11 +1419,6 @@ public class DeviceTest {
             usb.ioManager.setThreadPriority(Process.THREAD_PRIORITY_LOWEST);
             fail("setThreadPriority IllegalStateException expected");
         } catch (IllegalStateException ignored) {}
-        try {
-            usb.ioManager.setReadTimeout(20);
-            fail("setReadTimeout IllegalStateException expected");
-        } catch (IllegalStateException ignored) {}
-        assertEquals(0, usb.ioManager.getReadTimeout());
         usb.ioManager.setWriteTimeout(21);
         assertEquals(21, usb.ioManager.getWriteTimeout());
         usb.ioManager.setReadBufferSize(22);
@@ -1484,7 +1474,6 @@ public class DeviceTest {
         usb.setParameters(19200, 8, 1, UsbSerialPort.PARITY_NONE);
         telnet.setParameters(19200, 8, 1, UsbSerialPort.PARITY_NONE);
         usb.ioManager.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
-        Executors.newSingleThreadExecutor().submit(usb.ioManager);
         usb.waitForIoManagerStarted();
         try {
             usb.ioManager.start();
@@ -1514,7 +1503,6 @@ public class DeviceTest {
 
         // with timeout: write after timeout
         usb.open(EnumSet.of(UsbWrapper.OpenCloseFlags.NO_IOMANAGER_START));
-        usb.ioManager.setReadTimeout(100);
         usb.ioManager.start();
         usb.setParameters(19200, 8, 1, UsbSerialPort.PARITY_NONE);
         telnet.setParameters(19200, 8, 1, UsbSerialPort.PARITY_NONE);
@@ -1522,7 +1510,6 @@ public class DeviceTest {
         usb.ioManager.writeAsync(buf);
         data = telnet.read(2);
         assertEquals(2, data.length);
-        usb.ioManager.setReadTimeout(200);
     }
 
     @Test

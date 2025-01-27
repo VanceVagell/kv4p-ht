@@ -33,7 +33,12 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
     protected final UsbDevice mDevice;
     protected final int mPortNumber;
 
-    // non-null when open()
+    @Override
+    public UsbDeviceConnection getConnection() {
+      return mConnection;
+    }
+
+  // non-null when open()
     protected UsbDeviceConnection mConnection = null;
     protected UsbEndpoint mReadEndpoint;
     protected UsbEndpoint mWriteEndpoint;
