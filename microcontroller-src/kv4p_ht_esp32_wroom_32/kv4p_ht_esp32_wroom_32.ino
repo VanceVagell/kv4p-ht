@@ -276,11 +276,16 @@ void loop() {
       uint8_t tempBuffer[100];  // Big enough for a command and params, won't hold audio data
       int bytesRead = 0;
 
-      while (bytesRead < (DELIMITER_LENGTH + 1)) {  // Read the delimiter and the command byte only (no params yet)
-        if (Serial.available()) {
-          tempBuffer[bytesRead++] = Serial.read();
+      while (bytesRead < (DELIMITER_LENGTH)) { // Read the delimiter and the command byte only (no params yet)
+        uint8_t tmp = Serial.read();
+        if (tmp != COMMAND_DELIMITER[bytesRead]) {
+          // Not a delimiter. Reset.
+          bytesRead = 0;
+          continue;
         }
+        tempBuffer[bytesRead++] = tmp;
       }
+      tempBuffer[DELIMITER_LENGTH] = Serial.read();
       switch (tempBuffer[DELIMITER_LENGTH]) {
 
         case COMMAND_STOP:
