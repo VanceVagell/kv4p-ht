@@ -25,8 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 
-const byte FIRMWARE_VER[8] = {'0', '0', '0', '0', '0', '0', '1', '1'}; // Should be 8 characters representing a zero-padded version, like 00000001.
-const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'}; // Must match RadioAudioService.VERSION_PREFIX in Android app.
+const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '1'};  // Should be 8 characters representing a zero-padded version, like 00000001.
+const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
 
 // Commands defined here must match the Android app
 const uint8_t COMMAND_PTT_DOWN         = 1;  // start transmitting audio that Android app will send
@@ -37,9 +37,9 @@ const uint8_t COMMAND_STOP             = 5;  // stop everything, just wait for n
 const uint8_t COMMAND_GET_FIRMWARE_VER = 6;  // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
 
 // Outgoing commands (ESP32 -> Android)
-const byte COMMAND_SMETER_REPORT = 0x53; // 'S'
-const byte COMMAND_PHYS_PTT_DOWN = 0x44; // 'D'
-const byte COMMAND_PHYS_PTT_UP = 0x55;   // 'U'
+const byte COMMAND_SMETER_REPORT = 0x53;  // 'S'
+const byte COMMAND_PHYS_PTT_DOWN = 0x44;  // 'D'
+const byte COMMAND_PHYS_PTT_UP   = 0x55;  // 'U'
 
 // S-meter interval
 long lastSMeterReport = -1;
@@ -80,17 +80,17 @@ boolean isTxCacheSatisfied                               = false;  // Will be tr
 // Connections to radio module
 #define RXD2_PIN 16
 #define TXD2_PIN 17
-#define DAC_PIN 25 // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
-#define ADC_PIN 34 // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
-#define PTT_PIN 18 // Keys up the radio module
+#define DAC_PIN 25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
+#define ADC_PIN 34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
+#define PTT_PIN 18  // Keys up the radio module
 #define PD_PIN 19
 //#define SQ_PIN 32
 uint8_t SQ_PIN = 32;
-#define PHYS_PTT_PIN1 5  // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
-#define PHYS_PTT_PIN2 33 // Optional. See above.
+#define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
+#define PHYS_PTT_PIN2 33  // Optional. See above.
 
-#define DEBOUNCE_MS 50 // Minimum ms between PHYS_PTT_PIN1/2 down and then up, to avoid bouncing from spotty electrical contact.
-boolean isPhysPttDown = false;
+#define DEBOUNCE_MS 50  // Minimum ms between PHYS_PTT_PIN1/2 down and then up, to avoid bouncing from spotty electrical contact.
+boolean isPhysPttDown     = false;
 long buttonDebounceMillis = -1;
 
 // Built in LED
@@ -139,7 +139,7 @@ typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if w
 #define HW_VER_V2_0C (0xFF)
 #define HW_VER_V2_0D (0xF0)
 // #define HW_VER_?? (0x0F)  // Unused
-hw_ver_t hardware_version = HW_VER_V1; // lowest common denominator
+hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
@@ -164,7 +164,7 @@ void setup() {
   Serial.begin(230400);
 
   // Hardware dependent pin assignments.
-  switch(hardware_version) {
+  switch (hardware_version) {
     case HW_VER_V1:
       SQ_PIN = 32;
       break;
@@ -292,17 +292,14 @@ void loop() {
     // we don't start tx here, Android app decides what to do, since the user could be in
     // some mode where tx doesn't make sense, like in Settings).
     long msSincePhysButtonChange = millis() - buttonDebounceMillis;
-    if (buttonDebounceMillis == -1 || msSincePhysButtonChange > DEBOUNCE_MS) {      
+    if (buttonDebounceMillis == -1 || msSincePhysButtonChange > DEBOUNCE_MS) {
       // If EITHER physical PTT button has just become "down", let Android app know
-      if (!isPhysPttDown && 
-          (digitalRead(PHYS_PTT_PIN1) == LOW || 
-           digitalRead(PHYS_PTT_PIN2) == LOW)) {
+      if (!isPhysPttDown && (digitalRead(PHYS_PTT_PIN1) == LOW || digitalRead(PHYS_PTT_PIN2) == LOW)) {
         isPhysPttDown = true;
         reportPhysPttState();
         buttonDebounceMillis = millis();
-      } else if (isPhysPttDown && // If BOTH PTT buttons are now "up", let Android app know
-          (digitalRead(PHYS_PTT_PIN1) == HIGH && 
-           digitalRead(PHYS_PTT_PIN2) == HIGH)) {
+      } else if (isPhysPttDown &&  // If BOTH PTT buttons are now "up", let Android app know
+                 (digitalRead(PHYS_PTT_PIN1) == HIGH && digitalRead(PHYS_PTT_PIN2) == HIGH)) {
         isPhysPttDown = false;
         reportPhysPttState();
         buttonDebounceMillis = millis();
@@ -314,7 +311,7 @@ void loop() {
       uint8_t tempBuffer[100];  // Big enough for a command and params, won't hold audio data
       int bytesRead = 0;
 
-      while (bytesRead < (DELIMITER_LENGTH)) { // Read the delimiter and the command byte only (no params yet)
+      while (bytesRead < (DELIMITER_LENGTH)) {  // Read the delimiter and the command byte only (no params yet)
         uint8_t tmp = Serial.read();
         if (tmp != COMMAND_DELIMITER[bytesRead]) {
           // Not a delimiter. Reset.
@@ -377,15 +374,15 @@ void loop() {
               radioModuleStatus = RADIO_MODULE_FOUND;
             }
 
-          if (hardware_version == HW_VER_V2_0C) {
-            // v2.0c has a lower input ADC range.
-            result = dra->volume(4);
-          } else {
-            result = dra->volume(8);
-          }
-          // Serial.println("volume: " + String(result));
-          result = dra->filters(false, false, false);
-          // Serial.println("filters: " + String(result));
+            if (hardware_version == HW_VER_V2_0C) {
+              // v2.0c has a lower input ADC range.
+              result = dra->volume(4);
+            } else {
+              result = dra->volume(8);
+            }
+            // Serial.println("volume: " + String(result));
+            result = dra->filters(false, false, false);
+            // Serial.println("filters: " + String(result));
 
             Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));  // "VERSION"
             Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));      // "00000007" (or whatever)
@@ -752,7 +749,7 @@ void sendCmdToAndroid(byte cmdByte) {
   // 2. Command byte
   Serial.write(&cmdByte, 1);
 
-    // 3. Parameter length
+  // 3. Parameter length
   uint8_t len = 0;
   Serial.write(&len, 1);
 }
@@ -827,7 +824,7 @@ hw_ver_t get_hardware_version() {
   ver |= (digitalRead(HW_VER_PIN_0) == HIGH ? 0x0F : 0x00);
   ver |= (digitalRead(HW_VER_PIN_1) == HIGH ? 0xF0 : 0x00);
 
-  // In the future, we're replace these with analogRead()s and 
+  // In the future, we're replace these with analogRead()s and
   // use values between 0x0 and 0xF. For now, just binary.
 
   return ver;
