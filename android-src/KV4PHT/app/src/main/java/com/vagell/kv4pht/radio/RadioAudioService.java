@@ -397,7 +397,8 @@ public class RadioAudioService extends Service {
                     serialPort.setDTR(false);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                } catch (IOException ignored) {
+                } catch (IOException e) {
+                    Log.e("DEBUG", "Error while restart ESP32.", e);
                 }
                 break;
             default:
