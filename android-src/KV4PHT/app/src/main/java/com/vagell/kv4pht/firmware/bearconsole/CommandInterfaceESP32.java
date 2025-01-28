@@ -342,7 +342,6 @@ public class CommandInterfaceESP32 {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        //try { Thread.sleep(50); } catch (InterruptedException e) {}
 
         int numRead = recv(retVal.retValue, retVal.retValue.length, timeout);
         if (numRead == 0) {
