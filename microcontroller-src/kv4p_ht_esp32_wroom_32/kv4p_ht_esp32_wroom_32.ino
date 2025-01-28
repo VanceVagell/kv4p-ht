@@ -124,6 +124,10 @@ int fadeDirection  = 0;                // 0: no fade, 1: fade in, -1: fade out
 int attenuation    = ATTENUATION_MAX;  // Full volume
 bool lastSquelched = false;
 
+// 11dB vs 12dB is a ...version thing?
+#ifndef ADC_ATTEN_DB_12
+#define ADC_ATTEN_DB_12 ADC_ATTEN_DB_11
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
