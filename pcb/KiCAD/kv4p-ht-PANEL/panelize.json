@@ -32,13 +32,13 @@
         "type": "simple",
         "voffset": "2.5mm",
         "thickness": "0.25mm",
-        "text": "kv4p-ht, v2.0c"
+        "text": "kv4p-ht, v2.0d"
     },
     "text2": {
         "type": "simple",
         "voffset": "-2.5mm",
         "thickness": "0.25mm",
-        "text": "Manufactured by Halibut Electronics, 2024-12-09",
+        "text": "Manufactured by Halibut Electronics, 2025-01-15",
         "anchor": "mb"
     },
     "post": {
