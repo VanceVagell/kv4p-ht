@@ -84,7 +84,8 @@ boolean isTxCacheSatisfied                               = false;  // Will be tr
 #define ADC_PIN 34 // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
 #define PTT_PIN 18 // Keys up the radio module
 #define PD_PIN 19
-#define SQ_PIN 32
+//#define SQ_PIN 32
+uint8_t SQ_PIN = 32;
 #define PHYS_PTT_PIN1 5  // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define PHYS_PTT_PIN2 33 // Optional. See above.
 
@@ -129,6 +130,17 @@ bool lastSquelched = false;
 #define ADC_ATTEN_DB_12 ADC_ATTEN_DB_11
 #endif
 
+// Hardware version detection
+#define HW_VER_PIN_0 39    // 0xF0
+#define HW_VER_PIN_1 36    // 0x0F
+typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if we want.
+// LOW = 0, HIGH = F, 1 <= analog values <= E
+#define HW_VER_V1 (0x00)
+#define HW_VER_V2_0C (0xFF)
+#define HW_VER_V2_0D (0xF0)
+// #define HW_VER_?? (0x0F)  // Unused
+hw_ver_t hardware_version = HW_VER_V1; // lowest common denominator
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,12 +151,33 @@ void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth)
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
+hw_ver_t get_hardware_version();
+void reportPhysPttState();
 
 void setup() {
+  // Used for setup, need to know early.
+  hardware_version = get_hardware_version();
+
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(230400);
+
+  // Hardware dependent pin assignments.
+  switch(hardware_version) {
+    case HW_VER_V1:
+      SQ_PIN = 32;
+      break;
+    case HW_VER_V2_0C:
+      SQ_PIN = 4;
+      break;
+    case HW_VER_V2_0D:
+      SQ_PIN = 4;
+      break;
+    default:
+      // Unknown version detected. Indicate this some way?
+      break;
+  }
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
@@ -182,7 +215,12 @@ void initI2SRx() {
 
   // Initialize ADC
   adc1_config_width(ADC_WIDTH_BIT_12);
-  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
+  if (hardware_version == HW_VER_V2_0C) {
+    // v2.0c has a lower input ADC range
+    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
+  } else {
+    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
+  }
 
   static const i2s_config_t i2sRxConfig = {
     .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
@@ -339,10 +377,16 @@ void loop() {
               radioModuleStatus = RADIO_MODULE_FOUND;
             }
 
+          if (hardware_version == HW_VER_V2_0C) {
+            // v2.0c has a lower input ADC range.
+            result = dra->volume(4);
+          } else {
             result = dra->volume(8);
-            // Serial.println("volume: " + String(result));
-            result = dra->filters(false, false, false);
-            // Serial.println("filters: " + String(result));
+          }
+
+          // Serial.println("volume: " + String(result));
+          result = dra->filters(false, false, false);
+          // Serial.println("filters: " + String(result));
 
             Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));  // "VERSION"
             Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));      // "00000007" (or whatever)
@@ -353,6 +397,7 @@ void loop() {
             esp_task_wdt_reset();
             return;
           }
+
 
         // TODO get rid of the code duplication here and in MODE_RX below to handle COMMAND_TUNE_TO and COMMAND_FILTERS.
         // Should probably just have one standardized way to read any incoming bytes from Android app here, and handle
@@ -773,4 +818,18 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
 
 void reportPhysPttState() {
   sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
+}
+
+hw_ver_t get_hardware_version() {
+  pinMode(HW_VER_PIN_0, INPUT);
+  pinMode(HW_VER_PIN_1, INPUT);
+
+  hw_ver_t ver = 0x00;
+  ver |= (digitalRead(HW_VER_PIN_0) == HIGH ? 0x0F : 0x00);
+  ver |= (digitalRead(HW_VER_PIN_1) == HIGH ? 0xF0 : 0x00);
+
+  // In the future, we're replace these with analogRead()s and 
+  // use values between 0x0 and 0xF. For now, just binary.
+
+  return ver;
 }
