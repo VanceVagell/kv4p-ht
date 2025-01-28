@@ -395,7 +395,9 @@ public class RadioAudioService extends Service {
                     serialPort.setRTS(false);
                     Thread.sleep(50);
                     serialPort.setDTR(false);
-                } catch (IOException | InterruptedException e) {
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (IOException ignored) {
                 }
                 break;
             default:
