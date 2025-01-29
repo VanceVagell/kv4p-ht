@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/i2s.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
+#include <Adafruit_NeoPixel.h>
 
 const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '1'};  // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
@@ -52,10 +53,12 @@ int matchedDelimiterTokens                        = 0;
 int matchedDelimiterTokensRx                      = 0;
 
 // Mode of the app, which is essentially a state machine
-#define MODE_TX 0
-#define MODE_RX 1
-#define MODE_STOPPED 2
-int mode = MODE_STOPPED;
+enum Mode {
+  MODE_TX,
+  MODE_RX,
+  MODE_STOPPED
+};
+Mode mode = MODE_STOPPED;
 
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 22050
@@ -141,6 +144,12 @@ typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if w
 // #define HW_VER_?? (0x0F)  // Unused
 hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
 
+// NeoPixel support
+#define PIXELS_PIN 13
+#define NUM_PIXELS 1
+Adafruit_NeoPixel pixels(NUM_PIXELS, PIXELS_PIN, NEO_GRB + NEO_KHZ400);
+bool first_time = true;
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
 ////////////////////////////////////////////////////////////////////////////////
@@ -148,11 +157,12 @@ hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
 void initI2SRx();
 void initI2STx();
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
-void setMode(int newMode);
+void setMode(Mode newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
 hw_ver_t get_hardware_version();
 void reportPhysPttState();
+void show_LEDs();
 
 void setup() {
   // Used for setup, need to know early.
@@ -163,20 +173,34 @@ void setup() {
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(230400);
 
-  // Hardware dependent pin assignments.
+  // Indicate detected hardware version
+  // Config some pin assignments.
+  uint32_t color = 0;
   switch (hardware_version) {
     case HW_VER_V1:
+      color = pixels.Color(0, 32, 0);
       SQ_PIN = 32;
       break;
     case HW_VER_V2_0C:
+      color = pixels.Color(32, 0, 0);
       SQ_PIN = 4;
       break;
     case HW_VER_V2_0D:
+      color = pixels.Color(0, 0, 32);
       SQ_PIN = 4;
       break;
     default:
       // Unknown version detected. Indicate this some way?
       break;
+  }
+
+  for (uint8_t ndx = 3; ndx; ndx--) {
+    pixels.setPixelColor(0, color);
+    pixels.show();
+    delay(200);
+    pixels.setPixelColor(0, 0);
+    pixels.show();
+    delay(200);
   }
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
@@ -376,7 +400,7 @@ void loop() {
 
             if (hardware_version == HW_VER_V2_0C) {
               // v2.0c has a lower input ADC range.
-              result = dra->volume(4);
+              result = dra->volume(6);
             } else {
               result = dra->volume(8);
             }
@@ -597,7 +621,6 @@ void loop() {
         lastSMeterReport = millis();
       }
 
-
       size_t bytesRead = 0;
       static uint16_t buffer16[I2S_READ_LEN];
       static uint8_t buffer8[I2S_READ_LEN];
@@ -605,9 +628,15 @@ void loop() {
       size_t samplesRead = bytesRead / 2;
 
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
+      if (first_time) {
+        lastSquelched = squelched;
+        show_LEDs();
+      }
 
       // Check for squelch status change
       if (squelched != lastSquelched) {
+        lastSquelched = squelched;
+        show_LEDs();
         if (squelched) {
           // Start fade-out
           fadeCounter   = FADE_SAMPLES;
@@ -618,12 +647,10 @@ void loop() {
           fadeDirection = 1;
         }
       }
-      lastSquelched = squelched;
 
       int attenuationIncrement = ATTENUATION_MAX / FADE_SAMPLES;
 
       for (int i = 0; i < samplesRead; i++) {
-
         // Adjust attenuation during fade
         if (fadeCounter > 0) {
           fadeCounter--;
@@ -712,6 +739,8 @@ void loop() {
     // Disregard, we don't want to crash. Just pick up at next loop().)
     // Serial.println("Exception in loop(), skipping cycle.");
   }
+  first_time = false;
+  show_LEDs();
 }
 
 /**
@@ -767,28 +796,26 @@ void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, Str
   // Serial.println("tuneTo: " + String(result));
 }
 
-void setMode(int newMode) {
+void setMode(Mode newMode) {
   mode = newMode;
   switch (mode) {
     case MODE_STOPPED:
-      digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       break;
     case MODE_RX:
-      digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       initI2SRx();
       matchedDelimiterTokensRx = 0;
       break;
     case MODE_TX:
       txStartTime = micros();
-      digitalWrite(LED_PIN, HIGH);
       digitalWrite(PTT_PIN, LOW);
       initI2STx();
       txCachedAudioBytes = 0;
       isTxCacheSatisfied = false;
       break;
   }
+  show_LEDs();
 }
 
 void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
@@ -828,4 +855,49 @@ hw_ver_t get_hardware_version() {
   // use values between 0x0 and 0xF. For now, just binary.
 
   return ver;
+}
+
+void show_LEDs() {
+  const static uint32_t COLOR_STOPPED = pixels.Color(0, 0, 0);
+  const static uint32_t COLOR_RX_SQL_CLOSED = pixels.Color(0, 0, 32); // TODO: animate this state? Breath? Option to turn off entirely?
+  const static uint32_t COLOR_TX = pixels.Color(16, 16, 0);
+  const static uint32_t COLOR_RX_SQL_OPEN = pixels.Color(0, 32, 0);
+
+  // When to actually act?
+  static Mode last_mode = MODE_STOPPED;
+  static bool last_squelched = true;    // Eww.  This is too closely named to the variable we're tracking.
+  static uint32_t next_time = 0;
+  const static uint32_t update_every = 100;  // in milliseconds
+
+  uint32_t now = millis();
+
+  // Only change LEDs if:
+  // * it's been more than update_every ms since we've last set the LEDs.
+  // * either mode or lastSquelched have changed.
+  // This allows us to call show_LEDs() as often as we want without risking slamming the micro with IO.
+  if (now >= next_time || last_mode != mode || last_squelched != lastSquelched) {
+    last_mode = mode;
+    last_squelched = lastSquelched;
+    next_time = now + update_every;
+
+    switch (mode) {
+      case MODE_STOPPED:
+        digitalWrite(LED_PIN, LOW);
+        pixels.setPixelColor(0, COLOR_STOPPED);
+        break;
+      case MODE_RX:
+        digitalWrite(LED_PIN, LOW);
+        if (lastSquelched) {
+          pixels.setPixelColor(0, COLOR_RX_SQL_CLOSED);
+        } else {
+          pixels.setPixelColor(0, COLOR_RX_SQL_OPEN);
+        }
+        break;
+      case MODE_TX:
+        digitalWrite(LED_PIN, HIGH);
+        pixels.setPixelColor(0, COLOR_TX);
+        break;
+    }
+    pixels.show();
+  }
 }

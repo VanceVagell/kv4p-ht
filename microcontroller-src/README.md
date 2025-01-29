@@ -1,24 +1,22 @@
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
 - [Prerequisites](#prerequisites)
-  - [Install ESP32 Drivers](#install-esp32-drivers)
+   - [Install ESP32 Drivers](#install-esp32-drivers)
 - [Option 1: Arduino IDE](#option-1-arduino-ide)
-  - [Install Arduino IDE](#install-arduino-ide)
-  - [Install ESP32 Board Support](#install-esp32-board-support)
-  - [Install Required Libraries](#install-required-libraries)
-  - [Opening the Project](#opening-the-project-arduino-ide)
-  - [Building the Project](#building-the-project-arduino-ide)
-  - [Uploading to the ESP32](#uploading-to-the-esp32-arduino-ide)
+   - [Install Arduino IDE](#install-arduino-ide)
+   - [Install ESP32 Board Support](#install-esp32-board-support)
+   - [Install Required Libraries](#install-required-libraries)
+   - [Opening the Project (Arduino IDE)](#opening-the-project-arduino-ide)
+   - [Building the Project (Arduino IDE)](#building-the-project-arduino-ide)
+   - [Uploading to the ESP32 (Arduino IDE)](#uploading-to-the-esp32-arduino-ide)
 - [Option 2: PlatformIO](#option-2-platformio)
-  - [Install PlatformIO](#install-platformio)
-  - [Opening the Project](#opening-the-project-platformio)
-  - [Building the Project](#building-the-project-platformio)
-  - [Uploading to the ESP32](#uploading-to-the-esp32-platformio)
-  - [PlatformIO Specific Notes](#platformio-specific-notes)
+   - [Install PlatformIO](#install-platformio)
+   - [Opening the Project (PlatformIO)](#opening-the-project-platformio)
+   - [Building the Project (PlatformIO)](#building-the-project-platformio)
+   - [Uploading to the ESP32 (PlatformIO)](#uploading-to-the-esp32-platformio)
+   - [PlatformIO Specific Notes](#platformio-specific-notes)
 - [Additional Notes](#additional-notes)
-
-
-
 
 ## Prerequisites
 
@@ -30,7 +28,6 @@
    Ensure that the driver installation is successful:
    - **Windows:** Check the Device Manager for the COM port associated with your ESP32.
    - **macOS/Linux:** Verify the presence of `/dev/tty.*` devices corresponding to your ESP32.
-
 
 ## Option 1: Arduino IDE
 
@@ -58,14 +55,18 @@
 ### Install Required Libraries
 
 1. **Install EspSoftwareSerial:**
-   
    - Navigate to `Sketch` > `Include Library` > `Manage Libraries`.
    - In the **Library Manager** window, enter **"EspSoftwareSerial"** into the search bar.
    - Locate the **EspSoftwareSerial** library in the search results.
    - Click the **Install** button to add the library to your Arduino environment.
 
-2. **Install DRA818:**
-   
+2. **Install Adafruit NeoPixel:**
+   - Navigate to `Sketch` > `Include Library` > `Manage Libraries`.
+   - In the **Library Manager** window, enter **"Adafruit NeoPixel"** into the search bar.
+   - Locate the **Adafruit NeoPixel** library in the search results.
+   - Click the **Install** button to add the library to your Arduino environment.
+
+3. **Install DRA818:**
    > **Note:** The version of the DRA818 library available through the Arduino Library Manager is currently broken. To ensure proper functionality, you need to install it manually from the official GitHub release.
 
    - **Download the DRA818 Library ZIP:**
@@ -79,9 +80,8 @@
      - Select the ZIP file and click **Open**.
      - A confirmation message should appear indicating that the library was added successfully.
 
-3. **Confirm All Libraries Are Installed:**
-   
-   - After completing the above steps, ensure that both **EspSoftwareSerial** and **DRA818** are listed under `Sketch` > `Include Library`.
+4. **Confirm All Libraries Are Installed:**
+   - After completing the above steps, ensure that **EspSoftwareSerial**, **Adafruit NeoPixel**, and **DRA818** are listed under `Sketch` > `Include Library`.
    - If any libraries are missing, revisit the installation steps to ensure they were added correctly.
 
 ### Opening the Project (Arduino IDE)
@@ -110,7 +110,6 @@
    - Click the **Upload** button (right arrow) in the Arduino toolbar or press `Ctrl+U` (`Cmd+U` on macOS).
    - The Arduino IDE will compile (if not already done) and upload the firmware to the ESP32.
    - Monitor the output pane for upload progress and confirmation of success.
-
 
 ## Option 2: PlatformIO
 
@@ -174,13 +173,12 @@
 ### PlatformIO Specific Notes
 
 - **Renaming the Main File for IntelliSense:**
-  - **For IntelliSense to work properly in PlatformIO**, rename the main project file from `.ino` to `.cpp`. For example, rename `kv4p_ht_esp32_wroom_32.ino` to `kv4p_ht_esp32_wroom_32.cpp`.
-  - **Important:** Do **not** commit this renamed file to the repository. Keeping the file as `.ino` in the repository ensures compatibility with the Arduino IDE build process.
-  - **Workflow Suggestion:**
-    - When working locally in PlatformIO, perform the rename to benefit from IntelliSense.
-    - Before committing changes, revert the file extension back to `.ino` to maintain Arduino IDE compatibility.
-
-
+   - ~~**For IntelliSense to work properly in PlatformIO**, rename the main project file from `.ino` to `.cpp`. For example, rename `kv4p_ht_esp32_wroom_32.ino` to `kv4p_ht_esp32_wroom_32.cpp`.~~
+      - I don't think this is necessary anymore. My (@SmittyHalibut) PlatformIO does all the right things just editing a .ino file now (Jan 2025).
+   - **Important:** Do **not** commit this renamed file to the repository. Keeping the file as `.ino` in the repository ensures compatibility with the Arduino IDE build process.
+   - **Workflow Suggestion:**
+      - When working locally in PlatformIO, perform the rename to benefit from IntelliSense.
+      - Before committing changes, revert the file extension back to `.ino` to maintain Arduino IDE compatibility.
 
 ## Additional Notes
 
@@ -194,7 +192,3 @@
 
 - **Consistent Project Structure:**
   - Ensure that any changes made in one environment (e.g., library installations, code modifications) are compatible with the other to maintain consistency across both build systems.
-
-
-
-

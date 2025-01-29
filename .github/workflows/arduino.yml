@@ -31,4 +31,5 @@ jobs:
             - name: EspSoftwareSerial
               version: 8.1.0
             - source-url: https://github.com/fatpat/arduino-dra818/archive/refs/tags/v1.0.1.zip
+            - name: Adafruit NeoPixel
           verbose: true
