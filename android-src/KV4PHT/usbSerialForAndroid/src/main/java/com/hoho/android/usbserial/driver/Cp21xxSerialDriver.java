@@ -270,6 +270,14 @@ public class Cp21xxSerialDriver implements UsbSerialDriver {
         }
 
         @Override
+        public void setDTRandRTS(boolean dtr, boolean rts) throws IOException {
+            this.dtr = dtr;
+            this.rts = rts;
+            int value = (dtr ? DTR_ENABLE : DTR_DISABLE) | (rts ? RTS_ENABLE : RTS_DISABLE);
+            setConfigSingle(SILABSER_SET_MHS_REQUEST_CODE, value);
+        }
+
+        @Override
         public boolean getRI() throws IOException {
             return (getStatus() & STATUS_RI) != 0;
         }

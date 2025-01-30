@@ -134,6 +134,8 @@ public class CommandInterfaceESP32 {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        enterBootLoader();
+        drain();
         boolean syncSuccess = false;
 
         mUpCallback.onInfo("Syncing with ESP32"  + "\n");
@@ -269,10 +271,10 @@ public class CommandInterfaceESP32 {
     }
 
     private void drain() {
-        byte[] buf = new byte[1];
+        byte[] buf = new byte[1024];
         while (true) {
             try {
-                int bytesRead = mSerialPort.read(buf, 1000);
+                int bytesRead = mSerialPort.read(buf, 5);
                 if (bytesRead == 0) {
                     break;
                 }
@@ -334,76 +336,38 @@ public class CommandInterfaceESP32 {
         retVal.retCode = 0;
         byte buf[] = slipEncode(data);
 
+        drain();
         try {
             mSerialPort.write(buf, buf.length, timeout);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        try { Thread.sleep(5); } catch (InterruptedException e) {}
-        
-        int numRead = 0;
-        
-        for (i = 0; i < 10; i++) {
-            numRead = recv(retVal.retValue, retVal.retValue.length, timeout/5);
-            // mUpCallback.onInfo("num read:" + numRead);
-            if (numRead == 0) {
-                retVal.retCode = -1;
-                continue;
-            } else if (numRead == -1) {
-                retVal.retCode = -1;
-                continue;
-            }
 
-            if (retVal.retValue[0] != (byte) 0xC0) {
-                //mUpCallback.onInfo("invalid packet\n");
-                // System.out.println("Packet: " + printHex(retVal.retValue));
-                retVal.retCode = -1;
-                continue;
-            }
-
-            if (retVal.retValue[0] == (byte) 0xC0) {
-                mUpCallback.onInfo("Correct return value from ESP32\n");
-                // System.out.println("Packet: " + printHex(retVal.retValue));
-                retVal.retCode = 1;
-                break;
-            }
+        int numRead = recv(retVal.retValue, retVal.retValue.length, timeout);
+        if (numRead == 0) {
+            retVal.retCode = -1;
+        } else if (numRead == -1) {
+            retVal.retCode = -1;
         }
-
+        if (retVal.retValue[0] != (byte) 0xC0) {
+            //mUpCallback.onInfo("invalid packet\n");
+            // System.out.println("Packet: " + printHex(retVal.retValue));
+            retVal.retCode = -1;
+        }
+        if (retVal.retValue[0] == (byte) 0xC0) {
+            mUpCallback.onInfo("Correct return value from ESP32\n");
+            // System.out.println("Packet: " + printHex(retVal.retValue));
+            retVal.retCode = 1;
+        }
         return retVal;
     }
     private int recv(byte[] buf, int length, long timeout) {
-        int retval = 0;
-        int totalRetval = 0;
-        long endTime;
-        long startTime = System.currentTimeMillis();
-        byte[] tmpbuf = new byte[length];
-
-        while (true) {
-            try {
-                retval = mSerialPort.read(tmpbuf, length, 1000);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            if (retval > 0) {
-                System.arraycopy(tmpbuf, 0, buf, totalRetval, retval);
-                totalRetval += retval;
-                startTime = System.currentTimeMillis();
-                //if (DEBUG_SHOW_RECV) {
-                //    Log.d(TAG, "recv(" + retval + ") : " + toHexStr(buf, totalRetval));
-                //}
-            }
-            
-            if (totalRetval >= 8) { 
-                break;
-            }
-
-            endTime = System.currentTimeMillis();
-            if ((endTime - startTime) > timeout) {
-                //Log.e(TAG, "recv timeout.");
-                break;
-            }
+        try {
+            return mSerialPort.read(buf, length, (int) timeout);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
-        return retval;
+
     }
     /*private int _wait_for_ack( long timeout, byte readVal[]) {
         long stop = System.currentTimeMillis() + timeout;
@@ -483,23 +447,11 @@ public class CommandInterfaceESP32 {
      */
     public void enterBootLoader() {
         try {
-            // Step 1: Pull IO0 low to enter bootloader mode
-            mSerialPort.setDTR(true); // DTR high -> IO0 low (due to inversion)
-
-            // Step 2: Assert reset (pull EN low)
-            mSerialPort.setRTS(true); // RTS high -> EN low (due to inversion)
-
-            // Step 3: Wait for at least 100 milliseconds
+            mSerialPort.setDTRandRTS(true, false);
             Thread.sleep(100);
-
-            // Step 4: Release reset (pull EN high)
-            mSerialPort.setRTS(false); // RTS low -> EN high
-
-            // Step 5: Wait for the chip to boot (e.g., 50 milliseconds)
-            Thread.sleep(50);
-
-            // Step 6: Release IO0 to complete bootloader entry
-            mSerialPort.setDTR(false); // DTR low -> IO0 high
+            mSerialPort.setDTRandRTS(false, true);
+            Thread.sleep(100);
+            mSerialPort.setDTRandRTS(true, false);
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -215,6 +215,8 @@ public interface UsbSerialPort extends Closeable {
      */
     void setDTR(boolean value) throws IOException;
 
+    void setDTRandRTS(boolean dtr, boolean rts) throws IOException;
+
     /**
      * Gets the RI (Ring Indicator) bit from the underlying UART.
      *
