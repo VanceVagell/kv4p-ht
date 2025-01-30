@@ -80,6 +80,7 @@ import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -386,6 +387,19 @@ public class RadioAudioService extends Service {
                 sendCommandToESP32(RadioAudioService.ESP32Command.STOP);
                 audioTrack.stop();
                 usbIoManager.stop();
+                try {
+                    serialPort.setDTR(false);
+                    serialPort.setRTS(true);
+                    Thread.sleep(100);
+                    serialPort.setDTR(true);
+                    serialPort.setRTS(false);
+                    Thread.sleep(50);
+                    serialPort.setDTR(false);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (IOException e) {
+                    Log.e("DEBUG", "Error while restart ESP32.", e);
+                }
                 break;
             default:
                 break;
