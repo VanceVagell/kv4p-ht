@@ -151,9 +151,14 @@ public class RadioAudioService extends Service {
 
     // Delimiter must match ESP32 code
     static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF, (byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF};
-    private static final byte COMMAND_SMETER_REPORT = 0x53; // Ascii "S"
-    private static final byte COMMAND_PHYS_PTT_DOWN = 0x44; // Ascii "D"
-    private static final byte COMMAND_PHYS_PTT_UP = 0x55;   // Ascii "U"
+    private static final byte COMMAND_SMETER_REPORT  = 0x53; // Ascii "S"
+    private static final byte COMMAND_PHYS_PTT_DOWN  = 0x44; // Ascii "D"
+    private static final byte COMMAND_PHYS_PTT_UP    = 0x55;   // Ascii "U"
+    private static final byte COMMAND_DEBUG_INFO     = 0x01;
+    private static final byte COMMAND_DEBUG_ERROR    = 0x02;
+    private static final byte COMMAND_DEBUG_WARN     = 0x03;
+    private static final byte COMMAND_DEBUG_DEBUG    = 0x04;
+    private static final byte COMMAND_DEBUG_TRACE    = 0x05;
 
     private final ESP32DataStreamParser esp32DataStreamParser = new ESP32DataStreamParser(this::handleParsedCommand);
 
@@ -945,8 +950,8 @@ public class RadioAudioService extends Service {
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadBufferSize(1024/4); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
-        usbIoManager.setReadBufferCount(16*4);
+        usbIoManager.setReadBufferSize(1024); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
+        usbIoManager.setReadBufferCount(16*2);
         usbIoManager.start();
         checkedFirmwareVersion = false;
 
@@ -1434,6 +1439,16 @@ public class RadioAudioService extends Service {
                 endPtt();
                 callbacks.forcedPttEnd();
             }
+        } else if (cmd == COMMAND_DEBUG_INFO) {
+            Log.i("firmware", new String(param));
+        } else if (cmd == COMMAND_DEBUG_DEBUG) {
+            Log.d("firmware", new String(param));
+        } else if (cmd == COMMAND_DEBUG_ERROR) {
+            Log.e("firmware", new String(param));
+        } else if (cmd == COMMAND_DEBUG_WARN) {
+            Log.w("firmware", new String(param));
+        } else if (cmd == COMMAND_DEBUG_TRACE) {
+            Log.v("firmware", new String(param));
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
                     " paramLen=" + param.length);

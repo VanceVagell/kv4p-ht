@@ -37,9 +37,14 @@ const uint8_t COMMAND_STOP             = 5;  // stop everything, just wait for n
 const uint8_t COMMAND_GET_FIRMWARE_VER = 6;  // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
 
 // Outgoing commands (ESP32 -> Android)
-const byte COMMAND_SMETER_REPORT = 0x53;  // 'S'
-const byte COMMAND_PHYS_PTT_DOWN = 0x44;  // 'D'
-const byte COMMAND_PHYS_PTT_UP   = 0x55;  // 'U'
+const byte COMMAND_SMETER_REPORT  = 0x53; // 'S'
+const byte COMMAND_PHYS_PTT_DOWN  = 0x44; // 'D'
+const byte COMMAND_PHYS_PTT_UP    = 0x55; // 'U'
+const byte COMMAND_DEBUG_INFO     = 0x01;
+const byte COMMAND_DEBUG_ERROR    = 0x02;
+const byte COMMAND_DEBUG_WARN     = 0x03;
+const byte COMMAND_DEBUG_DEBUG    = 0x04;
+const byte COMMAND_DEBUG_TRACE    = 0x05;
 
 // S-meter interval
 long lastSMeterReport = -1;
@@ -141,6 +146,27 @@ typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if w
 // #define HW_VER_?? (0x0F)  // Unused
 hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
 
+#define _LOGE(fmt, ...)           \
+  {                                    \
+    debug_log_printf(COMMAND_DEBUG_ERROR, ARDUHAL_LOG_FORMAT(E, fmt), ##__VA_ARGS__);       \
+  }
+#define _LOGW(fmt, ...)           \
+  {                                    \
+    debug_log_printf(COMMAND_DEBUG_WARN, ARDUHAL_LOG_FORMAT(W, fmt), ##__VA_ARGS__);       \
+  }
+#define _LOGI(fmt, ...)           \
+  {                                    \
+    debug_log_printf(COMMAND_DEBUG_INFO, ARDUHAL_LOG_FORMAT(I, fmt), ##__VA_ARGS__);       \
+  }
+#define _LOGD(fmt, ...)           \
+  {                                    \
+    debug_log_printf(COMMAND_DEBUG_DEBUG, ARDUHAL_LOG_FORMAT(D, fmt), ##__VA_ARGS__);       \
+  }
+#define _LOGT(fmt, ...)           \
+  {                                    \
+    debug_log_printf(COMMAND_DEBUG_TRACE, ARDUHAL_LOG_FORMAT(T, fmt), ##__VA_ARGS__);       \
+  }
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
 ////////////////////////////////////////////////////////////////////////////////
@@ -153,6 +179,33 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
 hw_ver_t get_hardware_version();
 void reportPhysPttState();
+
+void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen);
+
+int debug_log_printf(uint8_t cmd, const char* format, ...) {
+  static char loc_buf[256];
+  char* temp = loc_buf;
+  int len;
+  va_list arg;
+  va_list copy;
+  va_start(arg, format);
+  va_copy(copy, arg);
+  len = vsnprintf(NULL, 0, format, arg);
+  va_end(copy);
+  if (len >= sizeof(loc_buf)) {
+    temp = (char*)malloc(len + 1);
+    if (temp == NULL) {
+      return 0;
+    }
+  }
+  vsnprintf(temp, len + 1, format, arg);
+  sendCmdToAndroid(cmd, (byte*) temp, len);
+  va_end(arg);
+  if (len >= sizeof(loc_buf)) {
+    free(temp);
+  }
+  return len;
+}
 
 void setup() {
   // Used for setup, need to know early.
@@ -204,6 +257,7 @@ void setup() {
 
   // Begin in STOPPED mode
   setMode(MODE_STOPPED);
+  _LOGI("Setup is finished");
 }
 
 void initI2SRx() {
@@ -591,10 +645,12 @@ void loop() {
             byte params[1] = {(uint8_t)rssiInt};
             sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
           }
+          _LOGD("%s, rssiInt=%d", rssiResponse.c_str(), rssiInt);
         }
 
         // It doesn't matter if we successfully got the S-meter reading, we only want to check at most once every SMETER_REPORT_INTERVAL_MS
         lastSMeterReport = millis();
+      
       }
 
 
@@ -734,24 +790,10 @@ void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen) {
   uint8_t len = paramsLen;
   Serial.write(&len, 1);
 
-  // 4. Parameter bytes
-  Serial.write(params, paramsLen);
-}
-
-/**
- * Send a command without params
- * Format: [DELIMITER(8 bytes)] [CMD(1 byte)]
- */
-void sendCmdToAndroid(byte cmdByte) {
-  // 1. Leading delimiter
-  Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
-
-  // 2. Command byte
-  Serial.write(&cmdByte, 1);
-
-  // 3. Parameter length
-  uint8_t len = 0;
-  Serial.write(&len, 1);
+  if (paramsLen > 0) {
+    // 4. Parameter bytes
+    Serial.write(params, paramsLen);
+  }
 }
 
 void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth) {
@@ -771,16 +813,19 @@ void setMode(int newMode) {
   mode = newMode;
   switch (mode) {
     case MODE_STOPPED:
+      _LOGI("MODE_STOPPED");
       digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       break;
     case MODE_RX:
+      _LOGI("MODE_RX");
       digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       initI2SRx();
       matchedDelimiterTokensRx = 0;
       break;
     case MODE_TX:
+      _LOGI("MODE_TX");
       txStartTime = micros();
       digitalWrite(LED_PIN, HIGH);
       digitalWrite(PTT_PIN, LOW);
@@ -813,7 +858,7 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
 }
 
 void reportPhysPttState() {
-  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
+  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP, NULL, 0);
 }
 
 hw_ver_t get_hardware_version() {
