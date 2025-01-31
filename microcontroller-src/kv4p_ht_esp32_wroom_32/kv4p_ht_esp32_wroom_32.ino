@@ -24,7 +24,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/i2s.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
-#include <Adafruit_NeoPixel.h>
 
 const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '1'};  // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
@@ -147,8 +146,18 @@ hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
 // NeoPixel support
 #define PIXELS_PIN 13
 #define NUM_PIXELS 1
-Adafruit_NeoPixel pixels(NUM_PIXELS, PIXELS_PIN, NEO_GRB + NEO_KHZ400);
-bool first_time = true;
+
+struct RGBColor {
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+};
+const RGBColor COLOR_STOPPED = {0, 0, 0};
+const RGBColor COLOR_RX_SQL_CLOSED = {0, 0, 32};
+const RGBColor COLOR_RX_SQL_OPEN = {0, 32, 0};
+const RGBColor COLOR_TX = {16, 16, 0};
+const RGBColor COLOR_BLACK = {0, 0, 0};
+RGBColor COLOR_HW_VER = COLOR_BLACK;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
@@ -163,6 +172,7 @@ void iir_lowpass_reset();
 hw_ver_t get_hardware_version();
 void reportPhysPttState();
 void show_LEDs();
+void neopixelColor(RGBColor color, float bright = 1.0);
 
 void setup() {
   // Used for setup, need to know early.
@@ -173,34 +183,24 @@ void setup() {
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(230400);
 
-  // Indicate detected hardware version
-  // Config some pin assignments.
-  uint32_t color = 0;
+  // Hardware dependent pin assignments.
   switch (hardware_version) {
     case HW_VER_V1:
-      color = pixels.Color(0, 32, 0);
+      COLOR_HW_VER = {0, 32, 0};
       SQ_PIN = 32;
       break;
     case HW_VER_V2_0C:
-      color = pixels.Color(32, 0, 0);
+      COLOR_HW_VER = {32, 0, 0};
       SQ_PIN = 4;
       break;
     case HW_VER_V2_0D:
-      color = pixels.Color(0, 0, 32);
+      COLOR_HW_VER = {0, 0, 32};
       SQ_PIN = 4;
       break;
     default:
       // Unknown version detected. Indicate this some way?
+      COLOR_HW_VER = {16, 16, 16};
       break;
-  }
-
-  for (uint8_t ndx = 3; ndx; ndx--) {
-    pixels.setPixelColor(0, color);
-    pixels.show();
-    delay(200);
-    pixels.setPixelColor(0, 0);
-    pixels.show();
-    delay(200);
   }
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
@@ -227,6 +227,7 @@ void setup() {
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
   // Begin in STOPPED mode
+  lastSquelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
 }
 
@@ -628,10 +629,6 @@ void loop() {
       size_t samplesRead = bytesRead / 2;
 
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
-      if (first_time) {
-        lastSquelched = squelched;
-        show_LEDs();
-      }
 
       // Check for squelch status change
       if (squelched != lastSquelched) {
@@ -739,7 +736,6 @@ void loop() {
     // Disregard, we don't want to crash. Just pick up at next loop().)
     // Serial.println("Exception in loop(), skipping cycle.");
   }
-  first_time = false;
   show_LEDs();
 }
 
@@ -857,17 +853,30 @@ hw_ver_t get_hardware_version() {
   return ver;
 }
 
-void show_LEDs() {
-  const static uint32_t COLOR_STOPPED = pixels.Color(0, 0, 0);
-  const static uint32_t COLOR_RX_SQL_CLOSED = pixels.Color(0, 0, 32); // TODO: animate this state? Breath? Option to turn off entirely?
-  const static uint32_t COLOR_TX = pixels.Color(16, 16, 0);
-  const static uint32_t COLOR_RX_SQL_OPEN = pixels.Color(0, 32, 0);
+void neopixelColor(RGBColor C, float bright) {
+  uint8_t red = uint8_t(C.red*bright);
+  uint8_t green = uint8_t(C.green*bright);
+  uint8_t blue = uint8_t(C.blue*bright);
+  neopixelWrite(PIXELS_PIN, red, green, blue);
+}
 
+// Calculate a float between min and max, that ramps from min to max in half of breath_every,
+// and from max to min the second half of breath_every.
+// now and breath_every are arbitrary units, but usually are milliseconds from millis().
+float calc_breath(uint32_t now, uint32_t breath_every, float min, float max) {
+  float amplitude = max - min;
+  float bright = (float(now%breath_every)/breath_every)*2.0;   // 0.0 to 2.0, how far through breath_every are we
+  if (bright > 1.0) bright = 2.0-bright;                     // Fold >1.0 back down to between 1.0 and 0.0.
+  bright = bright*amplitude + min;
+  return bright;
+}
+
+void show_LEDs() {
   // When to actually act?
   static Mode last_mode = MODE_STOPPED;
   static bool last_squelched = true;    // Eww.  This is too closely named to the variable we're tracking.
   static uint32_t next_time = 0;
-  const static uint32_t update_every = 100;  // in milliseconds
+  const static uint32_t update_every = 50;    // in milliseconds
 
   uint32_t now = millis();
 
@@ -883,21 +892,21 @@ void show_LEDs() {
     switch (mode) {
       case MODE_STOPPED:
         digitalWrite(LED_PIN, LOW);
-        pixels.setPixelColor(0, COLOR_STOPPED);
+        //neopixelColor(COLOR_STOPPED);
+        neopixelColor(COLOR_HW_VER);
         break;
       case MODE_RX:
         digitalWrite(LED_PIN, LOW);
         if (lastSquelched) {
-          pixels.setPixelColor(0, COLOR_RX_SQL_CLOSED);
+          neopixelColor(COLOR_RX_SQL_CLOSED, calc_breath(now, 2000, 0.5, 1.5));
         } else {
-          pixels.setPixelColor(0, COLOR_RX_SQL_OPEN);
+          neopixelColor(COLOR_RX_SQL_OPEN);
         }
         break;
       case MODE_TX:
         digitalWrite(LED_PIN, HIGH);
-        pixels.setPixelColor(0, COLOR_TX);
+        neopixelColor(COLOR_TX);
         break;
     }
-    pixels.show();
   }
 }

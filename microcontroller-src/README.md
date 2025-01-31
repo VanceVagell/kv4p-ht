@@ -60,13 +60,7 @@
    - Locate the **EspSoftwareSerial** library in the search results.
    - Click the **Install** button to add the library to your Arduino environment.
 
-2. **Install Adafruit NeoPixel:**
-   - Navigate to `Sketch` > `Include Library` > `Manage Libraries`.
-   - In the **Library Manager** window, enter **"Adafruit NeoPixel"** into the search bar.
-   - Locate the **Adafruit NeoPixel** library in the search results.
-   - Click the **Install** button to add the library to your Arduino environment.
-
-3. **Install DRA818:**
+2. **Install DRA818:**
    > **Note:** The version of the DRA818 library available through the Arduino Library Manager is currently broken. To ensure proper functionality, you need to install it manually from the official GitHub release.
 
    - **Download the DRA818 Library ZIP:**
@@ -80,8 +74,8 @@
      - Select the ZIP file and click **Open**.
      - A confirmation message should appear indicating that the library was added successfully.
 
-4. **Confirm All Libraries Are Installed:**
-   - After completing the above steps, ensure that **EspSoftwareSerial**, **Adafruit NeoPixel**, and **DRA818** are listed under `Sketch` > `Include Library`.
+3. **Confirm All Libraries Are Installed:**
+   - After completing the above steps, ensure that **EspSoftwareSerial** and **DRA818** are listed under `Sketch` > `Include Library`.
    - If any libraries are missing, revisit the installation steps to ensure they were added correctly.
 
 ### Opening the Project (Arduino IDE)
