@@ -122,7 +122,7 @@ public class RadioAudioService extends Service {
     private int mode = MODE_STARTUP;
     private int messageNumber = 0;
 
-    public static final byte SILENT_BYTE = -128;
+    public static final byte SILENT_BYTE = 0;
 
     // Callbacks to the Activity that started us
     private RadioAudioServiceCallbacks callbacks = null;
@@ -1097,8 +1097,14 @@ public class RadioAudioService extends Service {
         do {
             ChannelMemory candidate = channelMemories.get(nextIndex);
 
-            // If not marked as skipped, we tune to it and return.
-            if (!candidate.skipDuringScan) {
+            // If not marked as skipped, and it's in the active band, we tune to it and return.
+            float memoryFreqFloat = 0.0f;
+            try {
+                memoryFreqFloat = Float.parseFloat(candidate.frequency);
+            } catch (Exception e) {
+                Log.d("DEBUG", "Memory with id " + candidate.memoryId + " had invalid frequency.");
+            }
+            if (!candidate.skipDuringScan && memoryFreqFloat >= minRadioFreq && memoryFreqFloat <= maxRadioFreq) {
                 // Reset silence since we found an active memory.
                 consecutiveSilenceBytes = 0;
 
