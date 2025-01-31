@@ -255,6 +255,7 @@ void setup() {
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
+  printEnvironment();
   // Begin in STOPPED mode
   setMode(MODE_STOPPED);
   _LOGI("Setup is finished");
@@ -646,7 +647,7 @@ void loop() {
             byte params[1] = {(uint8_t)rssiInt};
             sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
           }
-          _LOGD("%s, rssiInt=%d", rssiResponse.c_str(), rssiInt);
+          //_LOGD("%s, rssiInt=%d", rssiResponse.c_str(), rssiInt);
         }
 
         // It doesn't matter if we successfully got the S-meter reading, we only want to check at most once every SMETER_REPORT_INTERVAL_MS
@@ -876,6 +877,19 @@ hw_ver_t get_hardware_version() {
   return ver;
 }
 
+void printEnvironment() {
+  _LOGI("---");
+  _LOGI("Heap Size: %d", ESP.getHeapSize());
+  _LOGI("SDK Version: %s", ESP.getSdkVersion());
+  _LOGI("CPU Freq: %d", ESP.getCpuFreqMHz());
+  _LOGI("Sketch MD5: %s", ESP.getSketchMD5().c_str());
+  _LOGI("Chip model: %s", ESP.getChipModel());
+  _LOGI("PSRAM size: %d", ESP.getPsramSize());
+  _LOGI("FLASH size: %d", ESP.getFlashChipSize());
+  _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
+  _LOGI("Hardware version: 0x%02x", hardware_version);
+  _LOGI("---");
+}
 
 void measureLoopFrequency() {
   // Exponential Weighted Moving Average (EWMA) for loop time
@@ -892,7 +906,7 @@ void measureLoopFrequency() {
   // Report every second
   if (now - lastTime >= 1000000) {  // 1,000,000 µs = 1 second
     float frequency = 1e6 / avgLoopTime;  // Convert loop time to frequency
-    _LOGI("Loop Time: %f µs, Frequency: %f Hz", avgLoopTime, frequency);
+    _LOGI("Loop Time: %.2f µs, Frequency: %.2f Hz", avgLoopTime, frequency);
     lastTime = now;
   }
 }
