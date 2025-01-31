@@ -117,8 +117,8 @@ char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 bool i2sStarted = false;
 
 // I2S audio sampling stuff
-#define I2S_READ_LEN 1024
-#define I2S_WRITE_LEN 1024
+#define I2S_READ_LEN 1024/4
+#define I2S_WRITE_LEN 1024/4
 #define I2S_ADC_UNIT ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
@@ -341,6 +341,7 @@ int16_t remove_dc(int16_t x) {
 }
 
 void loop() {
+  measureLoopFrequency();
   try {
     // Report any physical PTT button presses or releases back to Android app (note that
     // we don't start tx here, Android app decides what to do, since the user could be in
@@ -657,7 +658,7 @@ void loop() {
       size_t bytesRead = 0;
       static uint16_t buffer16[I2S_READ_LEN];
       static uint8_t buffer8[I2S_READ_LEN];
-      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 100));
+      ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 0));
       size_t samplesRead = bytesRead / 2;
 
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
@@ -873,4 +874,25 @@ hw_ver_t get_hardware_version() {
   // use values between 0x0 and 0xF. For now, just binary.
 
   return ver;
+}
+
+
+void measureLoopFrequency() {
+  // Exponential Weighted Moving Average (EWMA) for loop time
+  static float avgLoopTime = 0;
+  const float alpha = 0.1;  // Smoothing factor (adjust as needed)
+  static uint32_t lastTime = 0;
+  static uint32_t startTime = 0;
+  // Measure time per iteration
+  uint32_t now = micros();
+  uint32_t duration = now - startTime;
+  startTime = now;
+  // Apply EWMA filtering
+  avgLoopTime = alpha * duration + (1 - alpha) * avgLoopTime;
+  // Report every second
+  if (now - lastTime >= 1000000) {  // 1,000,000 µs = 1 second
+    float frequency = 1e6 / avgLoopTime;  // Convert loop time to frequency
+    _LOGI("Loop Time: %f µs, Frequency: %f Hz", avgLoopTime, frequency);
+    lastTime = now;
+  }
 }
