@@ -172,7 +172,7 @@ void iir_lowpass_reset();
 hw_ver_t get_hardware_version();
 void reportPhysPttState();
 void show_LEDs();
-void neopixelColor(RGBColor color, float bright = 1.0);
+void neopixelColor(RGBColor C, uint8_t bright);
 
 void setup() {
   // Used for setup, need to know early.
@@ -229,6 +229,7 @@ void setup() {
   // Begin in STOPPED mode
   lastSquelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
+  show_LEDs();
 }
 
 void initI2SRx() {
@@ -633,7 +634,6 @@ void loop() {
       // Check for squelch status change
       if (squelched != lastSquelched) {
         lastSquelched = squelched;
-        show_LEDs();
         if (squelched) {
           // Start fade-out
           fadeCounter   = FADE_SAMPLES;
@@ -811,7 +811,6 @@ void setMode(Mode newMode) {
       isTxCacheSatisfied = false;
       break;
   }
-  show_LEDs();
 }
 
 void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
@@ -853,52 +852,41 @@ hw_ver_t get_hardware_version() {
   return ver;
 }
 
-void neopixelColor(RGBColor C, float bright) {
-  uint8_t red = uint8_t(C.red*bright);
-  uint8_t green = uint8_t(C.green*bright);
-  uint8_t blue = uint8_t(C.blue*bright);
+void neopixelColor(RGBColor C, uint8_t bright = 255) {
+  uint8_t red = (C.red * bright) >> 8;
+  uint8_t green = (C.green * bright) >> 8;
+  uint8_t blue = (C.blue * bright) >> 8;
   neopixelWrite(PIXELS_PIN, red, green, blue);
 }
 
 // Calculate a float between min and max, that ramps from min to max in half of breath_every,
 // and from max to min the second half of breath_every.
 // now and breath_every are arbitrary units, but usually are milliseconds from millis().
-float calc_breath(uint32_t now, uint32_t breath_every, float min, float max) {
-  float amplitude = max - min;
-  float bright = (float(now%breath_every)/breath_every)*2.0;   // 0.0 to 2.0, how far through breath_every are we
-  if (bright > 1.0) bright = 2.0-bright;                     // Fold >1.0 back down to between 1.0 and 0.0.
-  bright = bright*amplitude + min;
-  return bright;
+uint8_t calc_breath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max) {
+  uint16_t amplitude = max - min; // Ensure enough range for calculations
+  uint16_t bright = ((now % breath_every) * 512) / breath_every; // Scale to 0-512
+  if (bright > 255) bright = 512 - bright; // Fold >255 back down to 255-0
+  return ((bright * amplitude) / 255) + min;
 }
 
 void show_LEDs() {
   // When to actually act?
-  static Mode last_mode = MODE_STOPPED;
-  static bool last_squelched = true;    // Eww.  This is too closely named to the variable we're tracking.
   static uint32_t next_time = 0;
   const static uint32_t update_every = 50;    // in milliseconds
-
   uint32_t now = millis();
-
   // Only change LEDs if:
   // * it's been more than update_every ms since we've last set the LEDs.
-  // * either mode or lastSquelched have changed.
-  // This allows us to call show_LEDs() as often as we want without risking slamming the micro with IO.
-  if (now >= next_time || last_mode != mode || last_squelched != lastSquelched) {
-    last_mode = mode;
-    last_squelched = lastSquelched;
+  if (now >= next_time) {
     next_time = now + update_every;
-
     switch (mode) {
       case MODE_STOPPED:
         digitalWrite(LED_PIN, LOW);
-        //neopixelColor(COLOR_STOPPED);
         neopixelColor(COLOR_HW_VER);
         break;
       case MODE_RX:
         digitalWrite(LED_PIN, LOW);
         if (lastSquelched) {
-          neopixelColor(COLOR_RX_SQL_CLOSED, calc_breath(now, 2000, 0.5, 1.5));
+          neopixelColor(COLOR_RX_SQL_CLOSED, calc_breath(now, 2000, 127, 255));
         } else {
           neopixelColor(COLOR_RX_SQL_OPEN);
         }
