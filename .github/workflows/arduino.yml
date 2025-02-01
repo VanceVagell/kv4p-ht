@@ -31,5 +31,5 @@ jobs:
             - name: EspSoftwareSerial
               version: 8.1.0
             - source-url: https://github.com/fatpat/arduino-dra818.git
-              vaersion: 89582e3ef7bf3f31f1af149e32cec16c4b9e4cf2
+              version: 89582e3ef7bf3f31f1af149e32cec16c4b9e4cf2
           verbose: true
