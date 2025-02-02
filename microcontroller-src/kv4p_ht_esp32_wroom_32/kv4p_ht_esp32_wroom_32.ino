@@ -122,14 +122,6 @@ bool i2sStarted = false;
 #define I2S_ADC_UNIT ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
-// Squelch parameters (for graceful fade to silence)
-#define FADE_SAMPLES 256  // Must be a power of two
-#define ATTENUATION_MAX 256
-int fadeCounter    = 0;
-int fadeDirection  = 0;                // 0: no fade, 1: fade in, -1: fade out
-int attenuation    = ATTENUATION_MAX;  // Full volume
-bool lastSquelched = false;
-
 // 11dB vs 12dB is a ...version thing?
 #ifndef ADC_ATTEN_DB_12
 #define ADC_ATTEN_DB_12 ADC_ATTEN_DB_11
@@ -407,9 +399,9 @@ void loop() {
               paramBytesMissing--;
             }
             if (paramsStr.charAt(0) == 'v') {
-              dra = new DRA818(&Serial2, DRA818_VHF);
+              dra = new DRA818(&Serial2, SA818_VHF);
             } else if (paramsStr.charAt(0) == 'u') {
-              dra = new DRA818(&Serial2, DRA818_UHF);
+              dra = new DRA818(&Serial2, SA818_UHF);
             } else {
               // Unexpected.
             }
@@ -664,37 +656,9 @@ void loop() {
 
       bool squelched = (digitalRead(SQ_PIN) == HIGH);
 
-      // Check for squelch status change
-      if (squelched != lastSquelched) {
-        if (squelched) {
-          // Start fade-out
-          fadeCounter   = FADE_SAMPLES;
-          fadeDirection = -1;
-        } else {
-          // Start fade-in
-          fadeCounter   = FADE_SAMPLES;
-          fadeDirection = 1;
-        }
-      }
-      lastSquelched = squelched;
-
-      int attenuationIncrement = ATTENUATION_MAX / FADE_SAMPLES;
-
       for (int i = 0; i < samplesRead; i++) {
-
-        // Adjust attenuation during fade
-        if (fadeCounter > 0) {
-          fadeCounter--;
-          attenuation += fadeDirection * attenuationIncrement;
-          attenuation = max(0, min(attenuation, ATTENUATION_MAX));
-        } else {
-          attenuation   = squelched ? 0 : ATTENUATION_MAX;
-          fadeDirection = 0;
-        }
-
-        // Apply attenuation to the sample
-        int16_t sample = (int32_t)remove_dc(((2048 - (buffer16[i] & 0xfff)) << 4)) * attenuation >> 8;
-        buffer8[i]     = (sample >> 8);  // Signed
+        int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
+        buffer8[i]     = squelched ? 0 : (sample >> 4);  // Signed
       }
 
       Serial.write(buffer8, samplesRead);
