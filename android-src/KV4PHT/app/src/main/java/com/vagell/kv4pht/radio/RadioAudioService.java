@@ -607,8 +607,10 @@ public class RadioAudioService extends Service {
 
         try {
             Float freq = Float.parseFloat(makeSafeHamFreq(activeFrequencyStr));
-            Float offsetMaxFreq = maxHamFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
-            if (freq < minHamFreq|| freq > offsetMaxFreq) {
+            Float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+            Float offsetMaxFreq = maxHamFreq - halfBandwidth;
+            Float offsetMinFreq = minHamFreq + halfBandwidth;
+            if (freq < offsetMinFreq || freq > offsetMaxFreq) {
                 txAllowed = false;
             } else {
                 txAllowed = true;
@@ -698,8 +700,10 @@ public class RadioAudioService extends Service {
 
         try {
             Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
-            Float offsetMaxFreq = maxHamFreq - (bandwidth.equals("W") ? 0.025f : 0.0125f);
-            if (txFreq < minHamFreq || txFreq > offsetMaxFreq) {
+            Float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+            Float offsetMaxFreq = maxHamFreq - halfBandwidth;
+            Float offsetMinFreq = minHamFreq + halfBandwidth;
+            if (txFreq < offsetMinFreq || txFreq > offsetMaxFreq) {
                 txAllowed = false;
             } else {
                 txAllowed = true;
