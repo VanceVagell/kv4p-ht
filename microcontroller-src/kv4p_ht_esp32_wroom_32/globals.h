@@ -37,7 +37,7 @@ const byte COMMAND_DEBUG_TRACE    = 0x05;
 ////////////////////////////////////////////////////////////////////////////////
 void initI2SRx();
 void initI2STx();
-void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
+void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
