@@ -6,3 +6,4 @@ backups/
 ~*
 *.lck
 *.swp
+.idea
