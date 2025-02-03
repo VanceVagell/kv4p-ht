@@ -78,7 +78,7 @@
         android:fontFamily="@font/jost"
         android:text="Keep your phone screen on, this app open, and don’t unplug your kv4p HT until flashing is done.\n
 \n
-This usually takes 5-10 minutes."
+This usually takes about 30 seconds."
         android:textColor="@color/primary_deselected"
         android:textSize="20dp"
         android:visibility="gone"/>

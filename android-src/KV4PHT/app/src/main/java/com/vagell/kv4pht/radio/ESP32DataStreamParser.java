@@ -9,7 +9,7 @@ public class ESP32DataStreamParser {
 
     private int matchedDelimiterTokens = 0;
     private byte command;
-    private byte commandParamLen;
+    private int commandParamLen;
     private final ByteArrayOutputStream commandParams = new ByteArrayOutputStream();
     private final ByteArrayOutputStream lookaheadBuffer = new ByteArrayOutputStream();
 
@@ -35,12 +35,10 @@ public class ESP32DataStreamParser {
                 // Log.d("DEBUG", "command: " + command);
                 matchedDelimiterTokens++;
             } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
-                commandParamLen = b;
+                commandParamLen = b & 0xFF;
                 commandParams.reset();
                 matchedDelimiterTokens++;
-
                 if (commandParamLen == 0) { // If this command has no params...
-                    lookaheadBuffer.reset();
                     onCommand.accept(command, commandParams.toByteArray());
                     resetParser(audioOut);
                 }
