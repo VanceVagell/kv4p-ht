@@ -24,27 +24,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/i2s.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
+#include "globals.h"
+#include "debug.h"
 
 const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '2'};  // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
-
-// Commands defined here must match the Android app
-const uint8_t COMMAND_PTT_DOWN         = 1;  // start transmitting audio that Android app will send
-const uint8_t COMMAND_PTT_UP           = 2;  // stop transmitting audio, go into RX mode
-const uint8_t COMMAND_TUNE_TO          = 3;  // change the frequency
-const uint8_t COMMAND_FILTERS          = 4;  // toggle filters on/off
-const uint8_t COMMAND_STOP             = 5;  // stop everything, just wait for next command
-const uint8_t COMMAND_GET_FIRMWARE_VER = 6;  // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
-
-// Outgoing commands (ESP32 -> Android)
-const byte COMMAND_SMETER_REPORT  = 0x53; // 'S'
-const byte COMMAND_PHYS_PTT_DOWN  = 0x44; // 'D'
-const byte COMMAND_PHYS_PTT_UP    = 0x55; // 'U'
-const byte COMMAND_DEBUG_INFO     = 0x01;
-const byte COMMAND_DEBUG_ERROR    = 0x02;
-const byte COMMAND_DEBUG_WARN     = 0x03;
-const byte COMMAND_DEBUG_DEBUG    = 0x04;
-const byte COMMAND_DEBUG_TRACE    = 0x05;
 
 // S-meter interval
 long lastSMeterReport = -1;
@@ -122,83 +106,6 @@ bool i2sStarted = false;
 #define I2S_ADC_UNIT ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
-// 11dB vs 12dB is a ...version thing?
-#ifndef ADC_ATTEN_DB_12
-#define ADC_ATTEN_DB_12 ADC_ATTEN_DB_11
-#endif
-
-// Hardware version detection
-#define HW_VER_PIN_0 39    // 0xF0
-#define HW_VER_PIN_1 36    // 0x0F
-typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if we want.
-// LOW = 0, HIGH = F, 1 <= analog values <= E
-#define HW_VER_V1 (0x00)
-#define HW_VER_V2_0C (0xFF)
-#define HW_VER_V2_0D (0xF0)
-// #define HW_VER_?? (0x0F)  // Unused
-hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
-
-#define _LOGE(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_ERROR, ARDUHAL_LOG_FORMAT(E, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGW(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_WARN, ARDUHAL_LOG_FORMAT(W, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGI(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_INFO, ARDUHAL_LOG_FORMAT(I, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGD(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_DEBUG, ARDUHAL_LOG_FORMAT(D, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGT(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_TRACE, ARDUHAL_LOG_FORMAT(T, fmt), ##__VA_ARGS__);       \
-  }
-
-////////////////////////////////////////////////////////////////////////////////
-/// Forward Declarations
-////////////////////////////////////////////////////////////////////////////////
-
-void initI2SRx();
-void initI2STx();
-void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
-void setMode(int newMode);
-void processTxAudio(uint8_t tempBuffer[], int bytesRead);
-void iir_lowpass_reset();
-hw_ver_t get_hardware_version();
-void reportPhysPttState();
-
-void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen);
-
-int debug_log_printf(uint8_t cmd, const char* format, ...) {
-  static char loc_buf[256];
-  char* temp = loc_buf;
-  int len;
-  va_list arg;
-  va_list copy;
-  va_start(arg, format);
-  va_copy(copy, arg);
-  len = vsnprintf(NULL, 0, format, arg);
-  va_end(copy);
-  if (len >= sizeof(loc_buf)) {
-    temp = (char*)malloc(len + 1);
-    if (temp == NULL) {
-      return 0;
-    }
-  }
-  vsnprintf(temp, len + 1, format, arg);
-  sendCmdToAndroid(cmd, (byte*) temp, len);
-  va_end(arg);
-  if (len >= sizeof(loc_buf)) {
-    free(temp);
-  }
-  return len;
-}
-
 void setup() {
   // Used for setup, need to know early.
   hardware_version = get_hardware_version();
@@ -247,7 +154,7 @@ void setup() {
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
-  printEnvironment();
+  debugSetup();
   // Begin in STOPPED mode
   setMode(MODE_STOPPED);
   _LOGI("Setup is finished");
@@ -274,7 +181,7 @@ void initI2SRx() {
     .sample_rate          = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
     .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
     .channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT,
-    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
+    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB),
     .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
     .dma_buf_count        = 4,
     .dma_buf_len          = I2S_READ_LEN,
@@ -334,7 +241,7 @@ int16_t remove_dc(int16_t x) {
 }
 
 void loop() {
-  measureLoopFrequency();
+  debugLoop();
   try {
     // Report any physical PTT button presses or releases back to Android app (note that
     // we don't start tx here, Android app decides what to do, since the user could be in
@@ -839,38 +746,4 @@ hw_ver_t get_hardware_version() {
   // use values between 0x0 and 0xF. For now, just binary.
 
   return ver;
-}
-
-void printEnvironment() {
-  _LOGI("---");
-  _LOGI("Heap Size: %d", ESP.getHeapSize());
-  _LOGI("SDK Version: %s", ESP.getSdkVersion());
-  _LOGI("CPU Freq: %d", ESP.getCpuFreqMHz());
-  _LOGI("Sketch MD5: %s", ESP.getSketchMD5().c_str());
-  _LOGI("Chip model: %s", ESP.getChipModel());
-  _LOGI("PSRAM size: %d", ESP.getPsramSize());
-  _LOGI("FLASH size: %d", ESP.getFlashChipSize());
-  _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
-  _LOGI("Hardware version: 0x%02x", hardware_version);
-  _LOGI("---");
-}
-
-void measureLoopFrequency() {
-  // Exponential Weighted Moving Average (EWMA) for loop time
-  static float avgLoopTime = 0;
-  const float alpha = 0.1;  // Smoothing factor (adjust as needed)
-  static uint32_t lastTime = 0;
-  static uint32_t startTime = 0;
-  // Measure time per iteration
-  uint32_t now = micros();
-  uint32_t duration = now - startTime;
-  startTime = now;
-  // Apply EWMA filtering
-  avgLoopTime = alpha * duration + (1 - alpha) * avgLoopTime;
-  // Report every second
-  if (now - lastTime >= 1000000) {  // 1,000,000 µs = 1 second
-    float frequency = 1e6 / avgLoopTime;  // Convert loop time to frequency
-    _LOGI("Loop Time: %.2f µs, Frequency: %.2f Hz", avgLoopTime, frequency);
-    lastTime = now;
-  }
 }
