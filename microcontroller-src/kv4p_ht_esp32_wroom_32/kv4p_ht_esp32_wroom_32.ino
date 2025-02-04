@@ -903,9 +903,9 @@ void measureLoopFrequency() {
 }
 
 void neopixelColor(RGBColor C, uint8_t bright = 255) {
-  uint8_t red = (C.red * bright) >> 8;
-  uint8_t green = (C.green * bright) >> 8;
-  uint8_t blue = (C.blue * bright) >> 8;
+  uint8_t red = (uint16_t(C.red) * bright) / 255;
+  uint8_t green = (uint16_t(C.green) * bright) / 255;
+  uint8_t blue = (uint16_t(C.blue) * bright) / 255;
   neopixelWrite(PIXELS_PIN, red, green, blue);
 }
 
