@@ -26,6 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "debug.h"
+#include "led.h"
 
 const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '2'};  // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
@@ -39,12 +40,6 @@ long lastSMeterReport = -1;
 const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
 int matchedDelimiterTokens                        = 0;
 int matchedDelimiterTokensRx                      = 0;
-
-// Mode of the app, which is essentially a state machine
-#define MODE_TX 0
-#define MODE_RX 1
-#define MODE_STOPPED 2
-int mode = MODE_STOPPED;
 
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 22050
@@ -82,9 +77,6 @@ uint8_t SQ_PIN = 32;
 boolean isPhysPttDown     = false;
 long buttonDebounceMillis = -1;
 
-// Built in LED
-#define LED_PIN 2
-
 // Object used for radio module serial comms
 DRA818 *dra;
 
@@ -99,6 +91,7 @@ char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
 // Have we installed an I2S driver at least once?
 bool i2sStarted = false;
+
 
 // I2S audio sampling stuff
 #define I2S_READ_LEN 1024/4
@@ -118,26 +111,26 @@ void setup() {
   // Hardware dependent pin assignments.
   switch (hardware_version) {
     case HW_VER_V1:
+      COLOR_HW_VER = {0, 32, 0};
       SQ_PIN = 32;
       break;
     case HW_VER_V2_0C:
+      COLOR_HW_VER = {32, 0, 0};
       SQ_PIN = 4;
       break;
     case HW_VER_V2_0D:
+      COLOR_HW_VER = {0, 0, 32};
       SQ_PIN = 4;
       break;
     default:
       // Unknown version detected. Indicate this some way?
+      COLOR_HW_VER = {16, 16, 16};
       break;
   }
 
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
-
-  // Debug LED
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
 
   // Optional physical PTT buttons
   pinMode(PHYS_PTT_PIN1, INPUT_PULLUP);
@@ -156,7 +149,9 @@ void setup() {
 
   debugSetup();
   // Begin in STOPPED mode
+  squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
+  ledSetup();
   _LOGI("Setup is finished");
 }
 
@@ -242,6 +237,7 @@ int16_t remove_dc(int16_t x) {
 
 void loop() {
   debugLoop();
+  ledLoop();
   try {
     // Report any physical PTT button presses or releases back to Android app (note that
     // we don't start tx here, Android app decides what to do, since the user could be in
@@ -331,7 +327,7 @@ void loop() {
 
             if (hardware_version == HW_VER_V2_0C) {
               // v2.0c has a lower input ADC range.
-              result = dra->volume(4);
+              result = dra->volume(6);
             } else {
               result = dra->volume(8);
             }
@@ -561,7 +557,7 @@ void loop() {
       ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 0));
       size_t samplesRead = bytesRead / 2;
 
-      bool squelched = (digitalRead(SQ_PIN) == HIGH);
+      squelched = (digitalRead(SQ_PIN) == HIGH);
 
       for (int i = 0; i < samplesRead; i++) {
         int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
@@ -682,17 +678,15 @@ void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, Str
   // Serial.println("tuneTo: " + String(result));
 }
 
-void setMode(int newMode) {
+void setMode(Mode newMode) {
   mode = newMode;
   switch (mode) {
     case MODE_STOPPED:
       _LOGI("MODE_STOPPED");
-      digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       break;
     case MODE_RX:
       _LOGI("MODE_RX");
-      digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       initI2SRx();
       matchedDelimiterTokensRx = 0;
@@ -700,7 +694,6 @@ void setMode(int newMode) {
     case MODE_TX:
       _LOGI("MODE_TX");
       txStartTime = micros();
-      digitalWrite(LED_PIN, HIGH);
       digitalWrite(PTT_PIN, LOW);
       initI2STx();
       txCachedAudioBytes = 0;
@@ -747,3 +740,4 @@ hw_ver_t get_hardware_version() {
 
   return ver;
 }
+

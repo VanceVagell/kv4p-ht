@@ -49,6 +49,17 @@ const byte COMMAND_DEBUG_WARN     = 0x03;
 const byte COMMAND_DEBUG_DEBUG    = 0x04;
 const byte COMMAND_DEBUG_TRACE    = 0x05;
 
+// Mode of the app, which is essentially a state machine
+enum Mode {
+  MODE_TX,
+  MODE_RX,
+  MODE_STOPPED
+};
+Mode mode = MODE_STOPPED;
+
+// Current SQ status
+bool squelched = false;
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
 ////////////////////////////////////////////////////////////////////////////////
