@@ -57,10 +57,12 @@ int matchedDelimiterTokens                        = 0;
 int matchedDelimiterTokensRx                      = 0;
 
 // Mode of the app, which is essentially a state machine
-#define MODE_TX 0
-#define MODE_RX 1
-#define MODE_STOPPED 2
-int mode = MODE_STOPPED;
+enum Mode {
+  MODE_TX,
+  MODE_RX,
+  MODE_STOPPED
+};
+Mode mode = MODE_STOPPED;
 
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 22050
@@ -116,6 +118,9 @@ char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 // Have we installed an I2S driver at least once?
 bool i2sStarted = false;
 
+// Current SQ status
+bool squelched = false;
+
 // I2S audio sampling stuff
 #define I2S_READ_LEN 1024/4
 #define I2S_WRITE_LEN 1024/4
@@ -137,6 +142,22 @@ typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if w
 #define HW_VER_V2_0D (0xF0)
 // #define HW_VER_?? (0x0F)  // Unused
 hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
+
+// NeoPixel support
+#define PIXELS_PIN 13
+#define NUM_PIXELS 1
+
+struct RGBColor {
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+};
+const RGBColor COLOR_STOPPED = {0, 0, 0};
+const RGBColor COLOR_RX_SQL_CLOSED = {0, 0, 32};
+const RGBColor COLOR_RX_SQL_OPEN = {0, 32, 0};
+const RGBColor COLOR_TX = {16, 16, 0};
+const RGBColor COLOR_BLACK = {0, 0, 0};
+RGBColor COLOR_HW_VER = COLOR_BLACK;
 
 #define _LOGE(fmt, ...)           \
   {                                    \
@@ -166,11 +187,13 @@ hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
 void initI2SRx();
 void initI2STx();
 void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
-void setMode(int newMode);
+void setMode(Mode newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
 hw_ver_t get_hardware_version();
 void reportPhysPttState();
+void show_LEDs();
+void neopixelColor(RGBColor C, uint8_t bright);
 
 void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen);
 
@@ -211,16 +234,20 @@ void setup() {
   // Hardware dependent pin assignments.
   switch (hardware_version) {
     case HW_VER_V1:
+      COLOR_HW_VER = {0, 32, 0};
       SQ_PIN = 32;
       break;
     case HW_VER_V2_0C:
+      COLOR_HW_VER = {32, 0, 0};
       SQ_PIN = 4;
       break;
     case HW_VER_V2_0D:
+      COLOR_HW_VER = {0, 0, 32};
       SQ_PIN = 4;
       break;
     default:
       // Unknown version detected. Indicate this some way?
+      COLOR_HW_VER = {16, 16, 16};
       break;
   }
 
@@ -249,7 +276,9 @@ void setup() {
 
   printEnvironment();
   // Begin in STOPPED mode
+  squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
+  show_LEDs();
   _LOGI("Setup is finished");
 }
 
@@ -424,7 +453,7 @@ void loop() {
 
             if (hardware_version == HW_VER_V2_0C) {
               // v2.0c has a lower input ADC range.
-              result = dra->volume(4);
+              result = dra->volume(6);
             } else {
               result = dra->volume(8);
             }
@@ -654,7 +683,7 @@ void loop() {
       ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 0));
       size_t samplesRead = bytesRead / 2;
 
-      bool squelched = (digitalRead(SQ_PIN) == HIGH);
+      squelched = (digitalRead(SQ_PIN) == HIGH);
 
       for (int i = 0; i < samplesRead; i++) {
         int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
@@ -734,6 +763,7 @@ void loop() {
     // Disregard, we don't want to crash. Just pick up at next loop().)
     // Serial.println("Exception in loop(), skipping cycle.");
   }
+  show_LEDs();
 }
 
 /**
@@ -775,17 +805,15 @@ void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, Str
   // Serial.println("tuneTo: " + String(result));
 }
 
-void setMode(int newMode) {
+void setMode(Mode newMode) {
   mode = newMode;
   switch (mode) {
     case MODE_STOPPED:
       _LOGI("MODE_STOPPED");
-      digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       break;
     case MODE_RX:
       _LOGI("MODE_RX");
-      digitalWrite(LED_PIN, LOW);
       digitalWrite(PTT_PIN, HIGH);
       initI2SRx();
       matchedDelimiterTokensRx = 0;
@@ -793,7 +821,6 @@ void setMode(int newMode) {
     case MODE_TX:
       _LOGI("MODE_TX");
       txStartTime = micros();
-      digitalWrite(LED_PIN, HIGH);
       digitalWrite(PTT_PIN, LOW);
       initI2STx();
       txCachedAudioBytes = 0;
@@ -874,3 +901,51 @@ void measureLoopFrequency() {
     lastTime = now;
   }
 }
+
+void neopixelColor(RGBColor C, uint8_t bright = 255) {
+  uint8_t red = (uint16_t(C.red) * bright) / 255;
+  uint8_t green = (uint16_t(C.green) * bright) / 255;
+  uint8_t blue = (uint16_t(C.blue) * bright) / 255;
+  neopixelWrite(PIXELS_PIN, red, green, blue);
+}
+
+// Calculate a float between min and max, that ramps from min to max in half of breath_every,
+// and from max to min the second half of breath_every.
+// now and breath_every are arbitrary units, but usually are milliseconds from millis().
+uint8_t calc_breath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max) {
+  uint16_t amplitude = max - min; // Ensure enough range for calculations
+  uint16_t bright = ((now % breath_every) * 512) / breath_every; // Scale to 0-512
+  if (bright > 255) bright = 512 - bright; // Fold >255 back down to 255-0
+  return ((bright * amplitude) / 255) + min;
+}
+
+void show_LEDs() {
+  // When to actually act?
+  static uint32_t next_time = 0;
+  const static uint32_t update_every = 50;    // in milliseconds
+  uint32_t now = millis();
+  // Only change LEDs if:
+  // * it's been more than update_every ms since we've last set the LEDs.
+  if (now >= next_time) {
+    next_time = now + update_every;
+    switch (mode) {
+      case MODE_STOPPED:
+        digitalWrite(LED_PIN, LOW);
+        neopixelColor(COLOR_HW_VER);
+        break;
+      case MODE_RX:
+        digitalWrite(LED_PIN, LOW);
+        if (squelched) {
+          neopixelColor(COLOR_RX_SQL_CLOSED, calc_breath(now, 2000, 127, 255));
+        } else {
+          neopixelColor(COLOR_RX_SQL_OPEN);
+        }
+        break;
+      case MODE_TX:
+        digitalWrite(LED_PIN, HIGH);
+        neopixelColor(COLOR_TX);
+        break;
+    }
+  }
+}
+
