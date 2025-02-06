@@ -91,7 +91,6 @@ void ledSetup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
   showLEDs();
-
 }
 
 void ledLoop() {  
