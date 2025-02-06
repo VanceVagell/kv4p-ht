@@ -39,24 +39,24 @@ const RGBColor COLOR_TX = {16, 16, 0};
 const RGBColor COLOR_BLACK = {0, 0, 0};
 RGBColor COLOR_HW_VER = COLOR_BLACK;
 
-void neopixelColor(RGBColor C, uint8_t bright = 255) {
-  uint8_t red = (uint16_t(C.red) * bright) / 255;
-  uint8_t green = (uint16_t(C.green) * bright) / 255;
-  uint8_t blue = (uint16_t(C.blue) * bright) / 255;
+void neopixelColor(const RGBColor &c, uint8_t bright = 255) {
+  uint8_t red = (uint16_t(c.red) * bright + 128) >> 8;
+  uint8_t green = (uint16_t(c.green) * bright + 128) >> 8;
+  uint8_t blue = (uint16_t(c.blue) * bright + 128) >> 8;
   neopixelWrite(PIXELS_PIN, red, green, blue);
 }
 
 // Calculate a float between min and max, that ramps from min to max in half of breath_every,
 // and from max to min the second half of breath_every.
 // now and breath_every are arbitrary units, but usually are milliseconds from millis().
-uint8_t calc_breath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max) {
+uint8_t calcBreath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max) {
   uint16_t amplitude = max - min; // Ensure enough range for calculations
   uint16_t bright = ((now % breath_every) * 512) / breath_every; // Scale to 0-512
   if (bright > 255) bright = 512 - bright; // Fold >255 back down to 255-0
   return ((bright * amplitude) / 255) + min;
 }
 
-void show_LEDs() {
+void showLEDs() {
   // When to actually act?
   static uint32_t next_time = 0;
   const static uint32_t update_every = 50;    // in milliseconds
@@ -73,7 +73,7 @@ void show_LEDs() {
       case MODE_RX:
         digitalWrite(LED_PIN, LOW);
         if (squelched) {
-          neopixelColor(COLOR_RX_SQL_CLOSED, calc_breath(now, 2000, 127, 255));
+          neopixelColor(COLOR_RX_SQL_CLOSED, calcBreath(now, 2000, 127, 255));
         } else {
           neopixelColor(COLOR_RX_SQL_OPEN);
         }
@@ -90,10 +90,10 @@ void ledSetup() {
   // Debug LED
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  show_LEDs();
+  showLEDs();
 
 }
 
 void ledLoop() {  
-  show_LEDs();
+  showLEDs();
 }
