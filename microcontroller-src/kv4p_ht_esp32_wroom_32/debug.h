@@ -122,10 +122,10 @@ void measureLoopFrequency() {
 #endif  
 }
 
-void debugSetup() {
+void inline debugSetup() {
   printEnvironment();
 }
 
-void debugLoop() {
+void inline debugLoop() {
   measureLoopFrequency();
 }

@@ -56,7 +56,7 @@ uint8_t calcBreath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max
   return ((bright * amplitude) / 255) + min;
 }
 
-void showLEDs() {
+void inline showLEDs() {
   // When to actually act?
   static uint32_t next_time = 0;
   const static uint32_t update_every = 50;    // in milliseconds
@@ -73,7 +73,7 @@ void showLEDs() {
       case MODE_RX:
         digitalWrite(LED_PIN, LOW);
         if (squelched) {
-          neopixelColor(COLOR_RX_SQL_CLOSED, calcBreath(now, 2000, 127, 255));
+          neopixelColor(COLOR_RX_SQL_CLOSED, calcBreath(now, 2000, 32, 255));
         } else {
           neopixelColor(COLOR_RX_SQL_OPEN);
         }
@@ -86,13 +86,13 @@ void showLEDs() {
   }
 }
 
-void ledSetup() {
+void inline ledSetup() {
   // Debug LED
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
   showLEDs();
 }
 
-void ledLoop() {  
+void inline ledLoop() {  
   showLEDs();
 }
