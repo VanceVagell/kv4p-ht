@@ -508,24 +508,26 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
 
             // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
-            threadPoolExecutor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
+            if (null != threadPoolExecutor) {
+                threadPoolExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
 
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            radioAudioService.setRadioType(
-                                "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
-                                    ? RadioAudioService.RADIO_MODULE_UHF
-                                    : RadioAudioService.RADIO_MODULE_VHF
-                            );
-                            radioAudioService.start();
-                        }
-                    });
-                }
-            });
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                radioAudioService.setRadioType(
+                                        "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
+                                                ? RadioAudioService.RADIO_MODULE_UHF
+                                                : RadioAudioService.RADIO_MODULE_VHF
+                                );
+                                radioAudioService.start();
+                            }
+                        });
+                    }
+                });
+            }
         }
 
         @Override

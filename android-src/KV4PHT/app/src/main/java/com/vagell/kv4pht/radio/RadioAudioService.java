@@ -105,8 +105,8 @@ public class RadioAudioService extends Service {
 
     // Must match the ESP32 device we support.
     // Idx 0 matches https://www.amazon.com/gp/product/B08D5ZD528
-    private static final int[] ESP32_VENDOR_IDS = {4292};
-    private static final int[] ESP32_PRODUCT_IDS = {60000};
+    private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
+    private static final int[] ESP32_PRODUCT_IDS = {60000, 29987};
 
     // Version related constants (also see FirmwareUtils for others)
     private static final String VERSION_PREFIX = "VERSION";
@@ -977,6 +977,8 @@ public class RadioAudioService extends Service {
      * @param radioType should be RADIO_TYPE_UHF or RADIO_TYPE_VHF
      */
     public void setRadioType(String radioType) {
+        Log.d("DEBUG", "setRadioType: " + radioType);
+
         if (!this.radioType.equals(radioType)) {
             this.radioType = radioType;
 
