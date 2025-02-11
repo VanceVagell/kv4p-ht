@@ -24,27 +24,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/i2s.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
+#include "globals.h"
+#include "debug.h"
+#include "led.h"
 
 const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '2'};  // Should be 8 characters representing a zero-padded version, like 00000001.
 const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
-
-// Commands defined here must match the Android app
-const uint8_t COMMAND_PTT_DOWN         = 1;  // start transmitting audio that Android app will send
-const uint8_t COMMAND_PTT_UP           = 2;  // stop transmitting audio, go into RX mode
-const uint8_t COMMAND_TUNE_TO          = 3;  // change the frequency
-const uint8_t COMMAND_FILTERS          = 4;  // toggle filters on/off
-const uint8_t COMMAND_STOP             = 5;  // stop everything, just wait for next command
-const uint8_t COMMAND_GET_FIRMWARE_VER = 6;  // report FIRMWARE_VER in the format '00000001' for 1 (etc.)
-
-// Outgoing commands (ESP32 -> Android)
-const byte COMMAND_SMETER_REPORT  = 0x53; // 'S'
-const byte COMMAND_PHYS_PTT_DOWN  = 0x44; // 'D'
-const byte COMMAND_PHYS_PTT_UP    = 0x55; // 'U'
-const byte COMMAND_DEBUG_INFO     = 0x01;
-const byte COMMAND_DEBUG_ERROR    = 0x02;
-const byte COMMAND_DEBUG_WARN     = 0x03;
-const byte COMMAND_DEBUG_DEBUG    = 0x04;
-const byte COMMAND_DEBUG_TRACE    = 0x05;
 
 // S-meter interval
 long lastSMeterReport = -1;
@@ -55,14 +40,6 @@ long lastSMeterReport = -1;
 const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
 int matchedDelimiterTokens                        = 0;
 int matchedDelimiterTokensRx                      = 0;
-
-// Mode of the app, which is essentially a state machine
-enum Mode {
-  MODE_TX,
-  MODE_RX,
-  MODE_STOPPED
-};
-Mode mode = MODE_STOPPED;
 
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 22050
@@ -100,9 +77,6 @@ uint8_t SQ_PIN = 32;
 boolean isPhysPttDown     = false;
 long buttonDebounceMillis = -1;
 
-// Built in LED
-#define LED_PIN 2
-
 // Object used for radio module serial comms
 DRA818 *dra;
 
@@ -118,109 +92,12 @@ char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 // Have we installed an I2S driver at least once?
 bool i2sStarted = false;
 
-// Current SQ status
-bool squelched = false;
 
 // I2S audio sampling stuff
 #define I2S_READ_LEN 1024/4
 #define I2S_WRITE_LEN 1024/4
 #define I2S_ADC_UNIT ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
-
-// 11dB vs 12dB is a ...version thing?
-#ifndef ADC_ATTEN_DB_12
-#define ADC_ATTEN_DB_12 ADC_ATTEN_DB_11
-#endif
-
-// Hardware version detection
-#define HW_VER_PIN_0 39    // 0xF0
-#define HW_VER_PIN_1 36    // 0x0F
-typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if we want.
-// LOW = 0, HIGH = F, 1 <= analog values <= E
-#define HW_VER_V1 (0x00)
-#define HW_VER_V2_0C (0xFF)
-#define HW_VER_V2_0D (0xF0)
-// #define HW_VER_?? (0x0F)  // Unused
-hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
-
-// NeoPixel support
-#define PIXELS_PIN 13
-#define NUM_PIXELS 1
-
-struct RGBColor {
-  uint8_t red;
-  uint8_t green;
-  uint8_t blue;
-};
-const RGBColor COLOR_STOPPED = {0, 0, 0};
-const RGBColor COLOR_RX_SQL_CLOSED = {0, 0, 32};
-const RGBColor COLOR_RX_SQL_OPEN = {0, 32, 0};
-const RGBColor COLOR_TX = {16, 16, 0};
-const RGBColor COLOR_BLACK = {0, 0, 0};
-RGBColor COLOR_HW_VER = COLOR_BLACK;
-
-#define _LOGE(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_ERROR, ARDUHAL_LOG_FORMAT(E, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGW(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_WARN, ARDUHAL_LOG_FORMAT(W, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGI(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_INFO, ARDUHAL_LOG_FORMAT(I, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGD(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_DEBUG, ARDUHAL_LOG_FORMAT(D, fmt), ##__VA_ARGS__);       \
-  }
-#define _LOGT(fmt, ...)           \
-  {                                    \
-    debug_log_printf(COMMAND_DEBUG_TRACE, ARDUHAL_LOG_FORMAT(T, fmt), ##__VA_ARGS__);       \
-  }
-
-////////////////////////////////////////////////////////////////////////////////
-/// Forward Declarations
-////////////////////////////////////////////////////////////////////////////////
-
-void initI2SRx();
-void initI2STx();
-void tuneTo(float freqTx, float freqRx, int tone, int squelch, String bandwidth);
-void setMode(Mode newMode);
-void processTxAudio(uint8_t tempBuffer[], int bytesRead);
-void iir_lowpass_reset();
-hw_ver_t get_hardware_version();
-void reportPhysPttState();
-void show_LEDs();
-void neopixelColor(RGBColor C, uint8_t bright);
-
-void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen);
-
-int debug_log_printf(uint8_t cmd, const char* format, ...) {
-  static char loc_buf[256];
-  char* temp = loc_buf;
-  int len;
-  va_list arg;
-  va_list copy;
-  va_start(arg, format);
-  va_copy(copy, arg);
-  len = vsnprintf(NULL, 0, format, arg);
-  va_end(copy);
-  if (len >= sizeof(loc_buf)) {
-    temp = (char*)malloc(len + 1);
-    if (temp == NULL) {
-      return 0;
-    }
-  }
-  vsnprintf(temp, len + 1, format, arg);
-  sendCmdToAndroid(cmd, (byte*) temp, len);
-  va_end(arg);
-  if (len >= sizeof(loc_buf)) {
-    free(temp);
-  }
-  return len;
-}
 
 void setup() {
   // Used for setup, need to know early.
@@ -255,10 +132,6 @@ void setup() {
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
 
-  // Debug LED
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
-
   // Optional physical PTT buttons
   pinMode(PHYS_PTT_PIN1, INPUT_PULLUP);
   pinMode(PHYS_PTT_PIN2, INPUT_PULLUP);
@@ -274,11 +147,11 @@ void setup() {
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
 
-  printEnvironment();
+  debugSetup();
   // Begin in STOPPED mode
   squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
-  show_LEDs();
+  ledSetup();
   _LOGI("Setup is finished");
 }
 
@@ -303,7 +176,7 @@ void initI2SRx() {
     .sample_rate          = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
     .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
     .channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT,
-    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
+    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB),
     .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
     .dma_buf_count        = 4,
     .dma_buf_len          = I2S_READ_LEN,
@@ -363,7 +236,8 @@ int16_t remove_dc(int16_t x) {
 }
 
 void loop() {
-  measureLoopFrequency();
+  debugLoop();
+  ledLoop();
   try {
     // Report any physical PTT button presses or releases back to Android app (note that
     // we don't start tx here, Android app decides what to do, since the user could be in
@@ -763,7 +637,6 @@ void loop() {
     // Disregard, we don't want to crash. Just pick up at next loop().)
     // Serial.println("Exception in loop(), skipping cycle.");
   }
-  show_LEDs();
 }
 
 /**
@@ -866,86 +739,5 @@ hw_ver_t get_hardware_version() {
   // use values between 0x0 and 0xF. For now, just binary.
 
   return ver;
-}
-
-void printEnvironment() {
-  _LOGI("---");
-  _LOGI("Heap Size: %d", ESP.getHeapSize());
-  _LOGI("SDK Version: %s", ESP.getSdkVersion());
-  _LOGI("CPU Freq: %d", ESP.getCpuFreqMHz());
-  _LOGI("Sketch MD5: %s", ESP.getSketchMD5().c_str());
-  _LOGI("Chip model: %s", ESP.getChipModel());
-  _LOGI("PSRAM size: %d", ESP.getPsramSize());
-  _LOGI("FLASH size: %d", ESP.getFlashChipSize());
-  _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
-  _LOGI("Hardware version: 0x%02x", hardware_version);
-  _LOGI("---");
-}
-
-void measureLoopFrequency() {
-  // Exponential Weighted Moving Average (EWMA) for loop time
-  static float avgLoopTime = 0;
-  const float alpha = 0.1;  // Smoothing factor (adjust as needed)
-  static uint32_t lastTime = 0;
-  static uint32_t startTime = 0;
-  // Measure time per iteration
-  uint32_t now = micros();
-  uint32_t duration = now - startTime;
-  startTime = now;
-  // Apply EWMA filtering
-  avgLoopTime = alpha * duration + (1 - alpha) * avgLoopTime;
-  // Report every second
-  if (now - lastTime >= 1000000) {  // 1,000,000 µs = 1 second
-    float frequency = 1e6 / avgLoopTime;  // Convert loop time to frequency
-    _LOGI("Loop Time: %.2f µs, Frequency: %.2f Hz", avgLoopTime, frequency);
-    lastTime = now;
-  }
-}
-
-void neopixelColor(RGBColor C, uint8_t bright = 255) {
-  uint8_t red = (uint16_t(C.red) * bright) / 255;
-  uint8_t green = (uint16_t(C.green) * bright) / 255;
-  uint8_t blue = (uint16_t(C.blue) * bright) / 255;
-  neopixelWrite(PIXELS_PIN, red, green, blue);
-}
-
-// Calculate a float between min and max, that ramps from min to max in half of breath_every,
-// and from max to min the second half of breath_every.
-// now and breath_every are arbitrary units, but usually are milliseconds from millis().
-uint8_t calc_breath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max) {
-  uint16_t amplitude = max - min; // Ensure enough range for calculations
-  uint16_t bright = ((now % breath_every) * 512) / breath_every; // Scale to 0-512
-  if (bright > 255) bright = 512 - bright; // Fold >255 back down to 255-0
-  return ((bright * amplitude) / 255) + min;
-}
-
-void show_LEDs() {
-  // When to actually act?
-  static uint32_t next_time = 0;
-  const static uint32_t update_every = 50;    // in milliseconds
-  uint32_t now = millis();
-  // Only change LEDs if:
-  // * it's been more than update_every ms since we've last set the LEDs.
-  if (now >= next_time) {
-    next_time = now + update_every;
-    switch (mode) {
-      case MODE_STOPPED:
-        digitalWrite(LED_PIN, LOW);
-        neopixelColor(COLOR_HW_VER);
-        break;
-      case MODE_RX:
-        digitalWrite(LED_PIN, LOW);
-        if (squelched) {
-          neopixelColor(COLOR_RX_SQL_CLOSED, calc_breath(now, 2000, 127, 255));
-        } else {
-          neopixelColor(COLOR_RX_SQL_OPEN);
-        }
-        break;
-      case MODE_TX:
-        digitalWrite(LED_PIN, HIGH);
-        neopixelColor(COLOR_TX);
-        break;
-    }
-  }
 }
 
