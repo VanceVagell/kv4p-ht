@@ -324,6 +324,13 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void radioConnected() {
+                    hideSnackbar();
+                    applySettings();
+                    findViewById(R.id.pttButton).setClickable(true);
+                }
+
+                @Override
+                public void hideSnackbar() {
                     if (usbSnackbar != null) {
                         usbSnackbar.dismiss();
                         usbSnackbar = null;
@@ -336,8 +343,12 @@ public class MainActivity extends AppCompatActivity {
                         radioModuleNotFoundSnackbar.dismiss();
                         radioModuleNotFoundSnackbar = null;
                     }
-                    applySettings();
-                    findViewById(R.id.pttButton).setClickable(true);
+
+                }
+
+                @Override
+                public void radioModuleHandshake() {
+                    showHandshakeSnackbar();
                 }
 
                 @Override
@@ -1715,6 +1726,21 @@ public class MainActivity extends AppCompatActivity {
         CharSequence snackbarMsg = "kv4p HT radio not found, plugged in?";
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
             .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
+            .setAnchorView(findViewById(R.id.bottomNavigationView));
+
+        // Make the text of the snackbar larger.
+        TextView snackbarActionTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+        snackbarActionTextView.setTextSize(20);
+        TextView snackbarTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+
+        usbSnackbar.show();
+    }
+
+    private void showHandshakeSnackbar() {
+        CharSequence snackbarMsg = "kv4p HT radio handshake.";
+        usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+            .setBackgroundTint(Color.rgb(20, 140, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
             .setAnchorView(findViewById(R.id.bottomNavigationView));
 
         // Make the text of the snackbar larger.

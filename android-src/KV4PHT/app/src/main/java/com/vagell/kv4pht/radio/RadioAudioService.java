@@ -483,6 +483,8 @@ public class RadioAudioService extends Service {
     public interface RadioAudioServiceCallbacks {
         public void radioMissing();
         public void radioConnected();
+        public void hideSnackbar();
+        public void radioModuleHandshake();
         public void radioModuleNotFound();
         public void audioTrackCreated();
         public void packetReceived(APRSPacket aprsPacket);
@@ -729,13 +731,13 @@ public class RadioAudioService extends Service {
         if (offset == ChannelMemory.OFFSET_NONE) {
             return txFreq;
         } else {
-            Float freqFloat = Float.parseFloat(txFreq);
+            float freqFloat = Float.parseFloat(txFreq);
             if (offset == ChannelMemory.OFFSET_UP) {
                 freqFloat += 0f + (khz / 1000f);
             } else if (offset == ChannelMemory.OFFSET_DOWN){
                 freqFloat -= 0f + (khz / 1000f);
             }
-            return makeSafeHamFreq(freqFloat.toString());
+            return makeSafeHamFreq(Float.toString(freqFloat));
         }
     }
 
@@ -866,6 +868,9 @@ public class RadioAudioService extends Service {
             }
         } else {
             Log.d("DEBUG", "Found ESP32.");
+            if (callbacks != null) {
+                callbacks.hideSnackbar();
+            }
             setupSerialConnection();
         }
     }
@@ -1030,7 +1035,7 @@ public class RadioAudioService extends Service {
                 callbacks.missingFirmware();
                 setMode(MODE_BAD_FIRMWARE);
             }
-        }, 6000);
+        }, 30000);
     }
 
     private void initAfterESP32Connected() {
@@ -1461,6 +1466,9 @@ public class RadioAudioService extends Service {
         } else if (cmd == COMMAND_HELLO) {
             gotHello = true;
             audioTrack.stop();
+            if (callbacks != null) {
+                callbacks.radioModuleHandshake();
+            }
             restartAudioPrebuffer();
             checkFirmwareVersion();
         } else {
