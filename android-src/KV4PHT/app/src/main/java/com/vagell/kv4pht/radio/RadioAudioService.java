@@ -1465,11 +1465,13 @@ public class RadioAudioService extends Service {
             Log.v("firmware", new String(param));
         } else if (cmd == COMMAND_HELLO) {
             gotHello = true;
-            audioTrack.stop();
+            if (audioTrack != null) {
+                audioTrack.stop();
+                restartAudioPrebuffer();
+            }
             if (callbacks != null) {
                 callbacks.radioModuleHandshake();
             }
-            restartAudioPrebuffer();
             checkFirmwareVersion();
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
