@@ -1035,7 +1035,7 @@ public class RadioAudioService extends Service {
                 callbacks.missingFirmware();
                 setMode(MODE_BAD_FIRMWARE);
             }
-        }, 30000);
+        }, 60000);
     }
 
     private void initAfterESP32Connected() {
