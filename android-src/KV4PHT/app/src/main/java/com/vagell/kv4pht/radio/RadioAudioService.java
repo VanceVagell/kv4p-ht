@@ -211,6 +211,7 @@ public class RadioAudioService extends Service {
     private boolean radioModuleNotFound = false;
     private boolean checkedFirmwareVersion = false;
     private boolean gotHello = false;
+    private final Handler timeOutHandler = new Handler(Looper.getMainLooper());
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -971,8 +972,8 @@ public class RadioAudioService extends Service {
         gotHello = false;
 
         Log.d("DEBUG", "Connected to ESP32.");
-
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        timeOutHandler.removeCallbacksAndMessages(null);
+        timeOutHandler.postDelayed(() -> {
             if (!gotHello) {
                 Log.d("DEBUG", "Error: Did not HELLO from module.");
                 callbacks.missingFirmware();
@@ -1029,8 +1030,9 @@ public class RadioAudioService extends Service {
 
         // If we don't hear back from the ESP32, it means the firmware is either not
         // installed or it's somehow corrupt.
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (mode == MODE_STARTUP && !radioModuleNotFound) {
+        timeOutHandler.removeCallbacksAndMessages(null);
+        timeOutHandler.postDelayed(() -> {
+            if (mode == MODE_STARTUP && !checkedFirmwareVersion) {
                 Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
                 callbacks.missingFirmware();
                 setMode(MODE_BAD_FIRMWARE);
