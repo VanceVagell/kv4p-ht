@@ -152,6 +152,7 @@ void setup() {
   squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
+  sendCmdToAndroid(COMMAND_HELLO, NULL, 0);
   _LOGI("Setup is finished");
 }
 

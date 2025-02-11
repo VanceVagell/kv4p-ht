@@ -159,6 +159,7 @@ public class RadioAudioService extends Service {
     private static final byte COMMAND_DEBUG_WARN     = 0x03;
     private static final byte COMMAND_DEBUG_DEBUG    = 0x04;
     private static final byte COMMAND_DEBUG_TRACE    = 0x05;
+    private static final byte COMMAND_HELLO          = 0x06;
 
     private final ESP32DataStreamParser esp32DataStreamParser = new ESP32DataStreamParser(this::handleParsedCommand);
 
@@ -209,6 +210,7 @@ public class RadioAudioService extends Service {
     private String radioType = RADIO_MODULE_VHF;
     private boolean radioModuleNotFound = false;
     private boolean checkedFirmwareVersion = false;
+    private boolean gotHello = false;
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
@@ -939,6 +941,9 @@ public class RadioAudioService extends Service {
             @Override
             public void onRunError(Exception e) {
                 Log.d("DEBUG", "Error reading from ESP32.");
+                if (audioTrack != null) {
+                    audioTrack.stop();
+                }
                 connection.close();
                 try {
                     serialPort.close();
@@ -958,19 +963,17 @@ public class RadioAudioService extends Service {
         usbIoManager.setReadBufferCount(16*2);
         usbIoManager.start();
         checkedFirmwareVersion = false;
+        gotHello = false;
 
         Log.d("DEBUG", "Connected to ESP32.");
 
-        // After a brief pause (to let it boot), do things with the ESP32 that we were waiting to do.
-        final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (!checkedFirmwareVersion) {
-                    checkFirmwareVersion();
-                }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!gotHello) {
+                Log.d("DEBUG", "Error: Did not HELLO from module.");
+                callbacks.missingFirmware();
+                setMode(MODE_BAD_FIRMWARE);
             }
-        }, 3000);
+        }, 500);
     }
 
     /**
@@ -1021,17 +1024,11 @@ public class RadioAudioService extends Service {
 
         // If we don't hear back from the ESP32, it means the firmware is either not
         // installed or it's somehow corrupt.
-        final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (mode != MODE_STARTUP || radioModuleNotFound) {
-                    return;
-                } else {
-                    Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
-                    callbacks.missingFirmware();
-                    setMode(MODE_BAD_FIRMWARE);
-                }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (mode == MODE_STARTUP && !radioModuleNotFound) {
+                Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
+                callbacks.missingFirmware();
+                setMode(MODE_BAD_FIRMWARE);
             }
         }, 6000);
     }
@@ -1461,6 +1458,11 @@ public class RadioAudioService extends Service {
             Log.w("firmware", new String(param));
         } else if (cmd == COMMAND_DEBUG_TRACE) {
             Log.v("firmware", new String(param));
+        } else if (cmd == COMMAND_HELLO) {
+            gotHello = true;
+            audioTrack.stop();
+            restartAudioPrebuffer();
+            checkFirmwareVersion();
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
                     " paramLen=" + param.length);

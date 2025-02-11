@@ -48,6 +48,7 @@ const byte COMMAND_DEBUG_ERROR    = 0x02;
 const byte COMMAND_DEBUG_WARN     = 0x03;
 const byte COMMAND_DEBUG_DEBUG    = 0x04;
 const byte COMMAND_DEBUG_TRACE    = 0x05;
+const byte COMMAND_HELLO          = 0x06;
 
 // Mode of the app, which is essentially a state machine
 enum Mode {
