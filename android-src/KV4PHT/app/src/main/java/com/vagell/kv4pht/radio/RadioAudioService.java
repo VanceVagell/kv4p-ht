@@ -979,7 +979,7 @@ public class RadioAudioService extends Service {
                 callbacks.missingFirmware();
                 setMode(MODE_BAD_FIRMWARE);
             }
-        }, 500);
+        }, 1000);
     }
 
     /**
