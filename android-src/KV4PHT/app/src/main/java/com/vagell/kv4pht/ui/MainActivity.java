@@ -1738,7 +1738,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showHandshakeSnackbar() {
-        CharSequence snackbarMsg = "kv4p HT radio handshake.";
+        CharSequence snackbarMsg = "Connecting to radio...";
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
             .setBackgroundTint(Color.rgb(20, 140, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
             .setAnchorView(findViewById(R.id.bottomNavigationView));
