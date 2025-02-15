@@ -975,7 +975,7 @@ public class RadioAudioService extends Service {
         timeOutHandler.removeCallbacksAndMessages(null);
         timeOutHandler.postDelayed(() -> {
             if (!gotHello) {
-                Log.d("DEBUG", "Error: Did not HELLO from module.");
+                Log.d("DEBUG", "Error: No HELLO received from module.");
                 callbacks.missingFirmware();
                 setMode(MODE_BAD_FIRMWARE);
             }
