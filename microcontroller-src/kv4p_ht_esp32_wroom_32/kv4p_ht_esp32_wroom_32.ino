@@ -152,6 +152,7 @@ void setup() {
   squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
+  sendCmdToAndroid(COMMAND_HELLO, NULL, 0);
   _LOGI("Setup is finished");
 }
 
@@ -314,7 +315,7 @@ void loop() {
             while (result != 1) {
               result = dra->handshake();  // Wait for module to start up
               // Serial.println("handshake: " + String(result));
-
+              esp_task_wdt_reset();
               if ((micros() - waitStart) > 2000000) {  // Give the radio module 2 seconds max before giving up on it
                 radioModuleStatus = RADIO_MODULE_NOT_FOUND;
                 break;
