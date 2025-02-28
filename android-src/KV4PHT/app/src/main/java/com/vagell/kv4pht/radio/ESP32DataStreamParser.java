@@ -20,20 +20,15 @@ public class ESP32DataStreamParser {
     public void handleCommands(byte[] newData) {
         for (byte b : newData) {
             if (matchedDelimiterTokens < COMMAND_DELIMITER.length) {
-                if (b == COMMAND_DELIMITER[matchedDelimiterTokens]) {
-                    matchedDelimiterTokens++;
-                } else {
-                    matchedDelimiterTokens = 0;
-                }
+                matchedDelimiterTokens = (b == COMMAND_DELIMITER[matchedDelimiterTokens]) ? matchedDelimiterTokens + 1 : 0;
             } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length) {
                 command = b;
-                // Log.d("DEBUG", "command: " + command);
                 matchedDelimiterTokens++;
             } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
                 commandParamLen = b & 0xFF;
                 commandParams.reset();
                 matchedDelimiterTokens++;
-                if (commandParamLen == 0) { // If this command has no params...
+                if (commandParamLen == 0) {
                     onCommand.accept(command, commandParams.toByteArray());
                     resetParser();
                 }
@@ -41,7 +36,6 @@ public class ESP32DataStreamParser {
                 commandParams.write(b);
                 matchedDelimiterTokens++;
                 if (commandParams.size() == commandParamLen) {
-                    // Log.d("DEBUG", "commandParams: " + commandParams);
                     onCommand.accept(command, commandParams.toByteArray());
                     resetParser();
                 }
