@@ -18,35 +18,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
-import android.Manifest;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.Service;
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.hardware.usb.UsbDevice;
-import android.hardware.usb.UsbDeviceConnection;
-import android.hardware.usb.UsbManager;
-import android.location.Location;
-import android.location.LocationManager;
-import android.media.AudioAttributes;
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioRecord;
-import android.media.AudioTrack;
-import android.os.Binder;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.Looper;
-import android.util.Log;
-
-import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
-import androidx.lifecycle.LiveData;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -80,18 +62,34 @@ import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbManager;
+import android.location.Location;
+import android.location.LocationManager;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioRecord;
+import android.media.AudioTrack;
+import android.os.Binder;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.util.Log;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.lifecycle.LiveData;
 
 /**
  * Background service that manages the connection to the ESP32 (to control the radio), and
@@ -160,6 +158,8 @@ public class RadioAudioService extends Service {
     private static final byte COMMAND_DEBUG_DEBUG    = 0x04;
     private static final byte COMMAND_DEBUG_TRACE    = 0x05;
     private static final byte COMMAND_HELLO          = 0x06;
+    private static final byte COMMAND_RX_AUDIO       = 0x07;
+    private static final byte COMMAND_VERSION        = 0x08;
 
     private final ESP32DataStreamParser esp32DataStreamParser = new ESP32DataStreamParser(this::handleParsedCommand);
 
@@ -941,7 +941,7 @@ public class RadioAudioService extends Service {
         usbIoManager = new SerialInputOutputManager(serialPort, new SerialInputOutputManager.Listener() {
             @Override
             public void onNewData(byte[] data) {
-                handleESP32Data(data);
+                esp32DataStreamParser.extractAudioAndHandleCommands(data);
             }
 
             @Override
@@ -1278,135 +1278,6 @@ public class RadioAudioService extends Service {
         return pcm16;
     }
 
-    private void handleESP32Data(byte[] data) {
-        // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
-         /* try {
-            String dataStr = new String(data, "UTF-8");
-            if (dataStr.length() < 100 && dataStr.length() > 0)
-                Log.d("DEBUG", "Str data from ESP32: " + dataStr);
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            } */
-        // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
-
-        // Handle and remove any commands (e.g. S-meter updates, physical PTT up/down)
-        // which may be intermixed with audio bytes.
-        data = esp32DataStreamParser.extractAudioAndHandleCommands(data);
-
-        if (mode == MODE_STARTUP) {
-            try {
-                // TODO rework this to use same command-handling as s-meter updates (below)
-                String dataStr = new String(data, "UTF-8");
-                versionStrBuffer += dataStr;
-                if (versionStrBuffer.contains(VERSION_PREFIX)) {
-                    int startIdx = versionStrBuffer.indexOf(VERSION_PREFIX) + VERSION_PREFIX.length();
-                    String verStr = "";
-                    try {
-                        verStr = versionStrBuffer.substring(startIdx, startIdx + VERSION_LENGTH);
-                    } catch (IndexOutOfBoundsException iobe) {
-                        return; // Version string not yet fully received.
-                    }
-                    int verInt = Integer.parseInt(verStr);
-                    if (verInt < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
-                        Log.d("DEBUG", "Error: ESP32 app firmware " + verInt + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
-                        if (callbacks != null) {
-                            callbacks.outdatedFirmware(verInt);
-                            versionStrBuffer = "";
-                        }
-                    } else {
-                        Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + verInt + ").");
-
-                        String radioStatusStr = versionStrBuffer.substring(startIdx + VERSION_LENGTH, startIdx + VERSION_LENGTH + 1);
-                        Log.d("DEBUG", "Radio status: '" + radioStatusStr + "'");
-
-                        if (radioStatusStr.equals(RADIO_MODULE_NOT_FOUND)) {
-                            radioModuleNotFound = true;
-                        } else if (radioStatusStr.equals(RADIO_MODULE_FOUND)) {
-                            radioModuleNotFound = false;
-                        } else {
-                            Log.d("DEBUG", "Error: unexpected radio status received '" + radioStatusStr + "'");
-                        }
-
-                        versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
-
-                        if (radioModuleNotFound) {
-                            callbacks.radioModuleNotFound();
-                            return;
-                        }
-
-                        initAfterESP32Connected();
-                    }
-                    return;
-                }
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        if (mode == MODE_RX || mode == MODE_SCAN) {
-            if (prebufferComplete && audioTrack != null) {
-                synchronized (audioTrack) {
-                    if (afskDemodulator != null) { // Avoid race condition at app start.
-                        // Play the audio.
-                        byte[] pcm16 = convert8BitTo16Bit(data);
-                        audioTrack.write(pcm16, 0, pcm16.length);
-
-                        // Add the audio samples to the AFSK demodulator.
-                        float[] audioAsFloats = convertPCM8SignedToFloatArray(data);
-                        afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
-                    }
-
-                    if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                        audioTrack.play();
-                    }
-                }
-            } else {
-                for (int i = 0; i < data.length; i++) {
-                    // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
-                    // while we're waiting for more bytes.
-                    rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
-                    if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
-                        prebufferComplete = true;
-                        // Log.d("DEBUG", "Rx prebuffer full, writing to audioTrack.");
-                        if (audioTrack != null) {
-                            if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                                audioTrack.play();
-                            }
-                            synchronized (audioTrack) {
-                                byte[] pcm16 = convert8BitTo16Bit(rxBytesPrebuffer);
-                                audioTrack.write(pcm16, 0, pcm16.length);
-                            }
-                        }
-
-                        rxPrebufferIdx = 0;
-                        break; // Might drop a few audio bytes from data[], should be very minimal
-                    }
-                }
-            }
-        }
-
-        if (mode == MODE_SCAN) {
-            // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
-            for (int i = 0; i < data.length; i++) {
-                if (data[i] == SILENT_BYTE) {
-                    consecutiveSilenceBytes++;
-                    // Log.d("DEBUG", "consecutiveSilenceBytes: " + consecutiveSilenceBytes);
-                    checkScanDueToSilence();
-                } else {
-                    consecutiveSilenceBytes = 0;
-                }
-            }
-        } else if (mode == MODE_TX) {
-            // We only expect physical PTT up and down commands in this mode, but it's already
-            // been handled by esp32DataStreamParser() earlier in this method.
-        }
-
-        if (mode == MODE_BAD_FIRMWARE) {
-            // Log.d("DEBUG", "Warning: Received data from ESP32 which was thought to have bad firmware.");
-            // Just ignore any data we get in this mode, who knows what is programmed on the ESP32.
-        }
-    }
-
     private void handleParsedCommand(byte cmd, byte[] param) {
         if (cmd == COMMAND_SMETER_REPORT) {
             if (param.length >= 1) {
@@ -1475,6 +1346,56 @@ public class RadioAudioService extends Service {
                 callbacks.radioModuleHandshake();
             }
             checkFirmwareVersion();
+        } else if ((cmd == COMMAND_RX_AUDIO) && (mode == MODE_RX || mode == MODE_SCAN)) {
+            if (afskDemodulator != null) { // Avoid race condition at app start.
+                // Play the audio.
+                byte[] pcm16 = convert8BitTo16Bit(param);
+                audioTrack.write(pcm16, 0, pcm16.length);
+                // Add the audio samples to the AFSK demodulator.
+                float[] audioAsFloats = convertPCM8SignedToFloatArray(param);
+                afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
+            }
+            if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                audioTrack.play();
+            }
+            if (mode == MODE_SCAN) {
+                // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
+                for (int i = 0; i < param.length; i++) {
+                    if (param[i] == SILENT_BYTE) {
+                        consecutiveSilenceBytes++;
+                        // Log.d("DEBUG", "consecutiveSilenceBytes: " + consecutiveSilenceBytes);
+                        checkScanDueToSilence();
+                    } else {
+                        consecutiveSilenceBytes = 0;
+                    }
+                }
+            }
+        } else if ((cmd == COMMAND_VERSION) && (mode == MODE_STARTUP)) {
+            final FirmwareVersion ver = new FirmwareVersion(param);
+            if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+                Log.d("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
+                if (callbacks != null) {
+                    callbacks.outdatedFirmware(ver.getVer());
+                    versionStrBuffer = "";
+                }
+            } else {
+                Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver.getVer() + ").");
+                Log.d("DEBUG", "Radio status: '" + ver.getRadioModuleStatus() + "'");
+
+                if (ver.getRadioModuleStatus().equals(RADIO_MODULE_NOT_FOUND)) {
+                    radioModuleNotFound = true;
+                } else if (ver.getRadioModuleStatus().equals(RADIO_MODULE_FOUND)) {
+                    radioModuleNotFound = false;
+                } else {
+                    Log.d("DEBUG", "Error: unexpected radio status received '" + ver.getRadioModuleStatus() + "'");
+                }
+                if (radioModuleNotFound) {
+                    callbacks.radioModuleNotFound();
+                    return;
+                }
+                initAfterESP32Connected();
+            }
+
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
                     " paramLen=" + param.length);

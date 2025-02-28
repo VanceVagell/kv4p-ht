@@ -27,17 +27,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "globals.h"
 #include "debug.h"
 #include "led.h"
+#include "protocol.h"
 
-const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '2'};  // Should be 8 characters representing a zero-padded version, like 00000001.
-const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
+const uint16_t FIRMWARE_VER = 12;  // Should be 8 characters representing a zero-padded version, like 00000001.
 
 // S-meter interval
 long lastSMeterReport = -1;
 #define SMETER_REPORT_INTERVAL_MS 500
 
-// Delimeter must also match Android app
-#define DELIMITER_LENGTH 8
-const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
 int matchedDelimiterTokens                        = 0;
 int matchedDelimiterTokensRx                      = 0;
 
@@ -332,16 +329,12 @@ void loop() {
             } else {
               result = dra->volume(8);
             }
-            // Serial.println("volume: " + String(result));
             result = dra->filters(false, false, false);
-            // Serial.println("filters: " + String(result));
-
-            Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));  // "VERSION"
-            Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));      // "00000007" (or whatever)
-            uint8_t radioModuleStatusArray[1] = {radioModuleStatus};
-            Serial.write(radioModuleStatusArray, 1);  // "f" (or "x" if there's a problem with radio module)
-
-            Serial.flush();
+            Version reply = {
+              .ver = FIRMWARE_VER,
+              .radioModuleStatus = radioModuleStatus
+            };
+            sendCmdToAndroid(COMMAND_VERSION, (uint8_t*) &reply, sizeof(reply));
             esp_task_wdt_reset();
             return;
           }
@@ -565,7 +558,7 @@ void loop() {
         buffer8[i]     = squelched ? 0 : (sample >> 4);  // Signed
       }
 
-      Serial.write(buffer8, samplesRead);
+      sendCmdToAndroid(COMMAND_RX_AUDIO, buffer8, samplesRead);
     } else if (mode == MODE_TX) {
       // Check for runaway tx
       int txSeconds = (micros() - txStartTime) / 1000000;

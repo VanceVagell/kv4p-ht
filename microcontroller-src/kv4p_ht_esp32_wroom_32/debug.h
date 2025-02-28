@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include "globals.h"
+#include "protocol.h"
 
 #ifndef RELEASE
 #define _LOGE(fmt, ...)           \
