@@ -329,12 +329,12 @@ void loop() {
               result = dra->volume(8);
             }
             result = dra->filters(false, false, false);
-            Version reply = {
+            Version params = {
               .ver = FIRMWARE_VER,
               .radioModuleStatus = radioModuleStatus,
               .hw = hardware_version
             };
-            sendCmdToHost(COMMAND_VERSION, (uint8_t*) &reply, sizeof(reply));
+            sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
             esp_task_wdt_reset();
             return;
           }
