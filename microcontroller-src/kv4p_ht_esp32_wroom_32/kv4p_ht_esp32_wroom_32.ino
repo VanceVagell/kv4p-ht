@@ -331,7 +331,8 @@ void loop() {
             result = dra->filters(false, false, false);
             Version reply = {
               .ver = FIRMWARE_VER,
-              .radioModuleStatus = radioModuleStatus
+              .radioModuleStatus = radioModuleStatus,
+              .hw = hardware_version
             };
             sendCmdToAndroid(COMMAND_VERSION, (uint8_t*) &reply, sizeof(reply));
             esp_task_wdt_reset();

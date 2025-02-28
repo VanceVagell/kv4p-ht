@@ -32,6 +32,7 @@ const byte COMMAND_VERSION        = 0x08;
 struct version {
     uint16_t    ver;
     char        radioModuleStatus;
+    hw_ver_t    hw;
 } __attribute__((__packed__));
   
 typedef struct version Version;
