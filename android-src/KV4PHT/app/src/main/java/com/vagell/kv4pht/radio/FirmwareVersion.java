@@ -3,6 +3,8 @@ package com.vagell.kv4pht.radio;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import org.jetbrains.annotations.NotNull;
+
 public class FirmwareVersion {
 
     private final short ver;  // equivalent to uint16_t
@@ -27,5 +29,14 @@ public class FirmwareVersion {
 
     public HardwareVersion getHardwareVersion() {
         return hardwareVersion;
+    }
+
+    @Override
+    public @NotNull String toString() {
+        return "FirmwareVersion {" +
+            "ver=" + ver +
+            ", radioModuleStatus=" + getRadioModuleStatus() +
+            ", hardwareVersion=" + getHardwareVersion() +
+            '}';
     }
 }

@@ -1316,9 +1316,7 @@ public class RadioAudioService extends Service {
                     callbacks.outdatedFirmware(ver.getVer());
                 }
             } else {
-                Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver.getVer() + ").");
-                Log.d("DEBUG", "Radio status: '" + ver.getRadioModuleStatus() + "'");
-
+                Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
                 if (ver.getRadioModuleStatus().equals(RADIO_MODULE_NOT_FOUND)) {
                     radioModuleNotFound = true;
                 } else if (ver.getRadioModuleStatus().equals(RADIO_MODULE_FOUND)) {
