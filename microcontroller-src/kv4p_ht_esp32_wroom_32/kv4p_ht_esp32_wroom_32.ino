@@ -148,7 +148,7 @@ void setup() {
   squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
-  sendCmdToAndroid(COMMAND_HELLO);
+  sendCmdToHost(COMMAND_HELLO);
   _LOGI("Setup is finished");
 }
 
@@ -334,7 +334,7 @@ void loop() {
               .radioModuleStatus = radioModuleStatus,
               .hw = hardware_version
             };
-            sendCmdToAndroid(COMMAND_VERSION, (uint8_t*) &reply, sizeof(reply));
+            sendCmdToHost(COMMAND_VERSION, (uint8_t*) &reply, sizeof(reply));
             esp_task_wdt_reset();
             return;
           }
@@ -535,7 +535,7 @@ void loop() {
             Rssi params = {
               .val = (uint8_t)rssiInt
             };
-            sendCmdToAndroid(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
+            sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
           }
         }
 
@@ -556,7 +556,7 @@ void loop() {
           int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
           buffer8[i]     = squelched ? 0 : (sample >> 4);  // Signed
         }
-        sendCmdToAndroid(COMMAND_RX_AUDIO, buffer8, samplesRead);
+        sendCmdToHost(COMMAND_RX_AUDIO, buffer8, samplesRead);
       }
     } else if (mode == MODE_TX) {
       // Check for runaway tx
@@ -691,7 +691,7 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
 }
 
 void reportPhysPttState() {
-  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
+  sendCmdToHost(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
 }
 
 hw_ver_t get_hardware_version() {

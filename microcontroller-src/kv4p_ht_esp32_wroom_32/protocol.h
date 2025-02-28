@@ -49,7 +49,7 @@ typedef struct rssi Rssi;
  * Send a command with params
  * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
  */
-void sendCmdToAndroid(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
+void sendCmdToHost(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
   if (paramsLen > 255) {
     paramsLen = 255;  // or handle differently (split, or error, etc.)
@@ -67,6 +67,6 @@ void sendCmdToAndroid(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
   }
 }
 
-void inline sendCmdToAndroid(Esp32ToHost cmd) {
-  sendCmdToAndroid(cmd, NULL, 0);
+void inline sendCmdToHost(Esp32ToHost cmd) {
+  sendCmdToHost(cmd, NULL, 0);
 }
