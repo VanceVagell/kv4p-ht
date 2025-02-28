@@ -106,11 +106,6 @@ public class RadioAudioService extends Service {
     private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
     private static final int[] ESP32_PRODUCT_IDS = {60000, 29987};
 
-    // Version related constants (also see FirmwareUtils for others)
-    private static final String VERSION_PREFIX = "VERSION";
-    private static String versionStrBuffer = "";
-    private static final int VERSION_LENGTH = 8; // Chars in the version string from ESP32 app.
-
     public static final int MODE_STARTUP = -1;
     public static final int MODE_RX = 0;
     public static final int MODE_TX = 1;
@@ -1354,7 +1349,6 @@ public class RadioAudioService extends Service {
                 Log.d("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
                 if (callbacks != null) {
                     callbacks.outdatedFirmware(ver.getVer());
-                    versionStrBuffer = "";
                 }
             } else {
                 Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver.getVer() + ").");
