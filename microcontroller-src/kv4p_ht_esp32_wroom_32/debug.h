@@ -77,7 +77,7 @@ int debug_log_printf(Esp32ToHost cmd, const char* format, ...) {
     }
   }
   vsnprintf(temp, len + 1, format, arg);
-  sendCmdToHost(cmd, (byte*) temp, len);
+  __sendCmdToHost(cmd, (byte*) temp, len);
   va_end(arg);
   if (len >= sizeof(loc_buf)) {
     free(temp);

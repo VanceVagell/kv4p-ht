@@ -49,7 +49,7 @@ typedef struct rssi Rssi;
  * Send a command with params
  * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
  */
-void sendCmdToHost(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
+void __sendCmdToHost(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
   if (paramsLen > 255) {
     paramsLen = 255;  // or handle differently (split, or error, etc.)
@@ -67,6 +67,34 @@ void sendCmdToHost(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
   }
 }
 
-void inline sendCmdToHost(Esp32ToHost cmd) {
-  sendCmdToHost(cmd, NULL, 0);
+void inline __sendCmdToHost(Esp32ToHost cmd) {
+  __sendCmdToHost(cmd, NULL, 0);
+}
+
+void inline sendHello() {
+  __sendCmdToHost(COMMAND_HELLO);
+}
+
+void inline sendRssi(uint8_t rssi) {
+  Rssi params = {
+    .val = rssi
+  };
+  __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
+}
+
+void inline sendVersion(uint16_t ver, char radioModuleStatus, hw_ver_t hw) {
+  Version params = {
+    .ver = ver,
+    .radioModuleStatus = radioModuleStatus,
+    .hw = hw
+  };
+  __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
+}
+
+void inline sendPhysPttState(bool isPhysPttDown) {
+  __sendCmdToHost(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
+}
+
+void inline sendAudio(const byte *data, size_t len) {
+  __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
 }
