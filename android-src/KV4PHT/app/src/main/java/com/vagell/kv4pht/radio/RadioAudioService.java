@@ -140,10 +140,6 @@ public class RadioAudioService extends Service {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 256;
-    private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
-    private int rxPrebufferIdx = 0;
-    private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
 
