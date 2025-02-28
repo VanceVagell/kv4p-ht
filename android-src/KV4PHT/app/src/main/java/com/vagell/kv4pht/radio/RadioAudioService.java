@@ -1254,42 +1254,7 @@ public class RadioAudioService extends Service {
 
     private void handleParsedCommand(byte cmd, byte[] param) {
         if (cmd == COMMAND_SMETER_REPORT) {
-            if (param.length >= 1) {
-                int sMeter255Value = (param[0] & 0xFF);
-                // Log.d("DEBUG", "Raw s-meter value from ESP32 (0-255) = " + sMeter255Value);
-
-                // Through empirical testing, it seems to scale from ~50 with no signal, and ~120 with a transmitter
-                // right near it. So we normalize to match that to an S1-S9 scale. Note, we start more granular at
-                // lower S-values so people can get a better sense of weak signals. This isn't a scientific db measurement...
-                int sMeter9Value = 1;
-                if (sMeter255Value >= 46) {
-                    sMeter9Value = 2;
-                }
-                if (sMeter255Value >= 50) {
-                    sMeter9Value = 3;
-                }
-                if (sMeter255Value >= 55) {
-                    sMeter9Value = 4;
-                }
-                if (sMeter255Value >= 61) {
-                    sMeter9Value = 5;
-                }
-                if (sMeter255Value >= 68) {
-                    sMeter9Value = 6;
-                }
-                if (sMeter255Value >= 76) {
-                    sMeter9Value = 7;
-                }
-                if (sMeter255Value >= 87) {
-                    sMeter9Value = 8;
-                }
-                if (sMeter255Value >= 101) {
-                    sMeter9Value = 9;
-                }
-                // Log.d("DEBUG", "Normalized s-meter (0-9) = " + sMeter9Value);
-
-                callbacks.sMeterUpdate(sMeter9Value);
-            }
+            callbacks.sMeterUpdate(new Rssi(param).getSMeter9Value());
         } else if (cmd == COMMAND_PHYS_PTT_DOWN) {
             if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
                 startPtt();

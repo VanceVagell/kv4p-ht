@@ -35,3 +35,9 @@ struct version {
 } __attribute__((__packed__));
   
 typedef struct version Version;
+
+struct rssi {
+    uint8_t     val;
+} __attribute__((__packed__));
+  
+typedef struct rssi Rssi;

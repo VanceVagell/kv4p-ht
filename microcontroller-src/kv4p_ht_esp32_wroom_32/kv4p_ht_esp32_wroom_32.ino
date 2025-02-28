@@ -530,12 +530,12 @@ void loop() {
         if (rssiResponse.length() > 7) {
           String rssiStr = rssiResponse.substring(5);
           int rssiInt    = rssiStr.toInt();
-
           if (rssiInt >= 0 && rssiInt <= 255) {
-            byte params[1] = {(uint8_t)rssiInt};
-            sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
+            Rssi params = {
+              .val = (uint8_t)rssiInt
+            };
+            sendCmdToAndroid(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
           }
-          //_LOGD("%s, rssiInt=%d", rssiResponse.c_str(), rssiInt);
         }
 
         // It doesn't matter if we successfully got the S-meter reading, we only want to check at most once every SMETER_REPORT_INTERVAL_MS
