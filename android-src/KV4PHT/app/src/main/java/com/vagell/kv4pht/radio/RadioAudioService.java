@@ -88,6 +88,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -194,8 +195,8 @@ public class RadioAudioService extends Service {
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
-    private static final String RADIO_MODULE_NOT_FOUND = "x";
-    private static final String RADIO_MODULE_FOUND = "f";
+    private static final char RADIO_MODULE_NOT_FOUND = 'x';
+    private static final char RADIO_MODULE_FOUND = 'f';
     public static final String RADIO_MODULE_VHF = "v";
     public static final String RADIO_MODULE_UHF = "u";
     private String radioType = RADIO_MODULE_VHF;
@@ -1309,28 +1310,30 @@ public class RadioAudioService extends Service {
                 }
             }
         } else if ((cmd == COMMAND_VERSION) && (mode == MODE_STARTUP)) {
-            final FirmwareVersion ver = FirmwareVersion.from(param);
-            if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
-                Log.d("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
-                if (callbacks != null) {
-                    callbacks.outdatedFirmware(ver.getVer());
-                }
-            } else {
-                Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
-                if (ver.getRadioModuleStatus().equals(RADIO_MODULE_NOT_FOUND)) {
-                    radioModuleNotFound = true;
-                } else if (ver.getRadioModuleStatus().equals(RADIO_MODULE_FOUND)) {
-                    radioModuleNotFound = false;
-                } else {
-                    Log.d("DEBUG", "Error: unexpected radio status received '" + ver.getRadioModuleStatus() + "'");
-                }
-                if (radioModuleNotFound) {
-                    callbacks.radioModuleNotFound();
+            FirmwareVersion.from(param).ifPresent(ver -> {
+                if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+                    Log.d("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
+                    Optional.ofNullable(callbacks).ifPresent(cb -> cb.outdatedFirmware(ver.getVer()));
                     return;
                 }
-                initAfterESP32Connected();
-            }
-
+                Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
+                switch (ver.getRadioModuleStatus()) {
+                    case RADIO_MODULE_NOT_FOUND:
+                        radioModuleNotFound = true;
+                        break;
+                    case RADIO_MODULE_FOUND:
+                        radioModuleNotFound = false;
+                        break;
+                    default:
+                        Log.d("DEBUG", "Error: unexpected radio status received '" + ver.getRadioModuleStatus() + "'");
+                        radioModuleNotFound = true;
+                }
+                if (radioModuleNotFound) {
+                    Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
+                } else {
+                    initAfterESP32Connected();
+                }
+            });
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
                     " paramLen=" + param.length);
