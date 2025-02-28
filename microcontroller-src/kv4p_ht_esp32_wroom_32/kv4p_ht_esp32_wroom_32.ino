@@ -29,7 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "led.h"
 #include "protocol.h"
 
-const uint16_t FIRMWARE_VER = 12;  // Should be 8 characters representing a zero-padded version, like 00000001.
+const uint16_t FIRMWARE_VER = 12;
 
 // S-meter interval
 long lastSMeterReport = -1;
