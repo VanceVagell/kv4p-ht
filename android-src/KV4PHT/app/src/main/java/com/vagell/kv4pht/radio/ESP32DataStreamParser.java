@@ -17,7 +17,7 @@ public class ESP32DataStreamParser {
         this.onCommand = onCommand;
     }
 
-    public void extractAudioAndHandleCommands(byte[] newData) {
+    public void handleCommands(byte[] newData) {
         for (byte b : newData) {
             if (matchedDelimiterTokens < COMMAND_DELIMITER.length) {
                 if (b == COMMAND_DELIMITER[matchedDelimiterTokens]) {

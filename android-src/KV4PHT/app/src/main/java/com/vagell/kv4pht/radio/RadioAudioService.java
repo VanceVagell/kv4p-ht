@@ -918,7 +918,7 @@ public class RadioAudioService extends Service {
         usbIoManager = new SerialInputOutputManager(serialPort, new SerialInputOutputManager.Listener() {
             @Override
             public void onNewData(byte[] data) {
-                esp32DataStreamParser.extractAudioAndHandleCommands(data);
+                esp32DataStreamParser.handleCommands(data);
             }
 
             @Override
