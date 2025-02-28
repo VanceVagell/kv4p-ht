@@ -572,11 +572,6 @@ public class RadioAudioService extends Service {
         notificationManager.createNotificationChannel(channel);
     }
 
-    private void restartAudioPrebuffer() {
-        prebufferComplete = false;
-        rxPrebufferIdx = 0;
-    }
-
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
         sendCommandToESP32(ESP32Command.FILTERS, (emphasis ? "1" : "0") + (highpass ? "1" : "0") + (lowpass ? "1" : "0"));
     }
@@ -602,9 +597,6 @@ public class RadioAudioService extends Service {
                     makeSafeHamFreq(activeFrequencyStr) + "0000" + squelchLevel +
                     (bandwidth.equals("Wide") ? "W" : "N"));
         }
-
-        // Reset audio prebuffer
-        restartAudioPrebuffer();
 
         try {
             Float freq = Float.parseFloat(makeSafeHamFreq(activeFrequencyStr));
@@ -696,9 +688,6 @@ public class RadioAudioService extends Service {
                             (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
-        // Reset audio prebuffer
-        restartAudioPrebuffer();
-
         try {
             Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
             Float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
@@ -771,8 +760,6 @@ public class RadioAudioService extends Service {
                 .build();
         audioTrack.setAuxEffectSendLevel(0.0f);
 
-        restartAudioPrebuffer();
-
         if (callbacks != null) {
             callbacks.audioTrackCreated();
         }
@@ -832,7 +819,6 @@ public class RadioAudioService extends Service {
             public void run() {
                 sendCommandToESP32(ESP32Command.PTT_UP);
                 audioTrack.flush();
-                restartAudioPrebuffer();
                 callbacks.txEnded();
             }
         }, MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP);
@@ -1038,9 +1024,6 @@ public class RadioAudioService extends Service {
 
     private void initAfterESP32Connected() {
         setMode(MODE_RX);
-
-        // Start by prebuffering some audio
-        restartAudioPrebuffer();
 
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
@@ -1336,7 +1319,6 @@ public class RadioAudioService extends Service {
             gotHello = true;
             if (audioTrack != null) {
                 audioTrack.stop();
-                restartAudioPrebuffer();
             }
             if (callbacks != null) {
                 callbacks.radioModuleHandshake();
