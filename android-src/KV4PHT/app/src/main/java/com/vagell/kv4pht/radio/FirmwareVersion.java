@@ -10,8 +10,7 @@ public class FirmwareVersion {
 
     public FirmwareVersion(final byte[] param) {
         ByteBuffer buffer = ByteBuffer.wrap(param);
-        buffer.order(ByteOrder.LITTLE_ENDIAN);  // Ensure the correct byte order (adjust to platform if necessary)
-        // Unpack the data from the buffer
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
         this.ver = buffer.getShort();  // Read the 16-bit unsigned value
         this.radioModuleStatus = buffer.get();  // Read the 8-bit char (1 byte)
     }
