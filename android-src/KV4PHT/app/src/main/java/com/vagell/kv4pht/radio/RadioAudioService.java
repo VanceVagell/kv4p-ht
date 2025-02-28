@@ -1254,7 +1254,7 @@ public class RadioAudioService extends Service {
 
     private void handleParsedCommand(byte cmd, byte[] param) {
         if (cmd == COMMAND_SMETER_REPORT) {
-            callbacks.sMeterUpdate(new Rssi(param).getSMeter9Value());
+            Rssi.from(param).map(Rssi::getSMeter9Value).ifPresent(s -> callbacks.sMeterUpdate(s));
         } else if (cmd == COMMAND_PHYS_PTT_DOWN) {
             if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
                 startPtt();
@@ -1309,7 +1309,7 @@ public class RadioAudioService extends Service {
                 }
             }
         } else if ((cmd == COMMAND_VERSION) && (mode == MODE_STARTUP)) {
-            final FirmwareVersion ver = new FirmwareVersion(param);
+            final FirmwareVersion ver = FirmwareVersion.from(param);
             if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                 Log.d("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
                 if (callbacks != null) {
