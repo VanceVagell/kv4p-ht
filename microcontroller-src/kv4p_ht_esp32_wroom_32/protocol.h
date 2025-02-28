@@ -41,7 +41,7 @@ typedef struct version Version;
 
 // COMMAND_SMETER_REPORT parameters
 struct rssi {
-  uint8_t     val;
+  uint8_t     rssi;
 } __attribute__((__packed__));
 typedef struct rssi Rssi;
 
@@ -77,7 +77,7 @@ void inline sendHello() {
 
 void inline sendRssi(uint8_t rssi) {
   Rssi params = {
-    .val = rssi
+    .rssi = rssi
   };
   __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
 }
