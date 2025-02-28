@@ -148,7 +148,7 @@ void setup() {
   squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
-  sendCmdToAndroid(COMMAND_HELLO, NULL, 0);
+  sendCmdToAndroid(COMMAND_HELLO);
   _LOGI("Setup is finished");
 }
 
@@ -632,32 +632,6 @@ void loop() {
   }
 }
 
-/**
- * Send a command with params
- * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
- */
-void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen) {
-  // Safety check: limit paramsLen to 255 for 1-byte length
-  if (paramsLen > 255) {
-    paramsLen = 255;  // or handle differently (split, or error, etc.)
-  }
-
-  // 1. Leading delimiter
-  Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
-
-  // 2. Command byte
-  Serial.write(&cmdByte, 1);
-
-  // 3. Parameter length
-  uint8_t len = paramsLen;
-  Serial.write(&len, 1);
-
-  if (paramsLen > 0) {
-    // 4. Parameter bytes
-    Serial.write(params, paramsLen);
-  }
-}
-
 void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth) {
   // Tell radio module to tune
   int result = 0;
@@ -717,7 +691,7 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
 }
 
 void reportPhysPttState() {
-  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP, NULL, 0);
+  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
 }
 
 hw_ver_t get_hardware_version() {

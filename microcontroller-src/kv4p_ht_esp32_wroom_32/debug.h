@@ -60,7 +60,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   }
   #endif
 
-int debug_log_printf(uint8_t cmd, const char* format, ...) {
+int debug_log_printf(Esp32ToHost cmd, const char* format, ...) {
   static char loc_buf[256];
   char* temp = loc_buf;
   int len;

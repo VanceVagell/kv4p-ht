@@ -53,4 +53,3 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
 hw_ver_t get_hardware_version();
 void reportPhysPttState();
-void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen);
