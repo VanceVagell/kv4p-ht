@@ -28,9 +28,9 @@ void initI2STx() {
 }
 
 void processTxAudio(uint8_t *src, size_t len) {
-  int16_t buffer16[I2S_WRITE_LEN];
+  static int16_t buffer16[I2S_WRITE_LEN];
   for (int i = 0; i < len; i++) {
-    buffer16[i] = (int16_t)(src[i]) << 8;  // Convert 8-bit unsigned PCM to 16-bit signed PCM
+    buffer16[i] = (int16_t)(src[i]) << 8;
   }
   size_t bytesWritten = 0;
   ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16, len * sizeof(int16_t), &bytesWritten, portMAX_DELAY));

@@ -22,16 +22,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 22050
 
+// Maximum length of the frame
+#define PROTO_MTU 0xFF
+
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
 #define SAMPLING_RATE_OFFSET 79
 
 // I2S audio sampling stuff
-#define I2S_READ_LEN 1024/4
-#define I2S_WRITE_LEN 1024/4
-#define I2S_ADC_UNIT ADC_UNIT_1
+#define I2S_READ_LEN    PROTO_MTU + 1
+#define I2S_WRITE_LEN   PROTO_MTU + 1
+#define I2S_ADC_UNIT    ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
-
 
 // Connections to radio module
 #define RXD2_PIN 16

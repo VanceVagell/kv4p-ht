@@ -139,7 +139,7 @@ void doConfig(Config const &config) {
   esp_task_wdt_reset();
 }
 
-void handleCommands(HostToEsp32 command, uint8_t *params, size_t param_len) {
+void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
   switch (command) {
     case COMMAND_HOST_CONFIG:
       if (param_len == sizeof(Config)) {

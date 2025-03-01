@@ -5,30 +5,24 @@
 #include "debug.h"
 
 // Delimeter must also match Android app
-#define DELIMITER_LENGTH 8
-const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
+const uint8_t COMMAND_DELIMITER[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
+#define DELIMITER_LENGTH sizeof(COMMAND_DELIMITER)
 
-// Commands defined here must match the Android app
-const uint8_t COMMAND_PTT_DOWN         = 1;  // start transmitting audio that Android app will send
-const uint8_t COMMAND_PTT_UP           = 2;  // stop transmitting audio, go into RX mode
-const uint8_t COMMAND_TUNE_TO          = 3;  // change the frequency
-const uint8_t COMMAND_FILTERS          = 4;  // toggle filters on/off
-const uint8_t COMMAND_STOP             = 5;  // stop everything, just wait for next command
-const uint8_t COMMAND_GET_FIRMWARE_VER = 6;  // reply with [COMMAND_VERSION(Version)]
-
-enum HostToEsp32 {
-  COMMAND_HOST_UNKNOWN     = 0x00,
-  COMMAND_HOST_PTT_DOWN    = 1, // [COMMAND_HOST_PTT_DOWN()]
-  COMMAND_HOST_PTT_UP      = 2, // [COMMAND_HOST_PTT_UP()]
-  COMMAND_HOST_GROUP       = 3, // [COMMAND_HOST_GROUP(Group)]
-  COMMAND_HOST_FILTERS     = 4, // [COMMAND_HOST_FILTERS(Filters)]
-  COMMAND_HOST_STOP        = 5, // [COMMAND_HOST_STOP()] 
-  COMMAND_HOST_CONFIG      = 6, // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
-  COMMAND_HOST_TX_AUDIO    = 7  // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
+// Incoming commands (Android -> ESP32)
+enum RcvCommand {
+  COMMAND_RCV_UNKNOWN    = 0x00,
+  COMMAND_HOST_PTT_DOWN  = 0x01, // [COMMAND_HOST_PTT_DOWN()]
+  COMMAND_HOST_PTT_UP    = 0x02, // [COMMAND_HOST_PTT_UP()]
+  COMMAND_HOST_GROUP     = 0x03, // [COMMAND_HOST_GROUP(Group)]
+  COMMAND_HOST_FILTERS   = 0x04, // [COMMAND_HOST_FILTERS(Filters)]
+  COMMAND_HOST_STOP      = 0x05, // [COMMAND_HOST_STOP()] 
+  COMMAND_HOST_CONFIG    = 0x06, // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
+  COMMAND_HOST_TX_AUDIO  = 0x07  // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
 };
 
 // Outgoing commands (ESP32 -> Android)
-enum Esp32ToHost {
+enum SndCommand {
+  COMMAND_SND_UNKNOWN    = 0x00,
   COMMAND_SMETER_REPORT  = 0x53, // [COMMAND_SMETER_REPORT(Rssi)]
   COMMAND_PHYS_PTT_DOWN  = 0x44, // [COMMAND_PHYS_PTT_DOWN()]
   COMMAND_PHYS_PTT_UP    = 0x55, // [COMMAND_PHYS_PTT_UP()]
@@ -87,7 +81,7 @@ typedef struct config Config;
  * Send a command with params
  * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
  */
-void __sendCmdToHost(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
+void __sendCmdToHost(SndCommand cmd, const byte *params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
   if (paramsLen > 255) {
     paramsLen = 255;  // or handle differently (split, or error, etc.)
@@ -105,7 +99,7 @@ void __sendCmdToHost(Esp32ToHost cmd, const byte *params, size_t paramsLen) {
   }
 }
 
-void inline __sendCmdToHost(Esp32ToHost cmd) {
+void inline __sendCmdToHost(SndCommand cmd) {
   __sendCmdToHost(cmd, NULL, 0);
 }
 
@@ -137,13 +131,13 @@ void inline sendAudio(const byte *data, size_t len) {
   __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
 }
 
-typedef void (*CommandCallback)(HostToEsp32 command, uint8_t *params, size_t param_len);
+typedef void (*CommandCallback)(RcvCommand command, uint8_t *params, size_t param_len);
 
-class HostDataStreamParser {
+class FrameParser {
 public:
-  HostDataStreamParser(Stream &serial, CommandCallback callback) 
+  FrameParser(Stream &serial, CommandCallback callback) 
     : _serial(serial), _callback(callback), _matchedDelimiterTokens(0),
-      _command(COMMAND_HOST_UNKNOWN), _commandParamLen(0), _paramIndex(0) {}
+      _command(COMMAND_RCV_UNKNOWN), _commandParamLen(0), _paramIndex(0) {}
 
   void loop() {
     while (_serial.available() > 0) {
@@ -155,7 +149,7 @@ private:
   Stream &_serial;
   CommandCallback _callback;
   uint8_t _matchedDelimiterTokens;
-  HostToEsp32 _command;
+  RcvCommand _command;
   uint8_t _commandParamLen; 
   uint8_t _commandParams[256];  
   uint8_t _paramIndex;
@@ -168,7 +162,7 @@ private:
         _matchedDelimiterTokens = 0;  // Reset on mismatch
       }
     } else if (_matchedDelimiterTokens == DELIMITER_LENGTH) {
-      _command = (HostToEsp32)b;
+      _command = (RcvCommand)b;
       _matchedDelimiterTokens++;
     } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 1) {
       _commandParamLen = b;
@@ -196,5 +190,5 @@ private:
   }
 };
 
-void handleCommands(HostToEsp32 command, uint8_t *params, size_t param_len);
-HostDataStreamParser parser(Serial, &handleCommands);
+void handleCommands(RcvCommand command, uint8_t *params, size_t param_len);
+FrameParser parser(Serial, &handleCommands);
