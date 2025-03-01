@@ -18,6 +18,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
+import static com.vagell.kv4pht.radio.HostToEsp32.DRA818_12K5;
+import static com.vagell.kv4pht.radio.HostToEsp32.DRA818_25K;
+import static com.vagell.kv4pht.radio.HostToEsp32.ModuleType.SA818_UHF;
+import static com.vagell.kv4pht.radio.HostToEsp32.ModuleType.SA818_VHF;
+
 import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -76,13 +81,14 @@ import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
+import com.vagell.kv4pht.radio.HostToEsp32.Config;
+import com.vagell.kv4pht.radio.HostToEsp32.Filters;
+import com.vagell.kv4pht.radio.HostToEsp32.Group;
 import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -130,7 +136,8 @@ public class RadioAudioService extends Service {
     private UsbDevice esp32Device;
     private static UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
-    private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a single USB write
+    private HostToEsp32 hostToEsp32;
+    private static final int TX_AUDIO_CHUNK_SIZE = 255; // Tx audio bytes to send to ESP32 in a single USB write
     private Map<String, Integer> mTones = new HashMap<>();
     private static final int MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP = 400;
 
@@ -180,7 +187,7 @@ public class RadioAudioService extends Service {
 
     private static final float UHF_MIN_FREQ    = 400.0f; // SA818U lower limit, in MHz
     private static float min70cmTxFreq         = 420.0f; // US 70cm band lower limit, in MHz (will be overwritten by user setting)
-    private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
+    private static float max70cmTxFreq         = 480.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
     private static final float UHF_MAX_FREQ    = 480.0f; // SA818U upper limit, in MHz (DRA818U can only go to 470MHz)
 
     private String activeFrequencyStr = null;
@@ -214,24 +221,6 @@ public class RadioAudioService extends Service {
     private static int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
 
     private ThreadPoolExecutor threadPoolExecutor = null;
-
-    public enum ESP32Command {
-        PTT_DOWN((byte) 1),
-        PTT_UP((byte) 2),
-        TUNE_TO((byte) 3), // paramsStr contains freq, offset, tone details
-        FILTERS((byte) 4), // paramStr contains emphasis, highpass, lowpass (each 0/1)
-        STOP((byte) 5),
-        GET_FIRMWARE_VER((byte) 6);
-
-        private byte commandByte;
-        ESP32Command(byte commandByte) {
-            this.commandByte = commandByte;
-        }
-
-        public byte getByte() {
-            return commandByte;
-        }
-    }
 
     public enum MicGainBoost {
         NONE,
@@ -384,7 +373,7 @@ public class RadioAudioService extends Service {
     public void setMode(int mode) {
         switch (mode) {
             case MODE_FLASHING:
-                sendCommandToESP32(RadioAudioService.ESP32Command.STOP);
+                hostToEsp32.stop();
                 audioTrack.stop();
                 usbIoManager.stop();
                 try {
@@ -569,7 +558,11 @@ public class RadioAudioService extends Service {
     }
 
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        sendCommandToESP32(ESP32Command.FILTERS, (emphasis ? "1" : "0") + (highpass ? "1" : "0") + (lowpass ? "1" : "0"));
+        hostToEsp32.filters(Filters.builder()
+            .high(highpass)
+            .low(lowpass)
+            .pre(emphasis)
+            .build());
     }
 
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
@@ -589,9 +582,12 @@ public class RadioAudioService extends Service {
         squelch = squelchLevel;
 
         if (serialPort != null) {
-            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafeHamFreq(activeFrequencyStr) +
-                    makeSafeHamFreq(activeFrequencyStr) + "0000" + squelchLevel +
-                    (bandwidth.equals("Wide") ? "W" : "N"));
+            hostToEsp32.group(Group.builder()
+                .freqTx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
+                .squelch((byte) squelchLevel)
+                .build());
         }
 
         try {
@@ -678,10 +674,14 @@ public class RadioAudioService extends Service {
         activeMemoryId = memory.memoryId;
 
         if (serialPort != null) {
-            sendCommandToESP32(ESP32Command.TUNE_TO,
-                    getTxFreq(memory.frequency, memory.offset, memory.offsetKhz) + makeSafeHamFreq(memory.frequency) +
-                            getToneIdxStr(memory.txTone) + getToneIdxStr(memory.rxTone) + squelchLevel +
-                            (bandwidth.equals("Wide") ? "W" : "N"));
+            hostToEsp32.group(Group.builder()
+                .freqTx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
+                .squelch((byte) squelchLevel)
+                .ctcssTx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
+                .ctcssTx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
+                .build());
         }
 
         try {
@@ -796,7 +796,7 @@ public class RadioAudioService extends Service {
             }
         });
 
-        sendCommandToESP32(ESP32Command.PTT_DOWN);
+        hostToEsp32.pttDown();
         audioTrack.stop();
         callbacks.txStarted();
     }
@@ -813,7 +813,7 @@ public class RadioAudioService extends Service {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                sendCommandToESP32(ESP32Command.PTT_UP);
+                hostToEsp32.pttUp();
                 audioTrack.flush();
                 callbacks.txEnded();
             }
@@ -946,6 +946,7 @@ public class RadioAudioService extends Service {
         usbIoManager.setReadBufferSize(1024); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.setReadBufferCount(16*2);
         usbIoManager.start();
+        hostToEsp32 = new HostToEsp32(usbIoManager);
         checkedFirmwareVersion = false;
         gotHello = false;
 
@@ -1000,10 +1001,11 @@ public class RadioAudioService extends Service {
 
         // Verify that the firmware of the ESP32 app is supported.
         setMode(MODE_STARTUP);
-        sendCommandToESP32(ESP32Command.STOP); // Tell ESP32 app to stop whatever it's doing.
-        sendCommandToESP32(ESP32Command.GET_FIRMWARE_VER); // Ask for firmware ver.
-        Log.d("DEBUG", "Telling firmware that radio is: " + (radioType.equals(RADIO_MODULE_UHF) ? "UHF" : "VHF"));
-        sendBytesToESP32(radioType.getBytes());
+
+        hostToEsp32.stop();
+        hostToEsp32.config(Config.builder()
+            .moduleType(radioType.equals(RADIO_MODULE_UHF) ? SA818_UHF : SA818_VHF)
+            .build());
         // The version is actually evaluated in handleESP32Data().
 
         // If we don't hear back from the ESP32, it means the firmware is either not
@@ -1152,7 +1154,7 @@ public class RadioAudioService extends Service {
         }
 
         if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
-            sendBytesToESP32(audioBuffer);
+            hostToEsp32.txAudio(audioBuffer);
         } else {
             // If the audio is fairly long, we need to send it to ESP32 at the same rate
             // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
@@ -1169,8 +1171,8 @@ public class RadioAudioService extends Service {
                         android.os.Process.setThreadPriority(
                                 android.os.Process.THREAD_PRIORITY_BACKGROUND +
                                         android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        sendBytesToESP32(Arrays.copyOfRange(finalAudioBuffer, chunkStart,
-                                Math.min(finalAudioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
+                        hostToEsp32.txAudio(Arrays.copyOfRange(finalAudioBuffer, chunkStart,
+                            Math.min(finalAudioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
                     }
                 }, (int) nextSendDelay);
 
@@ -1190,51 +1192,6 @@ public class RadioAudioService extends Service {
                 }, (int) nextSendDelay);
             }
         }
-    }
-
-    public void sendCommandToESP32(ESP32Command command) {
-        byte[] commandArray = { COMMAND_DELIMITER[0], COMMAND_DELIMITER[1],
-                COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
-                COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
-        sendBytesToESP32(commandArray);
-        Log.d("DEBUG", "Sent command: " + command);
-    }
-
-    public void sendCommandToESP32(ESP32Command command, String paramsStr) {
-        byte[] commandArray = { COMMAND_DELIMITER[0], COMMAND_DELIMITER[1],
-                COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
-                COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
-        byte[] combined = new byte[commandArray.length + paramsStr.length()];
-        ByteBuffer buffer = ByteBuffer.wrap(combined);
-        buffer.put(commandArray);
-        buffer.put(paramsStr.getBytes(StandardCharsets.US_ASCII));
-        combined = buffer.array();
-
-        // Write it in a single call so the params have a better chance (?) to fit in receive buffer on mcu.
-        // A little concerned there could be a bug here in rare chance that these bytes span receive
-        // buffer size on mcu.
-        // TODO implement a more robust way (in mcu code) of ensuring params are received by mcu
-        sendBytesToESP32(combined);
-        Log.d("DEBUG", "Sent command: " + command + " params: " + paramsStr);
-    }
-
-    public synchronized void sendBytesToESP32(byte[] newBytes) {
-        if (mode == MODE_BAD_FIRMWARE) {
-            Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 with bad firmware.");
-            return;
-        }
-
-        if (mode == MODE_FLASHING) {
-            Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 while in the process of flashing a new firmware.");
-            return;
-        }
-
-        if (null == usbIoManager) {
-            Log.d("DEBUG", "Warning: usbIoManager was null when trying to send bytes to ESP32.");
-            return;
-        }
-
-        usbIoManager.writeAsync(newBytes);
     }
 
     public static UsbSerialPort getUsbSerialPort() {

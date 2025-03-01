@@ -16,6 +16,17 @@ const uint8_t COMMAND_FILTERS          = 4;  // toggle filters on/off
 const uint8_t COMMAND_STOP             = 5;  // stop everything, just wait for next command
 const uint8_t COMMAND_GET_FIRMWARE_VER = 6;  // reply with [COMMAND_VERSION(Version)]
 
+enum HostToEsp32 {
+  COMMAND_HOST_UNKNOWN     = 0x00,
+  COMMAND_HOST_PTT_DOWN    = 1, // [COMMAND_HOST_PTT_DOWN()]
+  COMMAND_HOST_PTT_UP      = 2, // [COMMAND_HOST_PTT_UP()]
+  COMMAND_HOST_GROUP       = 3, // [COMMAND_HOST_GROUP(Group)]
+  COMMAND_HOST_FILTERS     = 4, // [COMMAND_HOST_FILTERS(Filters)]
+  COMMAND_HOST_STOP        = 5, // [COMMAND_HOST_STOP()] 
+  COMMAND_HOST_CONFIG      = 6, // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
+  COMMAND_HOST_TX_AUDIO    = 7  // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
+};
+
 // Outgoing commands (ESP32 -> Android)
 enum Esp32ToHost {
   COMMAND_SMETER_REPORT  = 0x53, // [COMMAND_SMETER_REPORT(Rssi)]
@@ -44,6 +55,33 @@ struct rssi {
   uint8_t     rssi;
 } __attribute__((__packed__));
 typedef struct rssi Rssi;
+
+// COMMAND_HOST_GROUP parameters
+struct group {
+  uint8_t bw;
+  float freq_tx;
+  float freq_rx;
+  uint8_t ctcss_tx;
+  uint8_t squelch;
+  uint8_t ctcss_rx;
+} __attribute__((__packed__));
+typedef struct group Group;
+
+// COMMAND_HOST_FILTERS parameters
+struct filters {
+  uint8_t flags;  // Uses bitmask for pre, high, and low
+} __attribute__((__packed__));
+typedef struct filters Filters;
+
+#define FILTER_PRE  (1 << 0)
+#define FILTER_HIGH (1 << 1)
+#define FILTER_LOW  (1 << 2)
+
+// COMMAND_HOST_CONFIG parameters
+struct config {
+  uint8_t radioType; 
+} __attribute__((__packed__));
+typedef struct config Config;
 
 /**
  * Send a command with params
@@ -98,3 +136,65 @@ void inline sendPhysPttState(bool isPhysPttDown) {
 void inline sendAudio(const byte *data, size_t len) {
   __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
 }
+
+typedef void (*CommandCallback)(HostToEsp32 command, uint8_t *params, size_t param_len);
+
+class HostDataStreamParser {
+public:
+  HostDataStreamParser(Stream &serial, CommandCallback callback) 
+    : _serial(serial), _callback(callback), _matchedDelimiterTokens(0),
+      _command(COMMAND_HOST_UNKNOWN), _commandParamLen(0), _paramIndex(0) {}
+
+  void loop() {
+    while (_serial.available() > 0) {
+      uint8_t b = _serial.read();
+      processByte(b);
+    }
+  }
+private:
+  Stream &_serial;
+  CommandCallback _callback;
+  uint8_t _matchedDelimiterTokens;
+  HostToEsp32 _command;
+  uint8_t _commandParamLen; 
+  uint8_t _commandParams[256];  
+  uint8_t _paramIndex;
+
+  void processByte(uint8_t b) {
+    if (_matchedDelimiterTokens < DELIMITER_LENGTH) {
+      if (b == COMMAND_DELIMITER[_matchedDelimiterTokens]) {
+        _matchedDelimiterTokens++;
+      } else {
+        _matchedDelimiterTokens = 0;  // Reset on mismatch
+      }
+    } else if (_matchedDelimiterTokens == DELIMITER_LENGTH) {
+      _command = (HostToEsp32)b;
+      _matchedDelimiterTokens++;
+    } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 1) {
+      _commandParamLen = b;
+      _paramIndex = 0;
+      _matchedDelimiterTokens++;
+      if (_commandParamLen == 0) {
+        _callback(_command, _commandParams, 0);
+        reset();
+      }
+    } else {
+      if (_paramIndex < _commandParamLen) {
+        _commandParams[_paramIndex++] = b;
+      }
+      if (_paramIndex == _commandParamLen) {
+        _callback(_command, _commandParams, _commandParamLen);
+        reset();
+      }
+    }
+  }
+
+  void reset() {
+    _matchedDelimiterTokens = 0;
+    _paramIndex = 0;
+    _commandParamLen = 0;
+  }
+};
+
+void handleCommands(HostToEsp32 command, uint8_t *params, size_t param_len);
+HostDataStreamParser parser(Serial, &handleCommands);

@@ -19,6 +19,32 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 
+// Audio sampling rate, must match what Android app expects (and sends).
+#define AUDIO_SAMPLE_RATE 22050
+
+// Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
+// But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
+#define SAMPLING_RATE_OFFSET 79
+
+// I2S audio sampling stuff
+#define I2S_READ_LEN 1024/4
+#define I2S_WRITE_LEN 1024/4
+#define I2S_ADC_UNIT ADC_UNIT_1
+#define I2S_ADC_CHANNEL ADC1_CHANNEL_6
+
+
+// Connections to radio module
+#define RXD2_PIN 16
+#define TXD2_PIN 17
+#define DAC_PIN 25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
+#define ADC_PIN 34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
+#define PTT_PIN 18  // Keys up the radio module
+#define PD_PIN 19
+//#define SQ_PIN 32
+uint8_t SQ_PIN = 32;
+#define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
+#define PHYS_PTT_PIN2 33  // Optional. See above.
+
 // Hardware version detection
 #define HW_VER_PIN_0 39    // 0xF0
 #define HW_VER_PIN_1 36    // 0x0F
@@ -42,12 +68,14 @@ Mode mode = MODE_STOPPED;
 // Current SQ status
 bool squelched = false;
 
+// Have we installed an I2S driver at least once?
+bool i2sStarted = false;
+
 ////////////////////////////////////////////////////////////////////////////////
 /// Forward Declarations
 ////////////////////////////////////////////////////////////////////////////////
 void initI2SRx();
 void initI2STx();
-void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth);
 void setMode(int newMode);
 void processTxAudio(uint8_t tempBuffer[], int bytesRead);
 void iir_lowpass_reset();
