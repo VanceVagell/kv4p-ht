@@ -302,11 +302,11 @@ public class RadioAudioService extends Service {
     }
 
     // These methods enforce the limits below (which change when we switch bands)
-    public void setMinHamFreq(float newMinFreq) {
+    public static void setMinHamFreq(float newMinFreq) {
         minHamFreq = newMinFreq;
     }
 
-    public void setMaxHamFreq(float newMaxFreq) {
+    public static void setMaxHamFreq(float newMaxFreq) {
         maxHamFreq = newMaxFreq;
     }
 
