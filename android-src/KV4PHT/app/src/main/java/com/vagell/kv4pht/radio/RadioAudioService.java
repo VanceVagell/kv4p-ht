@@ -1227,7 +1227,7 @@ public class RadioAudioService extends Service {
         return pcm16;
     }
 
-    @SuppressWarnings("java:S3776")
+    @SuppressWarnings({"java:S3776", "java:S6541"})
     private void handleParsedCommand(RcvCommand cmd, byte[] param) {
         switch (cmd) {
             case COMMAND_SMETER_REPORT:
@@ -1237,17 +1237,11 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_PHYS_PTT_DOWN:
-                if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
-                    startPtt();
-                    callbacks.forcedPttStart();
-                }
+                handlePhysicalPttDown();
                 break;
 
             case COMMAND_PHYS_PTT_UP:
-                if (mode == MODE_TX) {
-                    endPtt();
-                    callbacks.forcedPttEnd();
-                }
+                handlePhysicalPttUp();
                 break;
 
             case COMMAND_DEBUG_INFO:
@@ -1271,14 +1265,7 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_HELLO:
-                gotHello = true;
-                if (audioTrack != null) {
-                    audioTrack.stop();
-                }
-                if (callbacks != null) {
-                    callbacks.radioModuleHandshake();
-                }
-                checkFirmwareVersion();
+                handleHello();
                 break;
 
             case COMMAND_RX_AUDIO:
@@ -1292,6 +1279,31 @@ public class RadioAudioService extends Service {
             default:
                 break;
         }
+    }
+
+    private void handlePhysicalPttUp() {
+        if (mode == MODE_TX) {
+            endPtt();
+            callbacks.forcedPttEnd();
+        }
+    }
+
+    private void handlePhysicalPttDown() {
+        if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
+            startPtt();
+            callbacks.forcedPttStart();
+        }
+    }
+
+    private void handleHello() {
+        gotHello = true;
+        if (audioTrack != null) {
+            audioTrack.stop();
+        }
+        if (callbacks != null) {
+            callbacks.radioModuleHandshake();
+        }
+        checkFirmwareVersion();
     }
 
     private void handleVersion(byte[] param) {
