@@ -192,3 +192,7 @@ private:
 
 void handleCommands(RcvCommand command, uint8_t *params, size_t param_len);
 FrameParser parser(Serial, &handleCommands);
+
+void inline protocolLoop() {
+  parser.loop();
+}

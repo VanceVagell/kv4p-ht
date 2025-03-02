@@ -17,8 +17,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <Arduino.h>
-
-#include <algorithm>
 #include <DRA818.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
@@ -229,7 +227,7 @@ void readRssi() {
 void loop() {
   debugLoop();
   ledLoop();
-  parser.loop();
+  protocolLoop();
   rxAudioLoop();
   txAudioLoop();
   buttonsLoop();
