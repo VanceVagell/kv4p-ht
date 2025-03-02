@@ -92,6 +92,7 @@ import com.vagell.kv4pht.ui.MainActivity;
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.io.IOException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -435,12 +436,9 @@ public class RadioAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-            10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
-
-        messageNumber = (int) (Math.random()
-            * APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
+        SecureRandom random = new SecureRandom();
+        threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        messageNumber = random.nextInt(APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
     /**
