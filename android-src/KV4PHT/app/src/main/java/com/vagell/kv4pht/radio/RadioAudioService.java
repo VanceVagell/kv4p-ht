@@ -311,19 +311,19 @@ public class RadioAudioService extends Service {
     }
 
     // These will come from user settings
-    public void setMin2mTxFreq(float newMinFreq) {
+    public static void setMin2mTxFreq(float newMinFreq) {
         min2mTxFreq = newMinFreq;
     }
 
-    public void setMax2mTxFreq(float newMaxFreq) {
+    public static void setMax2mTxFreq(float newMaxFreq) {
         max2mTxFreq = newMaxFreq;
     }
 
-    public void setMin70cmTxFreq(float newMinFreq) {
+    public static void setMin70cmTxFreq(float newMinFreq) {
         min70cmTxFreq = newMinFreq;
     }
 
-    public void setMax70cmTxFreq(float newMaxFreq) {
+    public static void setMax70cmTxFreq(float newMaxFreq) {
         max70cmTxFreq = newMaxFreq;
     }
 
