@@ -22,8 +22,6 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_UHF;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_VHF;
-import static com.vagell.kv4pht.radio.Protocol.RADIO_MODULE_FOUND;
-import static com.vagell.kv4pht.radio.Protocol.RADIO_MODULE_NOT_FOUND;
 
 import android.Manifest;
 import android.app.NotificationChannel;
