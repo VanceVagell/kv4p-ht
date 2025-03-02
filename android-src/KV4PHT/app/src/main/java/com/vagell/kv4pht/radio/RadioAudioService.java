@@ -1329,20 +1329,24 @@ public class RadioAudioService extends Service {
     private void handleRxAudio(byte[] param) {
         if (mode == MODE_RX || mode == MODE_SCAN) {
             if (afskDemodulator != null) {
-                byte[] pcm16 = convert8BitTo16Bit(param);
-                audioTrack.write(pcm16, 0, pcm16.length);
                 afskDemodulator.addSamples(convertPCM8SignedToFloatArray(param), param.length);
             }
-            if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                audioTrack.play();
+            if (audioTrack != null) {
+                byte[] pcm16 = convert8BitTo16Bit(param);
+                audioTrack.write(pcm16, 0, pcm16.length);
+                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                    audioTrack.play();
+                }
             }
         }
         if (mode == MODE_SCAN) {
             for (byte b : param) {
-                consecutiveSilenceBytes = (b == SILENT_BYTE) ? consecutiveSilenceBytes + 1 : 0;
-                if (b == SILENT_BYTE) {
-                    checkScanDueToSilence();
+                if (b != SILENT_BYTE) {
+                    consecutiveSilenceBytes = 0;
+                    continue;
                 }
+                consecutiveSilenceBytes++;
+                checkScanDueToSilence();
             }
         }
     }
