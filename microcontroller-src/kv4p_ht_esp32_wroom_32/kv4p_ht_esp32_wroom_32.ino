@@ -20,9 +20,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <algorithm>
 #include <DRA818.h>
-#include <driver/adc.h>
-#include <driver/i2s.h>
-#include <driver/dac.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "debug.h"
@@ -34,19 +31,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 const uint16_t FIRMWARE_VER = 12;
 
-#define SMETER_REPORT_INTERVAL_MS 500
-
-// Buffer for outgoing audio bytes to send to radio module
-#define TX_TEMP_AUDIO_BUFFER_SIZE 4096    // Holds data we already got off of USB serial from Android app
-#define TX_CACHED_AUDIO_BUFFER_SIZE 1024  // MUST be smaller than DMA buffer size specified in i2sTxConfig, because we dump this cache into DMA buffer when full.
-uint8_t txCachedAudioBuffer[TX_CACHED_AUDIO_BUFFER_SIZE] = {0};
-int txCachedAudioBytes                                   = 0;
-boolean isTxCacheSatisfied                               = false;  // Will be true when the DAC has enough cached tx data to avoid any stuttering (i.e. at least TX_CACHED_AUDIO_BUFFER_SIZE bytes).
-
+#define SMETER_REPORT_INTERVAL_MS 100
 #define USB_BUFFER_SIZE 1024
-
-// ms to wait before issuing PTT UP after a tx (to allow final audio to go out)
-#define MS_WAIT_BEFORE_PTT_UP 40
 
 // Object used for radio module serial comms
 DRA818 *dra;
@@ -204,8 +190,6 @@ void setMode(Mode newMode) {
       txStartTime = micros();
       digitalWrite(PTT_PIN, LOW);
       initI2STx();
-      txCachedAudioBytes = 0;
-      isTxCacheSatisfied = false;
       break;
   }
 }
@@ -223,21 +207,28 @@ hw_ver_t get_hardware_version() {
 
 void readRssi() {
   static long lastSMeterReport = -1;
+  static char rssiBuffer[10];  // Fixed-size buffer for RSSI response
+  static uint8_t bufferIndex = 0;
   if (mode == MODE_RX) {
     if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
-      // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
-      // return value from the module, and just tells us success/fail.
-      // int rssi = dra->rssi();
       Serial2.println("RSSI?");
-      String rssiResponse = Serial2.readString();  // Should be like "RSSI=X\n\r", where X is 1-3 digits, 0-255
-      if (rssiResponse.length() > 7) {
-        String rssiStr = rssiResponse.substring(5);
-        int rssiInt    = rssiStr.toInt();
-        if (rssiInt >= 0 && rssiInt <= 255) {
-          sendRssi((uint8_t)rssiInt);
+      lastSMeterReport = millis();  // Update timestamp immediately
+      bufferIndex = 0;  // Reset buffer for new response
+    }
+    while (Serial2.available()) {
+      char c = Serial2.read();
+      if (c == '\n' || c == '\r') {
+        rssiBuffer[bufferIndex] = '\0';  // Null-terminate the buffer
+        if (strncmp(rssiBuffer, "RSSI=", 5) == 0) {
+          int rssiInt = atoi(rssiBuffer + 5);
+          if (rssiInt >= 0 && rssiInt <= 255) {
+            sendRssi((uint8_t)rssiInt);
+          }
         }
+        bufferIndex = 0;  // Reset for next read
+      } else if (bufferIndex < sizeof(rssiBuffer) - 1) {
+        rssiBuffer[bufferIndex++] = c;  // Store character in buffer
       }
-      lastSMeterReport = millis();
     }
   }
 }
