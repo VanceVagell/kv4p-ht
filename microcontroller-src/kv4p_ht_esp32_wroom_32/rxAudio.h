@@ -9,6 +9,8 @@
 #include "protocol.h"
 #include "debug.h"
 
+void iir_lowpass_reset();
+
 void initI2SRx() {
   // Remove any previous driver (rx or tx) that may have been installed.
   if (i2sStarted) {

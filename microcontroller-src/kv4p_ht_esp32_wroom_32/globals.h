@@ -36,24 +36,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
 // Connections to radio module
-#define RXD2_PIN 16
-#define TXD2_PIN 17
-#define DAC_PIN 25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
-#define ADC_PIN 34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
-#define PTT_PIN 18  // Keys up the radio module
-#define PD_PIN 19
-//#define SQ_PIN 32
-uint8_t SQ_PIN = 32;
+#define RXD2_PIN      16
+#define TXD2_PIN      17
+#define DAC_PIN       25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
+#define ADC_PIN       34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
+#define PTT_PIN       18  // Keys up the radio module
+#define PD_PIN        19
+uint8_t SQ_PIN      = 32;
 #define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define PHYS_PTT_PIN2 33  // Optional. See above.
 
 // Hardware version detection
-#define HW_VER_PIN_0 39    // 0xF0
-#define HW_VER_PIN_1 36    // 0x0F
+#define HW_VER_PIN_0  39  // 0xF0
+#define HW_VER_PIN_1  36  // 0x0F
 // LOW = 0, HIGH = F, 1 <= analog values <= E
-#define HW_VER_V1 (0x00)
-#define HW_VER_V2_0C (0xFF)
-#define HW_VER_V2_0D (0xF0)
+#define HW_VER_V1     (0x00)
+#define HW_VER_V2_0C  (0xFF)
+#define HW_VER_V2_0D  (0xF0)
 // #define HW_VER_?? (0x0F)  // Unused
 
 typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if we want.
@@ -72,14 +71,3 @@ bool squelched = false;
 
 // Have we installed an I2S driver at least once?
 bool i2sStarted = false;
-
-////////////////////////////////////////////////////////////////////////////////
-/// Forward Declarations
-////////////////////////////////////////////////////////////////////////////////
-void initI2SRx();
-void initI2STx();
-void setMode(int newMode);
-void processTxAudio(uint8_t tempBuffer[], int bytesRead);
-void iir_lowpass_reset();
-hw_ver_t get_hardware_version();
-void reportPhysPttState();
