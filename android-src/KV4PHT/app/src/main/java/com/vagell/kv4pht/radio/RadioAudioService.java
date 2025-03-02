@@ -1269,7 +1269,7 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_RX_AUDIO:
-                handleAudio(param);
+                handleRxAudio(param);
                 break;
 
             case COMMAND_VERSION:
@@ -1326,7 +1326,7 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private void handleAudio(byte[] param) {
+    private void handleRxAudio(byte[] param) {
         if (mode == MODE_RX || mode == MODE_SCAN) {
             if (afskDemodulator != null) { // Avoid race condition at app start.
                 // Play the audio.
