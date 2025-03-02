@@ -1237,6 +1237,7 @@ public class RadioAudioService extends Service {
         return pcm16;
     }
 
+    @SuppressWarnings("java:S3776")
     private void handleParsedCommand(RcvCommand cmd, byte[] param) {
         switch (cmd) {
             case COMMAND_SMETER_REPORT:
