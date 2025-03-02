@@ -8,9 +8,9 @@
 boolean isPhysPttDown     = false;
 
 void inline buttonsSetup() {
-    // Optional physical PTT buttons
-    pinMode(PHYS_PTT_PIN1, INPUT_PULLUP);
-    pinMode(PHYS_PTT_PIN2, INPUT_PULLUP);
+  // Optional physical PTT buttons
+  pinMode(PHYS_PTT_PIN1, INPUT_PULLUP);
+  pinMode(PHYS_PTT_PIN2, INPUT_PULLUP);
 }
 
 void inline buttonsLoop() {
