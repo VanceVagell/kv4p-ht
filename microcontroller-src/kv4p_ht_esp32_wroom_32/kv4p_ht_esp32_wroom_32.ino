@@ -100,11 +100,11 @@ void setup() {
 void doConfig(Config const &config) {
   dra = new DRA818(&Serial2, config.radioType);
   int result = -1;
-  unsigned long waitStart = micros();
+  uint32_t waitStart = millis();
   while (result != 1) {
     result = dra->handshake();  // Wait for module to start up
     esp_task_wdt_reset();
-    if ((micros() - waitStart) > 2000000) {  // Give the radio module 2 seconds max before giving up on it
+    if ((millis() - waitStart) > 2000) {  // Give the radio module 2 seconds max before giving up on it
       radioModuleStatus = RADIO_MODULE_NOT_FOUND;
       break;
     }
