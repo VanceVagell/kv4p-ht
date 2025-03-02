@@ -722,16 +722,6 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private String getToneIdxStr(String toneStr) {
-        if (toneStr == null) {
-            toneStr = "None";
-        }
-
-        Integer toneIdx = mTones.get(toneStr);
-
-        return toneIdx < 10 ? "0" + toneIdx : toneIdx.toString();
-    }
-
     private String getTxFreq(String txFreq, int offset, int khz) {
         if (offset == ChannelMemory.OFFSET_NONE) {
             return txFreq;
@@ -822,7 +812,7 @@ public class RadioAudioService extends Service {
 
         hostToEsp32.pttDown();
         audioTrack.stop();
-        callbacks.txStarted();
+        Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
     }
 
     public void endPtt() {
