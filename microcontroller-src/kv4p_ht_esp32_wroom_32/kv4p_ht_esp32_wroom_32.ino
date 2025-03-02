@@ -207,28 +207,21 @@ hw_ver_t get_hardware_version() {
 
 void readRssi() {
   static long lastSMeterReport = -1;
-  static char rssiBuffer[10];  // Fixed-size buffer for RSSI response
-  static uint8_t bufferIndex = 0;
   if (mode == MODE_RX) {
     if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
+      // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
+      // return value from the module, and just tells us success/fail.
+      // int rssi = dra->rssi();
       Serial2.println("RSSI?");
-      lastSMeterReport = millis();  // Update timestamp immediately
-      bufferIndex = 0;  // Reset buffer for new response
-    }
-    while (Serial2.available()) {
-      char c = Serial2.read();
-      if (c == '\n' || c == '\r') {
-        rssiBuffer[bufferIndex] = '\0';  // Null-terminate the buffer
-        if (strncmp(rssiBuffer, "RSSI=", 5) == 0) {
-          int rssiInt = atoi(rssiBuffer + 5);
-          if (rssiInt >= 0 && rssiInt <= 255) {
-            sendRssi((uint8_t)rssiInt);
-          }
+      String rssiResponse = Serial2.readString();  // Should be like "RSSI=X\n\r", where X is 1-3 digits, 0-255
+      if (rssiResponse.length() > 7) {
+        String rssiStr = rssiResponse.substring(5);
+        int rssiInt    = rssiStr.toInt();
+        if (rssiInt >= 0 && rssiInt <= 255) {
+          sendRssi((uint8_t)rssiInt);
         }
-        bufferIndex = 0;  // Reset for next read
-      } else if (bufferIndex < sizeof(rssiBuffer) - 1) {
-        rssiBuffer[bufferIndex++] = c;  // Store character in buffer
       }
+      lastSMeterReport = millis();
     }
   }
 }
