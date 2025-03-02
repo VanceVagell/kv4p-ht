@@ -29,31 +29,61 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 const uint16_t FIRMWARE_VER = 12;
 
-#define RSSI_REPORT_INTERVAL_MS 100
-#define USB_BUFFER_SIZE 1024
+const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
+const uint16_t USB_BUFFER_SIZE = 1024;
 
-// Object used for radio module serial comms
-DRA818 *dra;
+DRA818 sa818_vhf(&Serial2, SA818_VHF);
+DRA818 sa818_uhf(&Serial2, SA818_UHF);
+DRA818 &sa818 = sa818_vhf;
 
 // Tx runaway detection stuff
 long txStartTime = -1;
-#define RUNAWAY_TX_SEC 200
+const uint16_t RUNAWAY_TX_SEC = 200;
 
 // Were we able to communicate with the radio module during setup()?
 const char RADIO_MODULE_NOT_FOUND = 'x';
 const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
+void setMode(Mode newMode) {
+  mode = newMode;
+  switch (mode) {
+    case MODE_STOPPED:
+      _LOGI("MODE_STOPPED");
+    digitalWrite(PTT_PIN, HIGH);
+    break;
+    case MODE_RX:
+      _LOGI("MODE_RX");
+    digitalWrite(PTT_PIN, HIGH);
+    initI2SRx();
+    break;
+    case MODE_TX:
+      _LOGI("MODE_TX");
+    txStartTime = micros();
+    digitalWrite(PTT_PIN, LOW);
+    initI2STx();
+    break;
+  }
+}
+
+hw_ver_t get_hardware_version() {
+  pinMode(HW_VER_PIN_0, INPUT);
+  pinMode(HW_VER_PIN_1, INPUT);
+  hw_ver_t ver = 0x00;
+  ver |= (digitalRead(HW_VER_PIN_0) == HIGH ? 0x0F : 0x00);
+  ver |= (digitalRead(HW_VER_PIN_1) == HIGH ? 0xF0 : 0x00);
+  // In the future, we're replace these with analogRead()s and
+  // use values between 0x0 and 0xF. For now, just binary.
+  return ver;
+}
 
 void setup() {
   // Used for setup, need to know early.
   hardware_version = get_hardware_version();
-
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(230400);
-
   // Hardware dependent pin assignments.
   switch (hardware_version) {
     case HW_VER_V1:
@@ -83,11 +113,10 @@ void setup() {
   pinMode(SQ_PIN, INPUT);
   pinMode(PTT_PIN, OUTPUT);
   digitalWrite(PTT_PIN, HIGH);  // Rx
-
   // Communication with DRA818V radio module via GPIO pins
   Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
-
+  //
   debugSetup();
   // Begin in STOPPED mode
   squelched = (digitalRead(SQ_PIN) == HIGH);
@@ -98,11 +127,15 @@ void setup() {
 }
 
 void doConfig(Config const &config) {
-  dra = new DRA818(&Serial2, config.radioType);
+  if(config.radioType == SA818_UHF) {
+    sa818 = sa818_uhf;
+  } else {
+    sa818 = sa818_vhf;
+  }
   int result = -1;
   uint32_t waitStart = millis();
   while (result != 1) {
-    result = dra->handshake();  // Wait for module to start up
+    result = sa818.handshake();  // Wait for module to start up
     esp_task_wdt_reset();
     if ((millis() - waitStart) > 2000) {  // Give the radio module 2 seconds max before giving up on it
       radioModuleStatus = RADIO_MODULE_NOT_FOUND;
@@ -114,11 +147,11 @@ void doConfig(Config const &config) {
   }
   if (hardware_version == HW_VER_V2_0C) {
     // v2.0c has a lower input ADC range.
-    result = dra->volume(6);
+    result = sa818.volume(6);
   } else {
-    result = dra->volume(8);
+    result = sa818.volume(8);
   }
-  result = dra->filters(false, false, false);
+  result = sa818.filters(false, false, false);
   sendVersion(FIRMWARE_VER, radioModuleStatus, hardware_version);
   esp_task_wdt_reset();
 }
@@ -137,7 +170,7 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
       if (param_len == sizeof(Filters)) {
         Filters filters;
         memcpy(&filters, params, sizeof(Filters));
-        while (!dra->filters((filters.flags & FILTER_PRE), (filters.flags & FILTER_HIGH), (filters.flags & FILTER_LOW)));
+        while (!sa818.filters((filters.flags & FILTER_PRE), (filters.flags & FILTER_HIGH), (filters.flags & FILTER_LOW)));
         esp_task_wdt_reset();
       }
       break;
@@ -145,7 +178,7 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
       if (param_len == sizeof(Group)) {
         Group group;
         memcpy(&group, params, sizeof(Group));
-        while (!dra->group(group.bw, group.freq_tx, group.freq_rx, group.ctcss_tx, group.squelch, group.ctcss_rx));
+        while (!sa818.group(group.bw, group.freq_tx, group.freq_rx, group.ctcss_tx, group.squelch, group.ctcss_rx));
         esp_task_wdt_reset();
         if (mode == MODE_STOPPED) {
           setMode(MODE_RX);   
@@ -169,38 +202,6 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
       esp_task_wdt_reset();
       break;                              
   }
-}
-
-void setMode(Mode newMode) {
-  mode = newMode;
-  switch (mode) {
-    case MODE_STOPPED:
-      _LOGI("MODE_STOPPED");
-      digitalWrite(PTT_PIN, HIGH);
-      break;
-    case MODE_RX:
-      _LOGI("MODE_RX");
-      digitalWrite(PTT_PIN, HIGH);
-      initI2SRx();
-      break;
-    case MODE_TX:
-      _LOGI("MODE_TX");
-      txStartTime = micros();
-      digitalWrite(PTT_PIN, LOW);
-      initI2STx();
-      break;
-  }
-}
-
-hw_ver_t get_hardware_version() {
-  pinMode(HW_VER_PIN_0, INPUT);
-  pinMode(HW_VER_PIN_1, INPUT);
-  hw_ver_t ver = 0x00;
-  ver |= (digitalRead(HW_VER_PIN_0) == HIGH ? 0x0F : 0x00);
-  ver |= (digitalRead(HW_VER_PIN_1) == HIGH ? 0xF0 : 0x00);
-  // In the future, we're replace these with analogRead()s and
-  // use values between 0x0 and 0xF. For now, just binary.
-  return ver;
 }
 
 void rssiLoop() {
