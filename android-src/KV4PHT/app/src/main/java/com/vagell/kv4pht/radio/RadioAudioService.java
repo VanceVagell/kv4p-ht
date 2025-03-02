@@ -87,6 +87,7 @@ import com.vagell.kv4pht.radio.Protocol.Config;
 import com.vagell.kv4pht.radio.Protocol.Filters;
 import com.vagell.kv4pht.radio.Protocol.FrameParser;
 import com.vagell.kv4pht.radio.Protocol.Group;
+import com.vagell.kv4pht.radio.Protocol.RadioStatus;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.ui.MainActivity;
 
@@ -1330,14 +1331,7 @@ public class RadioAudioService extends Service {
                             return;
                         }
                         Log.i("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
-                        if (ver.getRadioModuleStatus() == RADIO_MODULE_NOT_FOUND) {
-                            radioModuleNotFound = true;
-                        } else if (ver.getRadioModuleStatus() == RADIO_MODULE_FOUND) {
-                            radioModuleNotFound = false;
-                        } else {
-                            Log.e("DEBUG", "Error: unexpected radio status received '" + ver.getRadioModuleStatus() + "'");
-                            radioModuleNotFound = true;
-                        }
+                        radioModuleNotFound = ver.getRadioModuleStatus() != RadioStatus.RADIO_STATUS_FOUND;
                         if (radioModuleNotFound) {
                             Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
                         } else {

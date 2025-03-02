@@ -26,9 +26,6 @@ public final class Protocol {
 
     public static final int PROTO_MTU = 0xFF; // Maximum length of the frame
 
-    public static final char RADIO_MODULE_NOT_FOUND = 'x';
-    public static final char RADIO_MODULE_FOUND = 'f';
-
     private Protocol() {
     }
 
@@ -73,6 +70,25 @@ public final class Protocol {
                 }
             }
             return COMMAND_RCV_UNKNOWN;
+        }
+    }
+
+    @Getter
+    public enum RadioStatus {
+        RADIO_STATUS_UNKNOWN('u'),
+        RADIO_STATUS_NOT_FOUND('x'),
+        RADIO_STATUS_FOUND('f');
+        private final char value;
+        RadioStatus(char value) {
+            this.value = value;
+        }
+        public static RadioStatus fromValue(char value) {
+            for (RadioStatus status : RadioStatus.values()) {
+                if (status.getValue() == value) {
+                    return status;
+                }
+            }
+            return RADIO_STATUS_UNKNOWN;
         }
     }
 
@@ -181,7 +197,7 @@ public final class Protocol {
     @Builder
     public static class FirmwareVersion {
         private final short ver;  // equivalent to uint16_t
-        private final char radioModuleStatus;  // equivalent to char
+        private final RadioStatus radioModuleStatus;  // equivalent to char
         private final HardwareVersion hardwareVersion;
         public static Optional<FirmwareVersion> from(final byte[] param) {
             return Optional.ofNullable(param)
@@ -190,7 +206,7 @@ public final class Protocol {
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
                     .ver(b.getShort())
-                    .radioModuleStatus((char) b.get())
+                    .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
                     .hardwareVersion(HardwareVersion.fromValue(b.get() & 0xFF))
                     .build());
         }
