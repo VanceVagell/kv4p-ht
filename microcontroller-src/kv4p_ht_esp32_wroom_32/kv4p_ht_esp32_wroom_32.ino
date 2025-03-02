@@ -36,10 +36,6 @@ DRA818 sa818_vhf(&Serial2, SA818_VHF);
 DRA818 sa818_uhf(&Serial2, SA818_UHF);
 DRA818 &sa818 = sa818_vhf;
 
-// Tx runaway detection stuff
-long txStartTime = -1;
-const uint16_t RUNAWAY_TX_SEC = 200;
-
 // Were we able to communicate with the radio module during setup()?
 const char RADIO_MODULE_NOT_FOUND = 'x';
 const char RADIO_MODULE_FOUND     = 'f';
@@ -59,7 +55,7 @@ void setMode(Mode newMode) {
     break;
     case MODE_TX:
       _LOGI("MODE_TX");
-    txStartTime = micros();
+    txStartTime = millis();
     digitalWrite(PTT_PIN, LOW);
     initI2STx();
     break;

@@ -71,3 +71,6 @@ bool squelched = false;
 
 // Have we installed an I2S driver at least once?
 bool i2sStarted = false;
+
+// Forward declarations
+void setMode(Mode newMode);

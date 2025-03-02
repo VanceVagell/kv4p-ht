@@ -1,3 +1,20 @@
+/*
+KV4P-HT (see http://kv4p.com)
+Copyright (C) 2024 Vance Vagell
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 #pragma once
 
 #include <Arduino.h>
@@ -8,6 +25,19 @@
 #include "globals.h"
 #include "protocol.h"
 #include "debug.h"
+
+static const i2s_config_t i2sRxConfig = {
+  .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
+  .sample_rate          = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
+  .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
+  .channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT,
+  .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB),
+  .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
+  .dma_buf_count        = 4,
+  .dma_buf_len          = I2S_READ_LEN,
+  .use_apll             = true,
+  .tx_desc_auto_clear   = false,
+  .fixed_mclk           = 0};
 
 void iir_lowpass_reset();
 
@@ -25,18 +55,6 @@ void initI2SRx() {
   } else {
     adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
   }
-  static const i2s_config_t i2sRxConfig = {
-    .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-    .sample_rate          = AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET,
-    .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
-    .channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT,
-    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB),
-    .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count        = 4,
-    .dma_buf_len          = I2S_READ_LEN,
-    .use_apll             = true,
-    .tx_desc_auto_clear   = false,
-    .fixed_mclk           = 0};
   ESP_ERROR_CHECK(i2s_driver_install(I2S_NUM_0, &i2sRxConfig, 0, NULL));
   ESP_ERROR_CHECK(i2s_set_adc_mode(I2S_ADC_UNIT, I2S_ADC_CHANNEL));
   dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
