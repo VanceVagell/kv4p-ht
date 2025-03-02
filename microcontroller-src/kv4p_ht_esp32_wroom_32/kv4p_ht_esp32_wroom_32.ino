@@ -27,17 +27,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "globals.h"
 #include "debug.h"
 #include "led.h"
+#include "protocol.h"
 
-const byte FIRMWARE_VER[8]   = {'0', '0', '0', '0', '0', '0', '1', '2'};  // Should be 8 characters representing a zero-padded version, like 00000001.
-const byte VERSION_PREFIX[7] = {'V', 'E', 'R', 'S', 'I', 'O', 'N'};       // Must match RadioAudioService.VERSION_PREFIX in Android app.
+const uint16_t FIRMWARE_VER = 12;
 
 // S-meter interval
 long lastSMeterReport = -1;
 #define SMETER_REPORT_INTERVAL_MS 500
 
-// Delimeter must also match Android app
-#define DELIMITER_LENGTH 8
-const uint8_t COMMAND_DELIMITER[DELIMITER_LENGTH] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
 int matchedDelimiterTokens                        = 0;
 int matchedDelimiterTokensRx                      = 0;
 
@@ -55,7 +52,6 @@ uint8_t txCachedAudioBuffer[TX_CACHED_AUDIO_BUFFER_SIZE] = {0};
 int txCachedAudioBytes                                   = 0;
 boolean isTxCacheSatisfied                               = false;  // Will be true when the DAC has enough cached tx data to avoid any stuttering (i.e. at least TX_CACHED_AUDIO_BUFFER_SIZE bytes).
 
-// Max data to cache from USB (1024 is ESP32 max)
 #define USB_BUFFER_SIZE 1024
 
 // ms to wait before issuing PTT UP after a tx (to allow final audio to go out)
@@ -152,7 +148,7 @@ void setup() {
   squelched = (digitalRead(SQ_PIN) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
-  sendCmdToAndroid(COMMAND_HELLO, NULL, 0);
+  sendHello();
   _LOGI("Setup is finished");
 }
 
@@ -332,16 +328,8 @@ void loop() {
             } else {
               result = dra->volume(8);
             }
-            // Serial.println("volume: " + String(result));
             result = dra->filters(false, false, false);
-            // Serial.println("filters: " + String(result));
-
-            Serial.write(VERSION_PREFIX, sizeof(VERSION_PREFIX));  // "VERSION"
-            Serial.write(FIRMWARE_VER, sizeof(FIRMWARE_VER));      // "00000007" (or whatever)
-            uint8_t radioModuleStatusArray[1] = {radioModuleStatus};
-            Serial.write(radioModuleStatusArray, 1);  // "f" (or "x" if there's a problem with radio module)
-
-            Serial.flush();
+            sendVersion(FIRMWARE_VER, radioModuleStatus, hardware_version);
             esp_task_wdt_reset();
             return;
           }
@@ -538,12 +526,9 @@ void loop() {
         if (rssiResponse.length() > 7) {
           String rssiStr = rssiResponse.substring(5);
           int rssiInt    = rssiStr.toInt();
-
           if (rssiInt >= 0 && rssiInt <= 255) {
-            byte params[1] = {(uint8_t)rssiInt};
-            sendCmdToAndroid(COMMAND_SMETER_REPORT, params, /* paramsLen */ 1);
+            sendRssi((uint8_t)rssiInt);
           }
-          //_LOGD("%s, rssiInt=%d", rssiResponse.c_str(), rssiInt);
         }
 
         // It doesn't matter if we successfully got the S-meter reading, we only want to check at most once every SMETER_REPORT_INTERVAL_MS
@@ -556,16 +541,15 @@ void loop() {
       static uint16_t buffer16[I2S_READ_LEN];
       static uint8_t buffer8[I2S_READ_LEN];
       ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 0));
-      size_t samplesRead = bytesRead / 2;
-
-      squelched = (digitalRead(SQ_PIN) == HIGH);
-
-      for (int i = 0; i < samplesRead; i++) {
-        int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
-        buffer8[i]     = squelched ? 0 : (sample >> 4);  // Signed
+      if (bytesRead > 0) {
+        size_t samplesRead = bytesRead / 2;
+        squelched = (digitalRead(SQ_PIN) == HIGH);
+        for (int i = 0; i < samplesRead; i++) {
+          int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
+          buffer8[i]     = squelched ? 0 : (sample >> 4);  // Signed
+        }
+        sendAudio(buffer8, samplesRead);
       }
-
-      Serial.write(buffer8, samplesRead);
     } else if (mode == MODE_TX) {
       // Check for runaway tx
       int txSeconds = (micros() - txStartTime) / 1000000;
@@ -640,32 +624,6 @@ void loop() {
   }
 }
 
-/**
- * Send a command with params
- * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
- */
-void sendCmdToAndroid(byte cmdByte, const byte *params, size_t paramsLen) {
-  // Safety check: limit paramsLen to 255 for 1-byte length
-  if (paramsLen > 255) {
-    paramsLen = 255;  // or handle differently (split, or error, etc.)
-  }
-
-  // 1. Leading delimiter
-  Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
-
-  // 2. Command byte
-  Serial.write(&cmdByte, 1);
-
-  // 3. Parameter length
-  uint8_t len = paramsLen;
-  Serial.write(&len, 1);
-
-  if (paramsLen > 0) {
-    // 4. Parameter bytes
-    Serial.write(params, paramsLen);
-  }
-}
-
 void tuneTo(float freqTx, float freqRx, int txTone, int rxTone, int squelch, String bandwidth) {
   // Tell radio module to tune
   int result = 0;
@@ -725,7 +683,7 @@ void processTxAudio(uint8_t tempBuffer[], int bytesRead) {
 }
 
 void reportPhysPttState() {
-  sendCmdToAndroid(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP, NULL, 0);
+  sendPhysPttState(isPhysPttDown);
 }
 
 hw_ver_t get_hardware_version() {

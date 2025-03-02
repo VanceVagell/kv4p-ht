@@ -81,7 +81,6 @@ import com.vagell.kv4pht.ui.MainActivity;
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -92,7 +91,6 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
 /**
  * Background service that manages the connection to the ESP32 (to control the radio), and
  * handles playing back any audio received from the radio. This frees up the rest of the
@@ -107,11 +105,6 @@ public class RadioAudioService extends Service {
     // Idx 0 matches https://www.amazon.com/gp/product/B08D5ZD528
     private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
     private static final int[] ESP32_PRODUCT_IDS = {60000, 29987};
-
-    // Version related constants (also see FirmwareUtils for others)
-    private static final String VERSION_PREFIX = "VERSION";
-    private static String versionStrBuffer = "";
-    private static final int VERSION_LENGTH = 8; // Chars in the version string from ESP32 app.
 
     public static final int MODE_STARTUP = -1;
     public static final int MODE_RX = 0;
@@ -142,10 +135,6 @@ public class RadioAudioService extends Service {
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
-    private static final int PRE_BUFFER_SIZE = 256;
-    private byte[] rxBytesPrebuffer = new byte[PRE_BUFFER_SIZE];
-    private int rxPrebufferIdx = 0;
-    private boolean prebufferComplete = false;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
 
@@ -160,6 +149,8 @@ public class RadioAudioService extends Service {
     private static final byte COMMAND_DEBUG_DEBUG    = 0x04;
     private static final byte COMMAND_DEBUG_TRACE    = 0x05;
     private static final byte COMMAND_HELLO          = 0x06;
+    private static final byte COMMAND_RX_AUDIO       = 0x07;
+    private static final byte COMMAND_VERSION        = 0x08;
 
     private final ESP32DataStreamParser esp32DataStreamParser = new ESP32DataStreamParser(this::handleParsedCommand);
 
@@ -576,11 +567,6 @@ public class RadioAudioService extends Service {
         notificationManager.createNotificationChannel(channel);
     }
 
-    private void restartAudioPrebuffer() {
-        prebufferComplete = false;
-        rxPrebufferIdx = 0;
-    }
-
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
         sendCommandToESP32(ESP32Command.FILTERS, (emphasis ? "1" : "0") + (highpass ? "1" : "0") + (lowpass ? "1" : "0"));
     }
@@ -606,9 +592,6 @@ public class RadioAudioService extends Service {
                     makeSafeHamFreq(activeFrequencyStr) + "0000" + squelchLevel +
                     (bandwidth.equals("Wide") ? "W" : "N"));
         }
-
-        // Reset audio prebuffer
-        restartAudioPrebuffer();
 
         try {
             Float freq = Float.parseFloat(makeSafeHamFreq(activeFrequencyStr));
@@ -700,9 +683,6 @@ public class RadioAudioService extends Service {
                             (bandwidth.equals("Wide") ? "W" : "N"));
         }
 
-        // Reset audio prebuffer
-        restartAudioPrebuffer();
-
         try {
             Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
             Float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
@@ -775,8 +755,6 @@ public class RadioAudioService extends Service {
                 .build();
         audioTrack.setAuxEffectSendLevel(0.0f);
 
-        restartAudioPrebuffer();
-
         if (callbacks != null) {
             callbacks.audioTrackCreated();
         }
@@ -836,7 +814,6 @@ public class RadioAudioService extends Service {
             public void run() {
                 sendCommandToESP32(ESP32Command.PTT_UP);
                 audioTrack.flush();
-                restartAudioPrebuffer();
                 callbacks.txEnded();
             }
         }, MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP);
@@ -941,7 +918,7 @@ public class RadioAudioService extends Service {
         usbIoManager = new SerialInputOutputManager(serialPort, new SerialInputOutputManager.Listener() {
             @Override
             public void onNewData(byte[] data) {
-                handleESP32Data(data);
+                esp32DataStreamParser.handleCommands(data);
             }
 
             @Override
@@ -1042,9 +1019,6 @@ public class RadioAudioService extends Service {
 
     private void initAfterESP32Connected() {
         setMode(MODE_RX);
-
-        // Start by prebuffering some audio
-        restartAudioPrebuffer();
 
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
@@ -1278,173 +1252,9 @@ public class RadioAudioService extends Service {
         return pcm16;
     }
 
-    private void handleESP32Data(byte[] data) {
-        // Log.d("DEBUG", "Got bytes from ESP32: " + Arrays.toString(data));
-         /* try {
-            String dataStr = new String(data, "UTF-8");
-            if (dataStr.length() < 100 && dataStr.length() > 0)
-                Log.d("DEBUG", "Str data from ESP32: " + dataStr);
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            } */
-        // Log.d("DEBUG", "Num bytes from ESP32: " + data.length);
-
-        // Handle and remove any commands (e.g. S-meter updates, physical PTT up/down)
-        // which may be intermixed with audio bytes.
-        data = esp32DataStreamParser.extractAudioAndHandleCommands(data);
-
-        if (mode == MODE_STARTUP) {
-            try {
-                // TODO rework this to use same command-handling as s-meter updates (below)
-                String dataStr = new String(data, "UTF-8");
-                versionStrBuffer += dataStr;
-                if (versionStrBuffer.contains(VERSION_PREFIX)) {
-                    int startIdx = versionStrBuffer.indexOf(VERSION_PREFIX) + VERSION_PREFIX.length();
-                    String verStr = "";
-                    try {
-                        verStr = versionStrBuffer.substring(startIdx, startIdx + VERSION_LENGTH);
-                    } catch (IndexOutOfBoundsException iobe) {
-                        return; // Version string not yet fully received.
-                    }
-                    int verInt = Integer.parseInt(verStr);
-                    if (verInt < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
-                        Log.d("DEBUG", "Error: ESP32 app firmware " + verInt + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
-                        if (callbacks != null) {
-                            callbacks.outdatedFirmware(verInt);
-                            versionStrBuffer = "";
-                        }
-                    } else {
-                        Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + verInt + ").");
-
-                        String radioStatusStr = versionStrBuffer.substring(startIdx + VERSION_LENGTH, startIdx + VERSION_LENGTH + 1);
-                        Log.d("DEBUG", "Radio status: '" + radioStatusStr + "'");
-
-                        if (radioStatusStr.equals(RADIO_MODULE_NOT_FOUND)) {
-                            radioModuleNotFound = true;
-                        } else if (radioStatusStr.equals(RADIO_MODULE_FOUND)) {
-                            radioModuleNotFound = false;
-                        } else {
-                            Log.d("DEBUG", "Error: unexpected radio status received '" + radioStatusStr + "'");
-                        }
-
-                        versionStrBuffer = ""; // Reset the version string buffer for next USB reconnect.
-
-                        if (radioModuleNotFound) {
-                            callbacks.radioModuleNotFound();
-                            return;
-                        }
-
-                        initAfterESP32Connected();
-                    }
-                    return;
-                }
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        if (mode == MODE_RX || mode == MODE_SCAN) {
-            if (prebufferComplete && audioTrack != null) {
-                synchronized (audioTrack) {
-                    if (afskDemodulator != null) { // Avoid race condition at app start.
-                        // Play the audio.
-                        byte[] pcm16 = convert8BitTo16Bit(data);
-                        audioTrack.write(pcm16, 0, pcm16.length);
-
-                        // Add the audio samples to the AFSK demodulator.
-                        float[] audioAsFloats = convertPCM8SignedToFloatArray(data);
-                        afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
-                    }
-
-                    if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                        audioTrack.play();
-                    }
-                }
-            } else {
-                for (int i = 0; i < data.length; i++) {
-                    // Prebuffer the incoming audio data so AudioTrack doesn't run out of audio to play
-                    // while we're waiting for more bytes.
-                    rxBytesPrebuffer[rxPrebufferIdx++] = data[i];
-                    if (rxPrebufferIdx == PRE_BUFFER_SIZE) {
-                        prebufferComplete = true;
-                        // Log.d("DEBUG", "Rx prebuffer full, writing to audioTrack.");
-                        if (audioTrack != null) {
-                            if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                                audioTrack.play();
-                            }
-                            synchronized (audioTrack) {
-                                byte[] pcm16 = convert8BitTo16Bit(rxBytesPrebuffer);
-                                audioTrack.write(pcm16, 0, pcm16.length);
-                            }
-                        }
-
-                        rxPrebufferIdx = 0;
-                        break; // Might drop a few audio bytes from data[], should be very minimal
-                    }
-                }
-            }
-        }
-
-        if (mode == MODE_SCAN) {
-            // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
-            for (int i = 0; i < data.length; i++) {
-                if (data[i] == SILENT_BYTE) {
-                    consecutiveSilenceBytes++;
-                    // Log.d("DEBUG", "consecutiveSilenceBytes: " + consecutiveSilenceBytes);
-                    checkScanDueToSilence();
-                } else {
-                    consecutiveSilenceBytes = 0;
-                }
-            }
-        } else if (mode == MODE_TX) {
-            // We only expect physical PTT up and down commands in this mode, but it's already
-            // been handled by esp32DataStreamParser() earlier in this method.
-        }
-
-        if (mode == MODE_BAD_FIRMWARE) {
-            // Log.d("DEBUG", "Warning: Received data from ESP32 which was thought to have bad firmware.");
-            // Just ignore any data we get in this mode, who knows what is programmed on the ESP32.
-        }
-    }
-
     private void handleParsedCommand(byte cmd, byte[] param) {
         if (cmd == COMMAND_SMETER_REPORT) {
-            if (param.length >= 1) {
-                int sMeter255Value = (param[0] & 0xFF);
-                // Log.d("DEBUG", "Raw s-meter value from ESP32 (0-255) = " + sMeter255Value);
-
-                // Through empirical testing, it seems to scale from ~50 with no signal, and ~120 with a transmitter
-                // right near it. So we normalize to match that to an S1-S9 scale. Note, we start more granular at
-                // lower S-values so people can get a better sense of weak signals. This isn't a scientific db measurement...
-                int sMeter9Value = 1;
-                if (sMeter255Value >= 46) {
-                    sMeter9Value = 2;
-                }
-                if (sMeter255Value >= 50) {
-                    sMeter9Value = 3;
-                }
-                if (sMeter255Value >= 55) {
-                    sMeter9Value = 4;
-                }
-                if (sMeter255Value >= 61) {
-                    sMeter9Value = 5;
-                }
-                if (sMeter255Value >= 68) {
-                    sMeter9Value = 6;
-                }
-                if (sMeter255Value >= 76) {
-                    sMeter9Value = 7;
-                }
-                if (sMeter255Value >= 87) {
-                    sMeter9Value = 8;
-                }
-                if (sMeter255Value >= 101) {
-                    sMeter9Value = 9;
-                }
-                // Log.d("DEBUG", "Normalized s-meter (0-9) = " + sMeter9Value);
-
-                callbacks.sMeterUpdate(sMeter9Value);
-            }
+            callbacks.sMeterUpdate(new Rssi(param).getSMeter9Value());
         } else if (cmd == COMMAND_PHYS_PTT_DOWN) {
             if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
                 startPtt();
@@ -1469,12 +1279,58 @@ public class RadioAudioService extends Service {
             gotHello = true;
             if (audioTrack != null) {
                 audioTrack.stop();
-                restartAudioPrebuffer();
             }
             if (callbacks != null) {
                 callbacks.radioModuleHandshake();
             }
             checkFirmwareVersion();
+        } else if ((cmd == COMMAND_RX_AUDIO) && (mode == MODE_RX || mode == MODE_SCAN)) {
+            if (afskDemodulator != null) { // Avoid race condition at app start.
+                // Play the audio.
+                byte[] pcm16 = convert8BitTo16Bit(param);
+                audioTrack.write(pcm16, 0, pcm16.length);
+                // Add the audio samples to the AFSK demodulator.
+                float[] audioAsFloats = convertPCM8SignedToFloatArray(param);
+                afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
+            }
+            if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                audioTrack.play();
+            }
+            if (mode == MODE_SCAN) {
+                // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
+                for (int i = 0; i < param.length; i++) {
+                    if (param[i] == SILENT_BYTE) {
+                        consecutiveSilenceBytes++;
+                        // Log.d("DEBUG", "consecutiveSilenceBytes: " + consecutiveSilenceBytes);
+                        checkScanDueToSilence();
+                    } else {
+                        consecutiveSilenceBytes = 0;
+                    }
+                }
+            }
+        } else if ((cmd == COMMAND_VERSION) && (mode == MODE_STARTUP)) {
+            final FirmwareVersion ver = new FirmwareVersion(param);
+            if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+                Log.d("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
+                if (callbacks != null) {
+                    callbacks.outdatedFirmware(ver.getVer());
+                }
+            } else {
+                Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
+                if (ver.getRadioModuleStatus().equals(RADIO_MODULE_NOT_FOUND)) {
+                    radioModuleNotFound = true;
+                } else if (ver.getRadioModuleStatus().equals(RADIO_MODULE_FOUND)) {
+                    radioModuleNotFound = false;
+                } else {
+                    Log.d("DEBUG", "Error: unexpected radio status received '" + ver.getRadioModuleStatus() + "'");
+                }
+                if (radioModuleNotFound) {
+                    callbacks.radioModuleNotFound();
+                    return;
+                }
+                initAfterESP32Connected();
+            }
+
         } else {
             Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
                     " paramLen=" + param.length);

@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include "globals.h"
+#include "protocol.h"
 
 #ifndef RELEASE
 #define _LOGE(fmt, ...)           \
@@ -59,7 +60,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   }
   #endif
 
-int debug_log_printf(uint8_t cmd, const char* format, ...) {
+int debug_log_printf(Esp32ToHost cmd, const char* format, ...) {
   static char loc_buf[256];
   char* temp = loc_buf;
   int len;
@@ -76,7 +77,7 @@ int debug_log_printf(uint8_t cmd, const char* format, ...) {
     }
   }
   vsnprintf(temp, len + 1, format, arg);
-  sendCmdToAndroid(cmd, (byte*) temp, len);
+  __sendCmdToHost(cmd, (byte*) temp, len);
   va_end(arg);
   if (len >= sizeof(loc_buf)) {
     free(temp);
