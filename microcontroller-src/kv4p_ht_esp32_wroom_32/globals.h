@@ -30,8 +30,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SAMPLING_RATE_OFFSET 79
 
 // I2S audio sampling stuff
-#define I2S_READ_LEN    PROTO_MTU + 1
-#define I2S_WRITE_LEN   PROTO_MTU + 1
+#define I2S_READ_LEN    (PROTO_MTU + 1) / 2
+#define I2S_WRITE_LEN   (PROTO_MTU + 1)
 #define I2S_ADC_UNIT    ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
