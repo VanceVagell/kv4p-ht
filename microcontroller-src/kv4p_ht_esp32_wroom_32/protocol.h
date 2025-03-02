@@ -83,8 +83,8 @@ typedef struct config Config;
  */
 void __sendCmdToHost(SndCommand cmd, const byte *params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
-  if (paramsLen > 255) {
-    paramsLen = 255;  // or handle differently (split, or error, etc.)
+  if (paramsLen > PROTO_MTU) {
+    paramsLen = PROTO_MTU;  // or handle differently (split, or error, etc.)
   }
   // 1. Leading delimiter
   Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);

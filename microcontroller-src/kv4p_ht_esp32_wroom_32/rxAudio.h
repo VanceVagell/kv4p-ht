@@ -7,6 +7,7 @@
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "protocol.h"
+#include "debug.h"
 
 void initI2SRx() {
   // Remove any previous driver (rx or tx) that may have been installed.
@@ -75,6 +76,9 @@ void rxAudioLoop() {
       for (int i = 0; i < samplesRead; i++) {
         int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
         buffer8[i]     = squelched ? 0 : (sample >> 4);  // Signed
+      }
+      if (samplesRead > PROTO_MTU) {
+        _LOGE("Audio farame will clipped: requested %d, clipped to %d", samplesRead, PROTO_MTU);
       }
       sendAudio(buffer8, samplesRead);
       esp_task_wdt_reset();
