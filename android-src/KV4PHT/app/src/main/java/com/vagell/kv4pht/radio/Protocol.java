@@ -51,7 +51,7 @@ public final class Protocol {
     @Getter
     public enum RcvCommand {
         COMMAND_RCV_UNKNOWN(0x00),
-        COMMAND_SMETER_REPORT(  0x53),  // [COMMAND_SMETER_REPORT(Rssi)]
+        COMMAND_SMETER_REPORT( 0x53),   // [COMMAND_SMETER_REPORT(Rssi)]
         COMMAND_PHYS_PTT_DOWN(0x44),    // [COMMAND_PHYS_PTT_DOWN()]
         COMMAND_PHYS_PTT_UP(0x55),      // [COMMAND_PHYS_PTT_UP()]
         COMMAND_DEBUG_INFO(0x01),       // [COMMAND_DEBUG_INFO(char[])]
@@ -143,17 +143,13 @@ public final class Protocol {
 
     @Getter
     public enum HardwareVersion {
-
         HW_VER_V1(0x00),
         HW_VER_V2_0C(0xFF),
         HW_VER_V2_0D(0xF0);
-
         private final int value;
-
         HardwareVersion(int value) {
             this.value = value;
         }
-
         public static HardwareVersion fromValue(int value) {
             for (HardwareVersion version : HardwareVersion.values()) {
                 if (version.getValue() == value) {
