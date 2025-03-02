@@ -29,7 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 const uint16_t FIRMWARE_VER = 12;
 
-#define SMETER_REPORT_INTERVAL_MS 100
+#define RSSI_REPORT_INTERVAL_MS 100
 #define USB_BUFFER_SIZE 1024
 
 // Object used for radio module serial comms
@@ -203,10 +203,10 @@ hw_ver_t get_hardware_version() {
   return ver;
 }
 
-void readRssi() {
-  static long lastSMeterReport = -1;
+void rssiLoop() {
+  static long lastRssiReport = -1;
   if (mode == MODE_RX) {
-    if ((millis() - lastSMeterReport) >= SMETER_REPORT_INTERVAL_MS) {
+    if ((millis() - lastRssiReport) >= RSSI_REPORT_INTERVAL_MS) {
       // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
       // return value from the module, and just tells us success/fail.
       // int rssi = dra->rssi();
@@ -219,7 +219,7 @@ void readRssi() {
           sendRssi((uint8_t)rssiInt);
         }
       }
-      lastSMeterReport = millis();
+      lastRssiReport = millis();
     }
   }
 }
@@ -231,5 +231,5 @@ void loop() {
   rxAudioLoop();
   txAudioLoop();
   buttonsLoop();
-  readRssi();
+  rssiLoop();
 }
