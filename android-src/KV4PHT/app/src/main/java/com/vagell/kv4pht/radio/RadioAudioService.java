@@ -1233,7 +1233,7 @@ public class RadioAudioService extends Service {
             case COMMAND_SMETER_REPORT:
                 Protocol.Rssi.from(param)
                     .map(Protocol.Rssi::getSMeter9Value)
-                    .ifPresent(s -> callbacks.sMeterUpdate(s));
+                    .ifPresent(callbacks::sMeterUpdate);
                 break;
 
             case COMMAND_PHYS_PTT_DOWN:
@@ -1282,54 +1282,62 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_RX_AUDIO:
-                if (mode == MODE_RX || mode == MODE_SCAN) {
-                    if (afskDemodulator != null) { // Avoid race condition at app start.
-                        // Play the audio.
-                        byte[] pcm16 = convert8BitTo16Bit(param);
-                        audioTrack.write(pcm16, 0, pcm16.length);
-                        // Add the audio samples to the AFSK demodulator.
-                        float[] audioAsFloats = convertPCM8SignedToFloatArray(param);
-                        afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
-                    }
-                    if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                        audioTrack.play();
-                    }
-                    if (mode == MODE_SCAN) {
-                        // Track consecutive silent bytes for scanning logic.
-                        for (byte b : param) {
-                            if (b == SILENT_BYTE) {
-                                consecutiveSilenceBytes++;
-                                checkScanDueToSilence();
-                            } else {
-                                consecutiveSilenceBytes = 0;
-                            }
-                        }
-                    }
-                }
+                handleAudio(param);
                 break;
 
             case COMMAND_VERSION:
-                if (mode == MODE_STARTUP) {
-                    Protocol.FirmwareVersion.from(param).ifPresent(ver -> {
-                        if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
-                            Log.e("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware "
-                                    + FirmwareUtils.PACKAGED_FIRMWARE_VER);
-                            Optional.ofNullable(callbacks).ifPresent(cb -> cb.outdatedFirmware(ver.getVer()));
-                            return;
-                        }
-                        Log.i("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
-                        radioModuleNotFound = ver.getRadioModuleStatus() != RadioStatus.RADIO_STATUS_FOUND;
-                        if (radioModuleNotFound) {
-                            Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
-                        } else {
-                            initAfterESP32Connected();
-                        }
-                    });
-                }
+                handleVersion(param);
                 break;
 
             default:
                 break;
+        }
+    }
+
+    private void handleVersion(byte[] param) {
+        if (mode == MODE_STARTUP) {
+            Protocol.FirmwareVersion.from(param).ifPresent(ver -> {
+                if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+                    Log.e("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware "
+                            + FirmwareUtils.PACKAGED_FIRMWARE_VER);
+                    Optional.ofNullable(callbacks).ifPresent(cb -> cb.outdatedFirmware(ver.getVer()));
+                    return;
+                }
+                Log.i("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
+                radioModuleNotFound = ver.getRadioModuleStatus() != RadioStatus.RADIO_STATUS_FOUND;
+                if (radioModuleNotFound) {
+                    Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
+                } else {
+                    initAfterESP32Connected();
+                }
+            });
+        }
+    }
+
+    private void handleAudio(byte[] param) {
+        if (mode == MODE_RX || mode == MODE_SCAN) {
+            if (afskDemodulator != null) { // Avoid race condition at app start.
+                // Play the audio.
+                byte[] pcm16 = convert8BitTo16Bit(param);
+                audioTrack.write(pcm16, 0, pcm16.length);
+                // Add the audio samples to the AFSK demodulator.
+                float[] audioAsFloats = convertPCM8SignedToFloatArray(param);
+                afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
+            }
+            if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                audioTrack.play();
+            }
+            if (mode == MODE_SCAN) {
+                // Track consecutive silent bytes for scanning logic.
+                for (byte b : param) {
+                    if (b == SILENT_BYTE) {
+                        consecutiveSilenceBytes++;
+                        checkScanDueToSilence();
+                    } else {
+                        consecutiveSilenceBytes = 0;
+                    }
+                }
+            }
         }
     }
 
