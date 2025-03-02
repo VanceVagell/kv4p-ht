@@ -1227,7 +1227,7 @@ public class RadioAudioService extends Service {
         return pcm16;
     }
 
-    @SuppressWarnings({"java:S3776", "java:S6541"})
+    @SuppressWarnings({"java:S6541"})
     private void handleParsedCommand(RcvCommand cmd, byte[] param) {
         switch (cmd) {
             case COMMAND_SMETER_REPORT:
@@ -1328,26 +1328,20 @@ public class RadioAudioService extends Service {
 
     private void handleRxAudio(byte[] param) {
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            if (afskDemodulator != null) { // Avoid race condition at app start.
-                // Play the audio.
+            if (afskDemodulator != null) {
                 byte[] pcm16 = convert8BitTo16Bit(param);
                 audioTrack.write(pcm16, 0, pcm16.length);
-                // Add the audio samples to the AFSK demodulator.
-                float[] audioAsFloats = convertPCM8SignedToFloatArray(param);
-                afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
+                afskDemodulator.addSamples(convertPCM8SignedToFloatArray(param), param.length);
             }
             if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                 audioTrack.play();
             }
-            if (mode == MODE_SCAN) {
-                // Track consecutive silent bytes for scanning logic.
-                for (byte b : param) {
-                    if (b == SILENT_BYTE) {
-                        consecutiveSilenceBytes++;
-                        checkScanDueToSilence();
-                    } else {
-                        consecutiveSilenceBytes = 0;
-                    }
+        }
+        if (mode == MODE_SCAN) {
+            for (byte b : param) {
+                consecutiveSilenceBytes = (b == SILENT_BYTE) ? consecutiveSilenceBytes + 1 : 0;
+                if (b == SILENT_BYTE) {
+                    checkScanDueToSilence();
                 }
             }
         }
