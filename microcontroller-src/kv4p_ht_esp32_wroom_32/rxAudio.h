@@ -72,7 +72,6 @@ void rxAudioLoop() {
     ESP_ERROR_CHECK(i2s_read(I2S_NUM_0, &buffer16, sizeof(buffer16), &bytesRead, 0));
     if (bytesRead > 0) {
       size_t samplesRead = bytesRead / 2;
-      squelched = (digitalRead(SQ_PIN) == HIGH);
       for (int i = 0; i < samplesRead; i++) {
         int16_t sample = remove_dc(2048 - (int16_t)(buffer16[i] & 0xfff));
         buffer8[i]     = squelched ? 0 : (sample >> 4);  // Signed

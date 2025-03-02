@@ -225,6 +225,7 @@ void rssiLoop() {
 }
 
 void loop() {
+  squelched = (digitalRead(SQ_PIN) == HIGH);
   debugLoop();
   ledLoop();
   protocolLoop();
