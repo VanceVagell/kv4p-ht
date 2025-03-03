@@ -1326,7 +1326,7 @@ public class RadioAudioService extends Service {
             for (int i = 0; i < len; i++) {
                 if (param[i] != SILENT_BYTE) {
                     consecutiveSilenceBytes = 0;
-                    break;
+                    continue;
                 }
                 consecutiveSilenceBytes++;
                 checkScanDueToSilence();
