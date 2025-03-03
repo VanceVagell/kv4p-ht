@@ -111,6 +111,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class RadioAudioService extends Service {
 
+    private static final  String FIRMWARE_TAG = "firmware";
+
     // Binder given to clients.
     private final IBinder binder = new RadioBinder();
 
@@ -1230,23 +1232,23 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_DEBUG_INFO:
-                Log.i("firmware", new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.i(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_DEBUG:
-                Log.d("firmware", new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.d(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_ERROR:
-                Log.e("firmware", new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.e(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_WARN:
-                Log.w("firmware", new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.w(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_TRACE:
-                Log.v("firmware", new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.v(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_HELLO:
