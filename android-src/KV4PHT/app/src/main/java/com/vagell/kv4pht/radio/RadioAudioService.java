@@ -135,7 +135,7 @@ public class RadioAudioService extends Service {
     // For transmitting audio to ESP32 / radio
     public static final int AUDIO_SAMPLE_RATE = 22050;
     public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    public static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
+    public static final int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
     public static final int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 4;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
@@ -1215,18 +1215,6 @@ public class RadioAudioService extends Service {
         return serialPort;
     }
 
-    public static byte[] convert8BitTo16Bit(byte[] pcm8) {
-        byte[] pcm16 = new byte[pcm8.length * 2];  // 2 bytes per 16-bit sample
-        for (int i = 0; i < pcm8.length; i++) {
-            int unsignedSample = pcm8[i] & 0xFF;  // Convert to unsigned
-            short sample16 = (short) ((unsignedSample) << 8);  // Scale and shift
-            // Store as little-endian (least significant byte first)
-            pcm16[i * 2] = (byte) (sample16 & 0xFF);          // LSB
-            pcm16[i * 2 + 1] = (byte) ((sample16 >> 8) & 0xFF); // MSB
-        }
-        return pcm16;
-    }
-
     @SuppressWarnings({"java:S6541"})
     private void handleParsedCommand(RcvCommand cmd, byte[] param) {
         switch (cmd) {
@@ -1328,12 +1316,12 @@ public class RadioAudioService extends Service {
 
     private void handleRxAudio(byte[] param) {
         if (mode == MODE_RX || mode == MODE_SCAN) {
+            float[] pcmFloat = convertPCM8SignedToFloatArray(param);
             if (afskDemodulator != null) {
-                afskDemodulator.addSamples(convertPCM8SignedToFloatArray(param), param.length);
+                afskDemodulator.addSamples(pcmFloat, pcmFloat.length);
             }
             if (audioTrack != null) {
-                byte[] pcm16 = convert8BitTo16Bit(param);
-                audioTrack.write(pcm16, 0, pcm16.length);
+                audioTrack.write(pcmFloat, 0, pcmFloat.length, AudioTrack.WRITE_NON_BLOCKING);
                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                     audioTrack.play();
                 }
@@ -1354,13 +1342,11 @@ public class RadioAudioService extends Service {
     private float[] convertPCM8SignedToFloatArray(byte[] pcm8Data) {
         // Create a float array of the same length as the input byte array
         float[] floatData = new float[pcm8Data.length];
-
         // Iterate through the byte array and convert each sample
         for (int i = 0; i < pcm8Data.length; i++) {
             // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = pcm8Data[i] / 128.0f;
+            floatData[i] = pcm8Data[i] / 127.0f;
         }
-
         return floatData;
     }
 
