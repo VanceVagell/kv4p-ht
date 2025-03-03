@@ -168,16 +168,12 @@ private:
   uint8_t _matchedDelimiterTokens;
   RcvCommand _command;
   uint8_t _commandParamLen; 
-  uint8_t _commandParams[256];  
+  uint8_t _commandParams[PROTO_MTU];
   uint8_t _paramIndex;
 
-  void processByte(uint8_t b) {
+  void inline processByte(uint8_t b) {
     if (_matchedDelimiterTokens < DELIMITER_LENGTH) {
-      if (b == COMMAND_DELIMITER[_matchedDelimiterTokens]) {
-        _matchedDelimiterTokens++;
-      } else {
-        _matchedDelimiterTokens = 0;  // Reset on mismatch
-      }
+      _matchedDelimiterTokens = (b == COMMAND_DELIMITER[_matchedDelimiterTokens]) ? _matchedDelimiterTokens + 1 : 0;
     } else if (_matchedDelimiterTokens == DELIMITER_LENGTH) {
       _command = (RcvCommand)b;
       _matchedDelimiterTokens++;
@@ -187,7 +183,7 @@ private:
       _matchedDelimiterTokens++;
       if (_commandParamLen == 0) {
         _callback(_command, _commandParams, 0);
-        reset();
+        resetParser();
       }
     } else {
       if (_paramIndex < _commandParamLen) {
@@ -195,19 +191,24 @@ private:
       }
       if (_paramIndex == _commandParamLen) {
         _callback(_command, _commandParams, _commandParamLen);
-        reset();
+        resetParser();
       }
     }
   }
 
-  void reset() {
+  void resetParser() {
     _matchedDelimiterTokens = 0;
     _paramIndex = 0;
     _commandParamLen = 0;
   }
 };
 
+// Forward declaration of handleCommands function
+// This function processes incoming commands, taking a command type, parameters, and their length.
 void handleCommands(RcvCommand command, uint8_t *params, size_t param_len);
+
+// Create an instance of FrameParser and associate it with the handleCommands function
+// The FrameParser object uses the Serial interface and the handleCommands function for processing commands.
 FrameParser parser(Serial, &handleCommands);
 
 void inline protocolLoop() {
