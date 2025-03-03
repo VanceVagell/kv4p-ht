@@ -1029,8 +1029,7 @@ public class RadioAudioService extends Service {
         timeOutHandler.removeCallbacksAndMessages(null);
         timeOutHandler.postDelayed(() -> {
             if (mode == MODE_STARTUP && !checkedFirmwareVersion) {
-                Log.d("DEBUG",
-                    "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
+                Log.d("DEBUG", "Error: Did not hear back from ESP32 after requesting its firmware version. Offering to flash.");
                 callbacks.missingFirmware();
                 setMode(MODE_BAD_FIRMWARE);
             }
@@ -1039,10 +1038,8 @@ public class RadioAudioService extends Service {
 
     private void initAfterESP32Connected() {
         setMode(MODE_RX);
-
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
-
         if (callbacks != null) {
             callbacks.radioConnected();
         }
