@@ -956,10 +956,8 @@ public class RadioAudioService extends Service {
                 findESP32Device(); // Attempt to reconnect after the brief pause above.
             }
         });
-        usbIoManager.setWriteBufferSize(
-            90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadBufferSize(
-            1024); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
+        usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
+        usbIoManager.setReadBufferSize(1024); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.setReadBufferCount(16 * 2);
         usbIoManager.start();
         hostToEsp32 = new Protocol.Sender(usbIoManager);
