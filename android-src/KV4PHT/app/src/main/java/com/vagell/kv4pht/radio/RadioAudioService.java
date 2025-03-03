@@ -1349,7 +1349,7 @@ public class RadioAudioService extends Service {
         // Clamp the float value to the range [-1.0, 1.0]
         float clampedValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
         // Convert float to signed 8-bit PCM range [-128, 127]
-        return (byte) (Math.round(clampedValue * 127) + 128);
+        return (byte) (Math.round(clampedValue * 127.0f) + 128);
     }
 
     private void initAFSKModem() {
