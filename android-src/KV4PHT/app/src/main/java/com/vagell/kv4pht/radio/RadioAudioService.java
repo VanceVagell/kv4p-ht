@@ -94,7 +94,6 @@ import org.apache.commons.lang3.ArrayUtils;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,7 +142,6 @@ public class RadioAudioService extends Service {
     private SerialInputOutputManager usbIoManager;
     private Protocol.Sender hostToEsp32;
     private Map<String, Integer> mTones = new HashMap<>();
-    private static final int MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP = 400;
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
