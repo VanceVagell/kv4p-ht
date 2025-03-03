@@ -137,6 +137,14 @@ void printEnvironment() {
 #endif  
 }
 
+#ifndef RELEASE
+extern "C" void _esp_error_check_failed(esp_err_t rc, const char *file, int line, const char *function, const char *expression){
+  debug_log_printf(COMMAND_DEBUG_ERROR, "[%6u][E][%s:%u]: %s ==> %s", (unsigned long) (esp_timer_get_time() / 1000ULL), file, line, expression, esp_err_to_name(rc));
+  debug_log_printf(COMMAND_DEBUG_ERROR, "[%6u][E][%s:%u]: ESP_ERROR_CHECK failed! Halting.", (unsigned long) (esp_timer_get_time() / 1000ULL), file, line);
+  while (true);
+}
+#endif 
+
 void measureLoopFrequency() {
 #ifndef RELEASE
   // Exponential Weighted Moving Average (EWMA) for loop time
