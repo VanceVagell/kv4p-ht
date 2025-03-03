@@ -1348,7 +1348,7 @@ public class RadioAudioService extends Service {
     private byte convertFloatToPCM8(float floatValue) {
         // Clamp the float value to the range [-1.0, 1.0]
         float clampedValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
-        // Convert signed 8-bit value to unsigned 8-bit PCM (range 0 to 255)
+        // Convert to unsigned 8-bit PCM (range 0 to 255)
         return (byte) (Math.round(clampedValue * 127.0f) + 128);
     }
 
