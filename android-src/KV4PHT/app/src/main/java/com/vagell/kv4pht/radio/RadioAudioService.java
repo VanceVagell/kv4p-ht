@@ -134,9 +134,9 @@ public class RadioAudioService extends Service {
 
     // For transmitting audio to ESP32 / radio
     public static final int AUDIO_SAMPLE_RATE = 22050;
-    public static final int CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
-    public static final int AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
-    public static final int MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT) * 2;
+    public static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
+    public static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
+    public static final int RX_AUDIO_MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, RX_AUDIO_CHANNEL_CONFIG, RX_AUDIO_FORMAT) * 2;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private static UsbSerialPort serialPort;
@@ -759,12 +759,12 @@ public class RadioAudioService extends Service {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build())
             .setAudioFormat(new AudioFormat.Builder()
-                .setEncoding(AUDIO_FORMAT)
+                .setEncoding(RX_AUDIO_FORMAT)
                 .setSampleRate(AUDIO_SAMPLE_RATE)
                 .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .build())
             .setTransferMode(AudioTrack.MODE_STREAM)
-            .setBufferSizeInBytes(MIN_BUFFER_SIZE)
+            .setBufferSizeInBytes(RX_AUDIO_MIN_BUFFER_SIZE)
             .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
             .build();
         audioTrack.setAuxEffectSendLevel(0.0f);
