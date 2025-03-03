@@ -22,6 +22,7 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_UHF;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_VHF;
+import static com.vagell.kv4pht.radio.Protocol.PROTO_MTU;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -147,6 +148,7 @@ public class RadioAudioService extends Service {
     private static final int MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP = 400;
 
     // For receiving audio from ESP32 / radio
+    private final float[] pcmFloat = new float[PROTO_MTU];
     private AudioTrack audioTrack;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
@@ -1311,12 +1313,12 @@ public class RadioAudioService extends Service {
 
     private void handleRxAudio(final byte[] param, final Integer len) {
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            float[] pcmFloat = convertPCM8SignedToFloatArray(param, len);
+            convertPCM8SignedToFloatArray(param, len, pcmFloat);
             if (afskDemodulator != null) {
-                afskDemodulator.addSamples(pcmFloat, pcmFloat.length);
+                afskDemodulator.addSamples(pcmFloat, len);
             }
             if (audioTrack != null) {
-                audioTrack.write(pcmFloat, 0, pcmFloat.length, AudioTrack.WRITE_NON_BLOCKING);
+                audioTrack.write(pcmFloat, 0, len, AudioTrack.WRITE_NON_BLOCKING);
                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                     audioTrack.play();
                 }
@@ -1334,15 +1336,12 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private float[] convertPCM8SignedToFloatArray(final byte[] pcm8Data, final Integer len) {
-        // Create a float array of the same length as the input byte array
-        float[] floatData = new float[len];
+    private void convertPCM8SignedToFloatArray(final byte[] pcm8Data, final Integer len, final float[] floatData) {
         // Iterate through the byte array and convert each sample
         for (int i = 0; i < len; i++) {
             // Normalize the signed 8-bit value to the range [-1.0, 1.0]
             floatData[i] = pcm8Data[i] / 127.0f;
         }
-        return floatData;
     }
 
     private byte convertFloatToPCM8(float floatValue) {
