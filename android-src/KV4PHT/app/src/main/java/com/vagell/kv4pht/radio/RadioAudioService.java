@@ -18,6 +18,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
+import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
+import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
+import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_UHF;
+import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_VHF;
+
 import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -76,18 +81,24 @@ import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
+import com.vagell.kv4pht.radio.Protocol.Config;
+import com.vagell.kv4pht.radio.Protocol.Filters;
+import com.vagell.kv4pht.radio.Protocol.FrameParser;
+import com.vagell.kv4pht.radio.Protocol.Group;
+import com.vagell.kv4pht.radio.Protocol.RadioStatus;
+import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.ui.MainActivity;
 
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -98,6 +109,7 @@ import java.util.concurrent.TimeUnit;
  * continues to play even if the phone's screen is off or the user starts another app.
  */
 public class RadioAudioService extends Service {
+
     // Binder given to clients.
     private final IBinder binder = new RadioBinder();
 
@@ -122,14 +134,15 @@ public class RadioAudioService extends Service {
 
     // For transmitting audio to ESP32 / radio
     public static final int AUDIO_SAMPLE_RATE = 22050;
-    public static final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    public static final  int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
-    public static final  int minBufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 4;
+    public static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
+    public static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
+    public static final int RX_AUDIO_MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, RX_AUDIO_CHANNEL_CONFIG, RX_AUDIO_FORMAT) * 2;
     private UsbManager usbManager;
     private UsbDevice esp32Device;
     private static UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
-    private static final int TX_AUDIO_CHUNK_SIZE = 512; // Tx audio bytes to send to ESP32 in a single USB write
+    private Protocol.Sender hostToEsp32;
+    private static final int TX_AUDIO_CHUNK_SIZE = Protocol.PROTO_MTU; // Tx audio bytes to send to ESP32 in a single USB write
     private Map<String, Integer> mTones = new HashMap<>();
     private static final int MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP = 400;
 
@@ -138,21 +151,7 @@ public class RadioAudioService extends Service {
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
 
-    // Delimiter must match ESP32 code
-    static final byte[] COMMAND_DELIMITER = new byte[] {(byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF, (byte)0xDE, (byte)0xAD, (byte)0xBE, (byte)0xEF};
-    private static final byte COMMAND_SMETER_REPORT  = 0x53; // Ascii "S"
-    private static final byte COMMAND_PHYS_PTT_DOWN  = 0x44; // Ascii "D"
-    private static final byte COMMAND_PHYS_PTT_UP    = 0x55;   // Ascii "U"
-    private static final byte COMMAND_DEBUG_INFO     = 0x01;
-    private static final byte COMMAND_DEBUG_ERROR    = 0x02;
-    private static final byte COMMAND_DEBUG_WARN     = 0x03;
-    private static final byte COMMAND_DEBUG_DEBUG    = 0x04;
-    private static final byte COMMAND_DEBUG_TRACE    = 0x05;
-    private static final byte COMMAND_HELLO          = 0x06;
-    private static final byte COMMAND_RX_AUDIO       = 0x07;
-    private static final byte COMMAND_VERSION        = 0x08;
-
-    private final ESP32DataStreamParser esp32DataStreamParser = new ESP32DataStreamParser(this::handleParsedCommand);
+    private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
 
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
@@ -160,7 +159,7 @@ public class RadioAudioService extends Service {
     private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
     private static final int MS_SILENCE_BEFORE_DATA = 300;
     private static final int MS_SILENCE_AFTER_DATA = 700;
-    private static final int APRS_MAX_MESSAGE_NUM =  99999;
+    private static final int APRS_MAX_MESSAGE_NUM = 99999;
 
     // APRS position settings
     public static final int APRS_POSITION_EXACT = 0;
@@ -172,15 +171,15 @@ public class RadioAudioService extends Service {
     private Runnable aprsBeaconRunnable = null;
 
     // Radio params and related settings
-    private static final float VHF_MIN_FREQ    = 134.0f; // SA818U lower limit, in MHz
-    private static float min2mTxFreq           = 144.0f; // US 2m band lower limit, in MHz (will be overwritten by user setting)
-    private static float max2mTxFreq           = 148.0f; // US 2m band upper limit, in MHz (will be overwritten by user setting)
-    private static final float VHF_MAX_FREQ    = 174.0f; // SA818U upper limit, in MHz
+    private static final float VHF_MIN_FREQ = 134.0f; // SA818U lower limit, in MHz
+    private static float min2mTxFreq = 144.0f; // US 2m band lower limit, in MHz (will be overwritten by user setting)
+    private static float max2mTxFreq = 148.0f; // US 2m band upper limit, in MHz (will be overwritten by user setting)
+    private static final float VHF_MAX_FREQ = 174.0f; // SA818U upper limit, in MHz
 
-    private static final float UHF_MIN_FREQ    = 400.0f; // SA818U lower limit, in MHz
-    private static float min70cmTxFreq         = 420.0f; // US 70cm band lower limit, in MHz (will be overwritten by user setting)
-    private static float max70cmTxFreq         = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
-    private static final float UHF_MAX_FREQ    = 480.0f; // SA818U upper limit, in MHz (DRA818U can only go to 470MHz)
+    private static final float UHF_MIN_FREQ = 400.0f; // SA818U lower limit, in MHz
+    private static float min70cmTxFreq = 420.0f; // US 70cm band lower limit, in MHz (will be overwritten by user setting)
+    private static float max70cmTxFreq = 450.0f; // US 70cm band upper limit, in MHz (will be overwritten by user setting)
+    private static final float UHF_MAX_FREQ = 480.0f; // SA818U upper limit, in MHz (DRA818U can only go to 470MHz)
 
     private String activeFrequencyStr = null;
     private int squelch = 0;
@@ -194,8 +193,6 @@ public class RadioAudioService extends Service {
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     private String bandwidth = "Wide";
     private boolean txAllowed = true;
-    private static final String RADIO_MODULE_NOT_FOUND = "x";
-    private static final String RADIO_MODULE_FOUND = "f";
     public static final String RADIO_MODULE_VHF = "v";
     public static final String RADIO_MODULE_UHF = "u";
     private String radioType = RADIO_MODULE_VHF;
@@ -213,24 +210,6 @@ public class RadioAudioService extends Service {
     private static int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
 
     private ThreadPoolExecutor threadPoolExecutor = null;
-
-    public enum ESP32Command {
-        PTT_DOWN((byte) 1),
-        PTT_UP((byte) 2),
-        TUNE_TO((byte) 3), // paramsStr contains freq, offset, tone details
-        FILTERS((byte) 4), // paramStr contains emphasis, highpass, lowpass (each 0/1)
-        STOP((byte) 5),
-        GET_FIRMWARE_VER((byte) 6);
-
-        private byte commandByte;
-        ESP32Command(byte commandByte) {
-            this.commandByte = commandByte;
-        }
-
-        public byte getByte() {
-            return commandByte;
-        }
-    }
 
     public enum MicGainBoost {
         NONE,
@@ -267,6 +246,7 @@ public class RadioAudioService extends Service {
      * Class used for the client Binder. This service always runs in the same process as its clients.
      */
     public class RadioBinder extends Binder {
+
         public RadioAudioService getService() {
             // Return this instance of RadioService so clients can call public methods.
             return RadioAudioService.this;
@@ -322,16 +302,30 @@ public class RadioAudioService extends Service {
     }
 
     // These methods enforce the limits below (which change when we switch bands)
-    public void setMinHamFreq(float newMinFreq) { minHamFreq = newMinFreq; }
-    public void setMaxHamFreq(float newMaxFreq) {
+    public static void setMinHamFreq(float newMinFreq) {
+        minHamFreq = newMinFreq;
+    }
+
+    public static void setMaxHamFreq(float newMaxFreq) {
         maxHamFreq = newMaxFreq;
     }
 
     // These will come from user settings
-    public void setMin2mTxFreq(float newMinFreq) { min2mTxFreq = newMinFreq; }
-    public void setMax2mTxFreq(float newMaxFreq) { max2mTxFreq = newMaxFreq; }
-    public void setMin70cmTxFreq(float newMinFreq) { min70cmTxFreq = newMinFreq; }
-    public void setMax70cmTxFreq(float newMaxFreq) { max70cmTxFreq = newMaxFreq; }
+    public static void setMin2mTxFreq(float newMinFreq) {
+        min2mTxFreq = newMinFreq;
+    }
+
+    public static void setMax2mTxFreq(float newMaxFreq) {
+        max2mTxFreq = newMaxFreq;
+    }
+
+    public static void setMin70cmTxFreq(float newMinFreq) {
+        min70cmTxFreq = newMinFreq;
+    }
+
+    public static void setMax70cmTxFreq(float newMaxFreq) {
+        max70cmTxFreq = newMaxFreq;
+    }
 
     public void setAprsBeaconPosition(boolean aprsBeaconPosition) {
         if (!this.aprsBeaconPosition && aprsBeaconPosition) { // If it was off, and now turned on...
@@ -342,7 +336,7 @@ public class RadioAudioService extends Service {
                 @Override
                 public void run() {
                     sendPositionBeacon();
-                    aprsBeaconHandler.postDelayed(this,  60 * APRS_BEACON_MINS * 1000);
+                    aprsBeaconHandler.postDelayed(this, 60 * APRS_BEACON_MINS * 1000);
                 }
             };
             aprsBeaconHandler.postDelayed(aprsBeaconRunnable, 60 * APRS_BEACON_MINS * 1000);
@@ -383,7 +377,7 @@ public class RadioAudioService extends Service {
     public void setMode(int mode) {
         switch (mode) {
             case MODE_FLASHING:
-                sendCommandToESP32(RadioAudioService.ESP32Command.STOP);
+                hostToEsp32.stop();
                 audioTrack.stop();
                 usbIoManager.stop();
                 try {
@@ -442,16 +436,14 @@ public class RadioAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
-
-        messageNumber = (int) (Math.random() * APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
+        SecureRandom random = new SecureRandom();
+        threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+        messageNumber = random.nextInt(APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
     /**
-     * Bound activities should call this when they're done providing any data (via setters),
-     * including the several necessary callback handlers.
+     * Bound activities should call this when they're done providing any data (via setters), including the several
+     * necessary callback handlers.
      */
     public void start() {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
@@ -464,35 +456,56 @@ public class RadioAudioService extends Service {
     }
 
     /**
-     * This must be set before any method that requires channels (like scanning or tuning to a
-     * memory) is access, or they will just report an error. And it should also be called whenever
-     * the active memories have changed (e.g. user selected a different memory group).
+     * This must be set before any method that requires channels (like scanning or tuning to a memory) is access, or
+     * they will just report an error. And it should also be called whenever the active memories have changed (e.g.
+     * user selected a different memory group).
      */
     public void setChannelMemories(LiveData<List<ChannelMemory>> channelMemoriesLiveData) {
         this.channelMemoriesLiveData = channelMemoriesLiveData;
     }
 
     public interface RadioAudioServiceCallbacks {
+
         public void radioMissing();
+
         public void radioConnected();
+
         public void hideSnackbar();
+
         public void radioModuleHandshake();
+
         public void radioModuleNotFound();
+
         public void audioTrackCreated();
+
         public void packetReceived(APRSPacket aprsPacket);
+
         public void scannedToMemory(int memoryId);
+
         public void outdatedFirmware(int firmwareVer);
+
         public void missingFirmware();
+
         public void txAllowed(boolean allowed);
+
         public void txStarted();
+
         public void txEnded();
+
         public void chatError(String snackbarText);
+
         public void sMeterUpdate(int value);
+
         public void aprsBeaconing(boolean beaconing, int accuracy);
+
         public void sentAprsBeacon(double latitude, double longitude);
+
         public void unknownLocation();
+
         public void forceTunedToFreq(String newFreqStr);
+
         public void forcedPttStart();
+
         public void forcedPttEnd();
     }
 
@@ -561,14 +574,18 @@ public class RadioAudioService extends Service {
     private void createNotificationChannels() {
         // Notification channel for APRS text chat messages
         NotificationChannel channel = new NotificationChannel(MESSAGE_NOTIFICATION_CHANNEL_ID,
-                "Chat messages", NotificationManager.IMPORTANCE_DEFAULT);
+            "Chat messages", NotificationManager.IMPORTANCE_DEFAULT);
         channel.setDescription("APRS text chat messages addressed to you");
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.createNotificationChannel(channel);
     }
 
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        sendCommandToESP32(ESP32Command.FILTERS, (emphasis ? "1" : "0") + (highpass ? "1" : "0") + (lowpass ? "1" : "0"));
+        hostToEsp32.filters(Filters.builder()
+            .high(highpass)
+            .low(lowpass)
+            .pre(emphasis)
+            .build());
     }
 
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
@@ -588,9 +605,12 @@ public class RadioAudioService extends Service {
         squelch = squelchLevel;
 
         if (serialPort != null) {
-            sendCommandToESP32(ESP32Command.TUNE_TO, makeSafeHamFreq(activeFrequencyStr) +
-                    makeSafeHamFreq(activeFrequencyStr) + "0000" + squelchLevel +
-                    (bandwidth.equals("Wide") ? "W" : "N"));
+            hostToEsp32.group(Group.builder()
+                .freqTx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
+                .squelch((byte) squelchLevel)
+                .build());
         }
 
         try {
@@ -625,7 +645,7 @@ public class RadioAudioService extends Service {
             freq = maxRadioFreq; // Highest freq supported
         }
 
-        strFreq = String.format(java.util.Locale.US,"%.4f", freq);
+        strFreq = String.format(java.util.Locale.US, "%.4f", freq);
 
         return strFreq;
     }
@@ -677,10 +697,14 @@ public class RadioAudioService extends Service {
         activeMemoryId = memory.memoryId;
 
         if (serialPort != null) {
-            sendCommandToESP32(ESP32Command.TUNE_TO,
-                    getTxFreq(memory.frequency, memory.offset, memory.offsetKhz) + makeSafeHamFreq(memory.frequency) +
-                            getToneIdxStr(memory.txTone) + getToneIdxStr(memory.rxTone) + squelchLevel +
-                            (bandwidth.equals("Wide") ? "W" : "N"));
+            hostToEsp32.group(Group.builder()
+                .freqTx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
+                .squelch((byte) squelchLevel)
+                .ctcssTx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
+                .ctcssTx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
+                .build());
         }
 
         try {
@@ -698,16 +722,6 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private String getToneIdxStr(String toneStr) {
-        if (toneStr == null) {
-            toneStr = "None";
-        }
-
-        Integer toneIdx = mTones.get(toneStr);
-
-        return toneIdx < 10 ? "0" + toneIdx : toneIdx.toString();
-    }
-
     private String getTxFreq(String txFreq, int offset, int khz) {
         if (offset == ChannelMemory.OFFSET_NONE) {
             return txFreq;
@@ -715,7 +729,7 @@ public class RadioAudioService extends Service {
             float freqFloat = Float.parseFloat(txFreq);
             if (offset == ChannelMemory.OFFSET_UP) {
                 freqFloat += 0f + (khz / 1000f);
-            } else if (offset == ChannelMemory.OFFSET_DOWN){
+            } else if (offset == ChannelMemory.OFFSET_DOWN) {
                 freqFloat -= 0f + (khz / 1000f);
             }
             return makeSafeHamFreq(Float.toString(freqFloat));
@@ -740,19 +754,19 @@ public class RadioAudioService extends Service {
             audioTrack = null;
         }
         audioTrack = new AudioTrack.Builder()
-                .setAudioAttributes(new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build())
-                .setAudioFormat(new AudioFormat.Builder()
-                        .setEncoding(audioFormat)
-                        .setSampleRate(AUDIO_SAMPLE_RATE)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build())
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(minBufferSize)
-                .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
-                .build();
+            .setAudioAttributes(new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build())
+            .setAudioFormat(new AudioFormat.Builder()
+                .setEncoding(RX_AUDIO_FORMAT)
+                .setSampleRate(AUDIO_SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build())
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setBufferSizeInBytes(RX_AUDIO_MIN_BUFFER_SIZE)
+            .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
+            .build();
         audioTrack.setAuxEffectSendLevel(0.0f);
 
         if (callbacks != null) {
@@ -786,7 +800,8 @@ public class RadioAudioService extends Service {
                     }
 
                     long elapsedSec = (System.currentTimeMillis() / 1000) - startTxTimeSec;
-                    if (elapsedSec > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
+                    if (elapsedSec
+                        > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
                         Log.d("DEBUG", "Warning: runaway tx timeout reached, PTT stopped.");
                         endPtt();
                     }
@@ -795,9 +810,9 @@ public class RadioAudioService extends Service {
             }
         });
 
-        sendCommandToESP32(ESP32Command.PTT_DOWN);
+        hostToEsp32.pttDown();
         audioTrack.stop();
-        callbacks.txStarted();
+        Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
     }
 
     public void endPtt() {
@@ -812,7 +827,7 @@ public class RadioAudioService extends Service {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                sendCommandToESP32(ESP32Command.PTT_UP);
+                hostToEsp32.pttUp();
                 audioTrack.flush();
                 callbacks.txEnded();
             }
@@ -918,7 +933,7 @@ public class RadioAudioService extends Service {
         usbIoManager = new SerialInputOutputManager(serialPort, new SerialInputOutputManager.Listener() {
             @Override
             public void onNewData(byte[] data) {
-                esp32DataStreamParser.handleCommands(data);
+                esp32DataStreamParser.processBytes(data);
             }
 
             @Override
@@ -943,8 +958,9 @@ public class RadioAudioService extends Service {
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
         usbIoManager.setReadBufferSize(1024); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
-        usbIoManager.setReadBufferCount(16*2);
+        usbIoManager.setReadBufferCount(16 * 2);
         usbIoManager.start();
+        hostToEsp32 = new Protocol.Sender(usbIoManager);
         checkedFirmwareVersion = false;
         gotHello = false;
 
@@ -999,10 +1015,11 @@ public class RadioAudioService extends Service {
 
         // Verify that the firmware of the ESP32 app is supported.
         setMode(MODE_STARTUP);
-        sendCommandToESP32(ESP32Command.STOP); // Tell ESP32 app to stop whatever it's doing.
-        sendCommandToESP32(ESP32Command.GET_FIRMWARE_VER); // Ask for firmware ver.
-        Log.d("DEBUG", "Telling firmware that radio is: " + (radioType.equals(RADIO_MODULE_UHF) ? "UHF" : "VHF"));
-        sendBytesToESP32(radioType.getBytes());
+
+        hostToEsp32.stop();
+        hostToEsp32.config(Config.builder()
+            .moduleType(radioType.equals(RADIO_MODULE_UHF) ? SA818_UHF : SA818_VHF)
+            .build());
         // The version is actually evaluated in handleESP32Data().
 
         // If we don't hear back from the ESP32, it means the firmware is either not
@@ -1019,10 +1036,8 @@ public class RadioAudioService extends Service {
 
     private void initAfterESP32Connected() {
         setMode(MODE_RX);
-
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
-
         if (callbacks != null) {
             callbacks.radioConnected();
         }
@@ -1129,7 +1144,7 @@ public class RadioAudioService extends Service {
             int signedSample = (audioBuffer[i] & 0xFF) - 128;
 
             // Apply gain
-            signedSample = (int)(signedSample * gain);
+            signedSample = (int) (signedSample * gain);
 
             // Clip to [-128..127]
             signedSample = Math.min(127, signedSample);
@@ -1151,7 +1166,7 @@ public class RadioAudioService extends Service {
         }
 
         if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
-            sendBytesToESP32(audioBuffer);
+            hostToEsp32.txAudio(audioBuffer);
         } else {
             // If the audio is fairly long, we need to send it to ESP32 at the same rate
             // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
@@ -1166,10 +1181,10 @@ public class RadioAudioService extends Service {
                     @Override
                     public void run() {
                         android.os.Process.setThreadPriority(
-                                android.os.Process.THREAD_PRIORITY_BACKGROUND +
-                                        android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        sendBytesToESP32(Arrays.copyOfRange(finalAudioBuffer, chunkStart,
-                                Math.min(finalAudioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
+                            android.os.Process.THREAD_PRIORITY_BACKGROUND +
+                                android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
+                        hostToEsp32.txAudio(Arrays.copyOfRange(finalAudioBuffer, chunkStart,
+                            Math.min(finalAudioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
                     }
                 }, (int) nextSendDelay);
 
@@ -1182,8 +1197,8 @@ public class RadioAudioService extends Service {
                     @Override
                     public void run() {
                         android.os.Process.setThreadPriority(
-                                android.os.Process.THREAD_PRIORITY_BACKGROUND +
-                                        android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
+                            android.os.Process.THREAD_PRIORITY_BACKGROUND +
+                                android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
                         endPtt();
                     }
                 }, (int) nextSendDelay);
@@ -1191,162 +1206,142 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public void sendCommandToESP32(ESP32Command command) {
-        byte[] commandArray = { COMMAND_DELIMITER[0], COMMAND_DELIMITER[1],
-                COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
-                COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
-        sendBytesToESP32(commandArray);
-        Log.d("DEBUG", "Sent command: " + command);
-    }
-
-    public void sendCommandToESP32(ESP32Command command, String paramsStr) {
-        byte[] commandArray = { COMMAND_DELIMITER[0], COMMAND_DELIMITER[1],
-                COMMAND_DELIMITER[2], COMMAND_DELIMITER[3], COMMAND_DELIMITER[4], COMMAND_DELIMITER[5],
-                COMMAND_DELIMITER[6], COMMAND_DELIMITER[7], command.getByte() };
-        byte[] combined = new byte[commandArray.length + paramsStr.length()];
-        ByteBuffer buffer = ByteBuffer.wrap(combined);
-        buffer.put(commandArray);
-        buffer.put(paramsStr.getBytes(StandardCharsets.US_ASCII));
-        combined = buffer.array();
-
-        // Write it in a single call so the params have a better chance (?) to fit in receive buffer on mcu.
-        // A little concerned there could be a bug here in rare chance that these bytes span receive
-        // buffer size on mcu.
-        // TODO implement a more robust way (in mcu code) of ensuring params are received by mcu
-        sendBytesToESP32(combined);
-        Log.d("DEBUG", "Sent command: " + command + " params: " + paramsStr);
-    }
-
-    public synchronized void sendBytesToESP32(byte[] newBytes) {
-        if (mode == MODE_BAD_FIRMWARE) {
-            Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 with bad firmware.");
-            return;
-        }
-
-        if (mode == MODE_FLASHING) {
-            Log.d("DEBUG", "Warning: Attempted to send bytes to ESP32 while in the process of flashing a new firmware.");
-            return;
-        }
-
-        if (null == usbIoManager) {
-            Log.d("DEBUG", "Warning: usbIoManager was null when trying to send bytes to ESP32.");
-            return;
-        }
-
-        usbIoManager.writeAsync(newBytes);
-    }
-
     public static UsbSerialPort getUsbSerialPort() {
         return serialPort;
     }
 
-    public static byte[] convert8BitTo16Bit(byte[] pcm8) {
-        byte[] pcm16 = new byte[pcm8.length * 2];  // 2 bytes per 16-bit sample
-        for (int i = 0; i < pcm8.length; i++) {
-            int unsignedSample = pcm8[i] & 0xFF;  // Convert to unsigned
-            short sample16 = (short)((unsignedSample) << 8);  // Scale and shift
-            // Store as little-endian (least significant byte first)
-            pcm16[i * 2] = (byte)(sample16 & 0xFF);          // LSB
-            pcm16[i * 2 + 1] = (byte)((sample16 >> 8) & 0xFF); // MSB
+    @SuppressWarnings({"java:S6541"})
+    private void handleParsedCommand(RcvCommand cmd, byte[] param) {
+        switch (cmd) {
+            case COMMAND_SMETER_REPORT:
+                Protocol.Rssi.from(param)
+                    .map(Protocol.Rssi::getSMeter9Value)
+                    .ifPresent(callbacks::sMeterUpdate);
+                break;
+
+            case COMMAND_PHYS_PTT_DOWN:
+                handlePhysicalPttDown();
+                break;
+
+            case COMMAND_PHYS_PTT_UP:
+                handlePhysicalPttUp();
+                break;
+
+            case COMMAND_DEBUG_INFO:
+                Log.i("firmware", new String(param));
+                break;
+
+            case COMMAND_DEBUG_DEBUG:
+                Log.d("firmware", new String(param));
+                break;
+
+            case COMMAND_DEBUG_ERROR:
+                Log.e("firmware", new String(param));
+                break;
+
+            case COMMAND_DEBUG_WARN:
+                Log.w("firmware", new String(param));
+                break;
+
+            case COMMAND_DEBUG_TRACE:
+                Log.v("firmware", new String(param));
+                break;
+
+            case COMMAND_HELLO:
+                handleHello();
+                break;
+
+            case COMMAND_RX_AUDIO:
+                handleRxAudio(param);
+                break;
+
+            case COMMAND_VERSION:
+                handleVersion(param);
+                break;
+
+            default:
+                break;
         }
-        return pcm16;
     }
 
-    private void handleParsedCommand(byte cmd, byte[] param) {
-        if (cmd == COMMAND_SMETER_REPORT) {
-            callbacks.sMeterUpdate(new Rssi(param).getSMeter9Value());
-        } else if (cmd == COMMAND_PHYS_PTT_DOWN) {
-            if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
-                startPtt();
-                callbacks.forcedPttStart();
-            }
-        } else if (cmd == COMMAND_PHYS_PTT_UP) {
-            if (mode == MODE_TX) {
-                endPtt();
-                callbacks.forcedPttEnd();
-            }
-        } else if (cmd == COMMAND_DEBUG_INFO) {
-            Log.i("firmware", new String(param));
-        } else if (cmd == COMMAND_DEBUG_DEBUG) {
-            Log.d("firmware", new String(param));
-        } else if (cmd == COMMAND_DEBUG_ERROR) {
-            Log.e("firmware", new String(param));
-        } else if (cmd == COMMAND_DEBUG_WARN) {
-            Log.w("firmware", new String(param));
-        } else if (cmd == COMMAND_DEBUG_TRACE) {
-            Log.v("firmware", new String(param));
-        } else if (cmd == COMMAND_HELLO) {
-            gotHello = true;
-            if (audioTrack != null) {
-                audioTrack.stop();
-            }
-            if (callbacks != null) {
-                callbacks.radioModuleHandshake();
-            }
-            checkFirmwareVersion();
-        } else if ((cmd == COMMAND_RX_AUDIO) && (mode == MODE_RX || mode == MODE_SCAN)) {
-            if (afskDemodulator != null) { // Avoid race condition at app start.
-                // Play the audio.
-                byte[] pcm16 = convert8BitTo16Bit(param);
-                audioTrack.write(pcm16, 0, pcm16.length);
-                // Add the audio samples to the AFSK demodulator.
-                float[] audioAsFloats = convertPCM8SignedToFloatArray(param);
-                afskDemodulator.addSamples(audioAsFloats, audioAsFloats.length);
-            }
-            if (audioTrack != null && audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                audioTrack.play();
-            }
-            if (mode == MODE_SCAN) {
-                // Track consecutive silent bytes, so if we're scanning we can move to next after a while.
-                for (int i = 0; i < param.length; i++) {
-                    if (param[i] == SILENT_BYTE) {
-                        consecutiveSilenceBytes++;
-                        // Log.d("DEBUG", "consecutiveSilenceBytes: " + consecutiveSilenceBytes);
-                        checkScanDueToSilence();
-                    } else {
-                        consecutiveSilenceBytes = 0;
-                    }
-                }
-            }
-        } else if ((cmd == COMMAND_VERSION) && (mode == MODE_STARTUP)) {
-            final FirmwareVersion ver = new FirmwareVersion(param);
-            if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
-                Log.d("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware " + FirmwareUtils.PACKAGED_FIRMWARE_VER);
-                if (callbacks != null) {
-                    callbacks.outdatedFirmware(ver.getVer());
-                }
-            } else {
-                Log.d("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
-                if (ver.getRadioModuleStatus().equals(RADIO_MODULE_NOT_FOUND)) {
-                    radioModuleNotFound = true;
-                } else if (ver.getRadioModuleStatus().equals(RADIO_MODULE_FOUND)) {
-                    radioModuleNotFound = false;
-                } else {
-                    Log.d("DEBUG", "Error: unexpected radio status received '" + ver.getRadioModuleStatus() + "'");
-                }
-                if (radioModuleNotFound) {
-                    callbacks.radioModuleNotFound();
+    private void handlePhysicalPttUp() {
+        if (mode == MODE_TX) {
+            endPtt();
+            callbacks.forcedPttEnd();
+        }
+    }
+
+    private void handlePhysicalPttDown() {
+        if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
+            startPtt();
+            callbacks.forcedPttStart();
+        }
+    }
+
+    private void handleHello() {
+        gotHello = true;
+        if (audioTrack != null) {
+            audioTrack.stop();
+        }
+        if (callbacks != null) {
+            callbacks.radioModuleHandshake();
+        }
+        checkFirmwareVersion();
+    }
+
+    private void handleVersion(byte[] param) {
+        if (mode == MODE_STARTUP) {
+            Protocol.FirmwareVersion.from(param).ifPresent(ver -> {
+                if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+                    Log.e("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware "
+                            + FirmwareUtils.PACKAGED_FIRMWARE_VER);
+                    Optional.ofNullable(callbacks).ifPresent(cb -> cb.outdatedFirmware(ver.getVer()));
                     return;
                 }
-                initAfterESP32Connected();
-            }
+                Log.i("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
+                radioModuleNotFound = ver.getRadioModuleStatus() != RadioStatus.RADIO_STATUS_FOUND;
+                if (radioModuleNotFound) {
+                    Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
+                } else {
+                    initAfterESP32Connected();
+                }
+            });
+        }
+    }
 
-        } else {
-            Log.d("DEBUG", "Unknown cmd received from ESP32: 0x" + Integer.toHexString(cmd & 0xFF) +
-                    " paramLen=" + param.length);
+    private void handleRxAudio(byte[] param) {
+        if (mode == MODE_RX || mode == MODE_SCAN) {
+            float[] pcmFloat = convertPCM8SignedToFloatArray(param);
+            if (afskDemodulator != null) {
+                afskDemodulator.addSamples(pcmFloat, pcmFloat.length);
+            }
+            if (audioTrack != null) {
+                audioTrack.write(pcmFloat, 0, pcmFloat.length, AudioTrack.WRITE_NON_BLOCKING);
+                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                    audioTrack.play();
+                }
+            }
+        }
+        if (mode == MODE_SCAN) {
+            for (byte b : param) {
+                if (b != SILENT_BYTE) {
+                    consecutiveSilenceBytes = 0;
+                    continue;
+                }
+                consecutiveSilenceBytes++;
+                checkScanDueToSilence();
+            }
         }
     }
 
     private float[] convertPCM8SignedToFloatArray(byte[] pcm8Data) {
         // Create a float array of the same length as the input byte array
         float[] floatData = new float[pcm8Data.length];
-
         // Iterate through the byte array and convert each sample
         for (int i = 0; i < pcm8Data.length; i++) {
             // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = pcm8Data[i] / 128.0f;
+            floatData[i] = pcm8Data[i] / 127.0f;
         }
-
         return floatData;
     }
 
