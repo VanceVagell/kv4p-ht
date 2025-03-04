@@ -1,10 +1,8 @@
 package com.vagell.kv4pht.radio;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Optional;
-import java.util.function.BiConsumer;
 
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.javAX25.ax25.Arrays;
