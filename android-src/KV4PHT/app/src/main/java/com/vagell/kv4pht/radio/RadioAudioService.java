@@ -79,6 +79,7 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
+import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
@@ -1184,23 +1185,23 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_DEBUG_INFO:
-                Log.i(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.i(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_DEBUG:
-                Log.d(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.d(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_ERROR:
-                Log.e(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.e(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_WARN:
-                Log.w(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.w(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_TRACE:
-                Log.v(FIRMWARE_TAG, new String(com.vagell.kv4pht.javAX25.ax25.Arrays.copyOf(param, len)));
+                Log.v(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_HELLO:
