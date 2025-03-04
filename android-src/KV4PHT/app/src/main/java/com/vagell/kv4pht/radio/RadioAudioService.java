@@ -22,6 +22,7 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_UHF;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_VHF;
+import static com.vagell.kv4pht.radio.Protocol.PROTO_MTU;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -78,6 +79,7 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
+import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
@@ -108,6 +110,8 @@ import java.util.concurrent.TimeUnit;
  * continues to play even if the phone's screen is off or the user starts another app.
  */
 public class RadioAudioService extends Service {
+
+    private static final  String FIRMWARE_TAG = "firmware";
 
     // Binder given to clients.
     private final IBinder binder = new RadioBinder();
@@ -144,6 +148,7 @@ public class RadioAudioService extends Service {
     private Map<String, Integer> mTones = new HashMap<>();
 
     // For receiving audio from ESP32 / radio
+    private final float[] pcmFloat = new float[PROTO_MTU];
     private AudioTrack audioTrack;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
@@ -1163,10 +1168,10 @@ public class RadioAudioService extends Service {
     }
 
     @SuppressWarnings({"java:S6541"})
-    private void handleParsedCommand(RcvCommand cmd, byte[] param) {
+    private void handleParsedCommand(final RcvCommand cmd, final byte[] param, final Integer len) {
         switch (cmd) {
             case COMMAND_SMETER_REPORT:
-                Protocol.Rssi.from(param)
+                Protocol.Rssi.from(param, len)
                     .map(Protocol.Rssi::getSMeter9Value)
                     .ifPresent(callbacks::sMeterUpdate);
                 break;
@@ -1180,23 +1185,23 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_DEBUG_INFO:
-                Log.i("firmware", new String(param));
+                Log.i(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_DEBUG:
-                Log.d("firmware", new String(param));
+                Log.d(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_ERROR:
-                Log.e("firmware", new String(param));
+                Log.e(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_WARN:
-                Log.w("firmware", new String(param));
+                Log.w(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_DEBUG_TRACE:
-                Log.v("firmware", new String(param));
+                Log.v(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
 
             case COMMAND_HELLO:
@@ -1204,11 +1209,11 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_RX_AUDIO:
-                handleRxAudio(param);
+                handleRxAudio(param, len);
                 break;
 
             case COMMAND_VERSION:
-                handleVersion(param);
+                handleVersion(param, len);
                 break;
 
             default:
@@ -1241,9 +1246,9 @@ public class RadioAudioService extends Service {
         checkFirmwareVersion();
     }
 
-    private void handleVersion(byte[] param) {
+    private void handleVersion(final byte[] param, final Integer len) {
         if (mode == MODE_STARTUP) {
-            Protocol.FirmwareVersion.from(param).ifPresent(ver -> {
+            Protocol.FirmwareVersion.from(param, len).ifPresent(ver -> {
                 if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                     Log.e("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware "
                             + FirmwareUtils.PACKAGED_FIRMWARE_VER);
@@ -1261,22 +1266,22 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private void handleRxAudio(byte[] param) {
+    private void handleRxAudio(final byte[] param, final Integer len) {
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            float[] pcmFloat = convertPCM8SignedToFloatArray(param);
+            convertPCM8SignedToFloatArray(param, len, pcmFloat);
             if (afskDemodulator != null) {
-                afskDemodulator.addSamples(pcmFloat, pcmFloat.length);
+                afskDemodulator.addSamples(pcmFloat, len);
             }
             if (audioTrack != null) {
-                audioTrack.write(pcmFloat, 0, pcmFloat.length, AudioTrack.WRITE_NON_BLOCKING);
+                audioTrack.write(pcmFloat, 0, len, AudioTrack.WRITE_NON_BLOCKING);
                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                     audioTrack.play();
                 }
             }
         }
         if (mode == MODE_SCAN) {
-            for (byte b : param) {
-                if (b != SILENT_BYTE) {
+            for (int i = 0; i < len; i++) {
+                if (param[i] != SILENT_BYTE) {
                     consecutiveSilenceBytes = 0;
                     continue;
                 }
@@ -1286,26 +1291,19 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private float[] convertPCM8SignedToFloatArray(byte[] pcm8Data) {
-        // Create a float array of the same length as the input byte array
-        float[] floatData = new float[pcm8Data.length];
+    private void convertPCM8SignedToFloatArray(final byte[] pcm8Data, final Integer len, final float[] floatData) {
         // Iterate through the byte array and convert each sample
-        for (int i = 0; i < pcm8Data.length; i++) {
+        for (int i = 0; i < len; i++) {
             // Normalize the signed 8-bit value to the range [-1.0, 1.0]
             floatData[i] = pcm8Data[i] / 127.0f;
         }
-        return floatData;
     }
 
     private byte convertFloatToPCM8(float floatValue) {
-        // Clamp the float value to the range [-1.0, 1.0] to prevent overflow
+        // Clamp the float value to the range [-1.0, 1.0]
         float clampedValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
-
-        // Convert float value in range [-1.0, 1.0] to signed 8-bit value
-        int signedValue = Math.round(clampedValue * 128);
-
-        // Convert signed 8-bit value to unsigned 8-bit PCM (range 0 to 255)
-        return (byte) (signedValue + 128);
+        // Convert to unsigned 8-bit PCM (range 0 to 255)
+        return (byte) (Math.round(clampedValue * 127.0f) + 128);
     }
 
     private void initAFSKModem() {
