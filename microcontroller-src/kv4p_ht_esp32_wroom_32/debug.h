@@ -86,8 +86,44 @@ int debug_log_printf(SndCommand cmd, const char* format, ...) {
 }
 
 void printEnvironment() {
-#ifndef RELEASE 
+#ifndef RELEASE
+  esp_reset_reason_t reset_reason = esp_reset_reason();
   _LOGI("---");
+  switch (reset_reason) {
+    case ESP_RST_POWERON:
+      _LOGI("Reset Reason: Power On Reset");
+      break;
+    case ESP_RST_EXT:
+      _LOGI("Reset Reason: External Pin Reset");
+      break;
+    case ESP_RST_SW:
+      _LOGI("Reset Reason: Software Reset");
+      break;
+    case ESP_RST_PANIC:
+      _LOGI("Reset Reason: Exception/Panic Reset");
+      break;
+    case ESP_RST_INT_WDT:
+      _LOGI("Reset Reason: Interrupt Watchdog Reset");
+      break;
+    case ESP_RST_TASK_WDT:
+      _LOGI("Reset Reason: Task Watchdog Reset");
+      break;
+    case ESP_RST_WDT:
+      _LOGI("Reset Reason: Other Watchdog Reset");
+      break;
+    case ESP_RST_DEEPSLEEP:
+      _LOGI("Reset Reason: Deep Sleep Reset");
+      break;
+    case ESP_RST_BROWNOUT:
+      _LOGI("Reset Reason: Brownout Reset");
+      break;
+    case ESP_RST_SDIO:
+      _LOGI("Reset Reason: SDIO Reset");
+      break;
+    default:
+      _LOGI("Reset Reason: Unknown");
+      break;
+  }
   _LOGI("Heap Size: %d", ESP.getHeapSize());
   _LOGI("SDK Version: %s", ESP.getSdkVersion());
   _LOGI("CPU Freq: %d", ESP.getCpuFreqMHz());
@@ -100,6 +136,14 @@ void printEnvironment() {
   _LOGI("---");
 #endif  
 }
+
+#ifndef RELEASE
+extern "C" void _esp_error_check_failed(esp_err_t rc, const char *file, int line, const char *function, const char *expression){
+  debug_log_printf(COMMAND_DEBUG_ERROR, "[%6u][E][%s:%u]: %s ==> %s", (unsigned long) (esp_timer_get_time() / 1000ULL), file, line, expression, esp_err_to_name(rc));
+  debug_log_printf(COMMAND_DEBUG_ERROR, "[%6u][E][%s:%u]: ESP_ERROR_CHECK failed! Halting.", (unsigned long) (esp_timer_get_time() / 1000ULL), file, line);
+  while (true);
+}
+#endif 
 
 void measureLoopFrequency() {
 #ifndef RELEASE

@@ -94,7 +94,6 @@ import org.apache.commons.lang3.ArrayUtils;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -142,9 +141,7 @@ public class RadioAudioService extends Service {
     private static UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
     private Protocol.Sender hostToEsp32;
-    private static final int TX_AUDIO_CHUNK_SIZE = Protocol.PROTO_MTU; // Tx audio bytes to send to ESP32 in a single USB write
     private Map<String, Integer> mTones = new HashMap<>();
-    private static final int MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP = 400;
 
     // For receiving audio from ESP32 / radio
     private AudioTrack audioTrack;
@@ -820,18 +817,9 @@ public class RadioAudioService extends Service {
             return;
         }
         setMode(MODE_RX);
-
-        // Hold off on telling the ESP32 firmware to PTT_UP, because we want the last bit of
-        // tx audio to be transmitted first (it's stuck in buffers).
-        final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                hostToEsp32.pttUp();
-                audioTrack.flush();
-                callbacks.txEnded();
-            }
-        }, MS_FOR_FINAL_TX_AUDIO_BEFORE_PTT_UP);
+        hostToEsp32.pttUp();
+        audioTrack.flush();
+        Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txEnded);
     }
 
     public void reconnectViaUSB() {
@@ -1164,45 +1152,9 @@ public class RadioAudioService extends Service {
         if (!dataMode) {
             audioBuffer = applyMicGain(audioBuffer);
         }
-
-        if (audioBuffer.length <= TX_AUDIO_CHUNK_SIZE) {
-            hostToEsp32.txAudio(audioBuffer);
-        } else {
-            // If the audio is fairly long, we need to send it to ESP32 at the same rate
-            // as audio sampling. Otherwise, we'll overwhelm its DAC buffer and some audio will
-            // be lost.
-            final Handler handler = new Handler(Looper.getMainLooper());
-            final float msToSendOneChunk = (float) TX_AUDIO_CHUNK_SIZE / (float) AUDIO_SAMPLE_RATE * 1000f;
-            float nextSendDelay = 0f;
-            byte[] finalAudioBuffer = audioBuffer;
-            for (int i = 0; i < audioBuffer.length; i += TX_AUDIO_CHUNK_SIZE) {
-                final int chunkStart = i;
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        android.os.Process.setThreadPriority(
-                            android.os.Process.THREAD_PRIORITY_BACKGROUND +
-                                android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        hostToEsp32.txAudio(Arrays.copyOfRange(finalAudioBuffer, chunkStart,
-                            Math.min(finalAudioBuffer.length, chunkStart + TX_AUDIO_CHUNK_SIZE)));
-                    }
-                }, (int) nextSendDelay);
-
-                nextSendDelay += msToSendOneChunk;
-            }
-
-            // In data mode, also schedule PTT up after last audio chunk goes out.
-            if (dataMode) {
-                handler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        android.os.Process.setThreadPriority(
-                            android.os.Process.THREAD_PRIORITY_BACKGROUND +
-                                android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE);
-                        endPtt();
-                    }
-                }, (int) nextSendDelay);
-            }
+        hostToEsp32.txAudio(audioBuffer);
+        if (dataMode) {
+            endPtt();
         }
     }
 

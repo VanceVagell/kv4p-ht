@@ -42,6 +42,9 @@ const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
 void setMode(Mode newMode) {
+  if (mode == newMode) {
+    return;
+  }
   mode = newMode;
   switch (mode) {
     case MODE_STOPPED:
@@ -194,8 +197,10 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
       esp_task_wdt_reset();
       break;
     case COMMAND_HOST_TX_AUDIO:
-      processTxAudio(params, param_len);
-      esp_task_wdt_reset();
+      if (mode == MODE_TX) {
+        processTxAudio(params, param_len);
+        esp_task_wdt_reset();
+      }
       break;                              
   }
 }
