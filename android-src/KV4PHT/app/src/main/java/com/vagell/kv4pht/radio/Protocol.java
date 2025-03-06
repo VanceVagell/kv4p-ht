@@ -1,10 +1,8 @@
 package com.vagell.kv4pht.radio;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Optional;
-import java.util.function.BiConsumer;
 
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.javAX25.ax25.Arrays;
@@ -180,9 +178,9 @@ public final class Protocol {
     @Builder
     public static class Rssi {
         private final int sMeter9Value;
-        public static Optional<Rssi> from(final byte[] param) {
+        public static Optional<Rssi> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> p.length == 1)
+                .filter(p -> len == 1)
                 .map(p -> p[0] & 0xFF)
                 .map(Rssi::calculateSMeter9Value)
                 .map(rssi -> Rssi.builder().sMeter9Value(rssi).build());
@@ -199,9 +197,9 @@ public final class Protocol {
         private final short ver;  // equivalent to uint16_t
         private final RadioStatus radioModuleStatus;  // equivalent to char
         private final HardwareVersion hardwareVersion;
-        public static Optional<FirmwareVersion> from(final byte[] param) {
+        public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> p.length == 4)
+                .filter(p -> len == 4)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
@@ -271,40 +269,52 @@ public final class Protocol {
         }
     }
 
+    @FunctionalInterface
+    public interface TriConsumer<T, U, V> {
+        void accept(T t, U u, V v);
+    }
+
     public static class FrameParser {
 
         private int matchedDelimiterTokens = 0;
         private byte command;
         private int commandParamLen;
-        private final ByteArrayOutputStream commandParams = new ByteArrayOutputStream();
-        private final BiConsumer<RcvCommand, byte[]> onCommand;
+        private final byte[] commandParams = new byte[PROTO_MTU];
+        private int paramIndex;
+        private final TriConsumer<RcvCommand, byte[], Integer> onCommand;
 
-        public FrameParser(BiConsumer<RcvCommand, byte[]> onCommand) {
+        public FrameParser(TriConsumer<RcvCommand, byte[], Integer> onCommand) {
             this.onCommand = onCommand;
         }
 
         public void processBytes(byte[] newData) {
             for (byte b : newData) {
-                if (matchedDelimiterTokens < COMMAND_DELIMITER.length) {
-                    matchedDelimiterTokens = (b == COMMAND_DELIMITER[matchedDelimiterTokens]) ? matchedDelimiterTokens + 1 : 0;
-                } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length) {
-                    command = b;
-                    matchedDelimiterTokens++;
-                } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
-                    commandParamLen = b & 0xFF;
-                    commandParams.reset();
-                    matchedDelimiterTokens++;
-                    if (commandParamLen == 0) {
-                        processCommand();
-                        resetParser();
-                    }
-                } else {
-                    commandParams.write(b);
-                    matchedDelimiterTokens++;
-                    if (commandParams.size() == commandParamLen) {
-                        processCommand();
-                        resetParser();
-                    }
+                processByte(b);
+            }
+        }
+
+        private void processByte(byte b) {
+            if (matchedDelimiterTokens < COMMAND_DELIMITER.length) {
+                matchedDelimiterTokens = (b == COMMAND_DELIMITER[matchedDelimiterTokens]) ? matchedDelimiterTokens + 1 : 0;
+            } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length) {
+                command = b;
+                matchedDelimiterTokens++;
+            } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
+                commandParamLen = b & 0xFF;
+                paramIndex = 0;
+                matchedDelimiterTokens++;
+                if (commandParamLen == 0) {
+                    processCommand();
+                    resetParser();
+                }
+            } else {
+                if (paramIndex < commandParamLen) {
+                    commandParams[paramIndex++] = b;
+                }
+                matchedDelimiterTokens++;
+                if (paramIndex == commandParamLen) {
+                    processCommand();
+                    resetParser();
                 }
             }
         }
@@ -312,16 +322,15 @@ public final class Protocol {
         private void processCommand() {
             RcvCommand cmd = RcvCommand.fromValue(this.command);
             if (cmd != RcvCommand.COMMAND_RCV_UNKNOWN) {
-                onCommand.accept(cmd, commandParams.toByteArray());
+                onCommand.accept(cmd, commandParams, commandParamLen);
             } else {
-                Log.w(TAG, "Unknown cmd received from ESP32: 0x" + Integer.toHexString(this.command & 0xFF) + " paramLen="
-                        + commandParams.size());
+                Log.w(TAG, "Unknown cmd received from ESP32: 0x" + Integer.toHexString(this.command & 0xFF) + " paramLen=" + commandParamLen);
             }
         }
 
         private void resetParser() {
             matchedDelimiterTokens = 0;
-            commandParams.reset();
+            paramIndex = 0;
             commandParamLen = 0;
         }
     }
