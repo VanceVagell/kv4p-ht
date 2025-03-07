@@ -3,26 +3,31 @@
 #include <Adafruit_NeoPixel.h>
 #include "DRA818.h"
 
+#ifndef USE_SERIAL
+#define USE_SERIAL true
+#endif
+const bool IF_SERIAL=USE_SERIAL;
+
 void print_buttons() {
     static bool PTT_Left, PTT_Right, Program;
     bool tmp;
 
     tmp = digitalRead(PIN_BUTTON_PTT_LEFT);
     if (PTT_Left != tmp) {
-        Serial.print("PTT Left: ");
-        Serial.println(tmp ? "Released" : "Pressed");
+        IF_SERIAL && Serial.print("PTT Left: ");
+        IF_SERIAL && Serial.println(tmp ? "Released" : "Pressed");
         PTT_Left = tmp;
     }
     tmp = digitalRead(PIN_BUTTON_PTT_RIGHT);
     if (PTT_Right != tmp) {
-        Serial.print("PTT Right: ");
-        Serial.println(tmp ? "Released" : "Pressed");
+        IF_SERIAL && Serial.print("PTT Right: ");
+        IF_SERIAL && Serial.println(tmp ? "Released" : "Pressed");
         PTT_Right = tmp;
     }
     tmp = digitalRead(PIN_BUTTON_PROGRAM);
     if (Program != tmp) {
-        Serial.print("Program: ");
-        Serial.println(tmp ? "Released" : "Pressed");
+        IF_SERIAL && Serial.print("Program: ");
+        IF_SERIAL && Serial.println(tmp ? "Released" : "Pressed");
         Program = tmp;
     }
 }
@@ -70,7 +75,7 @@ const uint16_t ADC_MAX = (1<<ADC_BITS) - 1;
 void setup() {
     Serial.begin(230400);
     delay(500);
-    Serial.println("Booting!");
+    IF_SERIAL && Serial.println("Booting!");
 
     pinMode(PIN_STOCK_LED, OUTPUT);
     pinMode(PIN_BUTTON_PTT_LEFT, INPUT);
@@ -91,19 +96,19 @@ void setup() {
     pinMode(PIN_GPIOHEAD_6, ANALOG);
     analogSetWidth(12);
     // Communication with DRA818V radio module via GPIO pins
-    Serial.println("Setting up serial port to 818 module.");
+    IF_SERIAL && Serial.println("Setting up serial port to 818 module.");
     Serial2.begin(9600, SERIAL_8N1, PIN_RX_FROM_RADIO, PIN_TX_TO_RADIO); 
     dra = new DRA818(&Serial2, DRA818_VHF);
 
-    Serial.print("Attempting handshake: ");
+    IF_SERIAL && Serial.print("Attempting handshake: ");
     uint8_t ret = 0;
     ret = dra->handshake();
-    Serial.println(ret ? "Success!" : "Failure.");
+    IF_SERIAL && Serial.println(ret ? "Success!" : "Failure.");
 
     if (ret) {
-        Serial.print("Attempting Group: ");
+        IF_SERIAL && Serial.print("Attempting Group: ");
         ret = dra->group(DRA818_12K5, 146.580, 146.580, 0, 8, 0);
-        Serial.println(ret ? "Group success!" : "Group failure.");
+        IF_SERIAL && Serial.println(ret ? "Group success!" : "Group failure.");
     }
     Serial2.println("AT+VERSION");  // Will print result in loop()
 
@@ -140,7 +145,7 @@ void loop() {
 
     while (Serial2.available()) {
         char c = Serial2.read();
-        Serial.print(c);
+        IF_SERIAL && Serial.print(c);
     }
 
     bool NEW_PTT = (digitalRead(PIN_BUTTON_PTT_LEFT) == LOW || digitalRead(PIN_BUTTON_PTT_RIGHT) == LOW);
@@ -148,24 +153,24 @@ void loop() {
     if (PTT_STATE != NEW_PTT) {
         PTT_STATE = NEW_PTT;
         digitalWrite(PIN_RADIO_PTT, PTT_STATE ? LOW : HIGH);
-        Serial.println(PTT_STATE ? "PTT" : "RTL");
+        IF_SERIAL && Serial.println(PTT_STATE ? "PTT" : "RTL");
     }
 
     bool NEW_COR = (digitalRead(PIN_RADIO_SQUELCH) == LOW);
     if (COR_STATE != NEW_COR) {
         COR_STATE = NEW_COR;
-        Serial.println(COR_STATE ? "Squelch open" : "Squelch closed");
+        IF_SERIAL && Serial.println(COR_STATE ? "Squelch open" : "Squelch closed");
     }
 
     if (last_time/5000 != now/5000) {
         // Once a second
-        //Serial.println("Boop.");
-        Serial2.print("RSSI?\r\n");
-        //Serial.println(dra->handshake());
+        //IF_SERIAL && Serial.println("Boop.");
+        IF_SERIAL && Serial2.print("RSSI?\r\n");
+        IF_SERIAL && Serial.println(dra->handshake());
 
         float V = adc_map(analogRead(PIN_GPIOHEAD_6));
         // Voltage divider in hardware, hence *2
-        Serial.println(String(V*2) + "v");
+        IF_SERIAL && Serial.println(String(V*2) + "v");
 
     }
 
