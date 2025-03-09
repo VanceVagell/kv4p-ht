@@ -697,33 +697,34 @@ public class RadioAudioService extends Service {
 
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
+        Float txFreq = null;
+        try {
+            txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
+        } catch (NumberFormatException nfe) {
+        }
 
         if (serialPort != null) {
             hostToEsp32.group(Group.builder()
-                .freqTx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
-                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
-                .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
-                .squelch((byte) squelchLevel)
-                .ctcssTx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
-                .ctcssTx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
-                .build());
+                    .freqTx(txFreq)
+                    .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                    .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
+                    .squelch((byte) squelchLevel)
+                    .ctcssRx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
+                    .ctcssTx(mTones.getOrDefault(memory.txTone, 0).byteValue())
+                    .build());
         }
 
-        try {
-            Float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
-            Float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
-            Float offsetMaxFreq = maxHamFreq - halfBandwidth;
-            Float offsetMinFreq = minHamFreq + halfBandwidth;
-            if (txFreq < offsetMinFreq || txFreq > offsetMaxFreq) {
-                txAllowed = false;
-            } else {
-                txAllowed = true;
-            }
-            callbacks.txAllowed(txAllowed);
-        } catch (NumberFormatException nfe) {
+        Float deviation = (bandwidth.equals("Wide") ? 0.005f : 0.0025f);
+        Float offsetMaxFreq = maxHamFreq - deviation;
+        Float offsetMinFreq = minHamFreq + deviation;
+        if (txFreq < offsetMinFreq || txFreq > offsetMaxFreq) {
+            txAllowed = false;
+        } else {
+            txAllowed = true;
         }
+        callbacks.txAllowed(txAllowed);
     }
-
+    
     private String getTxFreq(String txFreq, int offset, int khz) {
         if (offset == ChannelMemory.OFFSET_NONE) {
             return txFreq;
