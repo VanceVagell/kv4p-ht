@@ -724,7 +724,7 @@ public class RadioAudioService extends Service {
         }
         callbacks.txAllowed(txAllowed);
     }
-    
+
     private String getTxFreq(String txFreq, int offset, int khz) {
         if (offset == ChannelMemory.OFFSET_NONE) {
             return txFreq;

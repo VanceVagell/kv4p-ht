@@ -1741,14 +1741,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showHandshakeSnackbar() {
-        CharSequence snackbarMsg = "Connecting to radio...";
+        CharSequence snackbarMsg = "Looking for kv4p HT radio...";
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-            .setBackgroundTint(Color.rgb(20, 140, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
+            .setBackgroundTint(getResources().getColor(R.color.primary))
+            .setTextColor(getResources().getColor(R.color.medium_gray))
             .setAnchorView(findViewById(R.id.bottomNavigationView));
 
         // Make the text of the snackbar larger.
-        TextView snackbarActionTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
-        snackbarActionTextView.setTextSize(20);
         TextView snackbarTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
