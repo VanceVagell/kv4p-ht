@@ -38,6 +38,7 @@ import android.hardware.usb.UsbManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -150,6 +151,7 @@ public class RadioAudioService extends Service {
     // For receiving audio from ESP32 / radio
     private final float[] pcmFloat = new float[PROTO_MTU];
     private AudioTrack audioTrack;
+    private AudioFocusRequest audioFocusRequest;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
 
@@ -756,11 +758,15 @@ public class RadioAudioService extends Service {
             audioTrack.release();
             audioTrack = null;
         }
+        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANT)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build();
+        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(audioAttributes)
+            .build();
         audioTrack = new AudioTrack.Builder()
-            .setAudioAttributes(new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build())
+            .setAudioAttributes(audioAttributes)
             .setAudioFormat(new AudioFormat.Builder()
                 .setEncoding(RX_AUDIO_FORMAT)
                 .setSampleRate(AUDIO_SAMPLE_RATE)
@@ -1274,19 +1280,30 @@ public class RadioAudioService extends Service {
                 afskDemodulator.addSamples(pcmFloat, len);
             }
             if (audioTrack != null) {
-                audioTrack.write(pcmFloat, 0, len, AudioTrack.WRITE_NON_BLOCKING);
-                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                    audioTrack.play();
+                AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                if (len > 0) {
+                    audioTrack.write(pcmFloat, 0, len, AudioTrack.WRITE_NON_BLOCKING);
+                    audioManager.requestAudioFocus(audioFocusRequest);
+                    if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+                        audioTrack.play();
+                    }
+                } else {
+                    audioManager.abandonAudioFocusRequest(audioFocusRequest);
                 }
             }
         }
         if (mode == MODE_SCAN) {
-            for (int i = 0; i < len; i++) {
-                if (param[i] != SILENT_BYTE) {
-                    consecutiveSilenceBytes = 0;
-                    continue;
+            if (len > 0) {
+                for (int i = 0; i < len; i++) {
+                    if (param[i] != SILENT_BYTE) {
+                        consecutiveSilenceBytes = 0;
+                        continue;
+                    }
+                    consecutiveSilenceBytes++;
+                    checkScanDueToSilence();
                 }
-                consecutiveSilenceBytes++;
+            } else {
+                consecutiveSilenceBytes = consecutiveSilenceBytes + PROTO_MTU;
                 checkScanDueToSilence();
             }
         }
