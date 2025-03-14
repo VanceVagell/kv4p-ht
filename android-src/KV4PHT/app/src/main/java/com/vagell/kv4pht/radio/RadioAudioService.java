@@ -760,7 +760,7 @@ public class RadioAudioService extends Service {
         }
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ASSISTANT)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build();
         audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
             .setAudioAttributes(audioAttributes)
