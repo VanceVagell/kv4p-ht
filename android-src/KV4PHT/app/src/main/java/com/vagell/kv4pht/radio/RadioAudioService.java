@@ -157,7 +157,7 @@ public class RadioAudioService extends Service {
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
     private PacketDemodulator afskDemodulator = null;
-    private static final int MS_SILENCE_BEFORE_DATA = 700;
+    private static final int MS_SILENCE_BEFORE_DATA = 1100;
     private static final int MS_SILENCE_AFTER_DATA = 700;
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
     private static final byte[] LEAD_IN_SILENCE;
