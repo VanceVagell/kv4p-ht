@@ -157,15 +157,21 @@ public class RadioAudioService extends Service {
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
     private PacketDemodulator afskDemodulator = null;
-    private static final int MS_SILENCE_BEFORE_DATA = 1100;
-    private static final int MS_SILENCE_AFTER_DATA = 700;
+    private static final int MS_SILENCE_BEFORE_DATA_MS = 1100;
+    private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
     private static final byte[] LEAD_IN_SILENCE;
     private static final byte[] TAIL_SILENCE;
     static {
-        LEAD_IN_SILENCE = new byte[AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA];
+        // Calculate the size of the silence buffers
+        int leadInSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA_MS;
+        int tailSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA_MS;
+        // Round the silence buffer sizes to the nearest multiple of PROTO_MTU
+        leadInSize = (int) Math.ceil((double) leadInSize / PROTO_MTU) * PROTO_MTU;
+        tailSize = (int) Math.ceil((double) tailSize / PROTO_MTU) * PROTO_MTU;
+        LEAD_IN_SILENCE = new byte[leadInSize];
         java.util.Arrays.fill(LEAD_IN_SILENCE, SILENT_BYTE);
-        TAIL_SILENCE = new byte[AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA];
+        TAIL_SILENCE = new byte[tailSize];
         java.util.Arrays.fill(TAIL_SILENCE, SILENT_BYTE);
     }
 
