@@ -40,11 +40,11 @@ Each message consists of the following fields:
 | `0x53`       | `COMMAND_SMETER_REPORT` | Reports RSSI level                     |
 | `0x44`       | `COMMAND_PHYS_PTT_DOWN` | Physical push-to-talk activation       |
 | `0x55`       | `COMMAND_PHYS_PTT_UP`   | Physical push-to-talk deactivation     |
-| `0x10`       | `COMMAND_DEBUG_INFO`    | Sends debug info message               |
-| `0x11`       | `COMMAND_DEBUG_ERROR`   | Sends debug error message              |
-| `0x12`       | `COMMAND_DEBUG_WARN`    | Sends debug warning message            |
-| `0x13`       | `COMMAND_DEBUG_DEBUG`   | Sends debug debug-level message        |
-| `0x14`       | `COMMAND_DEBUG_TRACE`   | Sends debug trace message              |
+| `0x01`       | `COMMAND_DEBUG_INFO`    | Sends debug info message               |
+| `0x02`       | `COMMAND_DEBUG_ERROR`   | Sends debug error message              |
+| `0x03`       | `COMMAND_DEBUG_WARN`    | Sends debug warning message            |
+| `0x04`       | `COMMAND_DEBUG_DEBUG`   | Sends debug debug-level message        |
+| `0x05`       | `COMMAND_DEBUG_TRACE`   | Sends debug trace message              |
 | `0x06`       | `COMMAND_HELLO`         | Hello handshake message                |
 | `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx audio data (payload required) |
 | `0x08`       | `COMMAND_VERSION`       | Sends firmware version information     |
@@ -55,9 +55,9 @@ Each message consists of the following fields:
 
 ```c
 struct version {
-  uint16_t    ver;
-  char        radioModuleStatus;
-  hw_ver_t    hw;
+  uint16_t    ver;               // 2 bytes
+  char        radioModuleStatus; // 1 byte
+  hw_ver_t    hw;                // sizeof(hw_ver_t) bytes
 } __attribute__((__packed__));
 typedef struct version Version;
 ```
@@ -66,7 +66,7 @@ typedef struct version Version;
 
 ```c
 struct rssi {
-  uint8_t     rssi;
+  uint8_t     rssi; // 1 byte
 } __attribute__((__packed__));
 typedef struct rssi Rssi;
 ```
@@ -75,12 +75,12 @@ typedef struct rssi Rssi;
 
 ```c
 struct group {
-  uint8_t bw;
-  float freq_tx;
-  float freq_rx;
-  uint8_t ctcss_tx;
-  uint8_t squelch;
-  uint8_t ctcss_rx;
+  uint8_t bw;       // 1 byte
+  float freq_tx;    // 4 bytes
+  float freq_rx;    // 4 bytes
+  uint8_t ctcss_tx; // 1 byte
+  uint8_t squelch;  // 1 byte
+  uint8_t ctcss_rx; // 1 byte
 } __attribute__((__packed__));
 typedef struct group Group;
 ```
@@ -89,20 +89,20 @@ typedef struct group Group;
 
 ```c
 struct filters {
-  uint8_t flags;  // Uses bitmask for pre, high, and low
+  uint8_t flags;  // 1 byte - Uses bitmask for pre, high, and low
 } __attribute__((__packed__));
 typedef struct filters Filters;
 
-#define FILTER_PRE  (1 << 0)
-#define FILTER_HIGH (1 << 1)
-#define FILTER_LOW  (1 << 2)
+#define FILTER_PRE  (1 << 0) // Bit 0
+#define FILTER_HIGH (1 << 1) // Bit 1
+#define FILTER_LOW  (1 << 2) // Bit 2
 ```
 
 ### `COMMAND_HOST_CONFIG` Parameters
 
 ```c
 struct config {
-  uint8_t radioType; 
+  uint8_t radioType; // 1 byte
 } __attribute__((__packed__));
 typedef struct config Config;
 ```
@@ -112,6 +112,10 @@ typedef struct config Config;
 - Most commands follow a **fire-and-forget** approach.
 - Some commands may trigger a reply (indicated in comments).
 - There are no explicit response types; responses are sent as separate commands.
+
+## Byte Order and Bit Significance
+- All multi-byte fields are encoded in little-endian format.
+- Bitmask values follow LSB-first ordering (bit 0 is the least significant).
 
 ## Example Packets
 
