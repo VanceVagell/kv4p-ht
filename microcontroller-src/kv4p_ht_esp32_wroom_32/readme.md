@@ -1,4 +1,3 @@
-# KV4P-HT Serial Interface Documentation
 # KV4P-HT Communication Protocol
 
 ## Overview
