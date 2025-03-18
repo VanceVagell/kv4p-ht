@@ -57,7 +57,7 @@ Each message consists of the following fields:
 struct version {
   uint16_t    ver;               // 2 bytes
   char        radioModuleStatus; // 1 byte
-  hw_ver_t    hw;                // sizeof(hw_ver_t) bytes
+  hw_ver_t    hw;                // 1 byte
 } __attribute__((__packed__));
 typedef struct version Version;
 ```
