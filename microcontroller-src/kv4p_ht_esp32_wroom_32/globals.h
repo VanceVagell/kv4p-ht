@@ -27,7 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
-#define SAMPLING_RATE_OFFSET 79
+#define SAMPLING_RATE_OFFSET 0
 
 // I2S audio sampling stuff
 #define I2S_READ_LEN    (PROTO_MTU & ~0x01)       // Ensure it's even
