@@ -40,8 +40,11 @@ void initI2STx() {
   config.is_blocking_write = false;
   config.buffer_size = I2S_WRITE_LEN;
   config.buffer_count = 8;
+  config.use_apll = true;
+  config.auto_clear = false;
   out.begin(config);
   txOut.begin(txInfo);
+  i2s_zero_dma_buffer(I2S_NUM_0);
   txStreamConfidured = true;
 }
 

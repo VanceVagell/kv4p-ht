@@ -53,7 +53,6 @@ AudioEffectStream effects(in);
 StreamCopy rxCopier(rxOut, effects);
 Boost mute(0.0);
 Boost gain(16.0);
-Compressor comp(AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET);
 
 void initI2SRx() {
   if (hardware_version == HW_VER_V2_0C) {
@@ -69,6 +68,8 @@ void initI2SRx() {
   config.is_auto_center_read = true;
   config.buffer_size = I2S_READ_LEN;
   config.buffer_count = 4;
+  config.use_apll = true;
+  config.auto_clear = false;
   config.adc_pin = ADC_PIN; 
   in.begin(config);
   rxEnc.setAudioInfo(rxInfo);
@@ -86,7 +87,6 @@ void initI2SRx() {
 
   effects.clear();
   effects.addEffect(&gain);
-  effects.addEffect(&comp);
   effects.addEffect(&mute);
   effects.begin(rxInfo);
 
