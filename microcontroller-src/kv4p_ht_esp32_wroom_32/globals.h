@@ -46,6 +46,9 @@ uint8_t SQ_PIN      = 32;
 #define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define PHYS_PTT_PIN2 33  // Optional. See above.
 
+#define ADC_BIAS_VOLTAGE  1.75
+#define ADC_ATTENUATION   ADC_ATTEN_DB_12
+
 // Hardware version detection
 #define HW_VER_PIN_0  39  // 0xF0
 #define HW_VER_PIN_1  36  // 0x0F
@@ -68,9 +71,6 @@ Mode mode = MODE_STOPPED;
 
 // Current SQ status
 bool squelched = false;
-
-// Have we installed an I2S driver at least once?
-bool i2sStarted = false;
 
 // Forward declarations
 void setMode(Mode newMode);

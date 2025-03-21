@@ -49,18 +49,22 @@ void setMode(Mode newMode) {
   switch (mode) {
     case MODE_STOPPED:
       _LOGI("MODE_STOPPED");
-    digitalWrite(PTT_PIN, HIGH);
+      digitalWrite(PTT_PIN, HIGH);
+      endI2STx();
+      endI2SRx();
     break;
     case MODE_RX:
       _LOGI("MODE_RX");
-    digitalWrite(PTT_PIN, HIGH);
-    initI2SRx();
+      digitalWrite(PTT_PIN, HIGH);
+      endI2STx();
+      initI2SRx();
     break;
     case MODE_TX:
       _LOGI("MODE_TX");
-    txStartTime = millis();
-    digitalWrite(PTT_PIN, LOW);
-    initI2STx();
+      txStartTime = millis();
+      digitalWrite(PTT_PIN, LOW);
+      endI2SRx();
+      initI2STx();
     break;
   }
 }
