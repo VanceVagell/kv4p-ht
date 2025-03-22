@@ -221,13 +221,15 @@ public final class Protocol {
         }
 
         private void sendCommand(SndCommand commandType, byte[] param) {
-            ByteBuffer buffer = ByteBuffer.allocate(1024);
+            ByteBuffer buffer = ByteBuffer.allocate(1024*4);
             buffer.put(COMMAND_DELIMITER);
             buffer.put((byte) commandType.getValue());
             if (param != null) {
-                buffer.put((byte) param.length);
+                buffer.put((byte) (param.length & 0xFF));       // LSB first
+                buffer.put((byte) ((param.length >> 8) & 0xFF)); // MSB second
                 buffer.put(param);
             } else {
+                buffer.put((byte) 0);
                 buffer.put((byte) 0);
             }
             byte[] command = new byte[buffer.position()];

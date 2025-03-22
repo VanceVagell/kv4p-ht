@@ -87,6 +87,9 @@ import com.vagell.kv4pht.data.APRSMessage;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
+import com.vagell.kv4pht.radio.OpusUtils;
+import com.vagell.kv4pht.radio.OpusUtils.OpusEncoderWrapper;
+import com.vagell.kv4pht.radio.Protocol;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 
@@ -102,8 +105,12 @@ public class MainActivity extends AppCompatActivity {
     private AudioRecord audioRecord;
     private boolean isRecording = false;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
+    private int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
     private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
+    private int frameSize = 960; // 20ms at 48kHz
+    private int bufferSize = Math.max(minBufferSize, frameSize * 2);
+    private final OpusEncoderWrapper encoder = new OpusEncoderWrapper(RadioAudioService.AUDIO_SAMPLE_RATE);
+
     private Thread recordingThread;
 
     private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
@@ -945,29 +952,19 @@ public class MainActivity extends AppCompatActivity {
         rxAudioVisualizer.setEnabled(true);
     }
 
-    private void updateRecordingVisualization(int waitMs, byte audioByte) {
+    private void updateRecordingVisualization(int waitMs, float txVolume) {
         if (disableAnimations) { return; }
-
         final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        float txVolume = ((float) audioByte + 128f) / 256; // 0 to 1
-                        ImageView txAudioView = findViewById(R.id.txAudioCircle);
-                        ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
-                        int mode = radioAudioService != null ? radioAudioService.getMode() : -1;
-                        layoutParams.width = audioByte == RadioAudioService.SILENT_BYTE ||
-                                mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
-                        layoutParams.height = audioByte == RadioAudioService.SILENT_BYTE ||
-                                mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
-                        txAudioView.setLayoutParams(layoutParams);
-                    }
-                });
-            }
-        }, waitMs); // waitMs gives us the fps we desire, see RECORD_ANIM_FPS constant.
+        handler.postDelayed(() -> runOnUiThread(() -> {
+            ImageView txAudioView = findViewById(R.id.txAudioCircle);
+            ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
+            int mode = radioAudioService != null ? radioAudioService.getMode() : -1;
+            layoutParams.width = Math.abs(txVolume) < 0.001 ||
+                    mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+            layoutParams.height = Math.abs(txVolume) < 0.001 ||
+                    mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+            txAudioView.setLayoutParams(layoutParams);
+        }), waitMs); // waitMs gives us the fps we desire, see RECORD_ANIM_FPS constant.
     }
 
     private void applySettings() {
@@ -1156,7 +1153,7 @@ public class MainActivity extends AppCompatActivity {
                                 rxAudioView.setLayoutParams(layoutParams);
 
                                 // Hide the tx audio visualization
-                                updateRecordingVisualization(100, RadioAudioService.SILENT_BYTE);
+                                updateRecordingVisualization(100, 0.0f);
                             }
                         }
 
@@ -1649,7 +1646,7 @@ public class MainActivity extends AppCompatActivity {
                 RadioAudioService.AUDIO_SAMPLE_RATE,
                 channelConfig,
                 audioFormat,
-                minBufferSize);
+                bufferSize);
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.d("DEBUG", "Audio init error");
@@ -1682,27 +1679,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void processAudioStream() {
+        float audioChunkSampleTotal = 0.0f; // Accumulate across buffers
+        int accumulatedSamples = 0; // Track count of samples
+        int samplesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
+        short[] audioBuffer = new short[frameSize];
+        byte[] opusData = new byte[Protocol.PROTO_MTU2];
         while (isRecording) {
-            byte[] audioBuffer = new byte[minBufferSize];
-            int bytesRead;
-            bytesRead = audioRecord.read(audioBuffer, 0, minBufferSize);
-
-            if (bytesRead > 0) {
-                if (radioAudioService != null) {
-                    radioAudioService.sendAudioToESP32(Arrays.copyOfRange(audioBuffer, 0, bytesRead), false);
-
-                    int bytesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
-                    long audioChunkByteTotal = 0;
-                    int waitMs = 0;
-                    for (int i = 0; i < bytesRead; i++) {
-                        if (i > 0 && i % bytesPerAnimFrame == 0) {
-                            audioChunkByteTotal += audioBuffer[i];
-                            updateRecordingVisualization(waitMs, (byte) (audioChunkByteTotal / bytesPerAnimFrame));
-                            waitMs += (1.0f / RECORD_ANIM_FPS * 1000);
-                            audioChunkByteTotal = 0;
-                        } else {
-                            audioChunkByteTotal += audioBuffer[i];
-                        }
+            int samples = audioRecord.read(audioBuffer, 0, frameSize);
+            if (samples > 0) {
+                int encodedLength = encoder.encode(audioBuffer, samples, opusData);
+                radioAudioService.sendAudioToESP32(Arrays.copyOfRange(opusData, 0, encodedLength), false);
+                // Accumulate samples across buffers
+                for (int i = 0; i < samples; i++) {
+                    audioChunkSampleTotal += Math.abs(audioBuffer[i] / 32768.0f);
+                    accumulatedSamples++;
+                    // If we have enough samples, update visualization
+                    if (accumulatedSamples >= samplesPerAnimFrame) {
+                        updateRecordingVisualization(0, audioChunkSampleTotal / accumulatedSamples);
+                        // Reset accumulators
+                        audioChunkSampleTotal = 0.0f;
+                        accumulatedSamples = 0;
                     }
                 }
             }
@@ -1716,7 +1712,7 @@ public class MainActivity extends AppCompatActivity {
             audioRecord.release();
             audioRecord = null;
             recordingThread = null;
-            updateRecordingVisualization(100, RadioAudioService.SILENT_BYTE);
+            updateRecordingVisualization(100, 0.0f);
         }
 
         radioAudioService.getAudioTrack().play();

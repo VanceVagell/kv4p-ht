@@ -1,6 +1,8 @@
 package com.vagell.kv4pht.radio;
 
+import io.github.jaredmdobson.OpusApplication;
 import io.github.jaredmdobson.OpusDecoder;
+import io.github.jaredmdobson.OpusEncoder;
 import io.github.jaredmdobson.OpusException;
 
 public final class OpusUtils {
@@ -34,5 +36,26 @@ public final class OpusUtils {
             }
         }
     }
+
+    public static class OpusEncoderWrapper {
+        private final OpusEncoder encoder;
+
+        public OpusEncoderWrapper(int sampleRate) {
+            try {
+                this.encoder = new OpusEncoder(sampleRate, 1, OpusApplication.OPUS_APPLICATION_AUDIO); // Mono
+            } catch (OpusException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        public int encode(short[] pcmData, int len, byte[] opusData) {
+            try {
+                return encoder.encode(pcmData, 0, len, opusData, 0, opusData.length);
+            } catch (OpusException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
 }
 

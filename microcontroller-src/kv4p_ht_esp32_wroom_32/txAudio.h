@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include <AudioTools.h>
+#include <AudioTools/AudioCodecs/CodecOpus.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "protocol.h"
@@ -26,7 +27,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 bool txStreamConfidured = false;
 AnalogAudioStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
-DecoderL8 txDec(false);
+//DecoderL8 txDec(false);
+OpusAudioDecoder txDec;
 EncodedAudioStream txOut(&out, &txDec); 
 
 // Tx runaway detection stuff
@@ -38,11 +40,18 @@ void initI2STx() {
   config.copyFrom(txInfo);
   config.adc_pin = DAC_PIN;
   config.is_blocking_write = false;
-  config.buffer_size = I2S_WRITE_LEN;
-  config.buffer_count = 8;
+  //config.buffer_size = I2S_WRITE_LEN;
+  //config.buffer_count = 8;
   config.use_apll = true;
   config.auto_clear = false;
   out.begin(config);
+
+  // configure OPUS additinal parameters
+  txDec.setAudioInfo(txInfo);
+  auto &enc_cfg = txDec.config();
+  enc_cfg.max_buffer_write_size = PROTO_MTU2;
+  txDec.begin(enc_cfg);
+
   txOut.begin(txInfo);
   i2s_zero_dma_buffer(I2S_NUM_0);
   txStreamConfidured = true;

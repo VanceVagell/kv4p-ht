@@ -167,9 +167,9 @@ private:
   CommandCallback _callback;
   uint8_t _matchedDelimiterTokens;
   RcvCommand _command;
-  uint8_t _commandParamLen; 
-  uint8_t _commandParams[PROTO_MTU];
-  uint8_t _paramIndex;
+  size_t _commandParamLen; 
+  uint8_t _commandParams[PROTO_MTU2];
+  size_t _paramIndex;
 
   void inline processByte(uint8_t b) {
     if (_matchedDelimiterTokens < DELIMITER_LENGTH) {
@@ -179,10 +179,16 @@ private:
       _matchedDelimiterTokens++;
     } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 1) {
       _commandParamLen = b;
+      _matchedDelimiterTokens++;
+    } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 2) {  
+      _commandParamLen |= (b << 8);
       _paramIndex = 0;
       _matchedDelimiterTokens++;
       if (_commandParamLen == 0) {
         _callback(_command, _commandParams, 0);
+        resetParser();
+      }
+      if (_commandParamLen > PROTO_MTU2) {
         resetParser();
       }
     } else {
