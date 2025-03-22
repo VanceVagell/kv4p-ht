@@ -91,8 +91,7 @@ import com.vagell.kv4pht.radio.Protocol.RadioStatus;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.ui.MainActivity;
 
-import org.apache.commons.lang3.ArrayUtils;
-
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -158,10 +157,23 @@ public class RadioAudioService extends Service {
     // AFSK modem
     private Afsk1200Modulator afskModulator = null;
     private PacketDemodulator afskDemodulator = null;
-    private static final int MS_DELAY_BEFORE_DATA_XMIT = 1000;
-    private static final int MS_SILENCE_BEFORE_DATA = 300;
-    private static final int MS_SILENCE_AFTER_DATA = 700;
+    private static final int MS_SILENCE_BEFORE_DATA_MS = 1100;
+    private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
+    private static final byte[] LEAD_IN_SILENCE;
+    private static final byte[] TAIL_SILENCE;
+    static {
+        // Calculate the size of the silence buffers
+        int leadInSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA_MS;
+        int tailSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA_MS;
+        // Round the silence buffer sizes to the nearest multiple of PROTO_MTU
+        leadInSize = (int) Math.ceil((double) leadInSize / PROTO_MTU) * PROTO_MTU;
+        tailSize = (int) Math.ceil((double) tailSize / PROTO_MTU) * PROTO_MTU;
+        LEAD_IN_SILENCE = new byte[leadInSize];
+        java.util.Arrays.fill(LEAD_IN_SILENCE, SILENT_BYTE);
+        TAIL_SILENCE = new byte[tailSize];
+        java.util.Arrays.fill(TAIL_SILENCE, SILENT_BYTE);
+    }
 
     // APRS position settings
     public static final int APRS_POSITION_EXACT = 0;
@@ -1159,9 +1171,6 @@ public class RadioAudioService extends Service {
             audioBuffer = applyMicGain(audioBuffer);
         }
         hostToEsp32.txAudio(audioBuffer);
-        if (dataMode) {
-            endPtt();
-        }
     }
 
     public static UsbSerialPort getUsbSerialPort() {
@@ -1499,44 +1508,25 @@ public class RadioAudioService extends Service {
             Log.d("DEBUG", "Tried to send an AX.25 packet when tx is not allowed, did not send.");
             return;
         }
-
         Log.d("DEBUG", "Sending AX25 packet: " + ax25Packet.toString());
-
         // This strange approach to getting bytes seems to be a state machine in the AFSK library.
         afskModulator.prepareToTransmit(ax25Packet);
-        float[] txSamples = afskModulator.getTxSamplesBuffer();
+        float[] buffer = afskModulator.getTxSamplesBuffer();
+        ByteArrayOutputStream audioStream = new ByteArrayOutputStream();
         int n;
-        ArrayList<Byte> audioBytes = new ArrayList<Byte>();
         while ((n = afskModulator.getSamples()) > 0) {
             for (int i = 0; i < n; i++) {
-                byte audioByte = convertFloatToPCM8(txSamples[i]);
-                audioBytes.add(audioByte);
+                audioStream.write(convertFloatToPCM8(buffer[i]));
             }
         }
-        byte[] simpleAudioBytes = ArrayUtils.toPrimitive(audioBytes.toArray(new Byte[0]));
-
         startPtt();
-        final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                // Add some silence before and after the data.
-                int bytesOfLeadInDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA);
-                int bytesOfTailDelay = (AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA);
-                byte[] combinedAudio = new byte[bytesOfLeadInDelay + simpleAudioBytes.length + bytesOfTailDelay];
-                for (int i = 0; i < bytesOfLeadInDelay; i++) {
-                    combinedAudio[i] = SILENT_BYTE;
-                }
-                for (int i = 0; i < simpleAudioBytes.length; i++) {
-                    combinedAudio[i + bytesOfLeadInDelay] = simpleAudioBytes[i];
-                }
-                for (int i = (bytesOfLeadInDelay + simpleAudioBytes.length); i < combinedAudio.length; i++) {
-                    combinedAudio[i] = SILENT_BYTE;
-                }
-
-                sendAudioToESP32(combinedAudio, true);
-            }
-        }, MS_DELAY_BEFORE_DATA_XMIT);
+        // Send lead-in silence
+        sendAudioToESP32(LEAD_IN_SILENCE, true);
+        // Send actual audio data
+        sendAudioToESP32(audioStream.toByteArray(), true);
+        // Send tail silence
+        sendAudioToESP32(TAIL_SILENCE, true);
+        endPtt();
     }
 
     public AudioTrack getAudioTrack() {
