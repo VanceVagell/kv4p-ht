@@ -100,16 +100,16 @@ typedef struct config Config;
  */
 void __sendCmdToHost(SndCommand cmd, const byte *params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
-  if (paramsLen > PROTO_MTU) {
-    paramsLen = PROTO_MTU;  // or handle differently (split, or error, etc.)
+  if (paramsLen > PROTO_MTU2) {
+    paramsLen = PROTO_MTU2;  // or handle differently (split, or error, etc.)
   }
   // 1. Leading delimiter
   Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
   // 2. Command byte
   Serial.write((uint8_t*) &cmd, 1);
   // 3. Parameter length
-  uint8_t len = paramsLen;
-  Serial.write(&len, 1);
+  uint16_t len = paramsLen;
+  Serial.write((uint8_t*) &len, sizeof(len));
   // 4. Parameter bytes
   if (paramsLen > 0) {
     Serial.write(params, paramsLen);

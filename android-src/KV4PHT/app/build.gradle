@@ -69,4 +69,5 @@ dependencies {
     implementation 'com.google.android.gms:play-services-location:21.3.0'
     implementation 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    implementation 'io.github.jaredmdobson:concentus:1.0.1'
 }

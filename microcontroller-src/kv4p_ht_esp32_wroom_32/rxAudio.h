@@ -32,8 +32,8 @@ class SerialOutput : public AudioOutput {
 public:
   size_t write(const uint8_t *data, size_t len) override {
     if (len > 0) {
-      if (len > PROTO_MTU) {
-        len = PROTO_MTU;
+      if (len > PROTO_MTU2) {
+        len = PROTO_MTU2;
       }
       sendAudio((uint8_t*)data, len);
       return len;
@@ -45,8 +45,8 @@ public:
 bool rxStreamConfidured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET, 1, 16);
-//OpusAudioEncoder rxEnc;
-EncoderL8 rxEnc(true); 
+OpusAudioEncoder rxEnc;
+//EncoderL8 rxEnc(true); 
 SerialOutput rxAudioOutput;
 EncodedAudioStream rxOut(&rxAudioOutput, &rxEnc);
 AudioEffectStream effects(in);  
@@ -66,24 +66,24 @@ void initI2SRx() {
   config.copyFrom(rxInfo);
   config.auto_clear = true;
   config.is_auto_center_read = true;
-  config.buffer_size = I2S_READ_LEN;
-  config.buffer_count = 4;
+  //config.buffer_size = I2S_READ_LEN;
+  //config.buffer_count = 4;
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = ADC_PIN; 
   in.begin(config);
   rxEnc.setAudioInfo(rxInfo);
   // configure OPUS additinal parameters
-  /*
   auto &enc_cfg = rxEnc.config();
   enc_cfg.application = OPUS_APPLICATION_AUDIO;
-  enc_cfg.frame_sizes_ms_x2 = OPUS_FRAMESIZE_40_MS;
+  enc_cfg.frame_sizes_ms_x2 = OPUS_FRAMESIZE_20_MS;
   enc_cfg.vbr = 1;
   enc_cfg.max_bandwidth = OPUS_BANDWIDTH_WIDEBAND;
   rxEnc.begin(enc_cfg);
-  */
+  /*
   rxEnc.setAudioInfo(config);
   rxEnc.begin();
+  */
 
   effects.clear();
   effects.addEffect(&gain);

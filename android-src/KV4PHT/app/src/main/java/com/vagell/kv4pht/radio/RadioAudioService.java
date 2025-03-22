@@ -83,6 +83,7 @@ import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
+import com.vagell.kv4pht.radio.OpusUtils.OpusDecoderWrapper;
 import com.vagell.kv4pht.radio.Protocol.Config;
 import com.vagell.kv4pht.radio.Protocol.Filters;
 import com.vagell.kv4pht.radio.Protocol.FrameParser;
@@ -136,7 +137,7 @@ public class RadioAudioService extends Service {
     private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
-    public static final int AUDIO_SAMPLE_RATE = 22050;
+    public static final int AUDIO_SAMPLE_RATE = 24000*2;
     public static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
     public static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
     public static final int RX_AUDIO_MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, RX_AUDIO_CHANNEL_CONFIG, RX_AUDIO_FORMAT) * 2;
@@ -148,10 +149,11 @@ public class RadioAudioService extends Service {
     private Map<String, Integer> mTones = new HashMap<>();
 
     // For receiving audio from ESP32 / radio
-    private final float[] pcmFloat = new float[PROTO_MTU];
+    private final float[] pcmFloat = new float[1920];
     private AudioTrack audioTrack;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
+    private final OpusUtils.OpusDecoderWrapper opusDecoder = new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, 1920);
 
     private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
 
@@ -1268,26 +1270,26 @@ public class RadioAudioService extends Service {
     }
 
     private void handleRxAudio(final byte[] param, final Integer len) {
+        int decoded = opusDecoder.decode(param, len, pcmFloat);
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            convertPCM8SignedToFloatArray(param, len, pcmFloat);
             if (afskDemodulator != null) {
-                afskDemodulator.addSamples(pcmFloat, len);
+                afskDemodulator.addSamples(pcmFloat, decoded);
             }
             if (audioTrack != null) {
-                audioTrack.write(pcmFloat, 0, len, AudioTrack.WRITE_NON_BLOCKING);
+                audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
                 if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
                     audioTrack.play();
                 }
             }
         }
         if (mode == MODE_SCAN) {
-            for (int i = 0; i < len; i++) {
-                if (param[i] != SILENT_BYTE) {
+            for (int i = 0; i < decoded; i++) {
+                if (Math.abs(pcmFloat[i]) > 0.001) {
                     consecutiveSilenceBytes = 0;
-                    continue;
+                } else {
+                    consecutiveSilenceBytes++;
+                    checkScanDueToSilence();
                 }
-                consecutiveSilenceBytes++;
-                checkScanDueToSilence();
             }
         }
     }

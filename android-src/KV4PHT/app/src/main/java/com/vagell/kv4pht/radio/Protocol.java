@@ -23,6 +23,8 @@ public final class Protocol {
     public static final byte DRA818_12K5 = 0x00;
 
     public static final int PROTO_MTU = 0xFF; // Maximum length of the frame
+    public static final int PROTO_MTU2 = 2048; // Maximum length of the frame
+
 
     private Protocol() {
     }
@@ -279,7 +281,7 @@ public final class Protocol {
         private int matchedDelimiterTokens = 0;
         private byte command;
         private int commandParamLen;
-        private final byte[] commandParams = new byte[PROTO_MTU];
+        private final byte[] commandParams = new byte[PROTO_MTU2];
         private int paramIndex;
         private final TriConsumer<RcvCommand, byte[], Integer> onCommand;
 
@@ -301,6 +303,9 @@ public final class Protocol {
                 matchedDelimiterTokens++;
             } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
                 commandParamLen = b & 0xFF;
+                matchedDelimiterTokens++;
+            } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 2) {
+                commandParamLen = (b & 0xFF) << 8 | commandParamLen;
                 paramIndex = 0;
                 matchedDelimiterTokens++;
                 if (commandParamLen == 0) {
