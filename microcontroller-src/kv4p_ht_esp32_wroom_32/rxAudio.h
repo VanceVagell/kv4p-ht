@@ -103,7 +103,6 @@ void endI2SRx() {
   if (rxStreamConfidured) {
     rxOut.end();
     effects.end();
-    rxEnc.end();
     in.end();
   }
   rxStreamConfidured = false;
