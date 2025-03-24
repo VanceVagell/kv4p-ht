@@ -1691,7 +1691,7 @@ public class MainActivity extends AppCompatActivity {
                 radioAudioService.sendAudioToESP32(Arrays.copyOfRange(opusData, 0, encodedLength), false);
                 // Accumulate samples across buffers
                 for (int i = 0; i < samples; i++) {
-                    audioChunkSampleTotal += Math.abs(audioBuffer[i] / 32768.0f);
+                    audioChunkSampleTotal += Math.abs(audioBuffer[i] / 32768.0f) * 8.0f;
                     accumulatedSamples++;
                     // If we have enough samples, update visualization
                     if (accumulatedSamples >= samplesPerAnimFrame) {

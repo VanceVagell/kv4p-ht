@@ -51,8 +51,9 @@ public final class OpusUtils {
         public int encode(short[] pcmData, int len, byte[] opusData) {
             try {
                 return encoder.encode(pcmData, 0, len, opusData, 0, opusData.length);
-            } catch (OpusException e) {
-                throw new RuntimeException(e);
+            } catch (OpusException | IllegalArgumentException e) {
+                //throw new RuntimeException(e);
+                return 0;
             }
         }
     }
