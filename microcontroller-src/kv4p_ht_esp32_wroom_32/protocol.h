@@ -100,8 +100,8 @@ typedef struct config Config;
  */
 void __sendCmdToHost(SndCommand cmd, const byte *params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
-  if (paramsLen > PROTO_MTU2) {
-    paramsLen = PROTO_MTU2;  // or handle differently (split, or error, etc.)
+  if (paramsLen > PROTO_MTU) {
+    paramsLen = PROTO_MTU;  // or handle differently (split, or error, etc.)
   }
   // 1. Leading delimiter
   Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
@@ -168,7 +168,7 @@ private:
   uint8_t _matchedDelimiterTokens;
   RcvCommand _command;
   size_t _commandParamLen; 
-  uint8_t _commandParams[PROTO_MTU2];
+  uint8_t _commandParams[PROTO_MTU];
   size_t _paramIndex;
 
   void inline processByte(uint8_t b) {
@@ -188,7 +188,7 @@ private:
         _callback(_command, _commandParams, 0);
         resetParser();
       }
-      if (_commandParamLen > PROTO_MTU2) {
+      if (_commandParamLen > PROTO_MTU) {
         resetParser();
       }
     } else {

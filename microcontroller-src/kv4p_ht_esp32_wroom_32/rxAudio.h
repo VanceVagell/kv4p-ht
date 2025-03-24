@@ -31,8 +31,8 @@ class SerialOutput : public AudioOutput {
 public:
   size_t write(const uint8_t *data, size_t len) override {
     if (len > 0) {
-      if (len > PROTO_MTU2) {
-        len = PROTO_MTU2;
+      if (len > PROTO_MTU) {
+        len = PROTO_MTU;
       }
       sendAudio((uint8_t*)data, len);
       return len;

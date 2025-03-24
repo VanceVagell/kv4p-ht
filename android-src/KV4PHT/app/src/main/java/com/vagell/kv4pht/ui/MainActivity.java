@@ -105,11 +105,8 @@ public class MainActivity extends AppCompatActivity {
     private AudioRecord audioRecord;
     private boolean isRecording = false;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    private int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
-    private int frameSize = 960; // 20ms at 48kHz
-    private int bufferSize = Math.max(minBufferSize, frameSize * 2);
-    private final OpusEncoderWrapper encoder = new OpusEncoderWrapper(RadioAudioService.AUDIO_SAMPLE_RATE);
+    private int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
+    private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat);
 
     private Thread recordingThread;
 
@@ -1646,7 +1643,7 @@ public class MainActivity extends AppCompatActivity {
                 RadioAudioService.AUDIO_SAMPLE_RATE,
                 channelConfig,
                 audioFormat,
-                bufferSize);
+                minBufferSize);
 
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.d("DEBUG", "Audio init error");
@@ -1682,16 +1679,14 @@ public class MainActivity extends AppCompatActivity {
         float audioChunkSampleTotal = 0.0f; // Accumulate across buffers
         int accumulatedSamples = 0; // Track count of samples
         int samplesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
-        short[] audioBuffer = new short[frameSize];
-        byte[] opusData = new byte[Protocol.PROTO_MTU2];
+        float[] audioBuffer = new float[RadioAudioService.OPUS_FRAME_SIZE];
         while (isRecording) {
-            int samples = audioRecord.read(audioBuffer, 0, frameSize);
-            if (samples > 0) {
-                int encodedLength = encoder.encode(audioBuffer, samples, opusData);
-                radioAudioService.sendAudioToESP32(Arrays.copyOfRange(opusData, 0, encodedLength), false);
+            int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
+            if (samples == RadioAudioService.OPUS_FRAME_SIZE) {
+                radioAudioService.sendAudioToESP32(audioBuffer, samples, false);
                 // Accumulate samples across buffers
                 for (int i = 0; i < samples; i++) {
-                    audioChunkSampleTotal += Math.abs(audioBuffer[i] / 32768.0f) * 8.0f;
+                    audioChunkSampleTotal += Math.abs(audioBuffer[i]) * 8.0f;
                     accumulatedSamples++;
                     // If we have enough samples, update visualization
                     if (accumulatedSamples >= samplesPerAnimFrame) {

@@ -22,8 +22,7 @@ public final class Protocol {
     public static final byte DRA818_25K = 0x01;
     public static final byte DRA818_12K5 = 0x00;
 
-    public static final int PROTO_MTU = 0xFF; // Maximum length of the frame
-    public static final int PROTO_MTU2 = 2048; // Maximum length of the frame
+    public static final int PROTO_MTU = 2048; // Maximum length of the frame
 
 
     private Protocol() {
@@ -263,6 +262,8 @@ public final class Protocol {
         }
 
         public void txAudio(byte[] audio) {
+            sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
+            /*
             int offset = 0;
             while (offset < audio.length) {
                 int chunkSize = Math.min(PROTO_MTU, audio.length - offset);
@@ -270,6 +271,7 @@ public final class Protocol {
                 sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, chunk);
                 offset += chunkSize;
             }
+             */
         }
     }
 
@@ -283,7 +285,7 @@ public final class Protocol {
         private int matchedDelimiterTokens = 0;
         private byte command;
         private int commandParamLen;
-        private final byte[] commandParams = new byte[PROTO_MTU2];
+        private final byte[] commandParams = new byte[PROTO_MTU];
         private int paramIndex;
         private final TriConsumer<RcvCommand, byte[], Integer> onCommand;
 

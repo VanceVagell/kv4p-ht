@@ -23,8 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define AUDIO_SAMPLE_RATE 48000
 
 // Maximum length of the frame
-#define PROTO_MTU 0xFF
-#define PROTO_MTU2 2048
+#define PROTO_MTU 2048
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.

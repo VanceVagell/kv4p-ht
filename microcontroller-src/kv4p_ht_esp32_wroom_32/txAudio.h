@@ -39,7 +39,7 @@ void initI2STx() {
   auto config = out.defaultConfig(TX_MODE);
   config.copyFrom(txInfo);
   config.adc_pin = DAC_PIN;
-  config.is_blocking_write = false;
+  config.is_blocking_write = true;
   //config.buffer_size = I2S_WRITE_LEN;
   //config.buffer_count = 8;
   config.use_apll = true;
@@ -49,7 +49,7 @@ void initI2STx() {
   // configure OPUS additinal parameters
   txDec.setAudioInfo(txInfo);
   auto &enc_cfg = txDec.config();
-  enc_cfg.max_buffer_write_size = PROTO_MTU2;
+  enc_cfg.max_buffer_write_size = PROTO_MTU;
   txDec.begin(enc_cfg);
 
   txOut.begin(txInfo);
@@ -66,7 +66,12 @@ void endI2STx() {
 }
 
 void processTxAudio(uint8_t *src, size_t len) {
-  txOut.write(src, len);
+  size_t totalWritten = 0;
+  while (totalWritten < len) {
+      size_t written = txOut.write(src + totalWritten, len - totalWritten);
+      totalWritten += written;
+      esp_task_wdt_reset();
+  }
 }
 
 void inline txAudioLoop() {
