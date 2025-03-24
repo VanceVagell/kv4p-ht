@@ -16,8 +16,7 @@ public final class Protocol {
     private static final String TAG = Protocol.class.getSimpleName();
 
     // Delimiter must match ESP32 code
-    static final byte[] COMMAND_DELIMITER = new byte[]{(byte) 0xDE, (byte) 0xAD, (byte) 0xBE, (byte) 0xEF, (byte) 0xDE,
-        (byte) 0xAD, (byte) 0xBE, (byte) 0xEF};
+    static final byte[] COMMAND_DELIMITER = new byte[]{(byte) 0xDE, (byte) 0xAD, (byte) 0xBE, (byte) 0xEF};
 
     public static final byte DRA818_25K = 0x01;
     public static final byte DRA818_12K5 = 0x00;

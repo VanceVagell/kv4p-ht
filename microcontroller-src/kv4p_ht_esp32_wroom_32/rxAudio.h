@@ -75,9 +75,9 @@ void initI2SRx() {
   // configure OPUS additinal parameters
   auto &enc_cfg = rxEnc.config();
   enc_cfg.application = OPUS_APPLICATION_AUDIO;
-  enc_cfg.frame_sizes_ms_x2 = OPUS_FRAMESIZE_20_MS;
+  enc_cfg.frame_sizes_ms_x2 = OPUS_FRAMESIZE_40_MS;
   enc_cfg.vbr = 1;
-  enc_cfg.max_bandwidth = OPUS_BANDWIDTH_WIDEBAND;
+  enc_cfg.max_bandwidth = OPUS_BANDWIDTH_NARROWBAND;
   rxEnc.begin(enc_cfg);
   /*
   rxEnc.setAudioInfo(config);

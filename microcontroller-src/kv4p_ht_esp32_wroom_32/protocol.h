@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "debug.h"
 
 // Delimeter must also match Android app
-const uint8_t COMMAND_DELIMITER[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
+const uint8_t COMMAND_DELIMITER[] = {0xDE, 0xAD, 0xBE, 0xEF};
 #define DELIMITER_LENGTH sizeof(COMMAND_DELIMITER)
 
 // Incoming commands (Android -> ESP32)

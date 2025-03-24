@@ -147,11 +147,11 @@ public class RadioAudioService extends Service {
     private Map<String, Integer> mTones = new HashMap<>();
 
     // For receiving audio from ESP32 / radio
-    private final float[] pcmFloat = new float[1920];
+    private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
     private AudioTrack audioTrack;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
-    public static final int OPUS_FRAME_SIZE = 1920; // Default: 20ms at 48kHz
+    public static final int OPUS_FRAME_SIZE = 1920; // 40ms at 48kHz
     private final OpusUtils.OpusDecoderWrapper opusDecoder = new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
     private final OpusUtils.OpusEncoderWrapper opusEncoder = new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
 
@@ -909,7 +909,7 @@ public class RadioAudioService extends Service {
         Log.d("DEBUG", "serialPort: " + serialPort);
         try {
             serialPort.open(connection);
-            serialPort.setParameters(230400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.d("DEBUG", "Error: couldn't open USB serial port.");
             if (callbacks != null) {

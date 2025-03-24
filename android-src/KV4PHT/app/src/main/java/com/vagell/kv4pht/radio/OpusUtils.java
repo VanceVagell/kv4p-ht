@@ -1,5 +1,6 @@
 package com.vagell.kv4pht.radio;
 
+import static io.github.jaredmdobson.OpusBandwidth.OPUS_BANDWIDTH_NARROWBAND;
 import static io.github.jaredmdobson.OpusFramesize.OPUS_FRAMESIZE_20_MS;
 
 import io.github.jaredmdobson.OpusApplication;
@@ -49,6 +50,7 @@ public final class OpusUtils {
                 this.encoder = new OpusEncoder(sampleRate, 1, OpusApplication.OPUS_APPLICATION_VOIP); // Mono
                 this.frameSize = frameSize;
                 this.encoder.setUseVBR(true);
+                this.encoder.setMaxBandwidth(OPUS_BANDWIDTH_NARROWBAND);
                 this.pcmBuffer = new short[frameSize];
             } catch (OpusException e) {
                 throw new RuntimeException(e);

@@ -86,7 +86,7 @@ void setup() {
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
-  Serial.begin(230400);
+  Serial.begin(115200);
   // Hardware dependent pin assignments.
   switch (hardware_version) {
     case HW_VER_V1:
