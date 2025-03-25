@@ -26,6 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "rxAudio.h"
 #include "txAudio.h"
 #include "buttons.h"
+#include "utils.h"
 
 const uint16_t FIRMWARE_VER = 12;
 
@@ -40,6 +41,8 @@ DRA818 &sa818 = sa818_vhf;
 const char RADIO_MODULE_NOT_FOUND = 'x';
 const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
+
+Debounce squelchDebounce(100);
 
 void setMode(Mode newMode) {
   if (mode == newMode) {
@@ -56,6 +59,7 @@ void setMode(Mode newMode) {
     case MODE_RX:
       _LOGI("MODE_RX");
       digitalWrite(PTT_PIN, HIGH);
+      squelchDebounce.forceState(true);
       endI2STx();
       initI2SRx();
     break;
@@ -210,14 +214,13 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
 }
 
 void rssiLoop() {
-  static long lastRssiReport = -1;
   if (mode == MODE_RX) {
-    if ((millis() - lastRssiReport) >= RSSI_REPORT_INTERVAL_MS) {
+    EVERY_N_MILLISECONDS(RSSI_REPORT_INTERVAL_MS) {
       // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
       // return value from the module, and just tells us success/fail.
       // int rssi = dra->rssi();
       Serial2.println("RSSI?");
-      String rssiResponse = Serial2.readString();  // Should be like "RSSI=X\n\r", where X is 1-3 digits, 0-255
+      String rssiResponse = Serial2.readString();
       if (rssiResponse.length() > 7) {
         String rssiStr = rssiResponse.substring(5);
         int rssiInt    = rssiStr.toInt();
@@ -225,13 +228,13 @@ void rssiLoop() {
           sendRssi((uint8_t)rssiInt);
         }
       }
-      lastRssiReport = millis();
     }
+    END_EVERY_N_MILLISECONDS();
   }
 }
 
 void loop() {
-  squelched = (digitalRead(SQ_PIN) == HIGH);
+  squelched = squelchDebounce.debounce((digitalRead(SQ_PIN) == HIGH));
   debugLoop();
   ledLoop();
   protocolLoop();
