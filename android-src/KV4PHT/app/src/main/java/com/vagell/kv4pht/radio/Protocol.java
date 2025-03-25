@@ -241,23 +241,20 @@ public final class Protocol {
         }
 
         private void sendCommand(SndCommand commandType, byte[] param) {
-            waitUntilCanSend();
-            ByteBuffer buffer = ByteBuffer.allocate(1024*4);
+            int frameSize = COMMAND_DELIMITER.length + 1 + 2 + (param != null ? param.length : 0);
+            waitUntilCanSend(frameSize);
+            ByteBuffer buffer = ByteBuffer.allocate(frameSize);
+            buffer.order(ByteOrder.LITTLE_ENDIAN);
             buffer.put(COMMAND_DELIMITER);
             buffer.put((byte) commandType.getValue());
             if (param != null) {
-                buffer.put((byte) (param.length & 0xFF));       // LSB first
-                buffer.put((byte) ((param.length >> 8) & 0xFF)); // MSB second
+                buffer.putShort((short) param.length);
                 buffer.put(param);
             } else {
-                buffer.put((byte) 0);
-                buffer.put((byte) 0);
+                buffer.putShort((short) 0);
             }
-            byte[] command = new byte[buffer.position()];
-            buffer.flip();
-            buffer.get(command);
-            usbIoManager.writeAsync(command);
-            flowControlWindow.addAndGet(-command.length);
+            usbIoManager.writeAsync(buffer.array());
+            flowControlWindow.addAndGet(-frameSize);
         }
 
         public void pttDown() {
@@ -298,10 +295,10 @@ public final class Protocol {
         }
         
         // Waits until it can send (windowSize > 0)
-        private void waitUntilCanSend() {
+        private void waitUntilCanSend(int size) {
             lock.lock();
             try {
-                while (flowControlWindow.get() <= 0) {
+                while (flowControlWindow.get() <= size) {
                     try {
                         canSendCondition.await();  // Wait until signaled that windowSize > 0
                     } catch (InterruptedException e) {

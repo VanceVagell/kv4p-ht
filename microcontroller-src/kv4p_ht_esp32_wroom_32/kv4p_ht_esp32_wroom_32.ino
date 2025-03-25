@@ -159,7 +159,7 @@ void doConfig(Config const &config) {
     result = sa818.volume(8);
   }
   result = sa818.filters(false, false, false);
-  sendVersion(FIRMWARE_VER, radioModuleStatus, hardware_version, USB_BUFFER_SIZE / 2);
+  sendVersion(FIRMWARE_VER, radioModuleStatus, hardware_version, USB_BUFFER_SIZE);
   esp_task_wdt_reset();
 }
 
