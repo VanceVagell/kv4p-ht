@@ -89,9 +89,9 @@ import com.vagell.kv4pht.radio.Protocol.FrameParser;
 import com.vagell.kv4pht.radio.Protocol.Group;
 import com.vagell.kv4pht.radio.Protocol.RadioStatus;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
+import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -1200,6 +1200,11 @@ public class RadioAudioService extends Service {
                 handleVersion(param, len);
                 break;
 
+            case COMMAND_WINDOW_UPDATE:
+                WindowUpdate.from(param, len).ifPresent(windowAck ->
+                    hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
+                break;
+
             default:
                 break;
         }
@@ -1244,6 +1249,7 @@ public class RadioAudioService extends Service {
                 if (radioModuleNotFound) {
                     Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
                 } else {
+                    hostToEsp32.setFlowControlWindow(ver.getWindowSize());
                     initAfterESP32Connected();
                 }
             });

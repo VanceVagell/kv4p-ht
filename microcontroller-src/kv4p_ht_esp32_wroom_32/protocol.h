@@ -51,6 +51,7 @@ enum SndCommand {
   COMMAND_HELLO          = 0x06, // [COMMAND_HELLO()]
   COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_VERSION        = 0x08, // [COMMAND_VERSION(Version)]
+  COMMAND_WINDOW_UPDATE  = 0x09,
 };
 
 // COMMAND_VERSION parameters
@@ -58,6 +59,7 @@ struct version {
   uint16_t    ver;
   char        radioModuleStatus;
   hw_ver_t    hw;
+  size_t      windowSize;
 } __attribute__((__packed__));
 typedef struct version Version;
 
@@ -93,6 +95,13 @@ struct config {
   uint8_t radioType; 
 } __attribute__((__packed__));
 typedef struct config Config;
+
+// COMMAND_WINDOW_ACK parameters
+struct window_update {
+  size_t size; 
+} __attribute__((__packed__));
+typedef struct window_update WindowUpdate;
+
 
 /**
  * Send a command with params
@@ -131,11 +140,12 @@ void inline sendRssi(uint8_t rssi) {
   __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
 }
 
-void inline sendVersion(uint16_t ver, char radioModuleStatus, hw_ver_t hw) {
+void inline sendVersion(uint16_t ver, char radioModuleStatus, hw_ver_t hw, size_t windowSize) {
   Version params = {
     .ver = ver,
     .radioModuleStatus = radioModuleStatus,
-    .hw = hw
+    .hw = hw,
+    .windowSize = windowSize
   };
   __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
 }
@@ -146,6 +156,13 @@ void inline sendPhysPttState(bool isPhysPttDown) {
 
 void inline sendAudio(const byte *data, size_t len) {
   __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
+}
+
+void inline sendWindowAck(size_t size) {
+  WindowUpdate params = {
+    .size = size,
+  };
+  __sendCmdToHost(COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
 }
 
 typedef void (*CommandCallback)(RcvCommand command, uint8_t *params, size_t param_len);
@@ -186,6 +203,7 @@ private:
       _matchedDelimiterTokens++;
       if (_commandParamLen == 0) {
         _callback(_command, _commandParams, 0);
+        sendWindowAck(DELIMITER_LENGTH + 1 + 2);
         resetParser();
       }
       if (_commandParamLen > PROTO_MTU) {
@@ -197,6 +215,7 @@ private:
       }
       if (_paramIndex == _commandParamLen) {
         _callback(_command, _commandParams, _commandParamLen);
+        sendWindowAck(DELIMITER_LENGTH + 1 + 2 + _commandParamLen);
         resetParser();
       }
     }

@@ -3,9 +3,12 @@ package com.vagell.kv4pht.radio;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
-import com.vagell.kv4pht.javAX25.ax25.Arrays;
 
 import android.util.Log;
 import lombok.Builder;
@@ -56,7 +59,8 @@ public final class Protocol {
         COMMAND_DEBUG_TRACE(0x05),      // [COMMAND_DEBUG_TRACE(char[])]
         COMMAND_HELLO(0x06),            // [COMMAND_HELLO()]
         COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
-        COMMAND_VERSION(0x08);          // [COMMAND_VERSION(Version)]
+        COMMAND_VERSION(0x08),          // [COMMAND_VERSION(Version)]
+        COMMAND_WINDOW_UPDATE(0x09);    // [COMMAND_WINDOW_UPDATE()]
         private final int value;
         RcvCommand(int value) {
             this.value = value;
@@ -197,28 +201,47 @@ public final class Protocol {
         private final short ver;  // equivalent to uint16_t
         private final RadioStatus radioModuleStatus;  // equivalent to char
         private final HardwareVersion hardwareVersion;
+        private final int windowSize; // equivalent to size_t
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 4)
+                .filter(p -> len == 8)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
                     .ver(b.getShort())
                     .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
                     .hardwareVersion(HardwareVersion.fromValue(b.get() & 0xFF))
+                    .windowSize(b.getInt())
                     .build());
+        }
+    }
+
+    @Data
+    @Builder
+    public static class WindowUpdate {
+        private final int size;
+        public static Optional<WindowUpdate> from(final byte[] param, Integer len) {
+            return Optional.ofNullable(param)
+                .filter(p -> len == 4)
+                .map(ByteBuffer::wrap)
+                .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
+                .map(b -> WindowUpdate.builder().size(b.getInt()).build());
         }
     }
 
     public static class Sender {
 
+        private final AtomicInteger flowControlWindow = new AtomicInteger(1024);
         private final SerialInputOutputManager usbIoManager;
+        private final Lock lock = new ReentrantLock();
+        private final Condition canSendCondition = lock.newCondition();
 
         public Sender(SerialInputOutputManager usbIoManager) {
             this.usbIoManager = usbIoManager;
         }
 
         private void sendCommand(SndCommand commandType, byte[] param) {
+            waitUntilCanSend();
             ByteBuffer buffer = ByteBuffer.allocate(1024*4);
             buffer.put(COMMAND_DELIMITER);
             buffer.put((byte) commandType.getValue());
@@ -234,6 +257,7 @@ public final class Protocol {
             buffer.flip();
             buffer.get(command);
             usbIoManager.writeAsync(command);
+            flowControlWindow.addAndGet(-command.length);
         }
 
         public void pttDown() {
@@ -271,6 +295,42 @@ public final class Protocol {
                 offset += chunkSize;
             }
              */
+        }
+        
+        // Waits until it can send (windowSize > 0)
+        private void waitUntilCanSend() {
+            lock.lock();
+            try {
+                while (flowControlWindow.get() <= 0) {
+                    try {
+                        canSendCondition.await();  // Wait until signaled that windowSize > 0
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        public void setFlowControlWindow(int size) {
+            lock.lock();
+            try {
+                flowControlWindow.set(size);
+                canSendCondition.signalAll();  // Signal all waiting threads that they can proceed
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        public void enlargeFlowControlWindow(int size) {
+            lock.lock();
+            try {
+                flowControlWindow.addAndGet(size);
+                canSendCondition.signalAll();  // Signal all waiting threads that they can proceed
+            } finally {
+                lock.unlock();
+            }
         }
     }
 
