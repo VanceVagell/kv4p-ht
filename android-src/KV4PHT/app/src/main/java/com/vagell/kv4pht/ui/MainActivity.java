@@ -106,6 +106,8 @@ public class MainActivity extends AppCompatActivity {
     private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
     private Thread recordingThread;
 
+    private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
+
     // Active screen type (e.g. voice or chat)
     private ScreenType activeScreenType = ScreenType.SCREEN_VOICE;
 
@@ -1195,39 +1197,38 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private void attachListeners() {
-        final Context ctx = this;
-
         ImageButton pttButton = findViewById(R.id.pttButton);
-        pttButton.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                boolean touchHandled = false;
-                switch (event.getAction()) {
-                    case MotionEvent.ACTION_DOWN:
-                        if (!((ImageButton) v).isClickable()) {
-                            touchHandled = true;
-                            break;
-                        }
-                        if (stickyPTT) {
-                            if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
-                                ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
-                                if (radioAudioService != null) {
-                                    // If the user tries to transmit, stop scanning so we don't
-                                    // move to a different frequency during or after the tx.
-                                    radioAudioService.setScanning(false, false);
-                                    setScanningUi(false);
-                                    radioAudioService.startPtt();
-                                }
-                                startPttUi(false);
-                            } else if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_TX) {
-                                ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
-                                if (radioAudioService != null) {
-                                    radioAudioService.endPtt();
-                                }
-                                endPttUi();
+        pttButton.setOnTouchListener((v, event) -> {
+            boolean touchHandled = false;
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    if (!v.isClickable()) {
+                        touchHandled = true;
+                        break;
+                    }
+                    pttButtonDebounceHandler.removeCallbacksAndMessages(null);
+                    if (stickyPTT) {
+                        if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
+                            ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
+                            if (radioAudioService != null) {
+                                // If the user tries to transmit, stop scanning so we don't
+                                // move to a different frequency during or after the tx.
+                                radioAudioService.setScanning(false, false);
+                                setScanningUi(false);
+                                radioAudioService.startPtt();
                             }
-                        } else {
+                            startPttUi(false);
+                        } else if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_TX) {
+                            ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
+                            if (radioAudioService != null) {
+                                radioAudioService.endPtt();
+                            }
+                            endPttUi();
+                        }
+                    } else {
+                        if (audioRecord == null) {
                             ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                             if (radioAudioService != null) {
                                 // If the user tries to transmit, stop scanning so we don't
@@ -1238,25 +1239,27 @@ public class MainActivity extends AppCompatActivity {
                             }
                             startPttUi(false);
                         }
+                    }
+                    touchHandled = true;
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (!v.isClickable()) {
                         touchHandled = true;
                         break;
-                    case MotionEvent.ACTION_UP:
-                        if (!((ImageButton) v).isClickable()) {
-                            touchHandled = true;
-                            break;
-                        }
-                        if (!stickyPTT) {
+                    }
+                    pttButtonDebounceHandler.removeCallbacksAndMessages(null);
+                    if (!stickyPTT) {
+                        pttButtonDebounceHandler.postDelayed(() -> {
                             if (radioAudioService != null) {
                                 radioAudioService.endPtt();
                             }
                             endPttUi();
-                        }
-                        touchHandled = true;
-                        break;
-                }
-
-                return touchHandled;
+                        }, 250);
+                    }
+                    touchHandled = true;
+                    break;
             }
+            return touchHandled;
         });
 
         pttButton.setOnClickListener(new View.OnClickListener() {
@@ -1738,14 +1741,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showHandshakeSnackbar() {
-        CharSequence snackbarMsg = "Connecting to radio...";
+        CharSequence snackbarMsg = "Looking for kv4p HT radio...";
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-            .setBackgroundTint(Color.rgb(20, 140, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
+            .setBackgroundTint(getResources().getColor(R.color.primary))
+            .setTextColor(getResources().getColor(R.color.medium_gray))
             .setAnchorView(findViewById(R.id.bottomNavigationView));
 
         // Make the text of the snackbar larger.
-        TextView snackbarActionTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
-        snackbarActionTextView.setTextSize(20);
         TextView snackbarTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 

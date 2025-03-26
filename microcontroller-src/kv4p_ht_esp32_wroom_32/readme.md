@@ -1,317 +1,143 @@
-# KV4P-HT Serial Interface Documentation
+# KV4P-HT Communication Protocol
 
-This document provides detailed instructions on how to interact with the KV4P-HT device via its serial console. It covers the serial connection setup, communication protocol, and command usage, including changing frequencies, controlling Push-To-Talk (PTT), and configuring filters.
+## Overview
 
----
+The KV4P-HT protocol defines the communication interface between the microcontroller and external systems. It specifies message structures and command types for data exchange.
 
-## Table of Contents
+## Protocol Version
 
-1. [Serial Connection Setup](#1-serial-connection-setup)
-2. [Communication Protocol](#2-communication-protocol)
-   - [2.1. Delimiter](#21-delimiter)
-   - [2.2. Command Structure](#22-command-structure)
-3. [Commands from Android (to ESP32)](#3-commands)
-   - [3.1. COMMAND_PTT_DOWN (0x01)](#31-command_ptt_down-0x01)
-   - [3.2. COMMAND_PTT_UP (0x02)](#32-command_ptt_up-0x02)
-   - [3.3. COMMAND_TUNE_TO (0x03)](#33-command_tune_to-0x03)
-   - [3.4. COMMAND_FILTERS (0x04)](#34-command_filters-0x04)
-   - [3.5. COMMAND_STOP (0x05)](#35-command_stop-0x05)
-   - [3.6. COMMAND_GET_FIRMWARE_VER (0x06)](#36-command_get_firmware_ver-0x06)
-4. [Commands from ESP32 (to Android)](#4-esp32-commands)
-   - [4.1. COMMAND_SMETER (0x53)](#41-command_smeter-0x53)
-5. [Examples](#5-examples)
-   - [5.1. Changing Frequencies](#51-changing-frequencies)
-   - [5.2. Starting Transmission](#52-starting-transmission)
-   - [5.3. Stopping Transmission](#53-stopping-transmission)
-   - [5.4. Configuring Filters](#54-configuring-filters)
-   - [5.5. Retrieving Firmware Version](#55-retrieving-firmware-version)
-6. [Additional Notes](#6-additional-notes)
+- **Current Version:** 2.0
+- **Changelog:**
+  - Initial version with core command set.
 
----
+## Packet Structure
 
-## 1. Serial Connection Setup
+Each message consists of the following fields:
 
-To interact with the KV4P-HT device, establish a serial connection using the following parameters:
+| Field             | Size (bytes) | Description                                |
+| ----------------- | ------------ | ------------------------------------------ |
+| Command Delimiter | 8            | Fixed value (`0xDEADBEEFDEADBEEF`)         |
+| Command           | 1            | Identifies the request or response         |
+| Parameter Length  | 1            | Length of the following parameters (0-255) |
+| Parameters        | 0-255        | Command-specific data                      |
 
-- **Port**: The serial port connected to the KV4P-HT device (e.g., `COM3`, `/dev/ttyUSB0`).
-- **Baud Rate**: `230400` bits per second.
-- **Data Bits**: `8` bits.
-- **Parity**: `None`.
-- **Stop Bits**: `1` bit.
-- **Flow Control**: `None`.
+## Incoming Commands (Android → ESP32)
 
-**Note**: Ensure that your serial communication software or terminal emulator supports the high baud rate of 921600 bps.
+| Command Code | Name                    | Description                              |
+| ------------ | ----------------------- | ---------------------------------------- |
+| `0x01`       | `COMMAND_HOST_PTT_DOWN` | Push-to-talk activation                  |
+| `0x02`       | `COMMAND_HOST_PTT_UP`   | Push-to-talk deactivation                |
+| `0x03`       | `COMMAND_HOST_GROUP`    | Set group (parameters required)          |
+| `0x04`       | `COMMAND_HOST_FILTERS`  | Set filters (parameters required)        |
+| `0x05`       | `COMMAND_HOST_STOP`     | Stop current operation                   |
+| `0x06`       | `COMMAND_HOST_CONFIG`   | Configure device (may return version)    |
+| `0x07`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx audio data (payload required) |
 
----
+## Outgoing Commands (ESP32 → Android)
 
-## 2. Communication Protocol
+| Command Code | Name                    | Description                            |
+| ------------ | ----------------------- | -------------------------------------- |
+| `0x53`       | `COMMAND_SMETER_REPORT` | Reports RSSI level                     |
+| `0x44`       | `COMMAND_PHYS_PTT_DOWN` | Physical push-to-talk activation       |
+| `0x55`       | `COMMAND_PHYS_PTT_UP`   | Physical push-to-talk deactivation     |
+| `0x01`       | `COMMAND_DEBUG_INFO`    | Sends debug info message               |
+| `0x02`       | `COMMAND_DEBUG_ERROR`   | Sends debug error message              |
+| `0x03`       | `COMMAND_DEBUG_WARN`    | Sends debug warning message            |
+| `0x04`       | `COMMAND_DEBUG_DEBUG`   | Sends debug debug-level message        |
+| `0x05`       | `COMMAND_DEBUG_TRACE`   | Sends debug trace message              |
+| `0x06`       | `COMMAND_HELLO`         | Hello handshake message                |
+| `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx audio data (payload required) |
+| `0x08`       | `COMMAND_VERSION`       | Sends firmware version information     |
 
-### 2.1. Delimiter
+## Command Parameters
 
-All commands sent to the KV4P-HT device must be preceded by an 8-byte delimiter. This delimiter signals the start of a new command and helps synchronize communication.
+### `COMMAND_VERSION` Parameters
 
-**Delimiter Byte Sequence**:
-
-```plaintext
-0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00
+```c
+struct version {
+  uint16_t    ver;               // 2 bytes
+  char        radioModuleStatus; // 1 byte
+  hw_ver_t    hw;                // 1 byte
+} __attribute__((__packed__));
+typedef struct version Version;
 ```
 
-### 2.2. Command Structure
+### `COMMAND_SMETER_REPORT` Parameters
 
-After the delimiter, send a single-byte command code followed by any required parameters. The general structure is as follows:
-
-```plaintext
-[Delimiter][Command Code][Parameters (if any)]
+```c
+struct rssi {
+  uint8_t     rssi; // 1 byte
+} __attribute__((__packed__));
+typedef struct rssi Rssi;
 ```
 
-- **Delimiter**: 8 bytes (as specified above).
-- **Command Code**: 1 byte (see the list of commands below).
-- **Parameters**: Varies by command.
+### `COMMAND_HOST_GROUP` Parameters
 
----
-
-## 3. Commands from Android (to ESP32)
-
-Below is a list of commands supported by the KV4P-HT device, along with their descriptions and parameter requirements.
-
-### 3.1. COMMAND_PTT_DOWN (0x01)
-
-- **Description**: Initiates transmission mode. The device expects audio data to follow, which will be transmitted over the radio.
-- **Parameters**: None.
-- **Usage**:
-  - Send the delimiter.
-  - Send the command code `0x01`.
-
-### 3.2. COMMAND_PTT_UP (0x02)
-
-- **Description**: Stops transmission and returns the device to receive mode.
-- **Parameters**: None.
-- **Usage**:
-  - Send the delimiter.
-  - Send the command code `0x02`.
-
-### 3.3. COMMAND_TUNE_TO (0x03)
-
-- **Description**: Changes the transmit and receive frequencies, as well as the tone and squelch settings.
-- **Parameters**: 19 bytes total.
-  - **Transmit Frequency**: 8 ASCII characters (e.g., `146.5200`).
-  - **Receive Frequency**: 8 ASCII characters.
-  - **Tone**: 2 ASCII characters representing an integer (e.g., `00` for none).
-  - **Squelch**: 1 ASCII character (`0` thru `8`).
-  - **Bandwidth**: 1 ASCII character (`W` or `N`).
-- **Usage**:
-  - Send the delimiter.
-  - Send the command code `0x03`.
-  - Send the parameters concatenated as a string.
-
-**Parameter Details**:
-
-| Parameter             | Length | Description                                          |
-|-----------------------|--------|------------------------------------------------------|
-| Transmit Frequency    | 8      | Frequency in MHz (e.g., `146.5200`)                  |
-| Receive Frequency     | 8      | Frequency in MHz                                     |
-| Tone                  | 2      | CTCSS tone frequency code (`00` for none)            |
-| Squelch               | 1      | `0` through `8` (off through maximum squelch)        |
-| Bandwidth             | 1      | `W` or `N` (wide 25kHz or narrow 12.5kHz)            |
-
-### 3.4. COMMAND_FILTERS (0x04)
-
-- **Description**: Configures the emphasis, high-pass, and low-pass filters.
-- **Parameters**: 3 bytes.
-  - Each byte is either `0` (disable) or `1` (enable).
-  - Order: `[Emphasis][High-Pass][Low-Pass]`.
-- **Usage**:
-  - Send the delimiter.
-  - Send the command code `0x04`.
-  - Send the 3-byte parameter string.
-
-### 3.5. COMMAND_STOP (0x05)
-
-- **Description**: Stops all operations and resets the device to standby mode, waiting for the next command.
-- **Parameters**: None.
-- **Usage**:
-  - Send the delimiter.
-  - Send the command code `0x05`.
-
-### 3.6. COMMAND_GET_FIRMWARE_VER (0x06)
-
-- **Description**: Requests the firmware version from the device.
-- **Parameters**: 1 byte
-   - Inform the firmware whether it should be in VHF or UHF mode with "v" or "u" (ASCII byte)
-- **Response**: The device will send back the string `VERSION` followed by an 8-character firmware version (e.g., `00000002`), and "f" for "radio module found" or "x" for "can't contact radio module"
-- **Usage**:
-  - Send the delimiter.
-  - Send the command code `0x06`.
-  - Send the radio module type the device has, either "v' or "u" (VHF or UHF, respectively)
-
----
-
-## 4. Commands from ESP32 (to Android)
-
-These commands may be sent by the ESP32 firmware, often embedded in the audio stream. Like the Android to ESP32 commands, these are prefixed with the same delimiter. 
-However, since these commands are embedded in an audio stream, they also include a count of parameter bytes. The overall format is:
-
-DELIMITER + COMMAND BYTE + PARAM SIZE BYTE + PARAM BYTE(S)
-
-Since the param size is stored in a byte, params can have a maximum of 255 bytes.
-
-### 4.1. COMMAND_SMETER (0x53)
-
-This command reports how strong the current signal reception (RSSI) is, from 0-255. It is sent periodically by the firmware to the Android device, via the audio stream.
-
-## 5. Examples
-
-### 5.1. Changing Frequencies
-
-**Objective**: Set the transmit frequency to `146.5200` MHz, receive frequency to `146.5200` MHz, no tone, squelch off, and wide bandwidth.
-
-**Command Sequence**:
-
-1. **Delimiter**:
-
-   ```plaintext
-   0xFF 0x00 0xFF 0x00 0xFF 0x00 0xFF 0x00
-   ```
-
-2. **Command Code**:
-
-   ```plaintext
-   0x03 (COMMAND_TUNE_TO)
-   ```
-
-3. **Parameters**:
-
-   - Transmit Frequency: `146.5200` (ASCII)
-   - Receive Frequency: `146.5200` (ASCII)
-   - Tone: `00` (ASCII)
-   - Squelch: `0` (ASCII)
-   - Bandwidth: `W` (ASCII)
-
-**Full Byte Sequence** (in hexadecimal):
-
-```plaintext
-FF 00 FF 00 FF 00 FF 00 03 31 34 36 2E 35 32 30 30 31 34 36 2E 35 32 30 30 30 30 30 57
+```c
+struct group {
+  uint8_t bw;       // 1 byte
+  float freq_tx;    // 4 bytes
+  float freq_rx;    // 4 bytes
+  uint8_t ctcss_tx; // 1 byte
+  uint8_t squelch;  // 1 byte
+  uint8_t ctcss_rx; // 1 byte
+} __attribute__((__packed__));
+typedef struct group Group;
 ```
 
-**Explanation**:
+### `COMMAND_HOST_FILTERS` Parameters
 
-- `31 34 36 2E 35 32 30 30` is ASCII for `146.5200`.
-- Tone `00`: `30 30`.
-- Squelch `0`: `30`.
-- Bandwidth `W`: `57`
+```c
+struct filters {
+  uint8_t flags;  // 1 byte - Uses bitmask for pre, high, and low
+} __attribute__((__packed__));
+typedef struct filters Filters;
 
-### 5.2. Starting Transmission
-
-**Objective**: Begin transmitting audio data.
-
-**Command Sequence**:
-
-1. **Delimiter**:
-
-   ```plaintext
-   0xFF 0x00 0xFF 0x00 0xFF 0x00 0xFF 0x00
-   ```
-
-2. **Command Code**:
-
-   ```plaintext
-   0x01 (COMMAND_PTT_DOWN)
-   ```
-
-**Following Data**:
-
-- Send the audio data bytes immediately after the command.
-- Audio data should be raw 8-bit PCM audio sampled at **22050Hz**.
-
-### 5.3. Stopping Transmission
-
-**Objective**: Stop transmitting and return to receive mode.
-
-**Command Sequence**:
-
-1. **While in transmission mode**, send the delimiter and the `COMMAND_PTT_UP` code.
-
-   ```plaintext
-   0xFF 0x00 0xFF 0x00 0xFF 0x00 0xFF 0x00 0x02
-   ```
-
-**Note**: There may be a brief delay (~40 ms) to allow final audio data to be transmitted.
-
-### 5.4. Configuring Filters
-
-**Objective**: Enable emphasis and disable high-pass and low-pass filters.
-
-**Command Sequence**:
-
-1. **Delimiter**:
-
-   ```plaintext
-   0xFF 0x00 0xFF 0x00 0xFF 0x00 0xFF 0x00
-   ```
-
-2. **Command Code**:
-
-   ```plaintext
-   0x04 (COMMAND_FILTERS)
-   ```
-
-3. **Parameters**:
-
-   - Emphasis: `1`
-   - High-Pass: `0`
-   - Low-Pass: `0`
-
-**Full Byte Sequence** (in hexadecimal):
-
-```plaintext
-FF 00 FF 00 FF 00 FF 00 04 31 30 30
+#define FILTER_PRE  (1 << 0) // Bit 0
+#define FILTER_HIGH (1 << 1) // Bit 1
+#define FILTER_LOW  (1 << 2) // Bit 2
 ```
 
-### 5.5. Retrieving Firmware Version
+### `COMMAND_HOST_CONFIG` Parameters
 
-**Objective**: Get the firmware version from the device.
+```c
+struct config {
+  uint8_t radioType; // 1 byte
+} __attribute__((__packed__));
+typedef struct config Config;
+```
 
-**Command Sequence**:
+## Command Handling Strategy
 
-1. **Delimiter**:
+- Most commands follow a **fire-and-forget** approach.
+- Some commands may trigger a reply (indicated in comments).
+- There are no explicit response types; responses are sent as separate commands.
 
-   ```plaintext
-   0xFF 0x00 0xFF 0x00 0xFF 0x00 0xFF 0x00
-   ```
+## Byte Order and Bit Significance
+- All multi-byte fields are encoded in little-endian format.
+- Bitmask values follow LSB-first ordering (bit 0 is the least significant).
 
-2. **Command Code**:
+## Example Packets
 
-   ```plaintext
-   0x06 (COMMAND_GET_FIRMWARE_VER)
-   ```
+### Push-to-talk activation
 
-**Expected Response**:
+```
+[ 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x00 ]
+```
 
-- The device will send back `VERSION00000002` (assuming the firmware version is `00000002`).
+- `0xDEADBEEFDEADBEEF`: Command Delimiter
+- `0x01`: `COMMAND_HOST_PTT_DOWN`
+- `0x00`: Parameter Length (no parameters)
 
----
+### Example Debug Message
 
-## 6. Additional Notes
+```
+[ 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0x10, 0x05, 'E', 'r', 'r', 'o', 'r' ]
+```
 
-- **Audio Data Format**:
-  - When transmitting (after `COMMAND_PTT_DOWN`), send raw 8-bit PCM audio data sampled at **22050Hz**.
-  - Ensure continuous data flow to prevent underruns or audio glitches.
+- `0xDEADBEEFDEADBEEF`: Command Delimiter
+- `0x10`: `COMMAND_DEBUG_INFO`
+- `0x05`: Parameter Length (5 bytes)
+- `'Error'`: Debug message content
 
-- **Runaway Transmission Prevention**:
-  - The device has a built-in safeguard that limits continuous transmission to **200 seconds** to prevent unintended prolonged transmissions.
 
-- **Squelch Behavior**:
-  - When in receive mode, the device handles squelch transitions smoothly using fade-in and fade-out effects to prevent audio pops.
-
-- **Buffer Sizes**:
-  - The device uses internal buffers to manage audio data. Avoid sending data exceeding buffer capacities in a single burst.
-
-- **Watchdog Timer (WDT)**:
-  - The device resets its watchdog timer regularly. If unresponsive, it may automatically reboot to recover from potential lock-ups.
-
-- **Error Handling**:
-  - Unexpected commands or malformed data may be ignored. Ensure that commands and parameters are correctly formatted according to the protocol.
-
----
-
-**Disclaimer**: Always test commands in a controlled environment to prevent unintended behavior. This documentation assumes familiarity with serial communication protocols and the KV4P-HT device's operational context.

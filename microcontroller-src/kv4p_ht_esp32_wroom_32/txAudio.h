@@ -47,6 +47,7 @@ void initI2STx() {
   i2sStarted = true;
   i2s_driver_install(I2S_NUM_0, &i2sTxConfig, 0, NULL);
   i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
+  i2s_zero_dma_buffer(I2S_NUM_0);
 }
 
 void processTxAudio(uint8_t *src, size_t len) {
