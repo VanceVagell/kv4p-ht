@@ -40,18 +40,41 @@ public:
     return len;
   } 
 };
-  
+
+#define DECAY_TIME 0.25  // seconds
+
+class DCOffsetRemover : public AudioEffect {
+public:
+  DCOffsetRemover(float decay_time = 0.25f, float sample_rate = AUDIO_SAMPLE_RATE): prev_y(0.0f) {
+    alpha = 1.0f - expf(-1.0f / (sample_rate * (decay_time / logf(2.0f))));
+  }
+  DCOffsetRemover(const DCOffsetRemover &) = default;
+  effect_t process(effect_t input) {
+    return active() ? remove_dc(input) : input;
+  }
+  DCOffsetRemover *clone() override {
+    return new DCOffsetRemover(*this);
+  }
+private:
+  float prev_y;
+  float alpha;
+  int16_t remove_dc(int16_t x) {
+    prev_y = alpha * x + (1.0f - alpha) * prev_y;
+    return x - (int16_t)prev_y;
+  }
+};
+
 bool rxStreamConfidured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET, 1, 16);
 OpusAudioEncoder rxEnc;
-//EncoderL8 rxEnc(true); 
 SerialOutput rxAudioOutput;
 EncodedAudioStream rxOut(&rxAudioOutput, &rxEnc);
 AudioEffectStream effects(in);  
 StreamCopy rxCopier(rxOut, effects);
 Boost mute(0.0);
 Boost gain(16.0);
+DCOffsetRemover dcOffsetRemover(DECAY_TIME);
 
 void initI2SRx() {
   if (hardware_version == HW_VER_V2_0C) {
@@ -63,10 +86,7 @@ void initI2SRx() {
   //AudioToolsLogger.begin(debugPrinter, AudioToolsLogLevel::Debug);
   auto config = in.defaultConfig(RX_MODE);
   config.copyFrom(rxInfo);
-  config.auto_clear = true;
-  config.is_auto_center_read = true;
-  //config.buffer_size = I2S_READ_LEN;
-  //config.buffer_count = 4;
+  config.is_auto_center_read = false;
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = ADC_PIN; 
@@ -79,14 +99,11 @@ void initI2SRx() {
   enc_cfg.vbr = 1;
   enc_cfg.max_bandwidth = OPUS_BANDWIDTH_NARROWBAND;
   rxEnc.begin(enc_cfg);
-  /*
-  rxEnc.setAudioInfo(config);
-  rxEnc.begin();
-  */
 
   effects.clear();
-  effects.addEffect(&gain);
-  effects.addEffect(&mute);
+  effects.addEffect(dcOffsetRemover);
+  effects.addEffect(gain);
+  effects.addEffect(mute);
   effects.begin(rxInfo);
 
   // open output
@@ -94,7 +111,6 @@ void initI2SRx() {
   // ADC bias
   dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
   dac_output_voltage(DAC_CHANNEL_2, (255.0 / 3.3) * ADC_BIAS_VOLTAGE);
-
   rxStreamConfidured = true;
 }
 

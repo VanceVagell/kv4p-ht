@@ -27,7 +27,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 bool txStreamConfidured = false;
 AnalogAudioStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
-//DecoderL8 txDec(false);
 OpusAudioDecoder txDec;
 EncodedAudioStream txOut(&out, &txDec); 
 
@@ -40,8 +39,6 @@ void initI2STx() {
   config.copyFrom(txInfo);
   config.adc_pin = DAC_PIN;
   config.is_blocking_write = true;
-  //config.buffer_size = I2S_WRITE_LEN;
-  //config.buffer_count = 8;
   config.use_apll = true;
   config.auto_clear = false;
   out.begin(config);
