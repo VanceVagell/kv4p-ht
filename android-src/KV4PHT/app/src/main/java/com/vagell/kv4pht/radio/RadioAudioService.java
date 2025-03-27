@@ -1138,7 +1138,7 @@ public class RadioAudioService extends Service {
         return newAudioBuffer;
     }
 
-    public void sendAudioToESP32(float[] samples, int len, boolean dataMode) {
+    public void sendAudioToESP32(float[] samples, boolean dataMode) {
         if (!dataMode) {
             samples = applyMicGain(samples);
         }
@@ -1487,7 +1487,7 @@ public class RadioAudioService extends Service {
         float[] opusFrame = new float[OPUS_FRAME_SIZE];
         java.util.Arrays.fill(opusFrame, 0.0f);
         for (int i = 0; i < (durationMs / 40); i++) {
-            sendAudioToESP32(opusFrame, OPUS_FRAME_SIZE, true);
+            sendAudioToESP32(opusFrame, true);
         }
     }
 
@@ -1512,14 +1512,14 @@ public class RadioAudioService extends Service {
             for (int i = 0; i < n; i++) {
                 opusFrame[opusFrameIndex++] = buffer[i];
                 if (opusFrameIndex == OPUS_FRAME_SIZE) {
-                    sendAudioToESP32(opusFrame, OPUS_FRAME_SIZE, true);
+                    sendAudioToESP32(opusFrame, true);
                     java.util.Arrays.fill(opusFrame, 0.0f);
                     opusFrameIndex = 0;
                 }
             }
         }
         // Send remaining audio if needed
-        sendAudioToESP32(opusFrame, OPUS_FRAME_SIZE, true);
+        sendAudioToESP32(opusFrame, true);
         // Send tail silence
         sendSilentFrames(MS_SILENCE_AFTER_DATA_MS);
         endPtt();

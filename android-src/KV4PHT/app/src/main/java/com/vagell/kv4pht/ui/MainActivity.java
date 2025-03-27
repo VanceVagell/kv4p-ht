@@ -1683,7 +1683,7 @@ public class MainActivity extends AppCompatActivity {
         while (isRecording) {
             int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
             if (samples == RadioAudioService.OPUS_FRAME_SIZE) {
-                radioAudioService.sendAudioToESP32(audioBuffer, samples, false);
+                radioAudioService.sendAudioToESP32(audioBuffer, false);
                 // Accumulate samples across buffers
                 for (int i = 0; i < samples; i++) {
                     audioChunkSampleTotal += Math.abs(audioBuffer[i]) * 8.0f;
