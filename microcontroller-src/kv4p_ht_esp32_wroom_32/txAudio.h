@@ -24,7 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "globals.h"
 #include "protocol.h"
 
-bool txStreamConfidured = false;
+bool txStreamConfigured = false;
 AnalogAudioStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
 OpusAudioDecoder txDec;
@@ -42,24 +42,23 @@ void initI2STx() {
   config.use_apll = true;
   config.auto_clear = false;
   out.begin(config);
-
   // configure OPUS additinal parameters
   txDec.setAudioInfo(txInfo);
-  auto &enc_cfg = txDec.config();
-  enc_cfg.max_buffer_write_size = PROTO_MTU;
-  txDec.begin(enc_cfg);
-
+  auto &decoderConfig = txDec.config();
+  decoderConfig.max_buffer_write_size = PROTO_MTU;
+  txDec.begin(decoderConfig);
+  // Open output
   txOut.begin(txInfo);
   i2s_zero_dma_buffer(I2S_NUM_0);
-  txStreamConfidured = true;
+  txStreamConfigured = true;
 }
 
 void endI2STx() {
-  if (txStreamConfidured) {
+  if (txStreamConfigured) {
     txOut.end();
     out.end();
   }
-  txStreamConfidured = false;
+  txStreamConfigured = false;
 }
 
 void processTxAudio(uint8_t *src, size_t len) {

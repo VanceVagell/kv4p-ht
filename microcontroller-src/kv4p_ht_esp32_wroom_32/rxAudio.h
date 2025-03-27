@@ -64,7 +64,7 @@ private:
   }
 };
 
-bool rxStreamConfidured = false;
+bool rxStreamConfigured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET, 1, 16);
 OpusAudioEncoder rxEnc;
@@ -74,53 +74,58 @@ AudioEffectStream effects(in);
 StreamCopy rxCopier(rxOut, effects);
 Boost mute(0.0);
 Boost gain(16.0);
-DCOffsetRemover dcOffsetRemover(DECAY_TIME);
+DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
+
+inline void injectADCBias() {
+  dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
+  dac_output_voltage(DAC_CHANNEL_2, (255.0 / 3.3) * ADC_BIAS_VOLTAGE);
+} 
+
+inline void setUpADCAttenuator() {
+  if (hardware_version == HW_VER_V2_0C) { // v2.0c has a lower input ADC range
+    adc1_config_channel_atten(I2S_ADC_CHANNEL, ADC_ATTEN_DB_0);
+  } else {
+    adc1_config_channel_atten(I2S_ADC_CHANNEL, ADC_ATTENUATION);
+  }
+}
 
 void initI2SRx() {
-  if (hardware_version == HW_VER_V2_0C) {
-    // v2.0c has a lower input ADC range
-    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_0);
-  } else {
-    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
-  }
+  injectADCBias();
+  setUpADCAttenuator();
   //AudioToolsLogger.begin(debugPrinter, AudioToolsLogLevel::Debug);
   auto config = in.defaultConfig(RX_MODE);
   config.copyFrom(rxInfo);
-  config.is_auto_center_read = false;
+  config.is_auto_center_read = false; // We use dcOffsetRemover instead
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = ADC_PIN; 
   in.begin(config);
   rxEnc.setAudioInfo(rxInfo);
   // configure OPUS additinal parameters
-  auto &enc_cfg = rxEnc.config();
-  enc_cfg.application = OPUS_APPLICATION_AUDIO;
-  enc_cfg.frame_sizes_ms_x2 = OPUS_FRAMESIZE_40_MS;
-  enc_cfg.vbr = 1;
-  enc_cfg.max_bandwidth = OPUS_BANDWIDTH_NARROWBAND;
-  rxEnc.begin(enc_cfg);
-
+  auto &encoderConfig = rxEnc.config();
+  encoderConfig.application = OPUS_APPLICATION_AUDIO;
+  encoderConfig.frame_sizes_ms_x2 = OPUS_FRAMESIZE_40_MS;
+  encoderConfig.vbr = 1;
+  encoderConfig.max_bandwidth = OPUS_BANDWIDTH_NARROWBAND;
+  rxEnc.begin(encoderConfig);
+  // effects
   effects.clear();
   effects.addEffect(dcOffsetRemover);
   effects.addEffect(gain);
   effects.addEffect(mute);
   effects.begin(rxInfo);
-
   // open output
   rxOut.begin(rxInfo);
-  // ADC bias
-  dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
-  dac_output_voltage(DAC_CHANNEL_2, (255.0 / 3.3) * ADC_BIAS_VOLTAGE);
-  rxStreamConfidured = true;
+  rxStreamConfigured = true;
 }
 
 void endI2SRx() {
-  if (rxStreamConfidured) {
+  if (rxStreamConfigured) {
     rxOut.end();
     effects.end();
     in.end();
   }
-  rxStreamConfidured = false;
+  rxStreamConfigured = false;
 }
   
 void rxAudioLoop() {

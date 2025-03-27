@@ -30,8 +30,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SAMPLING_RATE_OFFSET 0
 
 // I2S audio sampling stuff
-#define I2S_READ_LEN    (PROTO_MTU & ~0x01)       // Ensure it's even
-#define I2S_WRITE_LEN   ((PROTO_MTU + 1) & ~0x01) // Rounds up to the next even number
 #define I2S_ADC_UNIT    ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
