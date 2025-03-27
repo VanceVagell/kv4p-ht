@@ -1264,9 +1264,7 @@ public class RadioAudioService extends Service {
             }
             if (audioTrack != null) {
                 audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
-                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                    audioTrack.play();
-                }
+                ensureAudioPlaying();
             }
         }
         if (mode == MODE_SCAN) {
@@ -1278,6 +1276,12 @@ public class RadioAudioService extends Service {
                     checkScanDueToSilence();
                 }
             }
+        }
+    }
+
+    private void ensureAudioPlaying() {
+        if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+            audioTrack.play();
         }
     }
 
