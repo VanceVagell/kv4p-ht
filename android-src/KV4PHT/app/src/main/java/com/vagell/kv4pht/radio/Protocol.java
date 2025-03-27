@@ -283,15 +283,6 @@ public final class Protocol {
 
         public void txAudio(byte[] audio) {
             sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
-            /*
-            int offset = 0;
-            while (offset < audio.length) {
-                int chunkSize = Math.min(PROTO_MTU, audio.length - offset);
-                byte[] chunk = Arrays.copyOfRange(audio, offset, offset + chunkSize);
-                sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, chunk);
-                offset += chunkSize;
-            }
-             */
         }
         
         // Waits until it can send (windowSize > 0)
