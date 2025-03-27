@@ -87,13 +87,8 @@ import com.vagell.kv4pht.data.APRSMessage;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
-import com.vagell.kv4pht.radio.OpusUtils;
-import com.vagell.kv4pht.radio.OpusUtils.OpusEncoderWrapper;
-import com.vagell.kv4pht.radio.Protocol;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
-
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;

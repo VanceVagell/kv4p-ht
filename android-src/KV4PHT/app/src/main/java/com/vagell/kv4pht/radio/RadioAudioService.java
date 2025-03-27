@@ -1281,21 +1281,6 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private void convertPCM8SignedToFloatArray(final byte[] pcm8Data, final Integer len, final float[] floatData) {
-        // Iterate through the byte array and convert each sample
-        for (int i = 0; i < len; i++) {
-            // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = pcm8Data[i] / 127.0f;
-        }
-    }
-
-    private short convertFloatToPCM16(float floatValue) {
-        // Clamp the float value to the range [-1.0, 1.0]
-        float clampedValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
-        // Convert to signed 16-bit PCM (-32768 to 32767)
-        return (short) Math.round(clampedValue * 32767);
-    }
-
     private void initAFSKModem() {
         final Context activity = this;
 
