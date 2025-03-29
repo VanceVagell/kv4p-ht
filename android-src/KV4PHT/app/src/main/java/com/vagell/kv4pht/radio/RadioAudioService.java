@@ -1248,7 +1248,7 @@ public class RadioAudioService extends Service {
     }
 
     private void handlePhysicalPttDown() {
-        if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
+        if (mode == MODE_RX && txAllowed) { // Note that people can't hit PTT in the middle of a scan.
             startPtt();
             callbacks.forcedPttStart();
         }

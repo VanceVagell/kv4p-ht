@@ -518,6 +518,7 @@ public class MainActivity extends AppCompatActivity {
             };
 
             radioAudioService.setCallbacks(callbacks);
+            applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
 
             // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
