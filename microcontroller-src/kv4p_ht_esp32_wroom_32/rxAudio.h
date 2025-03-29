@@ -99,7 +99,11 @@ void rxAudioLoop() {
       if (samplesRead > PROTO_MTU) {
         _LOGE("Audio farame will be clipped: requested %d, clipped to %d", samplesRead, PROTO_MTU);
       }
-      sendAudio(buffer8, samplesRead);
+      if (!squelched) {
+        sendAudio(buffer8, samplesRead);
+      } else {
+        sendAudio(buffer8, 0);
+      }
       esp_task_wdt_reset();
     }
   }
