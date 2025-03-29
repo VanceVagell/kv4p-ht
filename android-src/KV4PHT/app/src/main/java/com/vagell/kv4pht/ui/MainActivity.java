@@ -385,13 +385,6 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void txAllowed(boolean allowed) {
-                    // Only enable the PTT and send chat buttons when tx is allowed (e.g. within ham band).
-                    findViewById(R.id.pttButton).setClickable(allowed);
-                    findViewById(R.id.sendButton).setClickable(allowed);
-                }
-
-                @Override
                 public void txStarted() {
                     if (activeMemoryId == -1) {
                         return;
@@ -517,6 +510,7 @@ public class MainActivity extends AppCompatActivity {
             };
 
             radioAudioService.setCallbacks(callbacks);
+            applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
 
             // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
@@ -873,6 +867,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void sendTextClicked(View view) {
+        if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+            showSimpleSnackbar("Can't tx outside ham band");
+            return;
+        }
+
         String targetCallsign = ((EditText) findViewById(R.id.textChatTo)).getText().toString().trim();
         if (targetCallsign.length() == 0) {
             targetCallsign = "CQ";
@@ -1197,6 +1196,13 @@ public class MainActivity extends AppCompatActivity {
                         touchHandled = true;
                         break;
                     }
+
+                    if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+                        touchHandled = true;
+                        showSimpleSnackbar("Can't tx outside ham band");
+                        break;
+                    }
+
                     pttButtonDebounceHandler.removeCallbacksAndMessages(null);
                     if (stickyPTT) {
                         if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
@@ -1259,6 +1265,11 @@ public class MainActivity extends AppCompatActivity {
                 // if stickyPTT isn't being used, don't handle a click on the PTT button (they need
                 // to hold since it's not sticky).
                 if (!stickyPTT) {
+                    return;
+                }
+
+                if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+                    showSimpleSnackbar("Can't tx outside ham band");
                     return;
                 }
 
@@ -1705,7 +1716,9 @@ public class MainActivity extends AppCompatActivity {
             updateRecordingVisualization(100, 0.0f);
         }
 
-        radioAudioService.getAudioTrack().play();
+        if (null != radioAudioService.getAudioTrack()) {
+            radioAudioService.getAudioTrack().play();
+        }
 
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button));
@@ -1809,6 +1822,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void singleBeaconButtonClicked(View view) {
+        if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+            showSimpleSnackbar("Can't tx outside ham band");
+            return;
+        }
+
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPositionPermissions();
             return;
