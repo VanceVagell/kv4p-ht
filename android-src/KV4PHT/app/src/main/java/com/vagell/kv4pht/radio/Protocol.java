@@ -3,9 +3,12 @@ package com.vagell.kv4pht.radio;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
-import com.vagell.kv4pht.javAX25.ax25.Arrays;
 
 import android.util.Log;
 import lombok.Builder;
@@ -16,13 +19,13 @@ public final class Protocol {
     private static final String TAG = Protocol.class.getSimpleName();
 
     // Delimiter must match ESP32 code
-    static final byte[] COMMAND_DELIMITER = new byte[]{(byte) 0xDE, (byte) 0xAD, (byte) 0xBE, (byte) 0xEF, (byte) 0xDE,
-        (byte) 0xAD, (byte) 0xBE, (byte) 0xEF};
+    static final byte[] COMMAND_DELIMITER = new byte[]{(byte) 0xDE, (byte) 0xAD, (byte) 0xBE, (byte) 0xEF};
 
     public static final byte DRA818_25K = 0x01;
     public static final byte DRA818_12K5 = 0x00;
 
-    public static final int PROTO_MTU = 0xFF; // Maximum length of the frame
+    public static final int PROTO_MTU = 2048; // Maximum length of the frame
+
 
     private Protocol() {
     }
@@ -56,7 +59,8 @@ public final class Protocol {
         COMMAND_DEBUG_TRACE(0x05),      // [COMMAND_DEBUG_TRACE(char[])]
         COMMAND_HELLO(0x06),            // [COMMAND_HELLO()]
         COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
-        COMMAND_VERSION(0x08);          // [COMMAND_VERSION(Version)]
+        COMMAND_VERSION(0x08),          // [COMMAND_VERSION(Version)]
+        COMMAND_WINDOW_UPDATE(0x09);    // [COMMAND_WINDOW_UPDATE()]
         private final int value;
         RcvCommand(int value) {
             this.value = value;
@@ -197,41 +201,60 @@ public final class Protocol {
         private final short ver;  // equivalent to uint16_t
         private final RadioStatus radioModuleStatus;  // equivalent to char
         private final HardwareVersion hardwareVersion;
+        private final int windowSize; // equivalent to size_t
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 4)
+                .filter(p -> len == 8)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
                     .ver(b.getShort())
                     .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
                     .hardwareVersion(HardwareVersion.fromValue(b.get() & 0xFF))
+                    .windowSize(b.getInt())
                     .build());
+        }
+    }
+
+    @Data
+    @Builder
+    public static class WindowUpdate {
+        private final int size;
+        public static Optional<WindowUpdate> from(final byte[] param, Integer len) {
+            return Optional.ofNullable(param)
+                .filter(p -> len == 4)
+                .map(ByteBuffer::wrap)
+                .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
+                .map(b -> WindowUpdate.builder().size(b.getInt()).build());
         }
     }
 
     public static class Sender {
 
+        private final AtomicInteger flowControlWindow = new AtomicInteger(1024);
         private final SerialInputOutputManager usbIoManager;
+        private final Lock lock = new ReentrantLock();
+        private final Condition canSendCondition = lock.newCondition();
 
         public Sender(SerialInputOutputManager usbIoManager) {
             this.usbIoManager = usbIoManager;
         }
 
         private void sendCommand(SndCommand commandType, byte[] param) {
-            ByteBuffer buffer = ByteBuffer.allocate(1024);
+            int frameSize = COMMAND_DELIMITER.length + 1 + 2 + (param != null ? param.length : 0);
+            waitUntilCanSend(frameSize);
+            ByteBuffer buffer = ByteBuffer.allocate(frameSize);
+            buffer.order(ByteOrder.LITTLE_ENDIAN);
             buffer.put(COMMAND_DELIMITER);
             buffer.put((byte) commandType.getValue());
             if (param != null) {
-                buffer.put((byte) param.length);
+                buffer.putShort((short) param.length);
                 buffer.put(param);
             } else {
-                buffer.put((byte) 0);
+                buffer.putShort((short) 0);
             }
-            byte[] command = new byte[buffer.position()];
-            buffer.flip();
-            buffer.get(command);
-            usbIoManager.writeAsync(command);
+            usbIoManager.writeAsync(buffer.array());
+            flowControlWindow.addAndGet(-frameSize);
         }
 
         public void pttDown() {
@@ -259,12 +282,42 @@ public final class Protocol {
         }
 
         public void txAudio(byte[] audio) {
-            int offset = 0;
-            while (offset < audio.length) {
-                int chunkSize = Math.min(PROTO_MTU, audio.length - offset);
-                byte[] chunk = Arrays.copyOfRange(audio, offset, offset + chunkSize);
-                sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, chunk);
-                offset += chunkSize;
+            sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
+        }
+        
+        // Waits until it can send (windowSize > 0)
+        private void waitUntilCanSend(int size) {
+            lock.lock();
+            try {
+                while (flowControlWindow.get() <= size) {
+                    try {
+                        canSendCondition.await();  // Wait until signaled that windowSize > 0
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        public void setFlowControlWindow(int size) {
+            lock.lock();
+            try {
+                flowControlWindow.set(size);
+                canSendCondition.signalAll();  // Signal all waiting threads that they can proceed
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        public void enlargeFlowControlWindow(int size) {
+            lock.lock();
+            try {
+                flowControlWindow.addAndGet(size);
+                canSendCondition.signalAll();  // Signal all waiting threads that they can proceed
+            } finally {
+                lock.unlock();
             }
         }
     }
@@ -301,6 +354,9 @@ public final class Protocol {
                 matchedDelimiterTokens++;
             } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
                 commandParamLen = b & 0xFF;
+                matchedDelimiterTokens++;
+            } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 2) {
+                commandParamLen = (b & 0xFF) << 8 | commandParamLen;
                 paramIndex = 0;
                 matchedDelimiterTokens++;
                 if (commandParamLen == 0) {

@@ -18,45 +18,56 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <Arduino.h>
-#include <driver/adc.h>
-#include <driver/i2s.h>
-#include <driver/dac.h>
+#include <AudioTools.h>
+#include <AudioTools/AudioCodecs/CodecOpus.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "protocol.h"
+
+bool txStreamConfigured = false;
+AnalogAudioStream out;
+AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
+OpusAudioDecoder txDec;
+EncodedAudioStream txOut(&out, &txDec); 
 
 // Tx runaway detection stuff
 uint32_t txStartTime = -1;
 const uint16_t RUNAWAY_TX_SEC = 200;
 
-static const i2s_config_t i2sTxConfig = {
-  .mode             = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
-  .sample_rate      = AUDIO_SAMPLE_RATE,
-  .bits_per_sample  = I2S_BITS_PER_SAMPLE_16BIT,
-  .channel_format   = I2S_CHANNEL_FMT_ONLY_RIGHT,
-  .intr_alloc_flags = 0,
-  .dma_buf_count    = 8,
-  .dma_buf_len      = I2S_WRITE_LEN,
-  .use_apll         = true};
-
-void initI2STx() {
-  // Remove any previous driver (rx or tx) that may have been installed.
-  if (i2sStarted) {
-    i2s_driver_uninstall(I2S_NUM_0);
-  }
-  i2sStarted = true;
-  i2s_driver_install(I2S_NUM_0, &i2sTxConfig, 0, NULL);
-  i2s_set_dac_mode(I2S_DAC_CHANNEL_RIGHT_EN);
+void initI2STx() {  
+  auto config = out.defaultConfig(TX_MODE);
+  config.copyFrom(txInfo);
+  config.adc_pin = DAC_PIN;
+  config.is_blocking_write = true;
+  config.use_apll = true;
+  config.auto_clear = false;
+  out.begin(config);
+  // configure OPUS additinal parameters
+  txDec.setAudioInfo(txInfo);
+  auto &decoderConfig = txDec.config();
+  decoderConfig.max_buffer_write_size = PROTO_MTU;
+  txDec.begin(decoderConfig);
+  // Open output
+  txOut.begin(txInfo);
   i2s_zero_dma_buffer(I2S_NUM_0);
+  txStreamConfigured = true;
+}
+
+void endI2STx() {
+  if (txStreamConfigured) {
+    txOut.end();
+    out.end();
+  }
+  txStreamConfigured = false;
 }
 
 void processTxAudio(uint8_t *src, size_t len) {
-  static int16_t buffer16[I2S_WRITE_LEN];
-  for (int i = 0; i < len; i++) {
-    buffer16[i] = (int16_t)(src[i]) << 8;
+  size_t totalWritten = 0;
+  while (totalWritten < len) {
+      size_t written = txOut.write(src + totalWritten, len - totalWritten);
+      totalWritten += written;
+      esp_task_wdt_reset();
   }
-  size_t bytesWritten = 0;
-  ESP_ERROR_CHECK(i2s_write(I2S_NUM_0, buffer16, len * sizeof(int16_t), &bytesWritten, portMAX_DELAY));
 }
 
 void inline txAudioLoop() {

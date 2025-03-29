@@ -22,7 +22,6 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_UHF;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_VHF;
-import static com.vagell.kv4pht.radio.Protocol.PROTO_MTU;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -83,15 +82,16 @@ import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
+import com.vagell.kv4pht.javAX25.ax25.PacketModulator;
 import com.vagell.kv4pht.radio.Protocol.Config;
 import com.vagell.kv4pht.radio.Protocol.Filters;
 import com.vagell.kv4pht.radio.Protocol.FrameParser;
 import com.vagell.kv4pht.radio.Protocol.Group;
 import com.vagell.kv4pht.radio.Protocol.RadioStatus;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
+import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -135,7 +135,7 @@ public class RadioAudioService extends Service {
     private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
-    public static final int AUDIO_SAMPLE_RATE = 22050;
+    public static final int AUDIO_SAMPLE_RATE = 48000;
     public static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
     public static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
     public static final int RX_AUDIO_MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, RX_AUDIO_CHANNEL_CONFIG, RX_AUDIO_FORMAT) * 2;
@@ -147,33 +147,22 @@ public class RadioAudioService extends Service {
     private Map<String, Integer> mTones = new HashMap<>();
 
     // For receiving audio from ESP32 / radio
-    private final float[] pcmFloat = new float[PROTO_MTU];
+    private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
     private AudioTrack audioTrack;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
+    public static final int OPUS_FRAME_SIZE = 1920; // 40ms at 48kHz
+    private final OpusUtils.OpusDecoderWrapper opusDecoder = new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
+    private final OpusUtils.OpusEncoderWrapper opusEncoder = new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
 
     private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
 
     // AFSK modem
-    private Afsk1200Modulator afskModulator = null;
+    private PacketModulator afskModulator = null;
     private PacketDemodulator afskDemodulator = null;
     private static final int MS_SILENCE_BEFORE_DATA_MS = 1100;
     private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
-    private static final byte[] LEAD_IN_SILENCE;
-    private static final byte[] TAIL_SILENCE;
-    static {
-        // Calculate the size of the silence buffers
-        int leadInSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA_MS;
-        int tailSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA_MS;
-        // Round the silence buffer sizes to the nearest multiple of PROTO_MTU
-        leadInSize = (int) Math.ceil((double) leadInSize / PROTO_MTU) * PROTO_MTU;
-        tailSize = (int) Math.ceil((double) tailSize / PROTO_MTU) * PROTO_MTU;
-        LEAD_IN_SILENCE = new byte[leadInSize];
-        java.util.Arrays.fill(LEAD_IN_SILENCE, SILENT_BYTE);
-        TAIL_SILENCE = new byte[tailSize];
-        java.util.Arrays.fill(TAIL_SILENCE, SILENT_BYTE);
-    }
 
     // APRS position settings
     public static final int APRS_POSITION_EXACT = 0;
@@ -920,7 +909,7 @@ public class RadioAudioService extends Service {
         Log.d("DEBUG", "serialPort: " + serialPort);
         try {
             serialPort.open(connection);
-            serialPort.setParameters(230400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.d("DEBUG", "Error: couldn't open USB serial port.");
             if (callbacks != null) {
@@ -1137,40 +1126,25 @@ public class RadioAudioService extends Service {
         Log.d("DEBUG", "Warning: All memories are skipDuringScan, no next memory found to scan to.");
     }
 
-    private byte[] applyMicGain(byte[] audioBuffer) {
+    private float[] applyMicGain(float[] audioBuffer) {
         if (micGainBoost == MicGainBoost.NONE) {
             return audioBuffer; // No gain, just return original
         }
-
-        byte[] newAudioBuffer = new byte[audioBuffer.length];
+        float[] newAudioBuffer = new float[audioBuffer.length];
         float gain = MicGainBoost.toFloat(micGainBoost);
-
         for (int i = 0; i < audioBuffer.length; i++) {
-            // Convert from [0..255] to [-128..127]
-            int signedSample = (audioBuffer[i] & 0xFF) - 128;
-
-            // Apply gain
-            signedSample = (int) (signedSample * gain);
-
-            // Clip to [-128..127]
-            signedSample = Math.min(127, signedSample);
-            signedSample = Math.max(-128, signedSample);
-
-            // Convert back to [0..255]
-            signedSample += 128;
-
-            // Store in the new buffer
-            newAudioBuffer[i] = (byte) signedSample;
+            newAudioBuffer[i] = audioBuffer[i] * gain;
         }
-
         return newAudioBuffer;
     }
 
-    public void sendAudioToESP32(byte[] audioBuffer, boolean dataMode) {
+    public void sendAudioToESP32(float[] samples, boolean dataMode) {
         if (!dataMode) {
-            audioBuffer = applyMicGain(audioBuffer);
+            samples = applyMicGain(samples);
         }
-        hostToEsp32.txAudio(audioBuffer);
+        byte[] audioFrame = new byte[Protocol.PROTO_MTU];
+        int encodedLength = opusEncoder.encode(samples, audioFrame);
+        hostToEsp32.txAudio(java.util.Arrays.copyOfRange(audioFrame, 0, encodedLength));
     }
 
     public static UsbSerialPort getUsbSerialPort() {
@@ -1226,6 +1200,11 @@ public class RadioAudioService extends Service {
                 handleVersion(param, len);
                 break;
 
+            case COMMAND_WINDOW_UPDATE:
+                WindowUpdate.from(param, len).ifPresent(windowAck ->
+                    hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
+                break;
+
             default:
                 break;
         }
@@ -1270,6 +1249,7 @@ public class RadioAudioService extends Service {
                 if (radioModuleNotFound) {
                     Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
                 } else {
+                    hostToEsp32.setFlowControlWindow(ver.getWindowSize());
                     initAfterESP32Connected();
                 }
             });
@@ -1277,43 +1257,32 @@ public class RadioAudioService extends Service {
     }
 
     private void handleRxAudio(final byte[] param, final Integer len) {
+        int decoded = opusDecoder.decode(param, len, pcmFloat);
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            convertPCM8SignedToFloatArray(param, len, pcmFloat);
             if (afskDemodulator != null) {
-                afskDemodulator.addSamples(pcmFloat, len);
+                afskDemodulator.addSamples(pcmFloat, decoded);
             }
             if (audioTrack != null) {
-                audioTrack.write(pcmFloat, 0, len, AudioTrack.WRITE_NON_BLOCKING);
-                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                    audioTrack.play();
-                }
+                audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
+                ensureAudioPlaying();
             }
         }
         if (mode == MODE_SCAN) {
-            for (int i = 0; i < len; i++) {
-                if (param[i] != SILENT_BYTE) {
+            for (int i = 0; i < decoded; i++) {
+                if (Math.abs(pcmFloat[i]) > 0.001) {
                     consecutiveSilenceBytes = 0;
-                    continue;
+                } else {
+                    consecutiveSilenceBytes++;
+                    checkScanDueToSilence();
                 }
-                consecutiveSilenceBytes++;
-                checkScanDueToSilence();
             }
         }
     }
 
-    private void convertPCM8SignedToFloatArray(final byte[] pcm8Data, final Integer len, final float[] floatData) {
-        // Iterate through the byte array and convert each sample
-        for (int i = 0; i < len; i++) {
-            // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = pcm8Data[i] / 127.0f;
+    private void ensureAudioPlaying() {
+        if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+            audioTrack.play();
         }
-    }
-
-    private byte convertFloatToPCM8(float floatValue) {
-        // Clamp the float value to the range [-1.0, 1.0]
-        float clampedValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
-        // Convert to unsigned 8-bit PCM (range 0 to 255)
-        return (byte) (Math.round(clampedValue * 127.0f) + 128);
     }
 
     private void initAFSKModem() {
@@ -1503,30 +1472,47 @@ public class RadioAudioService extends Service {
         return messageNumber - 1;
     }
 
+    private void sendSilentFrames(int durationMs) {
+        float[] opusFrame = new float[OPUS_FRAME_SIZE];
+        java.util.Arrays.fill(opusFrame, 0.0f);
+        for (int i = 0; i < (durationMs / 40); i++) {
+            sendAudioToESP32(opusFrame, true);
+        }
+    }
+
     private void txAX25Packet(Packet ax25Packet) {
         if (!txAllowed) {
             Log.d("DEBUG", "Tried to send an AX.25 packet when tx is not allowed, did not send.");
             return;
         }
-        Log.d("DEBUG", "Sending AX25 packet: " + ax25Packet.toString());
-        // This strange approach to getting bytes seems to be a state machine in the AFSK library.
+        Log.d("DEBUG", "Sending AX25 packet: " + ax25Packet);
+        startPtt();
+        float[] opusFrame = new float[OPUS_FRAME_SIZE];
+        // Send lead-in silence
+        sendSilentFrames(MS_SILENCE_BEFORE_DATA_MS);
+        // Prepare AFSK modulator
+        int opusFrameIndex = 0;
+        java.util.Arrays.fill(opusFrame, 0.0f);
         afskModulator.prepareToTransmit(ax25Packet);
         float[] buffer = afskModulator.getTxSamplesBuffer();
-        ByteArrayOutputStream audioStream = new ByteArrayOutputStream();
+        // Modulate and send samples
         int n;
         while ((n = afskModulator.getSamples()) > 0) {
             for (int i = 0; i < n; i++) {
-                audioStream.write(convertFloatToPCM8(buffer[i]));
+                opusFrame[opusFrameIndex++] = buffer[i];
+                if (opusFrameIndex == OPUS_FRAME_SIZE) {
+                    sendAudioToESP32(opusFrame, true);
+                    java.util.Arrays.fill(opusFrame, 0.0f);
+                    opusFrameIndex = 0;
+                }
             }
         }
-        startPtt();
-        // Send lead-in silence
-        sendAudioToESP32(LEAD_IN_SILENCE, true);
-        // Send actual audio data
-        sendAudioToESP32(audioStream.toByteArray(), true);
+        // Send remaining audio if needed
+        sendAudioToESP32(opusFrame, true);
         // Send tail silence
-        sendAudioToESP32(TAIL_SILENCE, true);
+        sendSilentFrames(MS_SILENCE_AFTER_DATA_MS);
         endPtt();
+        Log.i("DEBUG", "Send AX25 packet: " + ax25Packet);
     }
 
     public AudioTrack getAudioTrack() {
