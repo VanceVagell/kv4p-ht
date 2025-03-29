@@ -281,6 +281,10 @@ public class RadioAudioService extends Service {
         return binder;
     }
 
+    public boolean isTxAllowed() {
+        return txAllowed;
+    }
+
     public void setCallsign(String callsign) {
         this.callsign = callsign;
     }
@@ -502,8 +506,6 @@ public class RadioAudioService extends Service {
 
         public void missingFirmware();
 
-        public void txAllowed(boolean allowed);
-
         public void txStarted();
 
         public void txEnded();
@@ -639,7 +641,6 @@ public class RadioAudioService extends Service {
             } else {
                 txAllowed = true;
             }
-            callbacks.txAllowed(txAllowed);
         } catch (NumberFormatException nfe) {
         }
     }
@@ -736,7 +737,6 @@ public class RadioAudioService extends Service {
         } else {
             txAllowed = true;
         }
-        callbacks.txAllowed(txAllowed);
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
@@ -1389,50 +1389,47 @@ public class RadioAudioService extends Service {
     }
 
     public void sendPositionBeacon() {
+        if (!txAllowed) {
+            return; // Don't try to beacon if person is outside the ham band. But don't need to show an error, would be spammy (e.g. when listening to NOAA radio).
+        }
+
         if (getMode() != MODE_RX) { // Can only beacon in rx mode (e.g. not tx or scan)
             Log.d("DEBUG", "Skipping position beacon because not in RX mode");
             return;
         }
 
         LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
-        Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); // Try to get cached location (fast)
 
-        if (location == null) {
-            if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-                Log.d("DEBUG", "Unable to beacon position because Android device is missing Google Play Services, needed to get GPS location.");
-                callbacks.unknownLocation();
-                return;
-            }
-
-            // Otherwise, manually retrieve a new location for user.
-            FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-
-            fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
-                    .addOnSuccessListener(new OnSuccessListener<Location>() {
-                        @Override
-                        public void onSuccess(Location location) {
-                            if (location != null) {
-                                // Use the location
-                                double latitude = location.getLatitude();
-                                double longitude = location.getLongitude();
-                                sendPositionBeacon(latitude, longitude);
-                            } else {
-                                callbacks.unknownLocation();
-                            }
-                        }
-                    }).addOnFailureListener(new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception e) {
-                            callbacks.unknownLocation();
-                        }
-                    });
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
+            Log.d("DEBUG", "Unable to beacon position because Android device is missing Google Play Services, needed to get GPS location.");
+            callbacks.unknownLocation();
             return;
         }
 
-        double latitude = location.getLatitude();
-        double longitude = location.getLongitude();
-        sendPositionBeacon(latitude, longitude);
+        // Otherwise, manually retrieve a new location for user.
+        FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+        fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
+                .addOnSuccessListener(new OnSuccessListener<Location>() {
+                    @Override
+                    public void onSuccess(Location location) {
+                        if (location != null) {
+                            // Use the location
+                            double latitude = location.getLatitude();
+                            double longitude = location.getLongitude();
+                            sendPositionBeacon(latitude, longitude);
+                        } else {
+                            callbacks.unknownLocation();
+                        }
+                    }
+                }).addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        callbacks.unknownLocation();
+                    }
+                });
+        return;
     }
 
     private void sendPositionBeacon(double latitude, double longitude) {
