@@ -1521,8 +1521,8 @@ public class RadioAudioService extends Service {
         Log.i("DEBUG", "Send AX25 packet: " + ax25Packet);
     }
 
-    public AudioTrack getAudioTrack() {
-        return audioTrack;
+    public int getAudioTrackSessionId() {
+        return Optional.ofNullable(audioTrack).map(AudioTrack::getAudioSessionId).orElse(-1);
     }
 
     private void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {

@@ -360,7 +360,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void audioTrackCreated() {
                     if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        createRxAudioVisualizer(radioAudioService.getAudioTrack());
+                        createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId());
                     }
                 }
 
@@ -922,8 +922,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.textChatInput).requestFocus();
     }
 
-    private void createRxAudioVisualizer(AudioTrack audioTrack) {
-        rxAudioVisualizer = new Visualizer(audioTrack.getAudioSessionId());
+    private void createRxAudioVisualizer(int AudioSessionId) {
+        rxAudioVisualizer = new Visualizer(AudioSessionId);
         rxAudioVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
             @Override
             public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
@@ -1598,10 +1598,7 @@ public class MainActivity extends AppCompatActivity {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
                     if (radioAudioService != null) {
-                        AudioTrack audioTrack = radioAudioService.getAudioTrack();
-                        if (audioTrack != null) {
-                            createRxAudioVisualizer(audioTrack); // Visualizer requires RECORD_AUDIO permission (even if not visualizing the mic input).
-                        }
+                        createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId()); // Visualizer requires RECORD_AUDIO permission (even if not visualizing the mic input).
                     }
                     initAudioRecorder();
                 } else {
