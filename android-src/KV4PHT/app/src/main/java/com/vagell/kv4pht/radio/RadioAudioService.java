@@ -37,6 +37,7 @@ import android.hardware.usb.UsbManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -149,6 +150,7 @@ public class RadioAudioService extends Service {
     // For receiving audio from ESP32 / radio
     private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
     private AudioTrack audioTrack;
+    private AudioFocusRequest audioFocusRequest;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
     public static final int OPUS_FRAME_SIZE = 1920; // 40ms at 48kHz
@@ -266,6 +268,10 @@ public class RadioAudioService extends Service {
         activeFrequencyStr = bundle.getString("activeFrequencyStr");
 
         return binder;
+    }
+
+    public boolean isTxAllowed() {
+        return txAllowed;
     }
 
     public void setCallsign(String callsign) {
@@ -489,8 +495,6 @@ public class RadioAudioService extends Service {
 
         public void missingFirmware();
 
-        public void txAllowed(boolean allowed);
-
         public void txStarted();
 
         public void txEnded();
@@ -626,7 +630,6 @@ public class RadioAudioService extends Service {
             } else {
                 txAllowed = true;
             }
-            callbacks.txAllowed(txAllowed);
         } catch (NumberFormatException nfe) {
         }
     }
@@ -723,7 +726,6 @@ public class RadioAudioService extends Service {
         } else {
             txAllowed = true;
         }
-        callbacks.txAllowed(txAllowed);
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
@@ -757,11 +759,15 @@ public class RadioAudioService extends Service {
             audioTrack.release();
             audioTrack = null;
         }
+        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANT)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build();
+        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(audioAttributes)
+            .build();
         audioTrack = new AudioTrack.Builder()
-            .setAudioAttributes(new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build())
+            .setAudioAttributes(audioAttributes)
             .setAudioFormat(new AudioFormat.Builder()
                 .setEncoding(RX_AUDIO_FORMAT)
                 .setSampleRate(AUDIO_SAMPLE_RATE)
@@ -1263,7 +1269,9 @@ public class RadioAudioService extends Service {
                 afskDemodulator.addSamples(pcmFloat, decoded);
             }
             if (audioTrack != null) {
+                AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                 audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
+                audioManager.requestAudioFocus(audioFocusRequest);
                 ensureAudioPlaying();
             }
         }
@@ -1338,50 +1346,46 @@ public class RadioAudioService extends Service {
     }
 
     public void sendPositionBeacon() {
+        if (!txAllowed) {
+            return; // Don't try to beacon if person is outside the ham band. But don't need to show an error, would be spammy (e.g. when listening to NOAA radio).
+        }
+
         if (getMode() != MODE_RX) { // Can only beacon in rx mode (e.g. not tx or scan)
             Log.d("DEBUG", "Skipping position beacon because not in RX mode");
             return;
         }
 
         LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
-        Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); // Try to get cached location (fast)
 
-        if (location == null) {
-            if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-                Log.d("DEBUG", "Unable to beacon position because Android device is missing Google Play Services, needed to get GPS location.");
-                callbacks.unknownLocation();
-                return;
-            }
-
-            // Otherwise, manually retrieve a new location for user.
-            FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-
-            fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
-                    .addOnSuccessListener(new OnSuccessListener<Location>() {
-                        @Override
-                        public void onSuccess(Location location) {
-                            if (location != null) {
-                                // Use the location
-                                double latitude = location.getLatitude();
-                                double longitude = location.getLongitude();
-                                sendPositionBeacon(latitude, longitude);
-                            } else {
-                                callbacks.unknownLocation();
-                            }
-                        }
-                    }).addOnFailureListener(new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception e) {
-                            callbacks.unknownLocation();
-                        }
-                    });
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
+            Log.d("DEBUG", "Unable to beacon position because Android device is missing Google Play Services, needed to get GPS location.");
+            callbacks.unknownLocation();
             return;
         }
 
-        double latitude = location.getLatitude();
-        double longitude = location.getLongitude();
-        sendPositionBeacon(latitude, longitude);
+        // Otherwise, manually retrieve a new location for user.
+        FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+        fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
+            .addOnSuccessListener(new OnSuccessListener<Location>() {
+                @Override
+                public void onSuccess(Location location) {
+                    if (location != null) {
+                        // Use the location
+                        double latitude = location.getLatitude();
+                        double longitude = location.getLongitude();
+                        sendPositionBeacon(latitude, longitude);
+                    } else {
+                        callbacks.unknownLocation();
+                    }
+                }
+            }).addOnFailureListener(new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+                    callbacks.unknownLocation();
+                }
+            });
     }
 
     private void sendPositionBeacon(double latitude, double longitude) {
