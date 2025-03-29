@@ -1719,7 +1719,9 @@ public class MainActivity extends AppCompatActivity {
             updateRecordingVisualization(100, RadioAudioService.SILENT_BYTE);
         }
 
-        radioAudioService.getAudioTrack().play();
+        if (null != radioAudioService.getAudioTrack()) {
+            radioAudioService.getAudioTrack().play();
+        }
 
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button));
