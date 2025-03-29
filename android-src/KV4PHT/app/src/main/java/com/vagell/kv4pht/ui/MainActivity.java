@@ -1661,11 +1661,6 @@ public class MainActivity extends AppCompatActivity {
             initAudioRecorder();
         }
 
-        // Whenever we start recording we immediately silence any audio playback so the mic
-        // doesn't pick it up.
-        radioAudioService.getAudioTrack().pause();
-        radioAudioService.getAudioTrack().flush();
-
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button_on));
 
@@ -1715,11 +1710,6 @@ public class MainActivity extends AppCompatActivity {
             recordingThread = null;
             updateRecordingVisualization(100, 0.0f);
         }
-
-        if (null != radioAudioService.getAudioTrack()) {
-            radioAudioService.getAudioTrack().play();
-        }
-
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button));
     }

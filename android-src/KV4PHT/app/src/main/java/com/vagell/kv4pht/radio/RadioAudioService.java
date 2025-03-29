@@ -821,7 +821,9 @@ public class RadioAudioService extends Service {
         });
 
         hostToEsp32.pttDown();
-        audioTrack.stop();
+        if (audioTrack != null) {
+            audioTrack.stop();
+        }
         Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
     }
 
