@@ -66,7 +66,7 @@ private:
 
 bool rxStreamConfigured = false;
 AnalogAudioStream in;
-AudioInfo rxInfo(AUDIO_SAMPLE_RATE + SAMPLING_RATE_OFFSET, 1, 16);
+AudioInfo rxInfo(AUDIO_SAMPLE_RATE, 1, 16);
 OpusAudioEncoder rxEnc;
 SerialOutput rxAudioOutput;
 EncodedAudioStream rxOut(&rxAudioOutput, &rxEnc);
@@ -98,7 +98,8 @@ void initI2SRx() {
   config.is_auto_center_read = false; // We use dcOffsetRemover instead
   config.use_apll = true;
   config.auto_clear = false;
-  config.adc_pin = ADC_PIN; 
+  config.adc_pin = ADC_PIN;
+  config.sample_rate = AUDIO_SAMPLE_RATE * 1.02; // 2% over sample rate to avoid buffer underruns
   in.begin(config);
   rxEnc.setAudioInfo(rxInfo);
   // configure OPUS additinal parameters
