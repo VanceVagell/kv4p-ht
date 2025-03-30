@@ -1160,6 +1160,7 @@ public class RadioAudioService extends Service {
             case COMMAND_SMETER_REPORT:
                 Protocol.Rssi.from(param, len)
                     .map(Protocol.Rssi::getSMeter9Value)
+                    .filter(i -> mode == MODE_RX || mode == MODE_SCAN)
                     .ifPresent(callbacks::sMeterUpdate);
                 break;
 
