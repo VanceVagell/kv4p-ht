@@ -560,11 +560,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (rxAudioVisualizer != null) {
-            rxAudioVisualizer.setEnabled(false);
-            rxAudioVisualizer.release();
-            rxAudioVisualizer = null;
-        }
+        releaseRxAudioVisualizer();
 
         try {
             if (threadPoolExecutor != null) {
@@ -926,7 +922,16 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.textChatInput).requestFocus();
     }
 
+    private void releaseRxAudioVisualizer() {
+        if (rxAudioVisualizer != null) {
+            rxAudioVisualizer.setEnabled(false);
+            rxAudioVisualizer.release();
+            rxAudioVisualizer = null;
+        }
+    }
+
     private void createRxAudioVisualizer(int audioSessionId) {
+        releaseRxAudioVisualizer();
         rxAudioVisualizer = new Visualizer(audioSessionId);
         rxAudioVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
             @Override
