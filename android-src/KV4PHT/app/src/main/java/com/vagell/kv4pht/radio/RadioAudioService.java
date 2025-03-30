@@ -150,6 +150,7 @@ public class RadioAudioService extends Service {
     // For receiving audio from ESP32 / radio
     private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
     private AudioTrack audioTrack;
+    private float  audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
@@ -777,6 +778,8 @@ public class RadioAudioService extends Service {
             .setBufferSizeInBytes(RX_AUDIO_MIN_BUFFER_SIZE)
             .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
             .build();
+        audioTrack.setVolume(0.0f);
+        audioTrackVolume = 0.0f;
         audioTrack.setAuxEffectSendLevel(0.0f);
 
         if (callbacks != null) {
@@ -819,11 +822,9 @@ public class RadioAudioService extends Service {
                 }
             }
         });
-
         hostToEsp32.pttDown();
-        if (audioTrack != null) {
-            audioTrack.stop();
-        }
+        audioTrack.setVolume(0.0f);
+        audioTrackVolume = 0.0f;
         Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
     }
 
@@ -832,8 +833,9 @@ public class RadioAudioService extends Service {
             return;
         }
         setMode(MODE_RX);
+        audioTrack.setVolume(0.0f);
+        audioTrackVolume = 0.0f;
         hostToEsp32.pttUp();
-        audioTrack.flush();
         Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txEnded);
     }
 
@@ -1289,9 +1291,33 @@ public class RadioAudioService extends Service {
         }
     }
 
+    /**
+     * Ensures that the AudioTrack is playing and gradually adjusts its volume.
+     * The volume is increased smoothly based on a factor of alpha, and the volume is capped at 0.7f.
+     * If the calculated volume is below 0.7f, the volume is set to 0.0f.
+     * This method is intended to apply smooth volume adjustments to the AudioTrack.
+     * <p>
+     * The method first checks if the AudioTrack is playing. If it is not playing, the method starts the playback.
+     * Then, the volume is adjusted by applying a smoothing factor using a simple exponential-like formula.
+     * If the volume exceeds 0.7f, it will be set to the calculated value; otherwise, the volume will be set to 0.0f.
+     * </p>
+     *
+     * @see AudioTrack
+     * @see AudioTrack#setVolume(float)
+     */
     private void ensureAudioPlaying() {
         if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+            audioTrackVolume = 0;
+            audioTrack.setVolume(0.0f);
             audioTrack.play();
+        }
+        float alpha = 0.05f;
+        audioTrackVolume = alpha + (1.0f - alpha) * audioTrackVolume;
+        if (audioTrackVolume > 0.7f) {
+            audioTrack.setVolume(audioTrackVolume);
+        }
+        else {
+            audioTrack.setVolume(0.0f);
         }
     }
 
