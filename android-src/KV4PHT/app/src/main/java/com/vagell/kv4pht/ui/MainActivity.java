@@ -34,7 +34,6 @@ import android.graphics.Rect;
 import android.hardware.usb.UsbManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
-import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.media.audiofx.Visualizer;
 import android.os.Bundle;
@@ -922,8 +921,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.textChatInput).requestFocus();
     }
 
-    private void createRxAudioVisualizer(int AudioSessionId) {
-        rxAudioVisualizer = new Visualizer(AudioSessionId);
+    private void createRxAudioVisualizer(int audioSessionId) {
+        rxAudioVisualizer = new Visualizer(audioSessionId);
         rxAudioVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
             @Override
             public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {

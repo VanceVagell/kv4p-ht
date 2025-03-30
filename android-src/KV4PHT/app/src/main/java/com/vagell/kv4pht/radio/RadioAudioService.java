@@ -209,7 +209,6 @@ public class RadioAudioService extends Service {
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
-    private long startTxTimeSec = -1;
 
     // Notification stuff
     private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
@@ -789,7 +788,7 @@ public class RadioAudioService extends Service {
 
     private void setTxRunAwayTimer() {
         // Setup runaway tx safety measures.
-        startTxTimeSec = System.currentTimeMillis() / 1000;
+        long startTxTimeSec = System.currentTimeMillis() / 1000;
         threadPoolExecutor.execute(() -> {
             try {
                 Thread.sleep(RUNAWAY_TX_TIMEOUT_SEC * 1000L);
