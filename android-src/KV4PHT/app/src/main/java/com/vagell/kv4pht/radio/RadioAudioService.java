@@ -787,56 +787,49 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public void startPtt() {
-        if (!txAllowed) { // Extra precauation, though MainActivity should enforce this.
-            Log.d("DEBUG", "Warning: Attempted startPtt when txAllowed was false (should not happen).");
-            new Throwable().printStackTrace();
-            return;
-        }
-
-        setMode(MODE_TX);
-
-        if (null != callbacks) {
-            callbacks.sMeterUpdate(0);
-        }
-
+    private void setTxRunAwayTimer() {
         // Setup runaway tx safety measures.
         startTxTimeSec = System.currentTimeMillis() / 1000;
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Thread.sleep(RUNAWAY_TX_TIMEOUT_SEC * 1000);
-
-                    if (mode != MODE_TX) {
-                        return;
-                    }
-
-                    long elapsedSec = (System.currentTimeMillis() / 1000) - startTxTimeSec;
-                    if (elapsedSec
-                        > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
-                        Log.d("DEBUG", "Warning: runaway tx timeout reached, PTT stopped.");
-                        endPtt();
-                    }
-                } catch (InterruptedException e) {
+        threadPoolExecutor.execute(() -> {
+            try {
+                Thread.sleep(RUNAWAY_TX_TIMEOUT_SEC * 1000L);
+                if (mode != MODE_TX) {
+                    return;
                 }
+                long elapsedSec = (System.currentTimeMillis() / 1000) - startTxTimeSec;
+                if (elapsedSec
+                    > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
+                    Log.d("DEBUG", "Warning: runaway tx timeout reached, PTT stopped.");
+                    endPtt();
+                }
+            } catch (InterruptedException e) {
             }
         });
-        hostToEsp32.pttDown();
-        audioTrack.setVolume(0.0f);
-        audioTrackVolume = 0.0f;
-        Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
+    }
+
+    public void startPtt() {
+        if (mode == MODE_RX && txAllowed) {
+            setMode(MODE_TX);
+            Optional.ofNullable(callbacks).ifPresent(cb -> cb.sMeterUpdate(0));
+            setTxRunAwayTimer();
+            hostToEsp32.pttDown();
+            audioTrackVolume = 0.0f;
+            Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
+            Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
+        } else {
+            Log.d("DEBUG", "Warning: Attempted startPtt when it should not happen.");
+            new Throwable().printStackTrace();
+        }
     }
 
     public void endPtt() {
-        if (mode == MODE_RX) {
-            return;
+        if (mode == MODE_TX) {
+            setMode(MODE_RX);
+            audioTrackVolume = 0.0f;
+            Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
+            hostToEsp32.pttUp();
+            Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txEnded);
         }
-        setMode(MODE_RX);
-        audioTrack.setVolume(0.0f);
-        audioTrackVolume = 0.0f;
-        hostToEsp32.pttUp();
-        Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txEnded);
     }
 
     public void reconnectViaUSB() {
