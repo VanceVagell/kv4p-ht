@@ -560,6 +560,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (rxAudioVisualizer != null) {
+            rxAudioVisualizer.setEnabled(false);
+            rxAudioVisualizer.release();
+            rxAudioVisualizer = null;
+        }
 
         try {
             if (threadPoolExecutor != null) {
