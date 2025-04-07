@@ -20,18 +20,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Arduino.h>
 
 // Audio sampling rate, must match what Android app expects (and sends).
-#define AUDIO_SAMPLE_RATE 22050
+#define AUDIO_SAMPLE_RATE 48000
 
 // Maximum length of the frame
-#define PROTO_MTU 0xFF
+#define PROTO_MTU 2048
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.
 #define SAMPLING_RATE_OFFSET 0
 
 // I2S audio sampling stuff
-#define I2S_READ_LEN    (PROTO_MTU & ~0x01)       // Ensure it's even
-#define I2S_WRITE_LEN   ((PROTO_MTU + 1) & ~0x01) // Rounds up to the next even number
 #define I2S_ADC_UNIT    ADC_UNIT_1
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
@@ -45,6 +43,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 uint8_t SQ_PIN      = 32;
 #define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define PHYS_PTT_PIN2 33  // Optional. See above.
+
+#define ADC_BIAS_VOLTAGE  1.75
+#define ADC_ATTENUATION   ADC_ATTEN_DB_12
 
 // Hardware version detection
 #define HW_VER_PIN_0  39  // 0xF0
@@ -68,9 +69,6 @@ Mode mode = MODE_STOPPED;
 
 // Current SQ status
 bool squelched = false;
-
-// Have we installed an I2S driver at least once?
-bool i2sStarted = false;
 
 // Forward declarations
 void setMode(Mode newMode);
