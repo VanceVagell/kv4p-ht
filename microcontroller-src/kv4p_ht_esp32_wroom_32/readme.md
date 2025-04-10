@@ -22,7 +22,7 @@ Each message consists of the following fields:
 
 | Field             | Size (bytes) | Description                                |
 | ----------------- | ------------ | ------------------------------------------ |
-| Command Delimiter | 8            | Fixed value (`0xDEADBEEF`)                 |
+| Command Delimiter | 4            | Fixed value (`0xDEADBEEF`)                 |
 | Command           | 1            | Identifies the request or response         |
 | Parameter Length  | 2            | Length of the following parameters (0-65535) |
 | Parameters        | 0-65535      | Command-specific data                      |
