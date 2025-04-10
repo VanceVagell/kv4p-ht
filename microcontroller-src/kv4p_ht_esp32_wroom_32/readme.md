@@ -119,7 +119,7 @@ typedef struct config Config;
 
 ```c
 struct window_update {
-  uint16_t windowSize; // 2 bytes
+  size_t windowSize; // 4 bytes
 } __attribute__((__packed__));
 typedef struct window_update WindowUpdate;
 ```
