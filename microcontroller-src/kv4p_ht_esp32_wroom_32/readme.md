@@ -145,10 +145,10 @@ A window-based flow control mechanism, inspired by HTTP/2, is used to regulate t
    - This increases the window size, allowing Android to resume transmission.
 
 4. **Optional Implementation**:
-  - Implementing flow control is optional.
-  - A compliant implementation may ignore windowSize and COMMAND_WINDOW_UPDATE messages entirely.
-  - This is primarily useful when dealing with fast data sources like APRS modems that can generate large amounts of audio data rapidly.
-  - When audio is sourced from the ADC, it is inherently flow-controlled by the sampling hardware, making software flow control less necessary.
+   - Implementing flow control is optional.
+   - A compliant implementation may ignore windowSize and COMMAND_WINDOW_UPDATE messages entirely.
+   - This is primarily useful when dealing with fast data sources like APRS modems that can generate large amounts of audio data rapidly.
+   - When audio is sourced from the ADC, it is inherently flow-controlled by the sampling hardware, making software flow control less necessary.
 
 
 
