@@ -65,7 +65,7 @@ struct version {
   uint16_t    ver;               // 2 bytes
   char        radioModuleStatus; // 1 byte
   hw_ver_t    hw;                // 1 byte
-  uint16_t    windowSize;        // 2 bytes
+  size_t      windowSize;        // 4 bytes
 } __attribute__((__packed__));
 typedef struct version Version;
 ```
