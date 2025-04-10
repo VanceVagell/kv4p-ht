@@ -25,7 +25,7 @@ Each message consists of the following fields:
 | Command Delimiter | 4            | Fixed value (`0xDEADBEEF`)                 |
 | Command           | 1            | Identifies the request or response         |
 | Parameter Length  | 2            | Length of the following parameters (0-65535) |
-| Parameters        | 0-65535      | Command-specific data                      |
+| Parameters        | 0-2048       | Command-specific data                      |
 
 ## Incoming Commands (Android → ESP32)
 
