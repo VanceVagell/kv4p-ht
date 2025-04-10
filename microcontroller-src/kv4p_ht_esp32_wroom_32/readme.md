@@ -157,7 +157,7 @@ A window-based flow control mechanism, inspired by HTTP/2, is used to regulate t
 - Most commands follow a **fire-and-forget** approach.
 - Some commands may trigger a reply (indicated in comments).
 - There are no explicit response types; responses are sent as separate commands.
-- All incoming commands are subject to **window-based flow control**. ESP32 decrements window on receive; host updates via `COMMAND_WINDOW_UPDATE`.
+- All ESP32 incoming commands are subject to **window-based flow control**.
 
 ## Byte Order and Bit Significance
 - All multi-byte fields are encoded in little-endian format.
