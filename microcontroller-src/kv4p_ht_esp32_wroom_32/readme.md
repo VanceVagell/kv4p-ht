@@ -14,6 +14,7 @@ The KV4P-HT protocol defines the communication interface between the microcontro
   - `COMMAND_VERSION` payload now includes `windowSize`.
   - Audio streams are now OPUS encoded.
   - Window-based flow control implemented for all incoming commands, inspired by HTTP/2.
+  - Command delimiter now 4 byte `0xDEADBEEF`
 
 ## Packet Structure
 
@@ -21,7 +22,7 @@ Each message consists of the following fields:
 
 | Field             | Size (bytes) | Description                                |
 | ----------------- | ------------ | ------------------------------------------ |
-| Command Delimiter | 8            | Fixed value (`0xDEADBEEFDEADBEEF`)         |
+| Command Delimiter | 8            | Fixed value (`0xDEADBEEF`)                 |
 | Command           | 1            | Identifies the request or response         |
 | Parameter Length  | 2            | Length of the following parameters (0-65535) |
 | Parameters        | 0-65535      | Command-specific data                      |
@@ -159,20 +160,20 @@ A window-based flow control mechanism, inspired by HTTP/2, is used to regulate t
 ### Push-to-talk activation
 
 ```
-[ 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x00, 0x00 ]
+[ 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x00, 0x00 ]
 ```
 
-- `0xDEADBEEFDEADBEEF`: Command Delimiter
+- `0xDEADBEEF`: Command Delimiter
 - `0x01`: `COMMAND_HOST_PTT_DOWN`
 - `0x00 0x00`: Parameter Length (no parameters)
 
 ### Example Debug Message
 
 ```
-[ 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x05, 0x00, 'E', 'r', 'r', 'o', 'r' ]
+[ 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x05, 0x00, 'E', 'r', 'r', 'o', 'r' ]
 ```
 
-- `0xDEADBEEFDEADBEEF`: Command Delimiter
+- `0xDEADBEEF`: Command Delimiter
 - `0x01`: `COMMAND_DEBUG_INFO`
 - `0x05 0x00`: Parameter Length (5 bytes)
 - `'Error'`: Debug message content
