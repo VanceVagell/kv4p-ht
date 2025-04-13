@@ -28,7 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "buttons.h"
 #include "utils.h"
 
-const uint16_t FIRMWARE_VER = 12;
+const uint16_t FIRMWARE_VER = 13;
 
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint16_t USB_BUFFER_SIZE = 1024*2;

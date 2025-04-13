@@ -20,7 +20,7 @@ private:
   unsigned int debounceDelay;
   bool lastState;
 public:
-  Debounce(unsigned int delay): debounceDelay(delay), lastDebounceTime(millis()), lastState(true) {}
+  Debounce(unsigned int delay): debounceDelay(delay), lastDebounceTime(0), lastState(true) {}
 
   bool debounce(bool state) {
     if (state != lastState) {
