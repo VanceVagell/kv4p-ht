@@ -23,7 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "protocol.h"
-#include "buttons.h"
 
 bool txStreamConfigured = false;
 AnalogAudioStream out;
@@ -68,7 +67,6 @@ void processTxAudio(uint8_t *src, size_t len) {
       size_t written = txOut.write(src + totalWritten, len - totalWritten);
       totalWritten += written;
       esp_task_wdt_reset();
-      buttonsLoop();
   }
 }
 
