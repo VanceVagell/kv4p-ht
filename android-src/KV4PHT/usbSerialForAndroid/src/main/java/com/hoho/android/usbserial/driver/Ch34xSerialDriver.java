@@ -337,6 +337,13 @@ public class Ch34xSerialDriver implements UsbSerialDriver {
         }
 
         @Override
+        public void setDTRandRTS(boolean dtr, boolean rts) throws IOException {
+            this.dtr = dtr;
+            this.rts = rts;
+            setControlLines();
+        }
+
+        @Override
         public EnumSet<ControlLine> getControlLines() throws IOException {
             int status = getStatus();
             EnumSet<ControlLine> set = EnumSet.noneOf(ControlLine.class);
