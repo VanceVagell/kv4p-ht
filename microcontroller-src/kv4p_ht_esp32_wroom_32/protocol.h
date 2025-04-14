@@ -190,7 +190,7 @@ private:
   uint8_t _commandParams[PROTO_MTU];
   size_t _paramIndex;
 
-  bool inline processByte(uint8_t b) {
+  inline bool processByte(uint8_t b) {
     if (_matchedDelimiterTokens < DELIMITER_LENGTH) {
       _matchedDelimiterTokens = (b == COMMAND_DELIMITER[_matchedDelimiterTokens]) ? _matchedDelimiterTokens + 1 : 0;
     } else if (_matchedDelimiterTokens == DELIMITER_LENGTH) {
