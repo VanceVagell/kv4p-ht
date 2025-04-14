@@ -178,7 +178,7 @@ public:
       uint8_t b = _serial.read();
       if (processByte(b)) {
         return;
-      };
+      }
     }
   }
 private:
