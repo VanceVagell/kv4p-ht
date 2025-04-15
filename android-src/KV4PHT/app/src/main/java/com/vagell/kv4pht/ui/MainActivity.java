@@ -1723,7 +1723,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showUSBSnackbar() {
-        CharSequence snackbarMsg = "kv4p HT radio not found, plugged in?";
+        CharSequence snackbarMsg = getString(R.string.radio_not_found);
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
             .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
             .setAnchorView(findViewById(R.id.bottomNavigationView));
@@ -1738,7 +1738,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showHandshakeSnackbar() {
-        CharSequence snackbarMsg = "Looking for kv4p HT radio...";
+        CharSequence snackbarMsg = getString(R.string.handshake_message);
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
             .setBackgroundTint(getResources().getColor(R.color.primary))
             .setTextColor(getResources().getColor(R.color.medium_gray))
@@ -1752,7 +1752,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showRadioModuleNotFoundSnackbar() {
-        CharSequence snackbarMsg = "Radio module not responding to ESP32, check PCB solder joints";
+        CharSequence snackbarMsg = getString(R.string.module_not_found_message);
         radioModuleNotFoundSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
                 .setAnchorView(findViewById(R.id.bottomNavigationView));
@@ -1772,7 +1772,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private void showVersionSnackbar(int firmwareVer) {
         final Context ctx = this;
-        CharSequence snackbarMsg = firmwareVer == -1 ? "No firmware installed" : "New firmware available";
+        CharSequence snackbarMsg = firmwareVer == -1 ? getString(R.string.no_firmware_installed) : getString(R.string.new_firmware_available);
         versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
                 .setAction("Flash now", new View.OnClickListener() {
@@ -1832,7 +1832,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (null != radioAudioService) {
             if (null == callsign || callsign.trim().length() == 0) {
-                showCallsignSnackbar("Set your callsign to beacon your position");
+                showCallsignSnackbar(getString(R.string.set_your_callsign_to_beacon_your_position));
                 return;
             }
 
@@ -1850,7 +1850,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    scanButton.setText("SCAN");
+                    scanButton.setText(R.string.scan);
                 }
             });
 
@@ -1862,7 +1862,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    scanButton.setText("STOP SCAN");
+                    scanButton.setText(R.string.stop_scan);
                 }
             });
         }
@@ -1917,7 +1917,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void selectMemoryGroup(String groupName) {
-        this.selectedMemoryGroup = groupName.equals("All memories") ? null : groupName;
+        this.selectedMemoryGroup = groupName.equals(getString(R.string.all_memories)) ? null : groupName;
         viewModel.loadData();
 
         // Add drop-down arrow to end of selected group to suggest it's tappable
@@ -1995,7 +1995,7 @@ public class MainActivity extends AppCompatActivity {
                 break;
             case REQUEST_FIRMWARE:
                 if (resultCode == Activity.RESULT_OK) {
-                    showSimpleSnackbar("Successfully updated firmware");
+                    showSimpleSnackbar(getString(R.string.successfully_updated_firmware));
 
                     // Try to reconnect now that the kv4p HT firmware should be present
                     if (null != radioAudioService) {
