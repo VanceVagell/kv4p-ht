@@ -23,7 +23,7 @@
             android:id="@+id/settingsToolbarTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Settings"
+            android:text="@string/settings"
             android:textSize="32sp"
             app:fontWeight="500"
             android:textColor="@color/primary"
@@ -183,7 +183,7 @@
                     android:id="@+id/stickyPTTSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Sticky PTT"
+                    android:text="@string/sticky_ptt"
                     android:textSize="18dp"
                     android:textColor="@color/primary"
                     android:layout_marginTop="8dp"
@@ -248,7 +248,7 @@
                     android:id="@+id/aprsPositionSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Beacon my position"
+                    android:text="@string/beacon_my_position"
                     android:textSize="18dp"
                     android:textColor="@color/primary"
                     android:layout_marginTop="8dp"
@@ -287,7 +287,7 @@
                             android:padding="0dp"
                             android:layout_weight="1"
                             android:inputType="none"
-                            android:text="Exact"
+                            android:text="@string/exact"
                             android:textSize="20dp"
                             android:textColor="@color/primary"/>
                     </com.google.android.material.textfield.TextInputLayout>
@@ -335,7 +335,7 @@
                             android:padding="0dp"
                             android:layout_weight="1"
                             android:inputType="none"
-                            android:text="Wide"
+                            android:text="@string/wide"
                             android:textSize="20dp"
                             android:textColor="@color/primary"/>
                     </com.google.android.material.textfield.TextInputLayout>
@@ -567,7 +567,7 @@
                     android:layout_height="56dp"
                     android:layout_weight="0"
                     android:layout_marginBottom="16dp"
-                    android:text="Done"
+                    android:text="@string/done"
                     android:textSize="20dp"
                     android:textFontWeight="500"
                     android:textColor="@color/black"

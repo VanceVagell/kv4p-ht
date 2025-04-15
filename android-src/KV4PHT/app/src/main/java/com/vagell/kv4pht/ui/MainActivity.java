@@ -456,7 +456,7 @@ public class MainActivity extends AppCompatActivity {
                     // If beaconing just started, let user know in case they didn't want this
                     // or forgot they turned it on. And warn them if they haven't set their callsign.
                     if (beaconing && (null == callsign || callsign.trim().length() == 0)) {
-                        showCallsignSnackbar("Set your callsign to beacon your position");
+                        showCallsignSnackbar(getString(R.string.set_your_callsign_to_beacon_your_position));
                     } else if (beaconing) {
                         showBeaconingOnSnackbar(accuracy);
                     }
@@ -784,7 +784,7 @@ public class MainActivity extends AppCompatActivity {
             // If their callsign is not set, display a snackbar asking them to set it before they
             // can transmit.
             if (callsign == null || callsign.length() == 0) {
-                showCallsignSnackbar("Set your callsign to send text chat");
+                showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(false);
                 findViewById(R.id.sendButtonOverlay).setVisibility(View.VISIBLE);
@@ -811,7 +811,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showCallsignSnackbar(CharSequence snackbarMsg) {
         callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-                .setAction("Set now", new View.OnClickListener() {
+                .setAction(R.string.set_now, new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
                         callsignSnackbar.dismiss();
@@ -837,8 +837,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        String accuracyStr = (accuracy == RadioAudioService.APRS_POSITION_EXACT) ? "exact" : "approx";
-        CharSequence snackbarMsg = "Beaconing your " + accuracyStr + " position on active frequency";
+        String accuracyStr = (accuracy == RadioAudioService.APRS_POSITION_EXACT) ? getString(R.string.exact) : getString(R.string.approx);
+        CharSequence snackbarMsg = getString(R.string.position_beacon_message_1) + accuracyStr + getString(R.string.position_beacon_message_2);
         Snackbar beaconingSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
                 .setAction("Settings", new View.OnClickListener() {
                     @Override
@@ -862,7 +862,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void sendButtonOverlayClicked(View view) {
         if (callsign == null || callsign.length() == 0) {
-            showCallsignSnackbar("Set your callsign to send text chat");
+            showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
             ImageButton sendButton = findViewById(R.id.sendButton);
             sendButton.setEnabled(false);
         }
@@ -870,7 +870,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void sendTextClicked(View view) {
         if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
-            showSimpleSnackbar("Can't tx outside ham band");
+            showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
             return;
         }
 
@@ -1167,7 +1167,7 @@ public class MainActivity extends AppCompatActivity {
                                     public void run() {
                                         if (radioAudioService != null) {
                                             radioAudioService.setAprsPositionAccuracy(
-                                                    aprsPositionAccuracy.value.equals("Exact") ?
+                                                    aprsPositionAccuracy.value.equals(getString(R.string.exact)) ?
                                                             RadioAudioService.APRS_POSITION_EXACT :
                                                             RadioAudioService.APRS_POSITION_APPROX);
                                         }
@@ -1210,7 +1210,7 @@ public class MainActivity extends AppCompatActivity {
 
                     if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
                         touchHandled = true;
-                        showSimpleSnackbar("Can't tx outside ham band");
+                        showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
                         break;
                     }
 
@@ -1280,7 +1280,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
-                    showSimpleSnackbar("Can't tx outside ham band");
+                    showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
                     return;
                 }
 
@@ -1398,7 +1398,7 @@ public class MainActivity extends AppCompatActivity {
         activeFrequencyStr = radioAudioService.validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
-        showMemoryName("Simplex");
+        showMemoryName(getString(R.string.simplex));
         showFrequency(activeFrequencyStr);
 
         // Unhighlight all memory rows, since this is a simplex frequency.
@@ -1821,7 +1821,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void singleBeaconButtonClicked(View view) {
         if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
-            showSimpleSnackbar("Can't tx outside ham band");
+            showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
             return;
         }
 

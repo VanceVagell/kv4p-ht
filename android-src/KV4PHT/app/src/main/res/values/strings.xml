@@ -1,5 +1,11 @@
 <resources>
     <string name="app_name">kv4p HT</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="first_fragment_label">First Fragment</string>
+    <string name="second_fragment_label">Second Fragment</string>
 
     <string name="voice_display">Voice</string>
     <string name="aprs_chat_display">APRS chat</string>
@@ -27,25 +33,24 @@
     <string name="add_memory_display1">Add memory</string>
     <string name="to_display">To:</string>
     <string name="all_memories_display1">ALL MEMORIES ▼</string>
-    <string name="kv4p_ht">kv4p HT</string>
+    <string name="kv4p_ht" translatable="false">kv4p HT</string>
     <string name="push_to_talk_display">Push to talk</string>
     <string name="welcome_to_display">Welcome to</string>
     <string name="send_message_display">Send message</string>
-    <string name="visualization_of_current_receive_audio_volume_display">Visualization of current receive audio volume</string>
+    <string name="visualization_of_current_receive_audio_volume_display" translatable="false">Visualization of current receive audio volume</string>
     <string name="settings_display">Settings</string>
     <string name="send_aprs_position_beacond_display">Send APRS position beacon</string>
     <string name="write_up_to_67_chars">Write up to 67 chars...</string>
     <string name="callsign_or_cq">Callsign or CQ</string>
-    <string name="cq">CQ</string>
-    <string name="visualization_of_current_transmit_audio_volume">Visualization of current transmit audio volume</string>
+    <string name="cq" translatable="false">CQ</string>
+    <string name="visualization_of_current_transmit_audio_volume" translatable="false">Visualization of current transmit audio volume</string>
     <string name="squelch">Squelch</string>
     <string name="filters">Filters</string>
     <string name="radio_module_type">Radio module type</string>
     <string name="accessibility">Accessibility</string>
     <string name="closed_captions">Closed captions</string>
     <string name="system_setting">System setting</string>
-    <string name="aprs">APRS</string>
-    <string name="pre_amp_de_emphasis"><![CDATA[Pre- & De-emphasis]]></string>
+    <string name="aprs" translatable="false">APRS</string>
     <string name="highpass">Highpass</string>
     <string name="lowpass">Lowpass</string>
     <string name="radio">Radio</string>
@@ -59,8 +64,8 @@
     <string name="min_70cm_tx_frequency">Min 70cm TX frequency</string>
     <string name="max_70cm_tx_frequency">Max 70cm TX frequency</string>
     <string name="mic_gain_boost">Mic gain boost</string>
-    <string name="to">to</string>
-    <string name="kv4p_aprs_message">KV4P</string>
+    <string name="to" translatable="false">to</string>
+    <string name="kv4p_aprs_message" translatable="false">KV4P</string>
     <string name="message_body_example">The quick brown fox jumped over the lazy dog.</string>
     <string name="all_memories">All memories</string>
     <string name="edit">Edit</string>
@@ -76,4 +81,18 @@
     <string name="scan">SCAN</string>
     <string name="stop_scan">STOP SCAN</string>
     <string name="successfully_updated_firmware">Successfully updated firmware</string>
+    <string name="pre_amp_de_emphasis"><![CDATA[Pre- & De-emphasis]]></string>
+    <string name="set_your_callsign_to_send_text_chat">Set your callsign to send text chat</string>
+    <string name="can_t_tx_outside_ham_band">Can\'t tx outside ham band</string>
+    <string name="edit_memory">Edit memory</string>
+    <string name="set_now">Set now</string>
+    <string name="exact">exact</string>
+    <string name="approx">approx</string>
+    <string name="position_beacon_message_1">"Beaconing your "</string>
+    <string name="position_beacon_message_2">" position on active frequency"</string>
+    <string name="settings">Settings</string>
+    <string name="beacon_my_position">Beacon my position</string>
+    <string name="wide" translatable="false">Wide</string>
+    <string name="done">Done</string>
+    <string name="sticky_ptt" translatable="false">Sticky PTT</string>
 </resources>
