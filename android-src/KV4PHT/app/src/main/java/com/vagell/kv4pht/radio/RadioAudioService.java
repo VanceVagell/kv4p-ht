@@ -22,7 +22,6 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_UHF;
 import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_VHF;
-import static com.vagell.kv4pht.radio.Protocol.PROTO_MTU;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -38,6 +37,7 @@ import android.hardware.usb.UsbManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -83,15 +83,16 @@ import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
+import com.vagell.kv4pht.javAX25.ax25.PacketModulator;
 import com.vagell.kv4pht.radio.Protocol.Config;
 import com.vagell.kv4pht.radio.Protocol.Filters;
 import com.vagell.kv4pht.radio.Protocol.FrameParser;
 import com.vagell.kv4pht.radio.Protocol.Group;
 import com.vagell.kv4pht.radio.Protocol.RadioStatus;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
+import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -135,7 +136,7 @@ public class RadioAudioService extends Service {
     private RadioAudioServiceCallbacks callbacks = null;
 
     // For transmitting audio to ESP32 / radio
-    public static final int AUDIO_SAMPLE_RATE = 22050;
+    public static final int AUDIO_SAMPLE_RATE = 48000;
     public static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
     public static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
     public static final int RX_AUDIO_MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, RX_AUDIO_CHANNEL_CONFIG, RX_AUDIO_FORMAT) * 2;
@@ -147,33 +148,24 @@ public class RadioAudioService extends Service {
     private Map<String, Integer> mTones = new HashMap<>();
 
     // For receiving audio from ESP32 / radio
-    private final float[] pcmFloat = new float[PROTO_MTU];
+    private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
     private AudioTrack audioTrack;
+    private float  audioTrackVolume = 0.0f;
+    private AudioFocusRequest audioFocusRequest;
     private static final float SEC_BETWEEN_SCANS = 0.5f; // how long to wait during silence to scan to next frequency in scan mode
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
+    public static final int OPUS_FRAME_SIZE = 1920; // 40ms at 48kHz
+    private final OpusUtils.OpusDecoderWrapper opusDecoder = new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
+    private final OpusUtils.OpusEncoderWrapper opusEncoder = new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
 
     private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
 
     // AFSK modem
-    private Afsk1200Modulator afskModulator = null;
+    private PacketModulator afskModulator = null;
     private PacketDemodulator afskDemodulator = null;
     private static final int MS_SILENCE_BEFORE_DATA_MS = 1100;
     private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
-    private static final byte[] LEAD_IN_SILENCE;
-    private static final byte[] TAIL_SILENCE;
-    static {
-        // Calculate the size of the silence buffers
-        int leadInSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_BEFORE_DATA_MS;
-        int tailSize = AUDIO_SAMPLE_RATE / 1000 * MS_SILENCE_AFTER_DATA_MS;
-        // Round the silence buffer sizes to the nearest multiple of PROTO_MTU
-        leadInSize = (int) Math.ceil((double) leadInSize / PROTO_MTU) * PROTO_MTU;
-        tailSize = (int) Math.ceil((double) tailSize / PROTO_MTU) * PROTO_MTU;
-        LEAD_IN_SILENCE = new byte[leadInSize];
-        java.util.Arrays.fill(LEAD_IN_SILENCE, SILENT_BYTE);
-        TAIL_SILENCE = new byte[tailSize];
-        java.util.Arrays.fill(TAIL_SILENCE, SILENT_BYTE);
-    }
 
     // APRS position settings
     public static final int APRS_POSITION_EXACT = 0;
@@ -217,7 +209,6 @@ public class RadioAudioService extends Service {
 
     // Safety constants
     private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
-    private long startTxTimeSec = -1;
 
     // Notification stuff
     private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
@@ -277,6 +268,10 @@ public class RadioAudioService extends Service {
         activeFrequencyStr = bundle.getString("activeFrequencyStr");
 
         return binder;
+    }
+
+    public boolean isTxAllowed() {
+        return txAllowed;
     }
 
     public void setCallsign(String callsign) {
@@ -462,6 +457,8 @@ public class RadioAudioService extends Service {
     public void start() {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
+        // TODOV
+
         createNotificationChannels();
         findESP32Device();
         initAudioTrack();
@@ -499,8 +496,6 @@ public class RadioAudioService extends Service {
         public void outdatedFirmware(int firmwareVer);
 
         public void missingFirmware();
-
-        public void txAllowed(boolean allowed);
 
         public void txStarted();
 
@@ -637,7 +632,6 @@ public class RadioAudioService extends Service {
             } else {
                 txAllowed = true;
             }
-            callbacks.txAllowed(txAllowed);
         } catch (NumberFormatException nfe) {
         }
     }
@@ -734,7 +728,6 @@ public class RadioAudioService extends Service {
         } else {
             txAllowed = true;
         }
-        callbacks.txAllowed(txAllowed);
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
@@ -768,11 +761,15 @@ public class RadioAudioService extends Service {
             audioTrack.release();
             audioTrack = null;
         }
+        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANT)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build();
+        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(audioAttributes)
+            .build();
         audioTrack = new AudioTrack.Builder()
-            .setAudioAttributes(new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build())
+            .setAudioAttributes(audioAttributes)
             .setAudioFormat(new AudioFormat.Builder()
                 .setEncoding(RX_AUDIO_FORMAT)
                 .setSampleRate(AUDIO_SAMPLE_RATE)
@@ -782,6 +779,8 @@ public class RadioAudioService extends Service {
             .setBufferSizeInBytes(RX_AUDIO_MIN_BUFFER_SIZE)
             .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
             .build();
+        audioTrack.setVolume(0.0f);
+        audioTrackVolume = 0.0f;
         audioTrack.setAuxEffectSendLevel(0.0f);
 
         if (callbacks != null) {
@@ -789,55 +788,49 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public void startPtt() {
-        if (!txAllowed) { // Extra precauation, though MainActivity should enforce this.
-            Log.d("DEBUG", "Warning: Attempted startPtt when txAllowed was false (should not happen).");
-            new Throwable().printStackTrace();
-            return;
-        }
-
-        setMode(MODE_TX);
-
-        if (null != callbacks) {
-            callbacks.sMeterUpdate(0);
-        }
-
+    private void setTxRunAwayTimer() {
         // Setup runaway tx safety measures.
-        startTxTimeSec = System.currentTimeMillis() / 1000;
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Thread.sleep(RUNAWAY_TX_TIMEOUT_SEC * 1000);
-
-                    if (mode != MODE_TX) {
-                        return;
-                    }
-
-                    long elapsedSec = (System.currentTimeMillis() / 1000) - startTxTimeSec;
-                    if (elapsedSec
-                        > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
-                        Log.d("DEBUG", "Warning: runaway tx timeout reached, PTT stopped.");
-                        endPtt();
-                    }
-                } catch (InterruptedException e) {
+        long startTxTimeSec = System.currentTimeMillis() / 1000;
+        threadPoolExecutor.execute(() -> {
+            try {
+                Thread.sleep(RUNAWAY_TX_TIMEOUT_SEC * 1000L);
+                if (mode != MODE_TX) {
+                    return;
                 }
+                long elapsedSec = (System.currentTimeMillis() / 1000) - startTxTimeSec;
+                if (elapsedSec
+                    > RUNAWAY_TX_TIMEOUT_SEC) { // Check this because multiple tx may have happened with RUNAWAY_TX_TIMEOUT_SEC.
+                    Log.d("DEBUG", "Warning: runaway tx timeout reached, PTT stopped.");
+                    endPtt();
+                }
+            } catch (InterruptedException e) {
             }
         });
+    }
 
-        hostToEsp32.pttDown();
-        audioTrack.stop();
-        Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
+    public void startPtt() {
+        if (mode == MODE_RX && txAllowed) {
+            setMode(MODE_TX);
+            Optional.ofNullable(callbacks).ifPresent(cb -> cb.sMeterUpdate(0));
+            setTxRunAwayTimer();
+            hostToEsp32.pttDown();
+            audioTrackVolume = 0.0f;
+            Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
+            Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
+        } else {
+            Log.d("DEBUG", "Warning: Attempted startPtt when it should not happen.");
+            new Throwable().printStackTrace();
+        }
     }
 
     public void endPtt() {
-        if (mode == MODE_RX) {
-            return;
+        if (mode == MODE_TX) {
+            setMode(MODE_RX);
+            audioTrackVolume = 0.0f;
+            Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
+            hostToEsp32.pttUp();
+            Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txEnded);
         }
-        setMode(MODE_RX);
-        hostToEsp32.pttUp();
-        audioTrack.flush();
-        Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txEnded);
     }
 
     public void reconnectViaUSB() {
@@ -920,7 +913,7 @@ public class RadioAudioService extends Service {
         Log.d("DEBUG", "serialPort: " + serialPort);
         try {
             serialPort.open(connection);
-            serialPort.setParameters(230400, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+            serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.d("DEBUG", "Error: couldn't open USB serial port.");
             if (callbacks != null) {
@@ -1137,40 +1130,25 @@ public class RadioAudioService extends Service {
         Log.d("DEBUG", "Warning: All memories are skipDuringScan, no next memory found to scan to.");
     }
 
-    private byte[] applyMicGain(byte[] audioBuffer) {
+    private float[] applyMicGain(float[] audioBuffer) {
         if (micGainBoost == MicGainBoost.NONE) {
             return audioBuffer; // No gain, just return original
         }
-
-        byte[] newAudioBuffer = new byte[audioBuffer.length];
+        float[] newAudioBuffer = new float[audioBuffer.length];
         float gain = MicGainBoost.toFloat(micGainBoost);
-
         for (int i = 0; i < audioBuffer.length; i++) {
-            // Convert from [0..255] to [-128..127]
-            int signedSample = (audioBuffer[i] & 0xFF) - 128;
-
-            // Apply gain
-            signedSample = (int) (signedSample * gain);
-
-            // Clip to [-128..127]
-            signedSample = Math.min(127, signedSample);
-            signedSample = Math.max(-128, signedSample);
-
-            // Convert back to [0..255]
-            signedSample += 128;
-
-            // Store in the new buffer
-            newAudioBuffer[i] = (byte) signedSample;
+            newAudioBuffer[i] = audioBuffer[i] * gain;
         }
-
         return newAudioBuffer;
     }
 
-    public void sendAudioToESP32(byte[] audioBuffer, boolean dataMode) {
+    public void sendAudioToESP32(float[] samples, boolean dataMode) {
         if (!dataMode) {
-            audioBuffer = applyMicGain(audioBuffer);
+            samples = applyMicGain(samples);
         }
-        hostToEsp32.txAudio(audioBuffer);
+        byte[] audioFrame = new byte[Protocol.PROTO_MTU];
+        int encodedLength = opusEncoder.encode(samples, audioFrame);
+        hostToEsp32.txAudio(java.util.Arrays.copyOfRange(audioFrame, 0, encodedLength));
     }
 
     public static UsbSerialPort getUsbSerialPort() {
@@ -1183,6 +1161,7 @@ public class RadioAudioService extends Service {
             case COMMAND_SMETER_REPORT:
                 Protocol.Rssi.from(param, len)
                     .map(Protocol.Rssi::getSMeter9Value)
+                    .filter(i -> mode == MODE_RX || mode == MODE_SCAN)
                     .ifPresent(callbacks::sMeterUpdate);
                 break;
 
@@ -1226,6 +1205,11 @@ public class RadioAudioService extends Service {
                 handleVersion(param, len);
                 break;
 
+            case COMMAND_WINDOW_UPDATE:
+                WindowUpdate.from(param, len).ifPresent(windowAck ->
+                    hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
+                break;
+
             default:
                 break;
         }
@@ -1239,7 +1223,7 @@ public class RadioAudioService extends Service {
     }
 
     private void handlePhysicalPttDown() {
-        if (mode == MODE_RX) { // Note that people can't hit PTT in the middle of a scan.
+        if (mode == MODE_RX && txAllowed) { // Note that people can't hit PTT in the middle of a scan.
             startPtt();
             callbacks.forcedPttStart();
         }
@@ -1270,6 +1254,7 @@ public class RadioAudioService extends Service {
                 if (radioModuleNotFound) {
                     Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
                 } else {
+                    hostToEsp32.setFlowControlWindow(ver.getWindowSize());
                     initAfterESP32Connected();
                 }
             });
@@ -1277,43 +1262,58 @@ public class RadioAudioService extends Service {
     }
 
     private void handleRxAudio(final byte[] param, final Integer len) {
+        int decoded = opusDecoder.decode(param, len, pcmFloat);
         if (mode == MODE_RX || mode == MODE_SCAN) {
-            convertPCM8SignedToFloatArray(param, len, pcmFloat);
             if (afskDemodulator != null) {
-                afskDemodulator.addSamples(pcmFloat, len);
+                afskDemodulator.addSamples(pcmFloat, decoded);
             }
             if (audioTrack != null) {
-                audioTrack.write(pcmFloat, 0, len, AudioTrack.WRITE_NON_BLOCKING);
-                if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
-                    audioTrack.play();
-                }
+                AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
+                audioManager.requestAudioFocus(audioFocusRequest);
+                ensureAudioPlaying();
             }
         }
         if (mode == MODE_SCAN) {
-            for (int i = 0; i < len; i++) {
-                if (param[i] != SILENT_BYTE) {
+            for (int i = 0; i < decoded; i++) {
+                if (Math.abs(pcmFloat[i]) > 0.001) {
                     consecutiveSilenceBytes = 0;
-                    continue;
+                } else {
+                    consecutiveSilenceBytes++;
+                    checkScanDueToSilence();
                 }
-                consecutiveSilenceBytes++;
-                checkScanDueToSilence();
             }
         }
     }
 
-    private void convertPCM8SignedToFloatArray(final byte[] pcm8Data, final Integer len, final float[] floatData) {
-        // Iterate through the byte array and convert each sample
-        for (int i = 0; i < len; i++) {
-            // Normalize the signed 8-bit value to the range [-1.0, 1.0]
-            floatData[i] = pcm8Data[i] / 127.0f;
+    /**
+     * Ensures that the AudioTrack is playing and gradually adjusts its volume.
+     * The volume is increased smoothly based on a factor of alpha, and the volume is capped at 0.7f.
+     * If the calculated volume is below 0.7f, the volume is set to 0.0f.
+     * This method is intended to apply smooth volume adjustments to the AudioTrack.
+     * <p>
+     * The method first checks if the AudioTrack is playing. If it is not playing, the method starts the playback.
+     * Then, the volume is adjusted by applying a smoothing factor using a simple exponential-like formula.
+     * If the volume exceeds 0.7f, it will be set to the calculated value; otherwise, the volume will be set to 0.0f.
+     * </p>
+     *
+     * @see AudioTrack
+     * @see AudioTrack#setVolume(float)
+     */
+    private void ensureAudioPlaying() {
+        if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
+            audioTrackVolume = 0;
+            audioTrack.setVolume(0.0f);
+            audioTrack.play();
         }
-    }
-
-    private byte convertFloatToPCM8(float floatValue) {
-        // Clamp the float value to the range [-1.0, 1.0]
-        float clampedValue = Math.max(-1.0f, Math.min(1.0f, floatValue));
-        // Convert to unsigned 8-bit PCM (range 0 to 255)
-        return (byte) (Math.round(clampedValue * 127.0f) + 128);
+        float alpha = 0.05f;
+        audioTrackVolume = alpha + (1.0f - alpha) * audioTrackVolume;
+        if (audioTrackVolume > 0.7f) {
+            audioTrack.setVolume(audioTrackVolume);
+        }
+        else {
+            audioTrack.setVolume(0.0f);
+        }
     }
 
     private void initAFSKModem() {
@@ -1369,50 +1369,46 @@ public class RadioAudioService extends Service {
     }
 
     public void sendPositionBeacon() {
+        if (!txAllowed) {
+            return; // Don't try to beacon if person is outside the ham band. But don't need to show an error, would be spammy (e.g. when listening to NOAA radio).
+        }
+
         if (getMode() != MODE_RX) { // Can only beacon in rx mode (e.g. not tx or scan)
             Log.d("DEBUG", "Skipping position beacon because not in RX mode");
             return;
         }
 
         LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
-        Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); // Try to get cached location (fast)
 
-        if (location == null) {
-            if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-                Log.d("DEBUG", "Unable to beacon position because Android device is missing Google Play Services, needed to get GPS location.");
-                callbacks.unknownLocation();
-                return;
-            }
-
-            // Otherwise, manually retrieve a new location for user.
-            FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-
-            fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
-                    .addOnSuccessListener(new OnSuccessListener<Location>() {
-                        @Override
-                        public void onSuccess(Location location) {
-                            if (location != null) {
-                                // Use the location
-                                double latitude = location.getLatitude();
-                                double longitude = location.getLongitude();
-                                sendPositionBeacon(latitude, longitude);
-                            } else {
-                                callbacks.unknownLocation();
-                            }
-                        }
-                    }).addOnFailureListener(new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception e) {
-                            callbacks.unknownLocation();
-                        }
-                    });
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
+            Log.d("DEBUG", "Unable to beacon position because Android device is missing Google Play Services, needed to get GPS location.");
+            callbacks.unknownLocation();
             return;
         }
 
-        double latitude = location.getLatitude();
-        double longitude = location.getLongitude();
-        sendPositionBeacon(latitude, longitude);
+        // Otherwise, manually retrieve a new location for user.
+        FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+        fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
+            .addOnSuccessListener(new OnSuccessListener<Location>() {
+                @Override
+                public void onSuccess(Location location) {
+                    if (location != null) {
+                        // Use the location
+                        double latitude = location.getLatitude();
+                        double longitude = location.getLongitude();
+                        sendPositionBeacon(latitude, longitude);
+                    } else {
+                        callbacks.unknownLocation();
+                    }
+                }
+            }).addOnFailureListener(new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+                    callbacks.unknownLocation();
+                }
+            });
     }
 
     private void sendPositionBeacon(double latitude, double longitude) {
@@ -1503,34 +1499,51 @@ public class RadioAudioService extends Service {
         return messageNumber - 1;
     }
 
+    private void sendSilentFrames(int durationMs) {
+        float[] opusFrame = new float[OPUS_FRAME_SIZE];
+        java.util.Arrays.fill(opusFrame, 0.0f);
+        for (int i = 0; i < (durationMs / 40); i++) {
+            sendAudioToESP32(opusFrame, true);
+        }
+    }
+
     private void txAX25Packet(Packet ax25Packet) {
         if (!txAllowed) {
             Log.d("DEBUG", "Tried to send an AX.25 packet when tx is not allowed, did not send.");
             return;
         }
-        Log.d("DEBUG", "Sending AX25 packet: " + ax25Packet.toString());
-        // This strange approach to getting bytes seems to be a state machine in the AFSK library.
+        Log.d("DEBUG", "Sending AX25 packet: " + ax25Packet);
+        startPtt();
+        float[] opusFrame = new float[OPUS_FRAME_SIZE];
+        // Send lead-in silence
+        sendSilentFrames(MS_SILENCE_BEFORE_DATA_MS);
+        // Prepare AFSK modulator
+        int opusFrameIndex = 0;
+        java.util.Arrays.fill(opusFrame, 0.0f);
         afskModulator.prepareToTransmit(ax25Packet);
         float[] buffer = afskModulator.getTxSamplesBuffer();
-        ByteArrayOutputStream audioStream = new ByteArrayOutputStream();
+        // Modulate and send samples
         int n;
         while ((n = afskModulator.getSamples()) > 0) {
             for (int i = 0; i < n; i++) {
-                audioStream.write(convertFloatToPCM8(buffer[i]));
+                opusFrame[opusFrameIndex++] = buffer[i];
+                if (opusFrameIndex == OPUS_FRAME_SIZE) {
+                    sendAudioToESP32(opusFrame, true);
+                    java.util.Arrays.fill(opusFrame, 0.0f);
+                    opusFrameIndex = 0;
+                }
             }
         }
-        startPtt();
-        // Send lead-in silence
-        sendAudioToESP32(LEAD_IN_SILENCE, true);
-        // Send actual audio data
-        sendAudioToESP32(audioStream.toByteArray(), true);
+        // Send remaining audio if needed
+        sendAudioToESP32(opusFrame, true);
         // Send tail silence
-        sendAudioToESP32(TAIL_SILENCE, true);
+        sendSilentFrames(MS_SILENCE_AFTER_DATA_MS);
         endPtt();
+        Log.i("DEBUG", "Send AX25 packet: " + ax25Packet);
     }
 
-    public AudioTrack getAudioTrack() {
-        return audioTrack;
+    public int getAudioTrackSessionId() {
+        return Optional.ofNullable(audioTrack).map(AudioTrack::getAudioSessionId).orElse(-1);
     }
 
     private void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {

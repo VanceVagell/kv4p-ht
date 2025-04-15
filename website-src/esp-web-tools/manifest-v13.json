@@ -1,0 +1,13 @@
+{
+  "name": "kv4p HT firmware",
+  "version": "v13",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { "path": "../firmware/kv4p-ht-firmware-v13.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

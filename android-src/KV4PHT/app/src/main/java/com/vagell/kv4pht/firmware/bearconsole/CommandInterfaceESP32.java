@@ -158,42 +158,6 @@ public class CommandInterfaceESP32 {
         return syncSuccess;
     }
 
-    public void loadStubFromFile() {
-        try {
-            // Read the JSON file from assets
-            InputStream is = mContext.getResources().openRawResource(R.raw.esp32_stub_loader);
-
-            int size = is.available();
-            byte[] buffer = new byte[size];
-            is.read(buffer);
-            is.close();
-
-            String jsonStr = new String(buffer, "UTF-8");
-
-            // Parse the JSON
-            JSONObject json = new JSONObject(jsonStr);
-
-            // Extract the fields
-            int entry = json.getInt("entry");
-            String textBase64 = json.getString("text");
-            int textStart = json.getInt("text_start");
-            String dataBase64 = json.getString("data");
-            int dataStart = json.getInt("data_start");
-
-            // Decode the base64 strings into byte arrays
-            byte[] textSegment = Base64.decode(textBase64, Base64.DEFAULT);
-            byte[] dataSegment = Base64.decode(dataBase64, Base64.DEFAULT);
-
-            // Now use these in the loadStub() method
-            loadStub(textSegment, textStart, dataSegment, dataStart, entry);
-
-        } catch (IOException e) {
-            mUpCallback.onInfo("IOException: " + e.getMessage() + "\n");
-        } catch (JSONException e) {
-            mUpCallback.onInfo("JSONException: " + e.getMessage() + "\n");
-        }
-    }
-
     public void loadStub(byte[] textSegment, int textStart, byte[] dataSegment, int dataStart, int entry) {
         mUpCallback.onInfo("Uploading stub loader..." + "\n");
 
