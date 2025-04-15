@@ -40,6 +40,19 @@
         </nav>
         <main>
 			<div class="main-content-area">
+				<h1>Apr 13, 2025: Android app update v1.8.0, ESP32 firmware v13</h1>
+				<ul>
+					<li>Includes new v13 firmware.</li>
+					<li>Trying to tx outside ham band now shows a brief message.</li>
+					<li>Fixed calculation of tx limits related to bandwidth (narrow/wide) around band edges to be correct.</li>
+					<li>Ensured that tx limits are always applied, not just when after they're first set.</li>
+					<li>Fixed potential issue where physical PTT might be able to bypass tx limit in some circumstances.</li>
+					<li>Resolved several app-crashing exceptions reported in the Google Play developer console (race conditions people ran into in the wild).</li>
+					<li>Much more robust handshaking between Android app and kv4p HT firmware when device is first plugged in.</li></li>
+					<li>Clearer error message when the firmware can't contact the radio module (e.g. in case there's a bad solder joint).
+					<li>APRS beacon locations no longer use cached GPS data, which can be VERY stale.</li>
+					<li>Major rewrite of firmware code by @dkaukov for: better code architecture overall, more standardized protocol between firmware and Android app, and more robust audio handling with the Opus library (we can now revert to 115200 baud, because audio bytes are much more efficient now).</li>
+				</ul>
 				<h1>Feb 10, 2025: Android app update v1.7.3</h1>
 				<ul>
 					<li>Speculative fix for a crash bug on app start</li>

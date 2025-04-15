@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "debug.h"
 
 // Delimeter must also match Android app
-const uint8_t COMMAND_DELIMITER[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF};
+const uint8_t COMMAND_DELIMITER[] = {0xDE, 0xAD, 0xBE, 0xEF};
 #define DELIMITER_LENGTH sizeof(COMMAND_DELIMITER)
 
 // Incoming commands (Android -> ESP32)
@@ -51,6 +51,7 @@ enum SndCommand {
   COMMAND_HELLO          = 0x06, // [COMMAND_HELLO()]
   COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_VERSION        = 0x08, // [COMMAND_VERSION(Version)]
+  COMMAND_WINDOW_UPDATE  = 0x09,
 };
 
 // COMMAND_VERSION parameters
@@ -58,6 +59,7 @@ struct version {
   uint16_t    ver;
   char        radioModuleStatus;
   hw_ver_t    hw;
+  size_t      windowSize;
 } __attribute__((__packed__));
 typedef struct version Version;
 
@@ -94,6 +96,13 @@ struct config {
 } __attribute__((__packed__));
 typedef struct config Config;
 
+// COMMAND_WINDOW_ACK parameters
+struct window_update {
+  size_t size; 
+} __attribute__((__packed__));
+typedef struct window_update WindowUpdate;
+
+
 /**
  * Send a command with params
  * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
@@ -108,8 +117,8 @@ void __sendCmdToHost(SndCommand cmd, const byte *params, size_t paramsLen) {
   // 2. Command byte
   Serial.write((uint8_t*) &cmd, 1);
   // 3. Parameter length
-  uint8_t len = paramsLen;
-  Serial.write(&len, 1);
+  uint16_t len = paramsLen;
+  Serial.write((uint8_t*) &len, sizeof(len));
   // 4. Parameter bytes
   if (paramsLen > 0) {
     Serial.write(params, paramsLen);
@@ -131,11 +140,12 @@ void inline sendRssi(uint8_t rssi) {
   __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
 }
 
-void inline sendVersion(uint16_t ver, char radioModuleStatus, hw_ver_t hw) {
+void inline sendVersion(uint16_t ver, char radioModuleStatus, hw_ver_t hw, size_t windowSize) {
   Version params = {
     .ver = ver,
     .radioModuleStatus = radioModuleStatus,
-    .hw = hw
+    .hw = hw,
+    .windowSize = windowSize
   };
   __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
 }
@@ -146,6 +156,13 @@ void inline sendPhysPttState(bool isPhysPttDown) {
 
 void inline sendAudio(const byte *data, size_t len) {
   __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
+}
+
+void inline sendWindowAck(size_t size) {
+  WindowUpdate params = {
+    .size = size,
+  };
+  __sendCmdToHost(COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
 }
 
 typedef void (*CommandCallback)(RcvCommand command, uint8_t *params, size_t param_len);
@@ -167,9 +184,9 @@ private:
   CommandCallback _callback;
   uint8_t _matchedDelimiterTokens;
   RcvCommand _command;
-  uint8_t _commandParamLen; 
+  size_t _commandParamLen; 
   uint8_t _commandParams[PROTO_MTU];
-  uint8_t _paramIndex;
+  size_t _paramIndex;
 
   void inline processByte(uint8_t b) {
     if (_matchedDelimiterTokens < DELIMITER_LENGTH) {
@@ -179,10 +196,17 @@ private:
       _matchedDelimiterTokens++;
     } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 1) {
       _commandParamLen = b;
+      _matchedDelimiterTokens++;
+    } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 2) {  
+      _commandParamLen |= (b << 8);
       _paramIndex = 0;
       _matchedDelimiterTokens++;
       if (_commandParamLen == 0) {
         _callback(_command, _commandParams, 0);
+        sendWindowAck(DELIMITER_LENGTH + 1 + 2);
+        resetParser();
+      }
+      if (_commandParamLen > PROTO_MTU) {
         resetParser();
       }
     } else {
@@ -191,6 +215,7 @@ private:
       }
       if (_paramIndex == _commandParamLen) {
         _callback(_command, _commandParams, _commandParamLen);
+        sendWindowAck(DELIMITER_LENGTH + 1 + 2 + _commandParamLen);
         resetParser();
       }
     }

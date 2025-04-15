@@ -18,11 +18,11 @@ public class FirmwareUtils {
     private static int progressPercent = 0;
 
     // Whenever there is new firmware, put the files in res/raw, and update these constants.
-    public static final int PACKAGED_FIRMWARE_VER = 12;
-    private static final int FIRMWARE_FILE_1_ID = R.raw.v12_kv4p_ht_esp32_wroom_32_ino_bootloader;
-    private static final int FIRMWARE_FILE_2_ID = R.raw.v12_kv4p_ht_esp32_wroom_32_ino_partitions;
+    public static final int PACKAGED_FIRMWARE_VER = 13;
+    private static final int FIRMWARE_FILE_1_ID = R.raw.bootloader;
+    private static final int FIRMWARE_FILE_2_ID = R.raw.partitions;
     private static final int FIRMWARE_FILE_3_ID = R.raw.boot_app0; // This one never changes, it's the Arduino ESP32 bootloader
-    private static final int FIRMWARE_FILE_4_ID = R.raw.v12_kv4p_ht_esp32_wroom_32_ino;
+    private static final int FIRMWARE_FILE_4_ID = R.raw.firmware_v13;
 
     public FirmwareUtils() {
     }

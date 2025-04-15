@@ -34,7 +34,6 @@ import android.graphics.Rect;
 import android.hardware.usb.UsbManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
-import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.media.audiofx.Visualizer;
 import android.os.Bundle;
@@ -89,8 +88,6 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
-
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -102,8 +99,9 @@ public class MainActivity extends AppCompatActivity {
     private AudioRecord audioRecord;
     private boolean isRecording = false;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    private int audioFormat = AudioFormat.ENCODING_PCM_8BIT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat) * 2;
+    private int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
+    private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat);
+
     private Thread recordingThread;
 
     private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
@@ -361,7 +359,9 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void audioTrackCreated() {
                     if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        createRxAudioVisualizer(radioAudioService.getAudioTrack());
+                        if (radioAudioService.getAudioTrackSessionId() != -1) {
+                            createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId());
+                        }
                     }
                 }
 
@@ -383,13 +383,6 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void missingFirmware() {
                     showVersionSnackbar(-1);
-                }
-
-                @Override
-                public void txAllowed(boolean allowed) {
-                    // Only enable the PTT and send chat buttons when tx is allowed (e.g. within ham band).
-                    findViewById(R.id.pttButton).setClickable(allowed);
-                    findViewById(R.id.sendButton).setClickable(allowed);
                 }
 
                 @Override
@@ -518,6 +511,7 @@ public class MainActivity extends AppCompatActivity {
             };
 
             radioAudioService.setCallbacks(callbacks);
+            applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
 
             // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
@@ -568,6 +562,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        releaseRxAudioVisualizer();
 
         try {
             if (threadPoolExecutor != null) {
@@ -874,6 +869,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void sendTextClicked(View view) {
+        if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+            showSimpleSnackbar("Can't tx outside ham band");
+            return;
+        }
+
         String targetCallsign = ((EditText) findViewById(R.id.textChatTo)).getText().toString().trim();
         if (targetCallsign.length() == 0) {
             targetCallsign = "CQ";
@@ -924,8 +924,17 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.textChatInput).requestFocus();
     }
 
-    private void createRxAudioVisualizer(AudioTrack audioTrack) {
-        rxAudioVisualizer = new Visualizer(audioTrack.getAudioSessionId());
+    private void releaseRxAudioVisualizer() {
+        if (rxAudioVisualizer != null) {
+            rxAudioVisualizer.setEnabled(false);
+            rxAudioVisualizer.release();
+            rxAudioVisualizer = null;
+        }
+    }
+
+    private void createRxAudioVisualizer(int audioSessionId) {
+        releaseRxAudioVisualizer();
+        rxAudioVisualizer = new Visualizer(audioSessionId);
         rxAudioVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
             @Override
             public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
@@ -945,29 +954,19 @@ public class MainActivity extends AppCompatActivity {
         rxAudioVisualizer.setEnabled(true);
     }
 
-    private void updateRecordingVisualization(int waitMs, byte audioByte) {
+    private void updateRecordingVisualization(int waitMs, float txVolume) {
         if (disableAnimations) { return; }
-
         final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        float txVolume = ((float) audioByte + 128f) / 256; // 0 to 1
-                        ImageView txAudioView = findViewById(R.id.txAudioCircle);
-                        ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
-                        int mode = radioAudioService != null ? radioAudioService.getMode() : -1;
-                        layoutParams.width = audioByte == RadioAudioService.SILENT_BYTE ||
-                                mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
-                        layoutParams.height = audioByte == RadioAudioService.SILENT_BYTE ||
-                                mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
-                        txAudioView.setLayoutParams(layoutParams);
-                    }
-                });
-            }
-        }, waitMs); // waitMs gives us the fps we desire, see RECORD_ANIM_FPS constant.
+        handler.postDelayed(() -> runOnUiThread(() -> {
+            ImageView txAudioView = findViewById(R.id.txAudioCircle);
+            ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) txAudioView.getLayoutParams();
+            int mode = radioAudioService != null ? radioAudioService.getMode() : -1;
+            layoutParams.width = Math.abs(txVolume) < 0.001 ||
+                    mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+            layoutParams.height = Math.abs(txVolume) < 0.001 ||
+                    mode == RadioAudioService.MODE_RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
+            txAudioView.setLayoutParams(layoutParams);
+        }), waitMs); // waitMs gives us the fps we desire, see RECORD_ANIM_FPS constant.
     }
 
     private void applySettings() {
@@ -1156,7 +1155,7 @@ public class MainActivity extends AppCompatActivity {
                                 rxAudioView.setLayoutParams(layoutParams);
 
                                 // Hide the tx audio visualization
-                                updateRecordingVisualization(100, RadioAudioService.SILENT_BYTE);
+                                updateRecordingVisualization(100, 0.0f);
                             }
                         }
 
@@ -1208,6 +1207,13 @@ public class MainActivity extends AppCompatActivity {
                         touchHandled = true;
                         break;
                     }
+
+                    if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+                        touchHandled = true;
+                        showSimpleSnackbar("Can't tx outside ham band");
+                        break;
+                    }
+
                     pttButtonDebounceHandler.removeCallbacksAndMessages(null);
                     if (stickyPTT) {
                         if (radioAudioService != null && radioAudioService.getMode() == RadioAudioService.MODE_RX) {
@@ -1270,6 +1276,11 @@ public class MainActivity extends AppCompatActivity {
                 // if stickyPTT isn't being used, don't handle a click on the PTT button (they need
                 // to hold since it's not sticky).
                 if (!stickyPTT) {
+                    return;
+                }
+
+                if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+                    showSimpleSnackbar("Can't tx outside ham band");
                     return;
                 }
 
@@ -1597,11 +1608,8 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
-                    if (radioAudioService != null) {
-                        AudioTrack audioTrack = radioAudioService.getAudioTrack();
-                        if (audioTrack != null) {
-                            createRxAudioVisualizer(audioTrack); // Visualizer requires RECORD_AUDIO permission (even if not visualizing the mic input).
-                        }
+                    if (null != radioAudioService && radioAudioService.getAudioTrackSessionId() != -1) {
+                        createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId()); // Visualizer requires RECORD_AUDIO permission (even if not visualizing the mic input).
                     }
                     initAudioRecorder();
                 } else {
@@ -1661,11 +1669,6 @@ public class MainActivity extends AppCompatActivity {
             initAudioRecorder();
         }
 
-        // Whenever we start recording we immediately silence any audio playback so the mic
-        // doesn't pick it up.
-        radioAudioService.getAudioTrack().pause();
-        radioAudioService.getAudioTrack().flush();
-
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button_on));
 
@@ -1682,27 +1685,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void processAudioStream() {
+        float audioChunkSampleTotal = 0.0f; // Accumulate across buffers
+        int accumulatedSamples = 0; // Track count of samples
+        int samplesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
+        float[] audioBuffer = new float[RadioAudioService.OPUS_FRAME_SIZE];
         while (isRecording) {
-            byte[] audioBuffer = new byte[minBufferSize];
-            int bytesRead;
-            bytesRead = audioRecord.read(audioBuffer, 0, minBufferSize);
-
-            if (bytesRead > 0) {
-                if (radioAudioService != null) {
-                    radioAudioService.sendAudioToESP32(Arrays.copyOfRange(audioBuffer, 0, bytesRead), false);
-
-                    int bytesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
-                    long audioChunkByteTotal = 0;
-                    int waitMs = 0;
-                    for (int i = 0; i < bytesRead; i++) {
-                        if (i > 0 && i % bytesPerAnimFrame == 0) {
-                            audioChunkByteTotal += audioBuffer[i];
-                            updateRecordingVisualization(waitMs, (byte) (audioChunkByteTotal / bytesPerAnimFrame));
-                            waitMs += (1.0f / RECORD_ANIM_FPS * 1000);
-                            audioChunkByteTotal = 0;
-                        } else {
-                            audioChunkByteTotal += audioBuffer[i];
-                        }
+            int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
+            if (samples == RadioAudioService.OPUS_FRAME_SIZE) {
+                radioAudioService.sendAudioToESP32(audioBuffer, false);
+                // Accumulate samples across buffers
+                for (int i = 0; i < samples; i++) {
+                    audioChunkSampleTotal += Math.abs(audioBuffer[i]) * 8.0f;
+                    accumulatedSamples++;
+                    // If we have enough samples, update visualization
+                    if (accumulatedSamples >= samplesPerAnimFrame) {
+                        updateRecordingVisualization(0, audioChunkSampleTotal / accumulatedSamples);
+                        // Reset accumulators
+                        audioChunkSampleTotal = 0.0f;
+                        accumulatedSamples = 0;
                     }
                 }
             }
@@ -1716,11 +1716,8 @@ public class MainActivity extends AppCompatActivity {
             audioRecord.release();
             audioRecord = null;
             recordingThread = null;
-            updateRecordingVisualization(100, RadioAudioService.SILENT_BYTE);
+            updateRecordingVisualization(100, 0.0f);
         }
-
-        radioAudioService.getAudioTrack().play();
-
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button));
     }
@@ -1823,6 +1820,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void singleBeaconButtonClicked(View view) {
+        if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
+            showSimpleSnackbar("Can't tx outside ham band");
+            return;
+        }
+
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPositionPermissions();
             return;

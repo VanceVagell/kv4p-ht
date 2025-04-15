@@ -32,4 +32,8 @@ jobs:
               version: 8.1.0
             - source-url: https://github.com/fatpat/arduino-dra818.git
               version: 89582e3ef7bf3f31f1af149e32cec16c4b9e4cf2
+            - source-url: https://github.com/pschatzmann/arduino-audio-tools/archive/refs/tags/v1.0.1.zip
+              name: arduino-audio-tools
+            - source-url: https://github.com/pschatzmann/arduino-libopus/archive/refs/tags/a1.1.0.zip
+              name: arduino-libopus
           verbose: true

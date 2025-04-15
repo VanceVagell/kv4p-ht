@@ -6,9 +6,15 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 ## Protocol Version
 
-- **Current Version:** 2.0
+- **Current Version:** 2.1
 - **Changelog:**
   - Initial version with core command set.
+  - Parameter length field upgraded from 1 byte to 2 bytes (`uint16_t`).
+  - Added `COMMAND_WINDOW_UPDATE`.
+  - `COMMAND_VERSION` payload now includes `windowSize`.
+  - Audio streams are now OPUS encoded.
+  - Window-based flow control implemented for all incoming commands, inspired by HTTP/2.
+  - Command delimiter now 4 byte `0xDEADBEEF`
 
 ## Packet Structure
 
@@ -16,10 +22,10 @@ Each message consists of the following fields:
 
 | Field             | Size (bytes) | Description                                |
 | ----------------- | ------------ | ------------------------------------------ |
-| Command Delimiter | 8            | Fixed value (`0xDEADBEEFDEADBEEF`)         |
+| Command Delimiter | 4            | Fixed value (`0xDEADBEEF`)                 |
 | Command           | 1            | Identifies the request or response         |
-| Parameter Length  | 1            | Length of the following parameters (0-255) |
-| Parameters        | 0-255        | Command-specific data                      |
+| Parameter Length  | 2            | Length of the following parameters (0-65535) |
+| Parameters        | 0-2048       | Command-specific data                      |
 
 ## Incoming Commands (Android → ESP32)
 
@@ -31,7 +37,8 @@ Each message consists of the following fields:
 | `0x04`       | `COMMAND_HOST_FILTERS`  | Set filters (parameters required)        |
 | `0x05`       | `COMMAND_HOST_STOP`     | Stop current operation                   |
 | `0x06`       | `COMMAND_HOST_CONFIG`   | Configure device (may return version)    |
-| `0x07`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx audio data (payload required) |
+| `0x07`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx OPUS audio data (payload required, flow-controlled) |
+| `0x08`       | `COMMAND_WINDOW_UPDATE` | Updates available receive window         |
 
 ## Outgoing Commands (ESP32 → Android)
 
@@ -46,7 +53,7 @@ Each message consists of the following fields:
 | `0x04`       | `COMMAND_DEBUG_DEBUG`   | Sends debug debug-level message        |
 | `0x05`       | `COMMAND_DEBUG_TRACE`   | Sends debug trace message              |
 | `0x06`       | `COMMAND_HELLO`         | Hello handshake message                |
-| `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx audio data (payload required) |
+| `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx OPUS audio data (payload required) |
 | `0x08`       | `COMMAND_VERSION`       | Sends firmware version information     |
 
 ## Command Parameters
@@ -58,6 +65,7 @@ struct version {
   uint16_t    ver;               // 2 bytes
   char        radioModuleStatus; // 1 byte
   hw_ver_t    hw;                // 1 byte
+  size_t      windowSize;        // 4 bytes
 } __attribute__((__packed__));
 typedef struct version Version;
 ```
@@ -107,11 +115,49 @@ struct config {
 typedef struct config Config;
 ```
 
+### `COMMAND_WINDOW_UPDATE` Parameters
+
+```c
+struct window_update {
+  size_t windowSize; // 4 bytes
+} __attribute__((__packed__));
+typedef struct window_update WindowUpdate;
+```
+
+## Flow Control
+
+A window-based flow control mechanism, inspired by HTTP/2, is used to regulate the amount of data sent from Android to the ESP32:
+
+1. **Window Size Declaration**:
+   - The ESP32 sends a "desired" initial window size in the `COMMAND_VERSION` payload.
+   - This typically matches the size of its internal USB receive buffer.
+
+2. **Window Consumption**:
+   - Each incoming command from Android reduces the remaining window size by the size of the entire packet.
+   - All commands, not just `COMMAND_HOST_TX_AUDIO`, are subject to this flow control.
+
+3. **Blocking on Exhaustion**:
+   - If the next packet does not fit in the remaining window, Android must wait until space is available.
+   - Effectively, this blocks transmission when `windowSize < packet size`.
+
+4. **Window Replenishment**:
+   - Once the ESP32 finishes processing a packet, it sends a `COMMAND_WINDOW_UPDATE` message.
+   - This increases the window size, allowing Android to resume transmission.
+
+4. **Optional Implementation**:
+   - Implementing flow control is optional.
+   - A compliant implementation may ignore windowSize and COMMAND_WINDOW_UPDATE messages entirely.
+   - This is primarily useful when dealing with fast data sources like APRS modems that can generate large amounts of audio data rapidly.
+   - When audio is sourced from the ADC, it is inherently flow-controlled by the sampling hardware, making software flow control less necessary.
+
+
+
 ## Command Handling Strategy
 
 - Most commands follow a **fire-and-forget** approach.
 - Some commands may trigger a reply (indicated in comments).
 - There are no explicit response types; responses are sent as separate commands.
+- All ESP32 incoming commands are subject to **window-based flow control**.
 
 ## Byte Order and Bit Significance
 - All multi-byte fields are encoded in little-endian format.
@@ -122,22 +168,20 @@ typedef struct config Config;
 ### Push-to-talk activation
 
 ```
-[ 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x00 ]
+[ 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x00, 0x00 ]
 ```
 
-- `0xDEADBEEFDEADBEEF`: Command Delimiter
+- `0xDEADBEEF`: Command Delimiter
 - `0x01`: `COMMAND_HOST_PTT_DOWN`
-- `0x00`: Parameter Length (no parameters)
+- `0x00 0x00`: Parameter Length (no parameters)
 
 ### Example Debug Message
 
 ```
-[ 0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF, 0x10, 0x05, 'E', 'r', 'r', 'o', 'r' ]
+[ 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x05, 0x00, 'E', 'r', 'r', 'o', 'r' ]
 ```
 
-- `0xDEADBEEFDEADBEEF`: Command Delimiter
-- `0x10`: `COMMAND_DEBUG_INFO`
-- `0x05`: Parameter Length (5 bytes)
+- `0xDEADBEEF`: Command Delimiter
+- `0x01`: `COMMAND_DEBUG_INFO`
+- `0x05 0x00`: Parameter Length (5 bytes)
 - `'Error'`: Debug message content
-
-
