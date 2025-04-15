@@ -6829,16 +6829,6 @@
 	)
 	(wire
 		(pts
-			(xy 188.595 64.77) (xy 191.77 64.77)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "640b3a07-d92b-43ac-b407-c42fa4558ff9")
-	)
-	(wire
-		(pts
 			(xy 44.45 43.815) (xy 46.355 43.815)
 		)
 		(stroke
@@ -7066,6 +7056,16 @@
 			(type default)
 		)
 		(uuid "9e7e22c0-00ae-4f02-84aa-9c03673a84f1")
+	)
+	(wire
+		(pts
+			(xy 188.595 64.77) (xy 191.77 64.77)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a3b2e742-f724-4530-8a01-9d183de50f3f")
 	)
 	(wire
 		(pts
@@ -8003,7 +8003,7 @@
 	)
 	(hierarchical_label "Radio AF Out"
 		(shape input)
-		(at 171.45 38.1 0)
+		(at 186.69 22.225 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8234,7 +8234,7 @@
 	)
 	(hierarchical_label "Radio Mic In"
 		(shape input)
-		(at 146.05 38.1 0)
+		(at 161.29 22.225 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -10796,7 +10796,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 165.1 25.4 90)
+		(at 123.825 22.225 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -10805,7 +10805,7 @@
 		(fields_autoplaced yes)
 		(uuid "285cbe60-3511-49d8-b078-cf58c1996ee8")
 		(property "Reference" "TP2"
-			(at 161.798 20.32 90)
+			(at 120.523 17.145 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10813,7 +10813,7 @@
 			)
 		)
 		(property "Value" "+3.3v"
-			(at 161.798 22.86 90)
+			(at 120.523 19.685 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10821,7 +10821,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
-			(at 165.1 20.32 0)
+			(at 123.825 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10830,7 +10830,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 165.1 20.32 0)
+			(at 123.825 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10839,7 +10839,7 @@
 			)
 		)
 		(property "Description" "test point"
-			(at 165.1 25.4 0)
+			(at 123.825 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10928,7 +10928,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 146.05 38.1 90)
+		(at 161.29 22.225 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -10937,7 +10937,7 @@
 		(fields_autoplaced yes)
 		(uuid "2b482226-e908-4635-bc3e-e2cd4f1d59e4")
 		(property "Reference" "TP4"
-			(at 142.748 33.02 90)
+			(at 157.988 17.145 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10945,7 +10945,7 @@
 			)
 		)
 		(property "Value" "Radio Mic"
-			(at 142.748 35.56 90)
+			(at 157.988 19.685 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10953,7 +10953,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
-			(at 146.05 33.02 0)
+			(at 161.29 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10962,7 +10962,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 146.05 33.02 0)
+			(at 161.29 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10971,7 +10971,7 @@
 			)
 		)
 		(property "Description" "test point"
-			(at 146.05 38.1 0)
+			(at 161.29 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12758,7 +12758,7 @@
 	)
 	(symbol
 		(lib_id "power:+5V")
-		(at 146.05 25.4 270)
+		(at 104.775 22.225 270)
 		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
@@ -12768,7 +12768,7 @@
 		(fields_autoplaced yes)
 		(uuid "52971e7b-d5f9-4c96-b3e8-fd0935ba7e8a")
 		(property "Reference" "#PWR059"
-			(at 142.24 25.4 0)
+			(at 100.965 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12777,7 +12777,7 @@
 			)
 		)
 		(property "Value" "+5V"
-			(at 149.86 25.3999 90)
+			(at 108.585 22.2249 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12786,7 +12786,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 146.05 25.4 0)
+			(at 104.775 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12795,7 +12795,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 146.05 25.4 0)
+			(at 104.775 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -12804,7 +12804,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+5V\""
-			(at 146.05 25.4 0)
+			(at 104.775 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15639,7 +15639,7 @@
 	)
 	(symbol
 		(lib_id "power:+3.3V")
-		(at 165.1 25.4 270)
+		(at 123.825 22.225 270)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -15648,7 +15648,7 @@
 		(fields_autoplaced yes)
 		(uuid "8cc77127-b89b-4f8c-bea0-e94c99ab5980")
 		(property "Reference" "#PWR060"
-			(at 161.29 25.4 0)
+			(at 120.015 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15657,7 +15657,7 @@
 			)
 		)
 		(property "Value" "+3.3V"
-			(at 168.91 25.3999 90)
+			(at 127.635 22.2249 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15666,7 +15666,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 165.1 25.4 0)
+			(at 123.825 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15675,7 +15675,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 165.1 25.4 0)
+			(at 123.825 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15684,7 +15684,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+3.3V\""
-			(at 165.1 25.4 0)
+			(at 123.825 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15819,7 +15819,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 184.15 25.4 90)
+		(at 142.875 22.225 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -15828,7 +15828,7 @@
 		(fields_autoplaced yes)
 		(uuid "8d5066d0-3a30-434b-af10-ae286d54a52c")
 		(property "Reference" "TP3"
-			(at 180.848 20.32 90)
+			(at 139.573 17.145 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15836,7 +15836,7 @@
 			)
 		)
 		(property "Value" "Gnd"
-			(at 180.848 22.86 90)
+			(at 139.573 19.685 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15844,7 +15844,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_THTPad_D2.5mm_Drill1.2mm"
-			(at 184.15 20.32 0)
+			(at 142.875 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15853,7 +15853,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 184.15 20.32 0)
+			(at 142.875 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -15862,7 +15862,7 @@
 			)
 		)
 		(property "Description" "test point"
-			(at 184.15 25.4 0)
+			(at 142.875 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19444,7 +19444,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 184.15 25.4 90)
+		(at 142.875 22.225 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -19453,7 +19453,7 @@
 		(fields_autoplaced yes)
 		(uuid "cbf2fa1a-0b4f-467d-b27c-8b6e84794a15")
 		(property "Reference" "#PWR061"
-			(at 190.5 25.4 0)
+			(at 149.225 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19462,7 +19462,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 187.96 25.3999 90)
+			(at 146.685 22.2249 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19471,7 +19471,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 184.15 25.4 0)
+			(at 142.875 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19480,7 +19480,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 184.15 25.4 0)
+			(at 142.875 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19489,7 +19489,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 184.15 25.4 0)
+			(at 142.875 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19577,7 +19577,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 171.45 38.1 90)
+		(at 186.69 22.225 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -19586,7 +19586,7 @@
 		(fields_autoplaced yes)
 		(uuid "ceddc72d-dbf2-46c7-8a1d-b1682f02d296")
 		(property "Reference" "TP5"
-			(at 168.148 33.02 90)
+			(at 183.388 17.145 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19594,7 +19594,7 @@
 			)
 		)
 		(property "Value" "Radio AF Out"
-			(at 168.148 35.56 90)
+			(at 183.388 19.685 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19602,7 +19602,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
-			(at 171.45 33.02 0)
+			(at 186.69 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19611,7 +19611,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 171.45 33.02 0)
+			(at 186.69 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19620,7 +19620,7 @@
 			)
 		)
 		(property "Description" "test point"
-			(at 171.45 38.1 0)
+			(at 186.69 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19948,7 +19948,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 146.05 25.4 90)
+		(at 104.775 22.225 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom no)
@@ -19957,7 +19957,7 @@
 		(fields_autoplaced yes)
 		(uuid "d5b1481c-9875-4cb4-b9f4-4113cf270720")
 		(property "Reference" "TP1"
-			(at 142.748 20.32 90)
+			(at 101.473 17.145 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19965,7 +19965,7 @@
 			)
 		)
 		(property "Value" "+5v"
-			(at 142.748 22.86 90)
+			(at 101.473 19.685 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19973,7 +19973,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.5mm"
-			(at 146.05 20.32 0)
+			(at 104.775 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19982,7 +19982,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 146.05 20.32 0)
+			(at 104.775 17.145 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -19991,7 +19991,7 @@
 			)
 		)
 		(property "Description" "test point"
-			(at 146.05 25.4 0)
+			(at 104.775 22.225 0)
 			(effects
 				(font
 					(size 1.27 1.27)
