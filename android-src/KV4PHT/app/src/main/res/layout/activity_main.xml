@@ -24,7 +24,7 @@
 
             <ImageView
                 android:id="@+id/rxAudioCircle"
-                android:contentDescription="Visualization of current receive audio volume"
+                android:contentDescription="@string/visualization_of_current_receive_audio_volume_display"
                 android:layout_height="0dp"
                 android:layout_width="0dp"
                 android:layout_gravity="center_horizontal"
@@ -48,7 +48,7 @@
 
                 <ImageView
                     android:id="@+id/txAudioCircle"
-                    android:contentDescription="Visualization of current transmit audio volume"
+                    android:contentDescription="@string/visualization_of_current_transmit_audio_volume"
                     android:layout_height="0dp"
                     android:layout_width="0dp"
                     android:src="@drawable/circle_tx"
@@ -79,7 +79,7 @@
                     android:layout_marginTop="8dp"
                     android:background="@drawable/ic_settings"
                     android:layout_gravity="right"
-                    android:contentDescription="Settings"
+                    android:contentDescription="@string/settings_display"
                     android:onClick="settingsClicked" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -97,7 +97,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/jost"
                     android:gravity="center"
-                    android:text="Welcome to"
+                    android:text="@string/welcome_to_display"
                     android:textColor="@color/primary"
                     android:textSize="24dp"
                     android:maxLines="1"/>
@@ -112,7 +112,7 @@
                     android:gravity="center"
                     android:textColor="@color/primary"
                     android:textSize="64dp"
-                    android:text="kv4p HT"
+                    android:text="@string/kv4p_ht"
                     android:background="@color/clear"
                     android:maxLength="8"
                     android:maxLines="1"
@@ -233,7 +233,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="0"
                         android:fontFamily="@font/jost"
-                        android:text="ALL MEMORIES ▼"
+                        android:text="@string/all_memories_display1"
                         android:textAllCaps="true"
                         android:textColor="@color/primary"
                         android:textSize="16dp"
@@ -311,7 +311,7 @@
                         android:layout_width="36dp"
                         android:layout_height="36dp"
                         android:padding="16dp"
-                        android:contentDescription="Add memory"
+                        android:contentDescription="@string/add_memory_display1"
                         android:background="@drawable/ic_add"
                         android:onClick="addMemoryClicked" />
                 </androidx.appcompat.widget.LinearLayoutCompat>
@@ -364,7 +364,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:fontFamily="@font/jost"
-                        android:text="To: "
+                        android:text="@string/to_display"
                         android:textColor="@color/primary"
                         android:textSize="20dp"
                         android:layout_weight="0"/>
@@ -380,8 +380,8 @@
                         android:minLines="1"
                         android:background="@android:color/transparent"
                         android:textColorHint="@color/primary_deselected"
-                        android:hint="Callsign or CQ"
-                        android:text="CQ"
+                        android:hint="@string/callsign_or_cq"
+                        android:text="@string/cq"
                         android:imeOptions="actionDone">
                     </EditText>
 
@@ -393,7 +393,7 @@
                         android:layout_marginRight="8dp"
                         android:background="@drawable/ic_pin"
                         android:layout_gravity="right"
-                        android:contentDescription="Send APRS position beacon"
+                        android:contentDescription="@string/send_aprs_position_beacond_display"
                         android:onClick="singleBeaconButtonClicked"/>
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
@@ -416,7 +416,7 @@
                         android:maxLines="2"
                         android:background="@android:color/transparent"
                         android:textColorHint="@color/primary_deselected"
-                        android:hint="Write up to 67 chars..."
+                        android:hint="@string/write_up_to_67_chars"
                         android:layout_marginRight="16dp"
                         android:imeOptions="actionSend">
                     </EditText>
@@ -439,7 +439,7 @@
                                 android:layout_marginRight="8dp"
                                 android:background="@drawable/ic_send"
                                 android:layout_gravity="right"
-                                android:contentDescription="Send message"
+                                android:contentDescription="@string/send_message_display"
                                 android:onClick="sendTextClicked"/>
 
                             <View
@@ -480,7 +480,7 @@
                 android:layout_gravity="center"
                 android:layout_marginTop="-148dp"
                 android:elevation="8dp"
-                android:contentDescription="Push to talk"
+                android:contentDescription="@string/push_to_talk_display"
                 android:clickable="false" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>

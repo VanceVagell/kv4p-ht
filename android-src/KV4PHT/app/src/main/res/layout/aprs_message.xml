@@ -18,7 +18,7 @@
             android:id="@+id/fromCallsign"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="KV4P"
+            android:text="@string/kv4p_aprs_message"
             android:textColor="@color/primary"
             android:textFontWeight="500"
             android:textSize="16sp"
@@ -27,7 +27,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="to "
+            android:text="@string/to"
             android:textColor="@android:color/darker_gray"
             android:textSize="16sp" />
 
@@ -85,7 +85,7 @@
             android:id="@+id/messageBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="The quick brown fox jumped over the lazy dog."
+            android:text="@string/message_body_example"
             android:textColor="@color/primary"
             android:textSize="20sp"
             android:paddingLeft="8dp"

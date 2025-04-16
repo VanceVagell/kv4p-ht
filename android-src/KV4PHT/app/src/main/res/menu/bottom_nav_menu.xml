@@ -2,10 +2,10 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/voice_mode"
-        android:title="Voice"
+        android:title="@string/voice_display"
         android:icon="@drawable/ic_voice_mode"/>
     <item
         android:id="@+id/text_chat_mode"
-        android:title="APRS chat"
+        android:title="@string/aprs_chat_display"
         android:icon="@drawable/ic_text_chat_mode"/>
 </menu>

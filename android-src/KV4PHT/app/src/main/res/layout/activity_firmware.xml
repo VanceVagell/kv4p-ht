@@ -17,7 +17,7 @@
         android:id="@+id/firmwareToolbarTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Firmware update"
+        android:text="@string/firmware_update_display"
         android:textSize="32sp"
         app:fontWeight="500"
         android:textColor="@color/primary"
@@ -31,7 +31,7 @@
         android:fontFamily="@font/jost"
         android:textStyle="italic"
         android:gravity="center"
-        android:text="Connecting to bootloader..."
+        android:text="@string/connecting_to_bootloader_display"
         android:textColor="@color/primary_deselected"
         android:textSize="24dp"
         android:maxLines="1"/>
@@ -52,12 +52,7 @@
         android:layout_height="wrap_content"
         android:paddingTop="32dp"
         android:fontFamily="@font/jost"
-        android:text="Keep your kv4p HT plugged into your phone, and push these buttons:\n
-\n
-  1. Hold “Boot”\n
-  2. Press and release “Reset”\n
-  3. Release “Boot”\n
-  4. Wait about 30 seconds for it to connect"
+        android:text="@string/firmware_update_02"
         android:textColor="@color/primary_deselected"
         android:textSize="20dp"/>
 
@@ -66,7 +61,7 @@
         android:paddingTop="32dp"
         android:layout_width="match_parent"
         android:layout_height="256dp"
-        android:contentDescription="Photo of the bottom of the kv4p HT PCB, showing the reset button on the left, and the boot button on the right."
+        android:contentDescription="@string/firmware_update_01"
         android:scaleType="centerInside"
         android:src="@drawable/firmware_instructions" />
 
@@ -76,9 +71,7 @@
         android:layout_height="wrap_content"
         android:paddingTop="32dp"
         android:fontFamily="@font/jost"
-        android:text="Keep your phone screen on, this app open, and don’t unplug your kv4p HT until flashing is done.\n
-\n
-This usually takes about 30 seconds."
+        android:text="@string/firmware_update_03"
         android:textColor="@color/primary_deselected"
         android:textSize="20dp"
         android:visibility="gone"/>
@@ -97,7 +90,7 @@ This usually takes about 30 seconds."
             android:layout_height="56dp"
             android:layout_weight="0"
             android:background="?android:attr/selectableItemBackground"
-            android:text="Cancel"
+            android:text="@string/cancel_display1"
             android:textSize="20dp"
             android:textFontWeight="500"
             android:textColor="@color/primary"

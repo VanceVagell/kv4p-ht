@@ -16,7 +16,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="@font/jost"
-            android:text="Simplex"
+            android:text="@string/simplex"
             android:textColor="@color/primary_deselected"
             android:textSize="16dp"
             android:layout_gravity="center" />
@@ -38,7 +38,7 @@
             android:padding="16dp"
             android:background="@drawable/ic_menu"
             android:layout_gravity="right"
-            android:contentDescription="Memory menu"
+            android:contentDescription="@string/memory_menu"
             android:layout_marginTop="-56dp"
             android:layout_marginRight="16dp"
             android:visibility="gone" />
