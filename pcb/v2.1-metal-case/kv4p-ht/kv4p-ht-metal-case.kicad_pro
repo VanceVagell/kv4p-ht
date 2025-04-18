@@ -696,7 +696,7 @@
           "group_by": false,
           "label": "Part Number",
           "name": "Part Number",
-          "show": true
+          "show": false
         },
         {
           "group_by": true,
@@ -708,6 +708,18 @@
           "group_by": false,
           "label": "Alternate LCSC",
           "name": "Alternate LCSC",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "FT Rotation Offset",
+          "name": "FT Rotation Offset",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "FT Position Offset",
+          "name": "FT Position Offset",
           "show": true
         }
       ],
