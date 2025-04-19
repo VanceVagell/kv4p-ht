@@ -32,7 +32,7 @@ void print_buttons() {
     }
 }
 
-Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRBW + NEO_KHZ800);
+Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRBW + NEO_KHZ400);
 DRA818 *dra;
 
 uint8_t phase(uint32_t now, uint32_t cycle_length, uint32_t offset) {
@@ -89,8 +89,8 @@ void setup() {
     digitalWrite(PIN_RADIO_PD, HIGH);
     pinMode(PIN_RADIO_PTT, OUTPUT);
     digitalWrite(PIN_RADIO_PTT, HIGH); // Active low
-    pinMode(PIN_BUTTON_PTT_LEFT, INPUT);
-    pinMode(PIN_BUTTON_PTT_RIGHT, INPUT);
+    pinMode(PIN_BUTTON_PTT_LEFT, INPUT_PULLUP);
+    pinMode(PIN_BUTTON_PTT_RIGHT, INPUT_PULLUP);
     pinMode(PIN_RADIO_SQUELCH, INPUT);
 
     pinMode(PIN_GPIOHEAD_6, ANALOG);
@@ -147,6 +147,11 @@ void loop() {
         char c = Serial2.read();
         IF_SERIAL && Serial.print(c);
     }
+    while (Serial.available()) {
+        char c = Serial.read();
+        IF_SERIAL && Serial2.print(c);
+        IF_SERIAL && Serial.print(c);
+    }
 
     bool NEW_PTT = (digitalRead(PIN_BUTTON_PTT_LEFT) == LOW || digitalRead(PIN_BUTTON_PTT_RIGHT) == LOW);
 
@@ -165,8 +170,8 @@ void loop() {
     if (last_time/5000 != now/5000) {
         // Once a second
         //IF_SERIAL && Serial.println("Boop.");
+        //IF_SERIAL && Serial.println(dra->handshake());
         IF_SERIAL && Serial2.print("RSSI?\r\n");
-        IF_SERIAL && Serial.println(dra->handshake());
 
         float V = adc_map(analogRead(PIN_GPIOHEAD_6));
         // Voltage divider in hardware, hence *2
