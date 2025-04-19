@@ -237,9 +237,9 @@ void loop() {
   squelched = squelchDebounce.debounce((digitalRead(SQ_PIN) == HIGH));
   debugLoop();
   ledLoop();
+  buttonsLoop();
   protocolLoop();
   rxAudioLoop();
   txAudioLoop();
-  buttonsLoop();
   rssiLoop();
 }
