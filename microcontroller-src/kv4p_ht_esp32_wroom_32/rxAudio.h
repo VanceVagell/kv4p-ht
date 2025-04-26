@@ -83,7 +83,7 @@ inline void injectADCBias() {
 
 inline void setUpADCAttenuator() {
   if (hardware_version == HW_VER_V2_0C) { // v2.0c has a lower input ADC range
-    adc1_config_channel_atten(I2S_ADC_CHANNEL, ADC_ATTEN_DB_0);
+    adc1_config_channel_atten(I2S_ADC_CHANNEL, ADC_ATTENUATION_v20C);
   } else {
     adc1_config_channel_atten(I2S_ADC_CHANNEL, ADC_ATTENUATION);
   }

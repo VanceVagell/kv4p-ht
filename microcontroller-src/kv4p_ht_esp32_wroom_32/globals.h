@@ -45,8 +45,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define PHYS_PTT_PIN2 33  // Optional. See above.
 
-#define ADC_BIAS_VOLTAGE  1.75
-#define ADC_ATTENUATION   ADC_ATTEN_DB_12
+#define ADC_BIAS_VOLTAGE     1.75
+#define ADC_ATTENUATION      ADC_ATTEN_DB_12
+#define ADC_ATTENUATION_v20C ADC_ATTEN_DB_0  // v2.0c has a lower input ADC range
 
 // Hardware version detection
 #define HW_VER_PIN_0  39  // 0xF0
