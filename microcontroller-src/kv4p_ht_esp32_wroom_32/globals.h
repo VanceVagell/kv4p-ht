@@ -40,7 +40,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ADC_PIN       34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
 #define PTT_PIN       18  // Keys up the radio module
 #define PD_PIN        19
-uint8_t SQ_PIN      = 32;
+#define SQ_PIN_HW1    32  // 
+#define SQ_PIN_HW2     4  // Squelch pin. In v2.0c, this is GPIO 4. In v1.x and v2.0d, this is GPIO 32.
 #define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define PHYS_PTT_PIN2 33  // Optional. See above.
 
@@ -72,3 +73,6 @@ bool squelched = false;
 
 // Forward declarations
 void setMode(Mode newMode);
+
+// Squelch pin
+uint8_t sqPin = SQ_PIN_HW1;
