@@ -133,6 +133,7 @@ public class MainActivity extends AppCompatActivity {
     public static final int REQUEST_EDIT_MEMORY = 1;
     public static final int REQUEST_SETTINGS = 2;
     public static final int REQUEST_FIRMWARE = 3;
+    public static final int REQUEST_FIND_REPEATERS = 4;
 
     private MainViewModel viewModel;
     private RecyclerView memoriesRecyclerView;
@@ -1542,7 +1543,7 @@ public class MainActivity extends AppCompatActivity {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Should we show an explanation?
             if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.RECORD_AUDIO)) {
+                    Manifest.permission.ACCESS_FINE_LOCATION)) {
 
                 new AlertDialog.Builder(this)
                         .setTitle("Permission needed")
@@ -2038,6 +2039,20 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, REQUEST_FIRMWARE);
     }
 
+    private void startFindRepeatersActivity() {
+        // Stop any scanning or transmitting
+        if (radioAudioService != null) {
+            radioAudioService.setScanning(false);
+            radioAudioService.endPtt();
+        }
+        endPttUi();
+        setScanningUi(false);
+
+        // Actually start the find repeaters activity
+        Intent intent = new Intent("com.vagell.kv4pht.FIND_REPEATERS");
+        startActivityForResult(intent, REQUEST_FIND_REPEATERS);
+    }
+
     public void settingsClicked(View view) {
         if (radioAudioService != null) {
             radioAudioService.setScanning(false); // Stop scanning when settings brought up, so we don't get in a bad state after.
@@ -2049,5 +2064,23 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent("com.vagell.kv4pht.SETTINGS_ACTION");
         intent.putExtra("requestCode", REQUEST_SETTINGS);
         startActivityForResult(intent, REQUEST_SETTINGS);
+    }
+
+    public void moreClicked(View view) {
+        Context themedContext = new ContextThemeWrapper(this, R.style.Custom_PopupMenu);
+        PopupMenu moreMenu = new PopupMenu(themedContext, view);
+        moreMenu.inflate(R.menu.more_menu);
+        moreMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem item) {
+                String findNearbyRepeatersLabel = getString(R.string.find_repeaters_menu_item);
+
+                if (item.getTitle().equals(findNearbyRepeatersLabel)) {
+                    startFindRepeatersActivity();
+                }
+                return true;
+            }
+        });
+        moreMenu.show();
     }
 }

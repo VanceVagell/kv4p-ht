@@ -68,19 +68,29 @@
             <androidx.appcompat.widget.LinearLayoutCompat
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:orientation="vertical">
+                android:layout_marginTop="8dp"
+                android:gravity="right|center_vertical"
+                android:orientation="horizontal">
 
                 <ImageButton
                     android:id="@+id/settingsButton"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
                     android:padding="16dp"
-                    android:layout_marginRight="16dp"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginRight="8dp"
                     android:background="@drawable/ic_settings"
-                    android:layout_gravity="right"
                     android:contentDescription="@string/settings_display"
                     android:onClick="settingsClicked" />
+
+                <ImageButton
+                    android:id="@+id/moreButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:padding="16dp"
+                    android:layout_marginRight="8dp"
+                    android:background="@drawable/ic_menu"
+                    android:contentDescription="@string/settings_display"
+                    android:onClick="moreClicked" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 

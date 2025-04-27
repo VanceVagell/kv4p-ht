@@ -192,8 +192,8 @@ public class RadioAudioService extends Service {
     private String callsign = null;
     private int consecutiveSilenceBytes = 0; // To determine when to move scan after silence
     private int activeMemoryId = -1; // -1 means we're in simplex mode
-    private static float minRadioFreq = VHF_MIN_FREQ; // in MHz
-    private static float maxRadioFreq = VHF_MAX_FREQ; // in MHz
+    public static float minRadioFreq = VHF_MIN_FREQ; // in MHz
+    public static float maxRadioFreq = VHF_MAX_FREQ; // in MHz
     private static float minHamFreq = min2mTxFreq; // in MHz
     private static float maxHamFreq = max2mTxFreq; // in MHz
     private MicGainBoost micGainBoost = MicGainBoost.NONE;

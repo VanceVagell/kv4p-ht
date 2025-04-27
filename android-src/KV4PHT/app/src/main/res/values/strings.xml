@@ -39,6 +39,7 @@
     <string name="send_message_display">Send message</string>
     <string name="visualization_of_current_receive_audio_volume_display" translatable="false">Visualization of current receive audio volume</string>
     <string name="settings_display">Settings</string>
+    <string name="more_display">More</string>
     <string name="send_aprs_position_beacond_display">Send APRS position beacon</string>
     <string name="write_up_to_67_chars">Write up to 67 chars...</string>
     <string name="callsign_or_cq">Callsign or CQ</string>
@@ -95,4 +96,9 @@
     <string name="wide" translatable="false">Wide</string>
     <string name="done">Done</string>
     <string name="sticky_ptt" translatable="false">Sticky PTT</string>
+    <string name="find_repeaters_menu_item">Find nearby repeaters</string>
+    <string name="find_repeaters_title">Find nearby repeaters</string>
+    <string name="find_repeaters_instructions">Sign in to RepeaterBook, or create an account if you don’t have one.</string>
+    <string name="nearby_repeaters_found">Nearby repeaters found:&#160;</string>
+    <string name="save_repeaters_group_instructions">Which memory group would you like to save these new repeaters in?</string>
 </resources>
