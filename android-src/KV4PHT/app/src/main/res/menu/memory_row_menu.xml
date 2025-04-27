@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/option_1"
-        android:title="Edit" />
+        android:title="@string/edit" />
     <item android:id="@+id/option_2"
-        android:title="Delete" />
+        android:title="@string/delete" />
 </menu>
