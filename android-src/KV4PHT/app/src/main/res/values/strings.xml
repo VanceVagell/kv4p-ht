@@ -28,8 +28,8 @@
     <string name="connecting_to_bootloader_display">Connecting to bootloader...</string>
     <string name="cancel_display1">Cancel</string>
     <string name="firmware_update_01">Photo of the bottom of the kv4p HT PCB, showing the reset button on the left, and the boot button on the right.</string>
-    <string name="firmware_update_02">Keep your kv4p HT plugged into your phone, and push these buttons:\n \n 1. Hold “Boot”\n 2. Press and release “Reset”\n 3. Release “Boot”\n 4. Wait about 30 seconds for it to connect</string>
-    <string name="firmware_update_03">Keep your phone screen on, this app open, and don’t unplug your kv4p HT until flashing is done.\n \n This usually takes about 30 seconds.</string>
+    <string name="firmware_update_02">Keep your kv4p HT plugged into your phone, and push these buttons:\n\n1. Hold “Boot”\n2. Press and release “Reset”\n3. Release “Boot”\n4. Wait about 30 seconds for it to connect</string>
+    <string name="firmware_update_03">Keep your phone screen on, this app open, and don’t unplug your kv4p HT until flashing is done.\n\nThis usually takes about 30 seconds.</string>
     <string name="add_memory_display1">Add memory</string>
     <string name="to_display">To:</string>
     <string name="all_memories_display1">ALL MEMORIES ▼</string>
