@@ -176,7 +176,9 @@ public:
   void loop() {
     while (_serial.available() > 0) {
       uint8_t b = _serial.read();
-      processByte(b);
+      if (processByte(b)) {
+        return;
+      }
     }
   }
 private:
@@ -188,7 +190,7 @@ private:
   uint8_t _commandParams[PROTO_MTU];
   size_t _paramIndex;
 
-  void inline processByte(uint8_t b) {
+  inline bool processByte(uint8_t b) {
     if (_matchedDelimiterTokens < DELIMITER_LENGTH) {
       _matchedDelimiterTokens = (b == COMMAND_DELIMITER[_matchedDelimiterTokens]) ? _matchedDelimiterTokens + 1 : 0;
     } else if (_matchedDelimiterTokens == DELIMITER_LENGTH) {
@@ -205,6 +207,7 @@ private:
         _callback(_command, _commandParams, 0);
         sendWindowAck(DELIMITER_LENGTH + 1 + 2);
         resetParser();
+        return true;
       }
       if (_commandParamLen > PROTO_MTU) {
         resetParser();
@@ -217,8 +220,10 @@ private:
         _callback(_command, _commandParams, _commandParamLen);
         sendWindowAck(DELIMITER_LENGTH + 1 + 2 + _commandParamLen);
         resetParser();
+        return true;
       }
     }
+    return false;
   }
 
   void resetParser() {
