@@ -380,7 +380,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         public double freq;
         public double input;
         public double offset;
-        public double tone;
+        public String tone;
         public String location;
         public String state;
         public String county;
@@ -415,7 +415,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             r.freq     = tryParseDouble(cols[0]);
             r.input    = tryParseDouble(cols[1]);
             r.offset   = tryParseDouble(cols[2]);
-            r.tone     = tryParseDouble(cols[3]);
+            r.tone     = ToneHelper.normalizeTone(cols[3].trim());
             r.location = cols[4];
             r.state    = cols[5];
             r.county   = cols[6];
@@ -552,7 +552,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             RepeaterInfo r = nearbyRepeaters.get(i);
 
             ChannelMemory memory = new ChannelMemory();
-            memory.name = r.location;
+            memory.name = r.call + " • " + r.location;
             memory.group = group;
             memory.frequency = RadioAudioService.makeSafeHamFreq(String.valueOf(r.freq));
             if (r.offset < 0) {
@@ -564,7 +564,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             }
             memory.txTone = String.valueOf(r.tone);
             memory.rxTone = getString(R.string.none_display);
-            memory.offsetKhz = (int) (r.offset * 1000);
+            memory.offsetKhz = Math.abs((int) (r.offset * 1000));
             memory.skipDuringScan = false;
 
             memoriesToAdd.add(memory);

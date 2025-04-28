@@ -92,6 +92,7 @@ import com.vagell.kv4pht.radio.Protocol.RadioStatus;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
+import com.vagell.kv4pht.ui.ToneHelper;
 
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -145,7 +146,6 @@ public class RadioAudioService extends Service {
     private static UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
     private Protocol.Sender hostToEsp32;
-    private Map<String, Integer> mTones = new HashMap<>();
 
     // For receiving audio from ESP32 / radio
     private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
@@ -462,7 +462,6 @@ public class RadioAudioService extends Service {
         createNotificationChannels();
         findESP32Device();
         initAudioTrack();
-        setupTones();
         initAFSKModem();
     }
 
@@ -536,48 +535,6 @@ public class RadioAudioService extends Service {
             threadPoolExecutor.shutdownNow();
             threadPoolExecutor = null;
         }
-    }
-
-    private void setupTones() {
-        mTones.put("None", 0);
-        mTones.put("67", 1);
-        mTones.put("71.9", 2);
-        mTones.put("74.4", 3);
-        mTones.put("77", 4);
-        mTones.put("79.7", 5);
-        mTones.put("82.5", 6);
-        mTones.put("85.4", 7);
-        mTones.put("88.5", 8);
-        mTones.put("91.5", 9);
-        mTones.put("94.8", 10);
-        mTones.put("97.4", 11);
-        mTones.put("100", 12);
-        mTones.put("103.5", 13);
-        mTones.put("107.2", 14);
-        mTones.put("110.9", 15);
-        mTones.put("114.8", 16);
-        mTones.put("118.8", 17);
-        mTones.put("123", 18);
-        mTones.put("127.3", 19);
-        mTones.put("131.8", 20);
-        mTones.put("136.5", 21);
-        mTones.put("141.3", 22);
-        mTones.put("146.2", 23);
-        mTones.put("151.4", 24);
-        mTones.put("156.7", 25);
-        mTones.put("162.2", 26);
-        mTones.put("167.9", 27);
-        mTones.put("173.8", 28);
-        mTones.put("179.9", 29);
-        mTones.put("186.2", 30);
-        mTones.put("192.8", 31);
-        mTones.put("203.5", 32);
-        mTones.put("210.7", 33);
-        mTones.put("218.1", 34);
-        mTones.put("225.7", 35);
-        mTones.put("233.6", 36);
-        mTones.put("241.8", 37);
-        mTones.put("250.3", 38);
     }
 
     private void createNotificationChannels() {
@@ -710,13 +667,15 @@ public class RadioAudioService extends Service {
         }
 
         if (serialPort != null) {
+            int rxToneIdx = ToneHelper.getToneIndex(memory.rxTone);
+            int txToneIdx = ToneHelper.getToneIndex(memory.txTone);
             hostToEsp32.group(Group.builder()
                     .freqTx(txFreq)
                     .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
                     .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
                     .squelch((byte) squelchLevel)
-                    .ctcssRx(mTones.getOrDefault(memory.rxTone, 0).byteValue())
-                    .ctcssTx(mTones.getOrDefault(memory.txTone, 0).byteValue())
+                    .ctcssRx(new Integer(rxToneIdx == -1 ? 0 : rxToneIdx).byteValue())
+                    .ctcssTx(new Integer(txToneIdx == -1 ? 0 : txToneIdx).byteValue())
                     .build());
         }
 
