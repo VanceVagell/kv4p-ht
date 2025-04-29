@@ -457,8 +457,6 @@ public class RadioAudioService extends Service {
     public void start() {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 
-        // TODOV
-
         createNotificationChannels();
         findESP32Device();
         initAudioTrack();
@@ -806,10 +804,19 @@ public class RadioAudioService extends Service {
         esp32Device = null;
 
         if (null == usbIoManager) {
-            Log.d("DEBUG", "Warning: usbManager was null in findESP32Device.");
+            Log.d("DEBUG", "Warning: usbManager was null in findESP32Device. Retrying momentarily.");
+
             if (callbacks != null) {
                 callbacks.radioMissing(); // Not quite accurate, but this situation is likely transient/race condition.
             }
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+            setupSerialConnection(); // Attempt to reconnect after the brief pause above.
+
             return;
         }
 
