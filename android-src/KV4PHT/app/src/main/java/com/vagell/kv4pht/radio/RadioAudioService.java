@@ -547,6 +547,9 @@ public class RadioAudioService extends Service {
     }
 
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
+        if (null == hostToEsp32) {
+            return;
+        }
         hostToEsp32.filters(Filters.builder()
             .high(highpass)
             .low(lowpass)
@@ -801,6 +804,14 @@ public class RadioAudioService extends Service {
 
         setMode(MODE_STARTUP);
         esp32Device = null;
+
+        if (null == usbIoManager) {
+            Log.d("DEBUG", "Warning: usbManager was null in findESP32Device.");
+            if (callbacks != null) {
+                callbacks.radioMissing(); // Not quite accurate, but this situation is likely transient/race condition.
+            }
+            return;
+        }
 
         HashMap<String, UsbDevice> usbDevices = usbManager.getDeviceList();
 
@@ -1102,6 +1113,9 @@ public class RadioAudioService extends Service {
     }
 
     public void sendAudioToESP32(float[] samples, boolean dataMode) {
+        if (null == hostToEsp32) {
+            return;
+        }
         if (!dataMode) {
             samples = applyMicGain(samples);
         }

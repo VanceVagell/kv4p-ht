@@ -470,7 +470,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     private void findLocalityAsync(double latitude, double longitude) {
         Context ctx = this;
-        threadPoolExecutor.execute(new Runnable() {
+        new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -486,7 +486,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
             }
-        });
+        }).start();
     }
 
     private void promptUserForMemoryGroup() {
