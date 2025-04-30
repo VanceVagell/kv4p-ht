@@ -213,7 +213,7 @@ public class RadioAudioService extends Service {
     private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
 
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
 
     public enum MicGainBoost {
         NONE,
