@@ -204,13 +204,12 @@ public final class Protocol {
         private final int windowSize; // equivalent to size_t
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 8)
+                .filter(p -> len == 7)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
                     .ver(b.getShort())
                     .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
-                    .hardwareVersion(HardwareVersion.fromValue(b.get() & 0xFF))
                     .windowSize(b.getInt())
                     .build());
         }
