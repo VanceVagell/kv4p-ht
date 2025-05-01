@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include <DRA818.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
@@ -44,6 +45,44 @@ char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
 Debounce squelchDebounce(100);
 
+Preferences prefs;
+
+void loadHardwareConfig() {
+  prefs.begin("hwconfig", true); // read-only
+  hw.pins.rxd2Pin   = prefs.getChar("RXD2_PIN",     DEFAULT_RXD2_PIN);
+  hw.pins.txd2Pin   = prefs.getChar("TXD2_PIN",     DEFAULT_TXD2_PIN);
+  hw.pins.dacPin    = prefs.getChar("DAC_PIN",      DEFAULT_DAC_PIN);
+  hw.pins.adcPin    = prefs.getChar("ADC_PIN",      DEFAULT_ADC_PIN);
+  hw.pins.pttPin    = prefs.getChar("PTT_PIN",      DEFAULT_PTT_PIN);
+  hw.pins.pdPin     = prefs.getChar("PD_PIN",       DEFAULT_PD_PIN);
+  hw.pins.sqPin     = prefs.getChar("SQ_PIN_HW1",   DEFAULT_SQ_PIN);
+  hw.pins.pttPhys1  = prefs.getChar("PHYS_PTT1",    DEFAULT_PHYS_PTT_PIN1);
+  hw.pins.pttPhys2  = prefs.getChar("PHYS_PTT2",    DEFAULT_PHYS_PTT_PIN2);
+  hw.pins.pixelsPin = prefs.getChar("PIXELS_PIN",   DEFAULT_PIXELS_PIN);
+  hw.pins.ledPin    = prefs.getChar("LED_PIN",      DEFAULT_LED_PIN);
+  hw.adcAttenuation = (adc_atten_t) prefs.getChar("ADC_ATTEN", DEFAULT_ADC_ATTENUATION);
+  hw.adcBias        = prefs.getFloat("ADC_BIAS",    DEFAULT_ADC_BIAS_VOLTAGE);
+  prefs.end();
+}
+
+void saveHardwareConfig() {
+  prefs.begin("hwconfig", false); // read-write mode
+  prefs.putChar("RXD2_PIN",     hw.pins.rxd2Pin);
+  prefs.putChar("TXD2_PIN",     hw.pins.txd2Pin);
+  prefs.putChar("DAC_PIN",      hw.pins.dacPin);
+  prefs.putChar("ADC_PIN",      hw.pins.adcPin);
+  prefs.putChar("PTT_PIN",      hw.pins.pttPin);
+  prefs.putChar("PD_PIN",       hw.pins.pdPin);
+  prefs.putChar("SQ_PIN_HW1",   hw.pins.sqPin);
+  prefs.putChar("PHYS_PTT1",    hw.pins.pttPhys1);
+  prefs.putChar("PHYS_PTT2",    hw.pins.pttPhys2);
+  prefs.putChar("PIXELS_PIN",   hw.pins.pixelsPin);
+  prefs.putChar("LED_PIN",      hw.pins.ledPin);
+  prefs.putChar("ADC_ATTEN",    hw.adcAttenuation);
+  prefs.putFloat("ADC_BIAS",    hw.adcBias);
+  prefs.end();
+}
+
 void setMode(Mode newMode) {
   if (mode == newMode) {
     return;
@@ -52,13 +91,13 @@ void setMode(Mode newMode) {
   switch (mode) {
     case MODE_STOPPED:
       _LOGI("MODE_STOPPED");
-      digitalWrite(PTT_PIN, HIGH);
+      digitalWrite(hw.pins.pttPin, HIGH);
       endI2STx();
       endI2SRx();
     break;
     case MODE_RX:
       _LOGI("MODE_RX");
-      digitalWrite(PTT_PIN, HIGH);
+      digitalWrite(hw.pins.pttPin, HIGH);
       squelchDebounce.forceState(true);
       endI2STx();
       initI2SRx();
@@ -66,67 +105,38 @@ void setMode(Mode newMode) {
     case MODE_TX:
       _LOGI("MODE_TX");
       txStartTime = millis();
-      digitalWrite(PTT_PIN, LOW);
+      digitalWrite(hw.pins.pttPin, LOW);
       endI2SRx();
       initI2STx();
     break;
   }
 }
 
-hw_ver_t get_hardware_version() {
-  pinMode(HW_VER_PIN_0, INPUT);
-  pinMode(HW_VER_PIN_1, INPUT);
-  hw_ver_t ver = 0x00;
-  ver |= (digitalRead(HW_VER_PIN_0) == HIGH ? 0x0F : 0x00);
-  ver |= (digitalRead(HW_VER_PIN_1) == HIGH ? 0xF0 : 0x00);
-  // In the future, we're replace these with analogRead()s and
-  // use values between 0x0 and 0xF. For now, just binary.
-  return ver;
-}
-
 void setup() {
-  // Used for setup, need to know early.
-  hardware_version = get_hardware_version();
+  loadHardwareConfig();
+  //saveHardwareConfig();
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(115200);
-  // Hardware dependent pin assignments.
-  switch (hardware_version) {
-    case HW_VER_V1:
-      COLOR_HW_VER = {0, 32, 0};
-      sqPin = SQ_PIN_HW1;
-      break;
-    case HW_VER_V2_0C:
-      COLOR_HW_VER = {32, 0, 0};
-      sqPin = SQ_PIN_HW2;
-      break;
-    case HW_VER_V2_0D:
-      COLOR_HW_VER = {0, 0, 32};
-      sqPin = SQ_PIN_HW2;
-      break;
-    default:
-      // Unknown version detected. Indicate this some way?
-      COLOR_HW_VER = {16, 16, 16};
-      break;
-  }
+  COLOR_HW_VER = {0, 32, 0};
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
   buttonsSetup();
   // Set up radio module defaults
-  pinMode(PD_PIN, OUTPUT);
-  digitalWrite(PD_PIN, HIGH);  // Power on
-  pinMode(sqPin, INPUT);
-  pinMode(PTT_PIN, OUTPUT);
-  digitalWrite(PTT_PIN, HIGH);  // Rx
+  pinMode(hw.pins.pdPin, OUTPUT);
+  digitalWrite(hw.pins.pdPin, HIGH);  // Power on
+  pinMode(hw.pins.sqPin, INPUT);
+  pinMode(hw.pins.pttPin, OUTPUT);
+  digitalWrite(hw.pins.pttPin, HIGH);  // Rx
   // Communication with DRA818V radio module via GPIO pins
-  Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
+  Serial2.begin(9600, SERIAL_8N1, hw.pins.rxd2Pin, hw.pins.txd2Pin);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
   //
   debugSetup();
   // Begin in STOPPED mode
-  squelched = (digitalRead(sqPin) == HIGH);
+  squelched = (digitalRead(hw.pins.sqPin) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
   sendHello();
@@ -152,14 +162,8 @@ void doConfig(Config const &config) {
   if (result == 1) {  // Did we hear back from radio?
     radioModuleStatus = RADIO_MODULE_FOUND;
   }
-  if (hardware_version == HW_VER_V2_0C) {
-    // v2.0c has a lower input ADC range.
-    result = sa818.volume(6);
-  } else {
-    result = sa818.volume(8);
-  }
   result = sa818.filters(false, false, false);
-  sendVersion(FIRMWARE_VER, radioModuleStatus, hardware_version, USB_BUFFER_SIZE);
+  sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE);
   esp_task_wdt_reset();
 }
 
@@ -234,7 +238,7 @@ void rssiLoop() {
 }
 
 void loop() {
-  squelched = squelchDebounce.debounce((digitalRead(sqPin) == HIGH));
+  squelched = squelchDebounce.debounce((digitalRead(hw.pins.sqPin) == HIGH));
   debugLoop();
   ledLoop();
   buttonsLoop();

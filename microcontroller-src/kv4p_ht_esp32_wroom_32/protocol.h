@@ -58,7 +58,6 @@ enum SndCommand {
 struct version {
   uint16_t    ver;
   char        radioModuleStatus;
-  hw_ver_t    hw;
   size_t      windowSize;
 } __attribute__((__packed__));
 typedef struct version Version;
@@ -140,11 +139,10 @@ void inline sendRssi(uint8_t rssi) {
   __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
 }
 
-void inline sendVersion(uint16_t ver, char radioModuleStatus, hw_ver_t hw, size_t windowSize) {
+void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize) {
   Version params = {
     .ver = ver,
     .radioModuleStatus = radioModuleStatus,
-    .hw = hw,
     .windowSize = windowSize
   };
   __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));

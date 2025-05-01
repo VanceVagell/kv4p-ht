@@ -20,11 +20,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Arduino.h>
 #include "globals.h"
 
-// Built in LED
-#define LED_PIN 2
-
-// NeoPixel support
-#define PIXELS_PIN 13
 #define NUM_PIXELS 1
 
 struct RGBColor {
@@ -43,7 +38,7 @@ void neopixelColor(const RGBColor &c, uint8_t bright = 255) {
   uint8_t red = (uint16_t(c.red) * bright + 128) >> 8;
   uint8_t green = (uint16_t(c.green) * bright + 128) >> 8;
   uint8_t blue = (uint16_t(c.blue) * bright + 128) >> 8;
-  neopixelWrite(PIXELS_PIN, red, green, blue);
+  neopixelWrite(hw.pins.pixelsPin, red, green, blue);
 }
 
 // Calculate a float between min and max, that ramps from min to max in half of breath_every,
@@ -67,11 +62,11 @@ void inline showLEDs() {
     next_time = now + update_every;
     switch (mode) {
       case MODE_STOPPED:
-        digitalWrite(LED_PIN, LOW);
+        digitalWrite(hw.pins.ledPin, LOW);
         neopixelColor(COLOR_HW_VER);
         break;
       case MODE_RX:
-        digitalWrite(LED_PIN, LOW);
+        digitalWrite(hw.pins.ledPin, LOW);
         if (squelched) {
           neopixelColor(COLOR_RX_SQL_CLOSED, calcBreath(now, 2000, 32, 255));
         } else {
@@ -79,7 +74,7 @@ void inline showLEDs() {
         }
         break;
       case MODE_TX:
-        digitalWrite(LED_PIN, HIGH);
+        digitalWrite(hw.pins.ledPin, HIGH);
         neopixelColor(COLOR_TX);
         break;
     }
@@ -88,8 +83,8 @@ void inline showLEDs() {
 
 void inline ledSetup() {
   // Debug LED
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  pinMode(hw.pins.ledPin, OUTPUT);
+  digitalWrite(hw.pins.ledPin, LOW);
   showLEDs();
 }
 
