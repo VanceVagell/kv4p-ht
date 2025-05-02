@@ -111,22 +111,47 @@
                     android:textSize="24dp"
                     android:maxLines="1"/>
 
-
-                <EditText
-                    android:id="@+id/activeFrequency"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="-8dp"
-                    android:fontFamily="@font/jost"
-                    android:gravity="center"
-                    android:textColor="@color/primary"
-                    android:textSize="64dp"
-                    android:text="@string/kv4p_ht"
-                    android:background="@color/clear"
-                    android:maxLength="8"
-                    android:maxLines="1"
-                    android:singleLine="true"
-                    android:inputType="numberDecimal" />
+                    android:orientation="horizontal"
+                    android:layout_weight="1">
+
+                    <ImageButton
+                        android:id="@+id/freqMinus"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center_vertical"
+                        android:layout_margin="10dp"
+                        android:background="@drawable/ic_minus"
+                        android:onClick="decreaseFreqClicked"/>
+
+                    <EditText
+                        android:id="@+id/activeFrequency"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginTop="-8dp"
+                        android:fontFamily="@font/jost"
+                        android:gravity="center"
+                        android:textColor="@color/primary"
+                        android:textSize="64dp"
+                        android:text="@string/kv4p_ht"
+                        android:background="@color/clear"
+                        android:maxLength="8"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:inputType="numberDecimal" />
+
+                    <ImageButton
+                        android:id="@+id/freqPlus"
+                        android:layout_margin="10dp"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center_vertical"
+                        android:background="@drawable/ic_plus"
+                        android:onClick="increaseFreqClicked"/>
+                </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/sMeter"

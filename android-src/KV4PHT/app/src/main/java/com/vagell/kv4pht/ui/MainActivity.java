@@ -1820,6 +1820,32 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public void increaseFreqClicked(View view) {
+        if (radioAudioService != null) {
+            float currFreq = Float.parseFloat(radioAudioService.getActiveFrequencyStr());
+            if (currFreq == 0.0f) {
+                // the radio is not really working
+                return;
+            }
+            String newFreqStr = RadioAudioService.makeSafeHamFreq(Float.toString(currFreq + 0.1f));
+            radioAudioService.tuneToFreq(newFreqStr, squelch, false);  // Fixes invalid freq if we are at the limits.
+            tuneToFreqUi(newFreqStr, false);
+        }
+    }
+
+    public void decreaseFreqClicked(View view) {
+        if (radioAudioService != null) {
+            float currFreq = Float.parseFloat(radioAudioService.getActiveFrequencyStr());
+            if (currFreq == 0.0f) {
+                // the radio is not really working
+                return;
+            }
+            String newFreqStr = RadioAudioService.makeSafeHamFreq(Float.toString(currFreq - 0.1f));
+            radioAudioService.tuneToFreq(newFreqStr, squelch, false);  // Fixes invalid freq if we are at the limits.
+            tuneToFreqUi(newFreqStr, false);
+        }
+    }
+
     public void singleBeaconButtonClicked(View view) {
         if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
             showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
