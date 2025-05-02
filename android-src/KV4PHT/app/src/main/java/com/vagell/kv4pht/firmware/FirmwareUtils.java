@@ -114,13 +114,13 @@ public class FirmwareUtils {
             trackProgress(callback, 20);
 
             Log.d("DEBUG", "Flashing firmware");
-            cmd.flashData(readFirmwareBytes(firmwareFile1), 0x1000, 0);
+            cmd.flash(readFirmwareBytes(firmwareFile1), 0x1000, 0);
             trackProgress(callback, 30);
-            cmd.flashData(readFirmwareBytes(firmwareFile2), 0x8000, 0);
+            cmd.flash(readFirmwareBytes(firmwareFile2), 0x8000, 0);
             trackProgress(callback, 40);
-            cmd.flashData(readFirmwareBytes(firmwareFile3), 0xe000, 0);
+            cmd.flash(readFirmwareBytes(firmwareFile3), 0xe000, 0);
             trackProgress(callback, 50);
-            cmd.flashData(readFirmwareBytes(firmwareFile4), 0x10000, 0);
+            cmd.compressAndFlash(readFirmwareBytes(firmwareFile4), 0x10000, 0);
 
             // we have finished flashing, reboot ESP32
             cmd.reset();
