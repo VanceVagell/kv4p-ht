@@ -1,5 +1,6 @@
 key,type,encoding,value
 hwconfig,namespace,,
+HWCONFIG,data,u8,1
 RXD2_PIN,data,i8,16
 TXD2_PIN,data,i8,17
 DAC_PIN,data,i8,25
@@ -13,3 +14,4 @@ PIXELS_PIN,data,i8,13
 LED_PIN,data,i8,2
 ADC_ATTEN,data,i8,3
 ADC_BIAS,data,hex2bin,3FE00000
+STOPPED_COLOR,data,hex2bin,002000

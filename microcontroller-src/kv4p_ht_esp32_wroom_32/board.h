@@ -64,6 +64,7 @@ void loadHardwareConfig() {
   hw.pins.ledPin    = prefs.getChar("LED_PIN",      DEFAULT_LED_PIN);
   hw.adcAttenuation = (adc_atten_t) prefs.getChar("ADC_ATTEN", DEFAULT_ADC_ATTENUATION);
   hw.adcBias        = prefs.getFloat("ADC_BIAS",    DEFAULT_ADC_BIAS_VOLTAGE);
+  prefs.getBytes("STOPPED_COLOR", &hw.stoppedColor, sizeof(RGBColor));
   prefs.end();
 }
 
@@ -83,6 +84,7 @@ void saveHardwareConfig() {
   prefs.putChar("LED_PIN",      hw.pins.ledPin);
   prefs.putChar("ADC_ATTEN",    hw.adcAttenuation);
   prefs.putFloat("ADC_BIAS",    hw.adcBias);
+  prefs.putBytes("STOPPED_COLOR", &hw.stoppedColor, sizeof(RGBColor));
   prefs.end();
 }
 
