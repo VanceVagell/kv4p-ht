@@ -21,13 +21,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Preferences.h>
 #include "globals.h"
 #include "debug.h"
-#include "led.h"
 
-// Hardware version detection
+// Legacy Hardware version detection
 #define HW_VER_PIN_0  39  // 0xF0
 #define HW_VER_PIN_1  36  // 0x0F
 
-//  Hardware Version Summary:
+//  Hardware Version Summary (Legacy):
 //  +-------------+------------+-----------------+-------------------------------------------------------------------+
 //  | Version     | Squelch Pin| ADC Attenuation | Notes                                                             |
 //  +-------------+------------+-----------------+-------------------------------------------------------------------+
@@ -38,10 +37,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HW_VER_V1     (0x00)
 #define HW_VER_V2_0C  (0xFF)
 #define HW_VER_V2_0D  (0xF0)
-// #define HW_VER_?? (0x0F)  // Unused
 
 typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if we want.
-hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
 
 Preferences prefs;
 
