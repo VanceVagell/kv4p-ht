@@ -45,7 +45,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define DEFAULT_PHYS_PTT_PIN2 33  // Optional. See above.
 #define DEFAULT_LED_PIN        2  // Built in LED
-#define DEFAULT_PIXELS_PIN    13  // NeoPixel support
+#define DEFAULT_PIXELS_PIN    13  // NeoPixel data pin
 
 #define DEFAULT_ADC_BIAS_VOLTAGE     1.75
 #define DEFAULT_ADC_ATTENUATION      ADC_ATTEN_DB_12
