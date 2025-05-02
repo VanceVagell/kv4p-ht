@@ -55,7 +55,7 @@ void loadHardwareConfig() {
   hw.pins.adcPin    = prefs.getChar("ADC_PIN",      DEFAULT_ADC_PIN);
   hw.pins.pttPin    = prefs.getChar("PTT_PIN",      DEFAULT_PTT_PIN);
   hw.pins.pdPin     = prefs.getChar("PD_PIN",       DEFAULT_PD_PIN);
-  hw.pins.sqPin     = prefs.getChar("SQ_PIN_HW1",   DEFAULT_SQ_PIN);
+  hw.pins.sqPin     = prefs.getChar("SQ_PIN",       DEFAULT_SQ_PIN);
   hw.pins.pttPhys1  = prefs.getChar("PHYS_PTT1",    DEFAULT_PHYS_PTT_PIN1);
   hw.pins.pttPhys2  = prefs.getChar("PHYS_PTT2",    DEFAULT_PHYS_PTT_PIN2);
   hw.pins.pixelsPin = prefs.getChar("PIXELS_PIN",   DEFAULT_PIXELS_PIN);
@@ -73,7 +73,7 @@ void saveHardwareConfig() {
   prefs.putChar("ADC_PIN",      hw.pins.adcPin);
   prefs.putChar("PTT_PIN",      hw.pins.pttPin);
   prefs.putChar("PD_PIN",       hw.pins.pdPin);
-  prefs.putChar("SQ_PIN_HW1",   hw.pins.sqPin);
+  prefs.putChar("SQ_PIN",       hw.pins.sqPin);
   prefs.putChar("PHYS_PTT1",    hw.pins.pttPhys1);
   prefs.putChar("PHYS_PTT2",    hw.pins.pttPhys2);
   prefs.putChar("PIXELS_PIN",   hw.pins.pixelsPin);
