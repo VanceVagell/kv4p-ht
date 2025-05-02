@@ -99,10 +99,10 @@ void inline boardSetup() {
   if (isHardwareConfigExists()) {
     loadHardwareConfig();
   } else {
-    // Fallback to "old" way
+    // Fallback to legacy detection
     switch (get_hardware_version()) {
       case HW_VER_V2_0C:
-      hw.stoppedColor = {32, 0, 0};
+        hw.stoppedColor = {32, 0, 0};
         hw.pins.sqPin = 4;
         hw.adcAttenuation = ADC_ATTEN_DB_0;
         hw.volume = 6;
