@@ -22,17 +22,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define NUM_PIXELS 1
 
-struct RGBColor {
-  uint8_t red;
-  uint8_t green;
-  uint8_t blue;
-};
 const RGBColor COLOR_STOPPED = {0, 0, 0};
 const RGBColor COLOR_RX_SQL_CLOSED = {0, 0, 32};
 const RGBColor COLOR_RX_SQL_OPEN = {0, 32, 0};
 const RGBColor COLOR_TX = {16, 16, 0};
 const RGBColor COLOR_BLACK = {0, 0, 0};
-RGBColor COLOR_HW_VER = COLOR_BLACK;
 
 void neopixelColor(const RGBColor &c, uint8_t bright = 255) {
   uint8_t red = (uint16_t(c.red) * bright + 128) >> 8;
@@ -63,7 +57,7 @@ void inline showLEDs() {
     switch (mode) {
       case MODE_STOPPED:
         digitalWrite(hw.pins.ledPin, LOW);
-        neopixelColor(COLOR_HW_VER);
+        neopixelColor(hw.stoppedColor);
         break;
       case MODE_RX:
         digitalWrite(hw.pins.ledPin, LOW);

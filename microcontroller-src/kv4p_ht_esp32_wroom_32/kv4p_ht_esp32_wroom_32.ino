@@ -17,7 +17,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <Arduino.h>
-#include <Preferences.h>
 #include <DRA818.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
@@ -28,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "txAudio.h"
 #include "buttons.h"
 #include "utils.h"
+#include "board.h"
 
 const uint16_t FIRMWARE_VER = 14;
 
@@ -44,44 +44,6 @@ const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
 Debounce squelchDebounce(100);
-
-Preferences prefs;
-
-void loadHardwareConfig() {
-  prefs.begin("hwconfig", true); // read-only
-  hw.pins.rxd2Pin   = prefs.getChar("RXD2_PIN",     DEFAULT_RXD2_PIN);
-  hw.pins.txd2Pin   = prefs.getChar("TXD2_PIN",     DEFAULT_TXD2_PIN);
-  hw.pins.dacPin    = prefs.getChar("DAC_PIN",      DEFAULT_DAC_PIN);
-  hw.pins.adcPin    = prefs.getChar("ADC_PIN",      DEFAULT_ADC_PIN);
-  hw.pins.pttPin    = prefs.getChar("PTT_PIN",      DEFAULT_PTT_PIN);
-  hw.pins.pdPin     = prefs.getChar("PD_PIN",       DEFAULT_PD_PIN);
-  hw.pins.sqPin     = prefs.getChar("SQ_PIN",       DEFAULT_SQ_PIN);
-  hw.pins.pttPhys1  = prefs.getChar("PHYS_PTT1",    DEFAULT_PHYS_PTT_PIN1);
-  hw.pins.pttPhys2  = prefs.getChar("PHYS_PTT2",    DEFAULT_PHYS_PTT_PIN2);
-  hw.pins.pixelsPin = prefs.getChar("PIXELS_PIN",   DEFAULT_PIXELS_PIN);
-  hw.pins.ledPin    = prefs.getChar("LED_PIN",      DEFAULT_LED_PIN);
-  hw.adcAttenuation = (adc_atten_t) prefs.getChar("ADC_ATTEN", DEFAULT_ADC_ATTENUATION);
-  hw.adcBias        = prefs.getFloat("ADC_BIAS",    DEFAULT_ADC_BIAS_VOLTAGE);
-  prefs.end();
-}
-
-void saveHardwareConfig() {
-  prefs.begin("hwconfig", false); // read-write mode
-  prefs.putChar("RXD2_PIN",     hw.pins.rxd2Pin);
-  prefs.putChar("TXD2_PIN",     hw.pins.txd2Pin);
-  prefs.putChar("DAC_PIN",      hw.pins.dacPin);
-  prefs.putChar("ADC_PIN",      hw.pins.adcPin);
-  prefs.putChar("PTT_PIN",      hw.pins.pttPin);
-  prefs.putChar("PD_PIN",       hw.pins.pdPin);
-  prefs.putChar("SQ_PIN",       hw.pins.sqPin);
-  prefs.putChar("PHYS_PTT1",    hw.pins.pttPhys1);
-  prefs.putChar("PHYS_PTT2",    hw.pins.pttPhys2);
-  prefs.putChar("PIXELS_PIN",   hw.pins.pixelsPin);
-  prefs.putChar("LED_PIN",      hw.pins.ledPin);
-  prefs.putChar("ADC_ATTEN",    hw.adcAttenuation);
-  prefs.putFloat("ADC_BIAS",    hw.adcBias);
-  prefs.end();
-}
 
 void setMode(Mode newMode) {
   if (mode == newMode) {
@@ -113,13 +75,11 @@ void setMode(Mode newMode) {
 }
 
 void setup() {
-  loadHardwareConfig();
-  //saveHardwareConfig();
+  boardSetup();
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(115200);
-  COLOR_HW_VER = {0, 32, 0};
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
@@ -162,6 +122,7 @@ void doConfig(Config const &config) {
   if (result == 1) {  // Did we hear back from radio?
     radioModuleStatus = RADIO_MODULE_FOUND;
   }
+  result = sa818.volume(hw.volume);
   result = sa818.filters(false, false, false);
   sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE);
   esp_task_wdt_reset();

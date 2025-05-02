@@ -64,6 +64,12 @@ bool squelched = false;
 // Forward declarations
 void setMode(Mode newMode);
 
+struct RGBColor {
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+};
+
 struct PinConfig {
   int8_t sqPin;
   int8_t rxd2Pin;
@@ -82,6 +88,8 @@ struct HWConfig {
   PinConfig pins;
   float adcBias;
   adc_atten_t adcAttenuation;
+  uint8_t volume;
+  RGBColor stoppedColor;
 };
 
 HWConfig hw = {
@@ -99,5 +107,7 @@ HWConfig hw = {
     .pixelsPin = DEFAULT_PIXELS_PIN
   },
   .adcBias = DEFAULT_ADC_BIAS_VOLTAGE,
-  .adcAttenuation = DEFAULT_ADC_ATTENUATION
+  .adcAttenuation = DEFAULT_ADC_ATTENUATION,
+  .volume = 8,
+  .stoppedColor = {0, 32, 0}
 };
