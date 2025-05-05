@@ -290,6 +290,14 @@ public class RadioAudioService extends Service {
         this.bandwidth = bandwidth;
     }
 
+    public float getBandwidth() {
+	if (this.bandwidth == "Wide") {
+		return 0.025	// 25 KHz
+	} else {
+		return 0.0125   // 12.5 KHz
+	}
+    }
+
     public void setMinRadioFreq(float newMinFreq) {
         minRadioFreq = newMinFreq;
 
