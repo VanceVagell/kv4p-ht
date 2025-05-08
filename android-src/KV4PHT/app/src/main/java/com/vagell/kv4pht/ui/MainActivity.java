@@ -1131,8 +1131,10 @@ public class MainActivity extends AppCompatActivity {
                                 @Override
                                 public void run() {
                                     if (radioAudioService != null) {
-                                        if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP &&
-                                                radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
+                                        if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP
+                                            && radioAudioService.getMode() != RadioAudioService.MODE_SCAN
+                                            && radioAudioService.isRadioConnected()
+                                        ){
                                             radioAudioService.setMode(RadioAudioService.MODE_RX);
                                             radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
                                         }
@@ -1693,6 +1695,9 @@ public class MainActivity extends AppCompatActivity {
         while (isRecording) {
             int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
             if (samples == RadioAudioService.OPUS_FRAME_SIZE) {
+                if (!radioAudioService.isRadioConnected()) {
+                    throw new IllegalStateException("Radio not connected, cannot send audio.");
+                }
                 radioAudioService.sendAudioToESP32(audioBuffer, false);
                 // Accumulate samples across buffers
                 for (int i = 0; i < samples; i++) {
