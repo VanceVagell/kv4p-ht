@@ -292,9 +292,9 @@ public class RadioAudioService extends Service {
 
     public float getBandwidth() {
 	if (this.bandwidth == "Wide") {
-		return 0.025	// 25 KHz
+		return 0.025f;    // 25 KHz
 	} else {
-		return 0.0125   // 12.5 KHz
+		return 0.0125f;   // 12.5 KHz
 	}
     }
 

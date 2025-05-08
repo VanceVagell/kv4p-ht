@@ -1827,7 +1827,7 @@ public class MainActivity extends AppCompatActivity {
                 // the radio is not really working
                 return;
             }
-            String newFreqStr = RadioAudioService.makeSafeHamFreq(Float.toString(currFreq + radioAudioService.getBandwidth());
+            String newFreqStr = RadioAudioService.makeSafeHamFreq(Float.toString(currFreq + radioAudioService.getBandwidth()));
             radioAudioService.tuneToFreq(newFreqStr, squelch, false);  // Fixes invalid freq if we are at the limits.
             tuneToFreqUi(newFreqStr, false);
         }
