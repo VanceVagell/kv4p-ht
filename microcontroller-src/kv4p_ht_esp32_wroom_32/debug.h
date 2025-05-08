@@ -85,6 +85,25 @@ int debug_log_printf(SndCommand cmd, const char* format, ...) {
   return len;
 }
 
+void printHardwareConfig() {
+#ifndef RELEASE  
+  _LOGI("Hardware Configuration:");
+  _LOGI("  RXD2_PIN     = %d", hw.pins.rxd2Pin);
+  _LOGI("  TXD2_PIN     = %d", hw.pins.txd2Pin);
+  _LOGI("  DAC_PIN      = %d", hw.pins.dacPin);
+  _LOGI("  ADC_PIN      = %d", hw.pins.adcPin);
+  _LOGI("  PTT_PIN      = %d", hw.pins.pttPin);
+  _LOGI("  PD_PIN       = %d", hw.pins.pdPin);
+  _LOGI("  SQ_PIN_HW1   = %d", hw.pins.sqPin);
+  _LOGI("  PHYS_PTT1    = %d", hw.pins.pttPhys1);
+  _LOGI("  PHYS_PTT2    = %d", hw.pins.pttPhys2);
+  _LOGI("  PIXELS_PIN   = %d", hw.pins.pixelsPin);
+  _LOGI("  LED_PIN      = %d", hw.pins.ledPin);
+  _LOGI("  ADC_ATTEN    = %d", hw.adcAttenuation);
+  _LOGI("  ADC_BIAS     = %.3f", hw.adcBias);
+#endif
+}
+
 void printEnvironment() {
 #ifndef RELEASE
   esp_reset_reason_t reset_reason = esp_reset_reason();
@@ -132,7 +151,6 @@ void printEnvironment() {
   _LOGI("PSRAM size: %d", ESP.getPsramSize());
   _LOGI("FLASH size: %d", ESP.getFlashChipSize());
   _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
-  _LOGI("Hardware version: 0x%02x", hardware_version);
   _LOGI("---");
 #endif  
 }
@@ -169,6 +187,7 @@ void measureLoopFrequency() {
 
 void inline debugSetup() {
   printEnvironment();
+  printHardwareConfig();
 }
 
 void inline debugLoop() {

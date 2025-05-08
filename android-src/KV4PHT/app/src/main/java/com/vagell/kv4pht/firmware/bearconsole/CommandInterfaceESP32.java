@@ -18,17 +18,11 @@ package com.vagell.kv4pht.firmware.bearconsole;
  **/
 
 import android.content.Context;
-import android.util.Base64;
 
 import com.hoho.android.usbserial.driver.UsbSerialPort;
-import com.vagell.kv4pht.R;
-
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.zip.Deflater;
 
 
@@ -458,75 +452,10 @@ public class CommandInterfaceESP32 {
 
     }
 
+    private int flash_begin(int size, int compsize, int offset) {
 
-    /**
-     * @name flashData Program a full, uncompressed binary file into SPI Flash at a
-     *       given offset. If an ESP32 and md5 string is passed in, will also verify
-     *       memory. ESP8266 does not have checksum memory verification in ROM
-     */
-    public void flashData(byte binaryData[], int offset, int part) {
-        int filesize = binaryData.length;
-
-        mUpCallback.onInfo("Writing data with filesize: " + filesize);
-
-        byte image[] = compressBytes(binaryData);
-        int blocks = flash_defl_begin(filesize, image.length, offset);
-
-        int seq = 0;
-        int written = 0;
-        int address = offset;
-        int position = 0;
-
-        long t1 = System.currentTimeMillis();
-
-        while (image.length - position > 0) {
-
-            double percentage = Math.floor((double)(100 * (seq + 1)) / (double)blocks);
-
-            mUpCallback.onInfo("percentage: " + percentage + "\n");
-            mUpCallback.onUploading( (int) percentage);
-
-            byte block[];
-
-            if (image.length - position >= (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE)) {
-                block = _subArray(image, position, FLASH_WRITE_SIZE);
-            } else {
-                // Pad the last block
-                block = _subArray(image, position, image.length - position);
-
-                // we have an incomplete block (ie: less than 1024) so let pad the missing block
-                // with 0xFF
-                /*byte tempArray[] = new byte[(IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - block.length];
-                for (int i = 0; i < tempArray.length; i++) {
-                    tempArray[i] = (byte) 0xFF;
-                }
-                block = _appendArray(block, tempArray);*/
-            }
-
-            int attempts = 0;
-            final int MAX_ATTEMPTS = 10;
-            cmdRet retVal;
-            do {
-                attempts++;
-                retVal = flash_defl_block(block, seq, FLASH_TIMEOUT_MS);
-                if (retVal.retCode == -1) {
-                    mUpCallback.onInfo("Retry #" + attempts + " because Ret code: " + retVal.retCode + "\n");
-                }
-            } while (attempts < MAX_ATTEMPTS && retVal.retCode == -1);
-
-            seq += 1;
-            written += block.length;
-            position += (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE);
-        }
-
-        long t2 = System.currentTimeMillis();
-        mUpCallback.onInfo("Took " + (t2 - t1) + "ms to write " + filesize + " bytes" + "\n");
-    }
-
-    private int flash_defl_begin(int size, int compsize, int offset) {
-
-        int num_blocks = (int) Math.floor((double) (compsize + (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - 1) / (double) (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE));
-        int erase_blocks = (int) Math.floor((double) (size + (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE) - 1) / (double) (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE));
+        int num_blocks = (int) Math.floor((double) (compsize + FLASH_WRITE_SIZE - 1) / (double) FLASH_WRITE_SIZE);
+        int erase_blocks = (int) Math.floor((double) (size + FLASH_WRITE_SIZE - 1) / (double) FLASH_WRITE_SIZE);
         // Start time
         long t1 = System.currentTimeMillis();
 
@@ -536,17 +465,133 @@ public class CommandInterfaceESP32 {
             write_size = size;
             timeout = 3000;
         } else {
-            write_size = erase_blocks * (IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE);
+            write_size = erase_blocks * FLASH_WRITE_SIZE;
             timeout = timeout_per_mb(ERASE_REGION_TIMEOUT_PER_MB, write_size);
         }
 
         mUpCallback.onInfo("Compressed " + size + " bytes to " + compsize + "..."+ "\n");
 
         byte pkt[] = _appendArray(_int_to_bytearray(write_size), _int_to_bytearray(num_blocks));
-        pkt = _appendArray(pkt, _int_to_bytearray((IS_STUB ? STUBLOADER_FLASH_WRITE_SIZE : FLASH_WRITE_SIZE)));
+        pkt = _appendArray(pkt, _int_to_bytearray(FLASH_WRITE_SIZE));
         pkt = _appendArray(pkt, _int_to_bytearray(offset));
 
-        // System.out.println("params:" +printHex(pkt));
+        sendCommand((byte) ESP_FLASH_BEGIN, pkt, 0, timeout);
+
+        // end time
+        long t2 = System.currentTimeMillis();
+        if (size != 0 && IS_STUB == false) {
+            System.out.println("Took " + ((t2 - t1) / 1000) + "." + ((t2 - t1) % 1000) + "s to erase flash block");
+            mUpCallback.onInfo("Took " + ((t2 - t1) / 1000) + "." + ((t2 - t1) % 1000) + "s to erase flash block\n");
+        }
+        return num_blocks;
+    }
+
+    public cmdRet flash_block(byte data[], int seq, int timeout) {
+        cmdRet retVal;
+        byte pkt[] = _appendArray(_int_to_bytearray(data.length),_int_to_bytearray(seq));
+        pkt = _appendArray(pkt,_int_to_bytearray(0));
+        pkt = _appendArray(pkt,_int_to_bytearray(0));
+        pkt = _appendArray(pkt, data);
+
+        retVal = sendCommand((byte) ESP_FLASH_DATA, pkt, _checksum(data), timeout);
+        return retVal;
+    }
+
+    /**
+     * @name flashData Program a full, uncompressed binary file into SPI Flash at a
+     *       given offset. If an ESP32 and md5 string is passed in, will also verify
+     *       memory. ESP8266 does not have checksum memory verification in ROM
+     */
+    public void compressAndFlash(byte[] binaryData, int offset, int part) {
+        int filesize = binaryData.length;
+        mUpCallback.onInfo("Writing data with size: " + filesize);
+        byte[] image = compressBytes(binaryData);
+        int blocks = flash_defl_begin(filesize, image.length, offset);
+        int seq = 0;
+        int position = 0;
+        long t1 = System.currentTimeMillis();
+        while (image.length - position > 0) {
+            double percentage = Math.floor((double)(100 * (seq + 1)) / (double)blocks);
+            mUpCallback.onInfo("percentage: " + percentage + "\n");
+            mUpCallback.onUploading( (int) percentage);
+            byte[] block;
+            if (image.length - position >= FLASH_WRITE_SIZE) {
+                block = _subArray(image, position, FLASH_WRITE_SIZE);
+            } else {
+                // Pad the last block
+                block = _subArray(image, position, image.length - position);
+            }
+            cmdRet retVal = flash_defl_block(block, seq, 100);
+            if (retVal.retCode ==-1) {
+                //This should fix issue when writing is incorrect by trying again
+                mUpCallback.onInfo("Retry because Ret code:" + retVal.retCode +"\n");
+                retVal = flash_defl_block(block, seq, /*block_timeout*/ 100);
+            }
+            seq += 1;
+            position += FLASH_WRITE_SIZE;
+        }
+        long t2 = System.currentTimeMillis();
+        mUpCallback.onInfo("Took " + (t2 - t1) + "ms to write " + filesize + " bytes" + "\n");
+    }
+
+    /*
+    Flash uncompressed data
+     */
+    public void flash(byte[] binaryData, int offset, int part) {
+        int filesize = binaryData.length;
+        mUpCallback.onInfo("Writing data with size: " + filesize);
+        int blocks = flash_begin(filesize, binaryData.length, offset);
+        int seq = 0;
+        int position = 0;
+        long t1 = System.currentTimeMillis();
+        while (binaryData.length - position > 0) {
+            double percentage = Math.floor((double)(100 * (seq + 1)) / (double)blocks);
+            mUpCallback.onInfo("percentage: " + percentage + "\n");
+            mUpCallback.onUploading( (int) percentage);
+            byte[] block;
+            if (binaryData.length - position >= FLASH_WRITE_SIZE) {
+                block = _subArray(binaryData, position, FLASH_WRITE_SIZE);
+            } else {
+                // Pad the last block
+                block = _subArray(binaryData, position, binaryData.length - position);
+            }
+            cmdRet retVal = flash_block(block, seq, 100);
+            if (retVal.retCode ==-1) {
+                //This should fix issue when writing is incorrect by trying again
+                mUpCallback.onInfo("Retry because Ret code:" + retVal.retCode +"\n");
+                retVal = flash_block(block, seq, /*block_timeout*/ 100);
+            }
+            seq += 1;
+            position += FLASH_WRITE_SIZE;
+        }
+        long t2 = System.currentTimeMillis();
+        mUpCallback.onInfo("Took " + (t2 - t1) + "ms to write " + filesize + " bytes" + "\n");
+    }
+
+    private int flash_defl_begin(int size, int compsize, int offset) {
+
+        int num_blocks = (int) Math.floor((double) (compsize + FLASH_WRITE_SIZE - 1) / (double) FLASH_WRITE_SIZE);
+        int erase_blocks = (int) Math.floor((double) (size + FLASH_WRITE_SIZE - 1) / (double) FLASH_WRITE_SIZE);
+        // Start time
+        long t1 = System.currentTimeMillis();
+
+        int write_size, timeout;
+        if (IS_STUB) {
+            //using a stub (will use it in the future)
+            write_size = size;
+            timeout = 3000;
+        } else {
+            write_size = erase_blocks * FLASH_WRITE_SIZE;
+            timeout = timeout_per_mb(ERASE_REGION_TIMEOUT_PER_MB, write_size);
+        }
+
+        mUpCallback.onInfo("Compressed " + size + " bytes to " + compsize + "..."+ "\n");
+
+        byte pkt[] = _appendArray(_int_to_bytearray(write_size), _int_to_bytearray(num_blocks));
+        pkt = _appendArray(pkt, _int_to_bytearray(FLASH_WRITE_SIZE));
+        pkt = _appendArray(pkt, _int_to_bytearray(offset));
+
+
         sendCommand((byte) ESP_FLASH_DEFL_BEGIN, pkt, 0, timeout);
 
         // end time
