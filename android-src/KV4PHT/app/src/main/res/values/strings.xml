@@ -65,7 +65,7 @@
     <string name="min_70cm_tx_frequency">Min 70cm TX frequency</string>
     <string name="max_70cm_tx_frequency">Max 70cm TX frequency</string>
     <string name="mic_gain_boost">Mic gain boost</string>
-    <string name="to" translatable="false">to</string>
+    <string name="to" translatable="false">to </string>
     <string name="kv4p_aprs_message" translatable="false">KV4P</string>
     <string name="message_body_example">The quick brown fox jumped over the lazy dog.</string>
     <string name="all_memories">All memories</string>
