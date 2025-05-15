@@ -63,7 +63,7 @@ public final class FirmwareUtils {
             StartStage flasher = EspFlasherApi.connect(getSerialTransport(usbSerialPort))
                 .withCallBack(getProgressCallback(flashRegions, callback));
             callback.connectedToBootloader();
-            flasher.withBaudRate(EspFlasherApi.ESP_ROM_BAUD_HIGH, b -> setBaudRate(usbSerialPort, b))
+            flasher.withBaudRate(EspFlasherApi.ESP_ROM_BAUD_HIGHEST, b -> setBaudRate(usbSerialPort, b))
                 .chipDetect()
                 .loadStub()
                 .withCompression(false)
@@ -96,11 +96,11 @@ public final class FirmwareUtils {
         return new SerialTransport() {
             @Override
             public int read(byte[] buffer, int length) throws IOException {
-                return usbSerialPort.read(buffer, length, 10);
+                return usbSerialPort.read(buffer, length, 100);
             }
             @Override
             public void write(byte[] buffer, int length) throws IOException {
-                usbSerialPort.write(buffer, length, 10);
+                usbSerialPort.write(buffer, length, 0);
             }
             @Override
             public void setControlLines(boolean dtr, boolean rts) throws IOException {
