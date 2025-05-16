@@ -21,10 +21,13 @@ import org.dkaukov.esp32.core.EspFlasherApi.StartStage;
 import org.dkaukov.esp32.io.ProgressCallback;
 import org.dkaukov.esp32.io.SerialTransport;
 import org.dkaukov.esp32.protocol.EspFlasherProtocol;
+import org.slf4j.LoggerFactory;
 
 import android.content.Context;
 import android.util.Log;
 import lombok.SneakyThrows;
+import pl.brightinventions.slf4android.LogLevel;
+import pl.brightinventions.slf4android.LoggerConfiguration;
 
 public final class FirmwareUtils {
     private static final String TAG = FirmwareUtils.class.getSimpleName();
@@ -38,6 +41,12 @@ public final class FirmwareUtils {
     private static final int ESP32_PARTITION_TABLE = R.raw.partitions;
     private static final int ESP32_BOOT_APP_0 = R.raw.boot_app0;
     private static final int ESP32_APP = R.raw.firmware_v14;
+
+    static {
+        LoggerFactory.getLogger(EspFlasherProtocol.class).trace("Init..");
+        LoggerConfiguration.configuration().setLogLevel(LoggerFactory.getLogger(EspFlasherProtocol.class).getName(),
+            LogLevel.DEBUG);
+    }
 
     private FirmwareUtils() {}
 
