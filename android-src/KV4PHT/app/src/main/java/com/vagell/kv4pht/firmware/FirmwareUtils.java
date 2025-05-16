@@ -5,7 +5,7 @@ import static org.dkaukov.esp32.chip.Esp32ChipId.ESP32;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -23,6 +23,7 @@ import org.dkaukov.esp32.io.SerialTransport;
 import org.dkaukov.esp32.protocol.EspFlasherProtocol;
 import org.slf4j.LoggerFactory;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.util.Log;
 import lombok.SneakyThrows;
@@ -48,6 +49,13 @@ public final class FirmwareUtils {
             LogLevel.DEBUG);
     }
 
+    public static class ResourceLoadingException extends RuntimeException {
+        @SuppressLint("DefaultLocale")
+        public ResourceLoadingException(int id, IOException cause) {
+            super(String.format("Failed to read resource: %d", id), cause);
+        }
+    }
+
     private FirmwareUtils() {}
 
     public interface FirmwareCallback {
@@ -64,7 +72,7 @@ public final class FirmwareUtils {
         try {
             setBaudRate(usbSerialPort, EspFlasherApi.ESP_ROM_BAUD);
             Log.i(TAG, "Starting firmware flash, version: " + PACKAGED_FIRMWARE_VER);
-            Map<FlashRegion, byte[]> flashRegions = new HashMap<>();
+            Map<FlashRegion, byte[]> flashRegions = new EnumMap<>(FlashRegion.class);
             flashRegions.put(FlashRegion.BOOTLOADER, readResource(ctx, ESP32_BOOTLOADER));
             flashRegions.put(FlashRegion.PARTITION_TABLE, readResource(ctx, ESP32_PARTITION_TABLE));
             flashRegions.put(FlashRegion.APP_BOOTLOADER, readResource(ctx, ESP32_BOOT_APP_0));
@@ -157,7 +165,7 @@ public final class FirmwareUtils {
             }
             return outputStream.toByteArray();
         } catch (IOException e) {
-            throw new RuntimeException("Failed to read resource: " + resourceId, e);
+            throw new ResourceLoadingException(resourceId, e);
         }
     }
 }
