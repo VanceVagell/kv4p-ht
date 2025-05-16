@@ -50,8 +50,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ADC_ATTENUATION_v20C ADC_ATTEN_DB_0  // v2.0c has a lower input ADC range
 
 // Hardware version detection
-#define HW_VER_PIN_0  39  // 0xF0
-#define HW_VER_PIN_1  36  // 0x0F
+#define HW_VER_PIN_0  39  // 0x0F
+#define HW_VER_PIN_1  36  // 0xF0
 // LOW = 0, HIGH = F, 1 <= analog values <= E
 
 //  Hardware Version Summary:
