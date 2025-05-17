@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".ui.FirmwareActivity"
+    android:background="@drawable/bg"
+    android:paddingTop="96dp"
+    android:paddingBottom="24dp"
+    android:id="@+id/firmwareTopLevelView">
+
+    <TextView
+        android:id="@+id/firmwareToolbarTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/find_repeaters_title"
+        android:textSize="32sp"
+        app:fontWeight="500"
+        android:textColor="@color/primary"
+        android:layout_marginBottom="16dp"
+        android:layout_gravity="center"
+        android:layout_marginLeft="24dp"
+        android:layout_marginRight="24dp"/>
+
+    <TextView
+        android:id="@+id/findRepeatersStatusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/jost"
+        android:text="@string/find_repeaters_instructions"
+        android:textColor="@color/primary_deselected"
+        android:textSize="20dp"
+        android:layout_marginBottom="24dp"
+        android:layout_marginLeft="24dp"
+        android:layout_marginRight="24dp"/>
+
+    <WebView
+        android:id="@+id/repeaterBookWebView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/findRepeatersGroupInputHolder"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="0"
+        android:layout_marginTop="8dp"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+        android:hint="@string/memory_group_optional_display"
+        app:hintTextColor="@color/primary_deselected"
+        app:boxStrokeColor="@color/primary"
+        android:textColorHint="@color/primary_deselected"
+        android:paddingBottom="16dp"
+        android:paddingLeft="24dp"
+        android:paddingRight="24dp"
+        android:visibility="gone">
+
+        <AutoCompleteTextView
+            android:id="@+id/findRepeatersGroupTextInputEditText"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:textSize="20dp"
+            android:textColor="@color/primary"
+            android:inputType="text"/>
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <LinearLayout
+        android:id="@+id/firmwareButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="32dp"
+        android:gravity="right"
+        android:layout_marginLeft="24dp"
+        android:layout_marginRight="24dp"
+        android:layout_marginBottom="32dp">
+
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_weight="0"
+            android:background="?android:attr/selectableItemBackground"
+            android:text="@string/cancel_display1"
+            android:textSize="20dp"
+            android:textFontWeight="500"
+            android:textColor="@color/primary"
+            android:textAllCaps="false"
+            android:enabled="true"
+            android:onClick="findRepeatersCancelButtonClicked" />
+
+        <Button
+            android:id="@+id/findRepeatersSaveButton"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_weight="0"
+            android:layout_marginBottom="16dp"
+            android:text="@string/save_display"
+            android:textSize="20dp"
+            android:textFontWeight="500"
+            android:textColor="@color/black"
+            android:textAllCaps="false"
+            android:enabled="true"
+            android:onClick="findRepeatersSaveButtonClicked"
+            android:visibility="gone"/>
+    </LinearLayout>
+</LinearLayout>

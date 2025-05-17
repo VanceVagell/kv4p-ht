@@ -1,0 +1,71 @@
+{
+    "$schema": "https://go.kicad.org/pcm/schemas/v1",
+    "name": "Espressif Library",
+    "description": "This addon contains the Symbols, Footprint, and 3D Models for the Espressif SoC and Modules family.",
+    "description_full": "This addon contains the Symbols, Footprint, and 3D Models for the Espressif SoC and Modules family. All footprints were designed according to the Recommended PCB Land Pattern section present on each module datasheet.\n\n\n # Hardware Design Guidelines\n\n Before designing your hardware, be sure to check all recommendations at:\n\n- Espressif Hardware Design Guidelines: https://www.espressif.com/sites/default/files/documentation/esp32_hardware_design_guidelines_en.pdf\n-Espressif Product Selector: https://products.espressif.com/#/",
+    "identifier": "com.github.espressif.kicad-libraries",
+    "type": "library",
+    "author": {
+        "name": "Pedro Minatel",
+        "contact": {
+            "web": "https://github.com/espressif/kicad-libraries"
+        }
+    },
+    "maintainer": {
+        "name": "Pedro Minatel",
+        "contact": {
+            "web": "https://github.com/espressif/kicad-libraries"
+        }
+    },
+    "license": "CC-BY-SA-4.0",
+    "resources": {
+        "homepage": "https://github.com/espressif/kicad-libraries"
+    },
+    "versions": [
+        {
+            "version": "3.0.1",
+            "status": "stable",
+            "kicad_version": "8.0.0",
+            "download_sha256": "ed1ec6448536fe904788e950b528464bc2ba7a3b39bceb363a6acfb4014c8209",
+            "download_size": 47937097,
+            "download_url": "https://github.com/espressif/kicad-libraries/releases/download/3.0.1/espressif-kicad-addon.zip",
+            "install_size": 230247684
+        },
+        {
+            "version": "3.0.0",
+            "status": "stable",
+            "kicad_version": "7.0.0",
+            "download_sha256": "30bf08d44ed0e34e84a9dd6cc5273d49dc05d11d0f2176c6d8ed177aee5fbf51",
+            "download_size": 47925233,
+            "download_url": "https://github.com/espressif/kicad-libraries/releases/download/3.0.0/espressif-kicad-addon.zip",
+            "install_size": 230062869
+        },
+        {
+            "version": "2.07",
+            "status": "stable",
+            "kicad_version": "7.0.0",
+            "download_sha256": "0aa61481c42447d7a0d203012f7fa5e1da41cda1499d7bd6fcc577f79611be5a",
+            "download_size": 47920075,
+            "download_url": "https://github.com/espressif/kicad-libraries/releases/download/2.07/espressif-kicad-addon.zip",
+            "install_size": 230040812
+        },
+        {
+            "version": "2.0.6",
+            "status": "stable",
+            "kicad_version": "7.0.0",
+            "download_sha256": "0aa7b297b2cf8dff62f6ca539333115d4290a08d10ded4c0316ae79c943bfefc",
+            "download_size": 47916383,
+            "download_url": "https://github.com/espressif/kicad-libraries/releases/download/2.0.6/espressif-kicad-addon.zip",
+            "install_size": 230020857
+        },
+        {
+            "version": "2.0.5",
+            "status": "stable",
+            "kicad_version": "7.0.0",
+            "download_sha256": "85dc385187579cd879c70cea3f64a647a847497d16c8b80b5d9d58c7b2c65fb8",
+            "download_size": 40585315,
+            "download_url": "https://github.com/espressif/kicad-libraries/releases/download/2.0.5/espressif-kicad-addon.zip",
+            "install_size": 187817423
+        }
+    ]
+}

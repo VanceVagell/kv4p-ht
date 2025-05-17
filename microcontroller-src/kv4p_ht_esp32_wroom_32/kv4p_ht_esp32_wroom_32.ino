@@ -28,7 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "buttons.h"
 #include "utils.h"
 
-const uint16_t FIRMWARE_VER = 13;
+const uint16_t FIRMWARE_VER = 14;
 
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint16_t USB_BUFFER_SIZE = 1024*2;
@@ -95,15 +95,15 @@ void setup() {
   switch (hardware_version) {
     case HW_VER_V1:
       COLOR_HW_VER = {0, 32, 0};
-      SQ_PIN = 32;
+      sqPin = SQ_PIN_HW1;
       break;
     case HW_VER_V2_0C:
       COLOR_HW_VER = {32, 0, 0};
-      SQ_PIN = 4;
+      sqPin = SQ_PIN_HW2;
       break;
     case HW_VER_V2_0D:
       COLOR_HW_VER = {0, 0, 32};
-      SQ_PIN = 4;
+      sqPin = SQ_PIN_HW2;
       break;
     default:
       // Unknown version detected. Indicate this some way?
@@ -117,7 +117,7 @@ void setup() {
   // Set up radio module defaults
   pinMode(PD_PIN, OUTPUT);
   digitalWrite(PD_PIN, HIGH);  // Power on
-  pinMode(SQ_PIN, INPUT);
+  pinMode(sqPin, INPUT);
   pinMode(PTT_PIN, OUTPUT);
   digitalWrite(PTT_PIN, HIGH);  // Rx
   // Communication with DRA818V radio module via GPIO pins
@@ -126,7 +126,7 @@ void setup() {
   //
   debugSetup();
   // Begin in STOPPED mode
-  squelched = (digitalRead(SQ_PIN) == HIGH);
+  squelched = (digitalRead(sqPin) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
   sendHello();
@@ -234,12 +234,12 @@ void rssiLoop() {
 }
 
 void loop() {
-  squelched = squelchDebounce.debounce((digitalRead(SQ_PIN) == HIGH));
+  squelched = squelchDebounce.debounce((digitalRead(sqPin) == HIGH));
   debugLoop();
   ledLoop();
+  buttonsLoop();
   protocolLoop();
   rxAudioLoop();
   txAudioLoop();
-  buttonsLoop();
   rssiLoop();
 }

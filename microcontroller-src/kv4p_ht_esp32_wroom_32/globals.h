@@ -40,17 +40,28 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ADC_PIN       34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
 #define PTT_PIN       18  // Keys up the radio module
 #define PD_PIN        19
-uint8_t SQ_PIN      = 32;
+#define SQ_PIN_HW1    32  // 
+#define SQ_PIN_HW2     4  // Squelch pin. In v2.0c, this is GPIO 4. In v1.x and v2.0d, this is GPIO 32.
 #define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
 #define PHYS_PTT_PIN2 33  // Optional. See above.
 
-#define ADC_BIAS_VOLTAGE  1.75
-#define ADC_ATTENUATION   ADC_ATTEN_DB_12
+#define ADC_BIAS_VOLTAGE     1.75
+#define ADC_ATTENUATION      ADC_ATTEN_DB_12
+#define ADC_ATTENUATION_v20C ADC_ATTEN_DB_0  // v2.0c has a lower input ADC range
 
 // Hardware version detection
 #define HW_VER_PIN_0  39  // 0xF0
 #define HW_VER_PIN_1  36  // 0x0F
 // LOW = 0, HIGH = F, 1 <= analog values <= E
+
+//  Hardware Version Summary:
+//  +-------------+------------+-----------------+-------------------------------------------------------------------+
+//  | Version     | Squelch Pin| ADC Attenuation | Notes                                                             |
+//  +-------------+------------+-----------------+-------------------------------------------------------------------+
+//  | HW_VER_V1   | GPIO32     | 12dB            | Original version, full feature set                                |
+//  | HW_VER_V2_0C| GPIO4      | 0dB             | Switched to GPIO4 for squelch and lower ADC input range (0–1.1V). |
+//  | HW_VER_V2_0D| GPIO4      | 12dB            | Same squelch pin as V2.0C; ADC range restored to normal (~3.3V).  |
+//  +-------------+------------+-----------------+-------------------------------------------------------------------+
 #define HW_VER_V1     (0x00)
 #define HW_VER_V2_0C  (0xFF)
 #define HW_VER_V2_0D  (0xF0)
@@ -72,3 +83,6 @@ bool squelched = false;
 
 // Forward declarations
 void setMode(Mode newMode);
+
+// Squelch pin
+uint8_t sqPin = SQ_PIN_HW1;

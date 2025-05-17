@@ -44,7 +44,6 @@ import java.util.concurrent.TimeUnit;
 public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isAdd = true; // false means we're editing a memory, not adding
     private boolean isVhfRadio = true; // false means UHF radio
-    private List<String> mTones;
     private ThreadPoolExecutor threadPoolExecutor = null;
     private int mMemoryId;
     private ChannelMemory mMemory;
@@ -58,48 +57,6 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
         threadPoolExecutor = new ThreadPoolExecutor(2,
                 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
-
-        // Set up the list of supported CTCSS tones.
-        mTones = new ArrayList<>();
-        mTones.add("None");
-        mTones.add("67");
-        mTones.add("71.9");
-        mTones.add("74.4");
-        mTones.add("77");
-        mTones.add("79.7");
-        mTones.add("82.5");
-        mTones.add("85.4");
-        mTones.add("88.5");
-        mTones.add("91.5");
-        mTones.add("94.8");
-        mTones.add("97.4");
-        mTones.add("100");
-        mTones.add("103.5");
-        mTones.add("107.2");
-        mTones.add("110.9");
-        mTones.add("114.8");
-        mTones.add("118.8");
-        mTones.add("123");
-        mTones.add("127.3");
-        mTones.add("131.8");
-        mTones.add("136.5");
-        mTones.add("141.3");
-        mTones.add("146.2");
-        mTones.add("151.4");
-        mTones.add("156.7");
-        mTones.add("162.2");
-        mTones.add("167.9");
-        mTones.add("173.8");
-        mTones.add("179.9");
-        mTones.add("186.2");
-        mTones.add("192.8");
-        mTones.add("203.5");
-        mTones.add("210.7");
-        mTones.add("218.1");
-        mTones.add("225.7");
-        mTones.add("233.6");
-        mTones.add("241.8");
-        mTones.add("250.3");
 
         Bundle extras = getIntent().getExtras();
         if (extras != null) {
@@ -154,7 +111,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
         // Setup the title
         TextView titleTextView = findViewById(R.id.addEditToolbarTitle);
-        titleTextView.setText(isAdd ? "Add memory" : "Edit memory");
+        titleTextView.setText(isAdd ? getString(R.string.add_memory_display) : getString(R.string.edit_memory));
 
         // Hide advanced options until user chooses to show them
         setAdvancedOptionsVisible(false);
@@ -234,11 +191,11 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
     private void populateTones() {
         AutoCompleteTextView editToneTxTextView = findViewById(R.id.editToneTxTextView);
-        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, mTones);
+        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, ToneHelper.VALID_TONE_STRINGS);
         editToneTxTextView.setAdapter(arrayAdapter1);
 
         AutoCompleteTextView editToneRxTextView = findViewById(R.id.editToneRxTextView);
-        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, mTones);
+        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, ToneHelper.VALID_TONE_STRINGS);
         editToneRxTextView.setAdapter(arrayAdapter2);
     }
 

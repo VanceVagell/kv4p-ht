@@ -90,9 +90,12 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
                 memoryMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                     @Override
                     public boolean onMenuItemClick(MenuItem item) {
-                        if (item.getTitle().equals("Delete")) {
+                        String deleteTitle = themedContext.getString(R.string.delete);
+                        String editTitle = themedContext.getString(R.string.edit);
+
+                        if (item.getTitle().equals(deleteTitle)) {
                             memoryListener.onMemoryDelete(memory);
-                        } else if (item.getTitle().equals("Edit")) {
+                        } else if (item.getTitle().equals(editTitle)) {
                             memoryListener.onMemoryEdit(memory);
                         }
                         return true;
