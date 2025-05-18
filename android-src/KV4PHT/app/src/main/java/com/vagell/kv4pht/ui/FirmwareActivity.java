@@ -90,77 +90,74 @@ public class FirmwareActivity extends AppCompatActivity {
             return;
         }
         final Context ctx = this;
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                UsbSerialPort serialPort = RadioAudioService.getUsbSerialPort();
-                if (null == serialPort) {
-                    Log.d("DEBUG", "Error: Unexpected null serial port in FirmwareActivity.");
-                    // TODO report in UI that serial port not found, with option to retry
-                }
-                FirmwareUtils.flashFirmware(ctx, serialPort, new FirmwareUtils.FirmwareCallback() {
-                    @Override
-                    public void connectedToBootloader() {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                setStatusText("Flashing 0%");
-                                findViewById(R.id.firmwareInstructionText1).setVisibility(View.GONE);
-                                findViewById(R.id.firmwareInstructionImage).setVisibility(View.GONE);
-                                findViewById(R.id.firmwareButtons).setVisibility(View.GONE);
-                                findViewById(R.id.firmwareInstructionText2).setVisibility(View.VISIBLE);
-                                CircularProgressIndicator progressIndicator = findViewById(R.id.firmwareProgressIndicator);
-                                progressIndicator.setIndeterminate(false);
-                                progressIndicator.setProgress(0);
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void reportProgress(int percent) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                setStatusText("Flashing " + percent + "%");
-                                CircularProgressIndicator progressIndicator = findViewById(R.id.firmwareProgressIndicator);
-                                progressIndicator.setIndeterminate(false);
-                                progressIndicator.setProgress(percent);
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void doneFlashing(boolean success) {
-                        Log.d("DEBUG", "doneFlashing, success: " + success);
-
-                        if (success) {
-                            setResult(Activity.RESULT_OK, getIntent());
-                            finish();
-                        } else {
-                            Log.d("DEBUG", "Error: Flashing firmware failed.");
-
-                            CharSequence snackbarMsg = "Failed to flash firmware. If it keeps failing, use kv4p.com web flasher.";
-                            errorSnackbar = Snackbar.make(ctx, findViewById(R.id.firmwareTopLevelView), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-                                    .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
-                            errorSnackbar.setAction("Retry", new View.OnClickListener() {
-                                        @Override
-                                        public void onClick(View view) {
-                                            errorSnackbar.dismiss();
-                                            startFlashing();
-                                        }
-                                    });
-
-                            // Make the text of the snackbar larger.
-                            TextView snackbarActionTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
-                            snackbarActionTextView.setTextSize(20);
-                            TextView snackbarTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
-                            snackbarTextView.setTextSize(20);
-
-                            errorSnackbar.show();
-                        }
-                    }
-                });
+        threadPoolExecutor.execute(() -> {
+            UsbSerialPort serialPort = RadioAudioService.getUsbSerialPort();
+            if (null == serialPort) {
+                Log.d("DEBUG", "Error: Unexpected null serial port in FirmwareActivity.");
+                // TODO report in UI that serial port not found, with option to retry
             }
+            FirmwareUtils.flashFirmware(ctx, serialPort, new FirmwareUtils.FirmwareCallback() {
+                @Override
+                public void connectedToBootloader() {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            setStatusText("Flashing 0%");
+                            findViewById(R.id.firmwareInstructionText1).setVisibility(View.GONE);
+                            findViewById(R.id.firmwareInstructionImage).setVisibility(View.GONE);
+                            findViewById(R.id.firmwareButtons).setVisibility(View.GONE);
+                            findViewById(R.id.firmwareInstructionText2).setVisibility(View.VISIBLE);
+                            CircularProgressIndicator progressIndicator1 = findViewById(R.id.firmwareProgressIndicator);
+                            progressIndicator1.setIndeterminate(false);
+                            progressIndicator1.setProgress(0);
+                        }
+                    });
+                }
+
+                @Override
+                public void reportProgress(int percent) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            setStatusText("Flashing " + percent + "%");
+                            CircularProgressIndicator progressIndicator1 = findViewById(R.id.firmwareProgressIndicator);
+                            progressIndicator1.setIndeterminate(false);
+                            progressIndicator1.setProgress(percent);
+                        }
+                    });
+                }
+
+                @Override
+                public void doneFlashing(boolean success) {
+                    Log.d("DEBUG", "doneFlashing, success: " + success);
+
+                    if (success) {
+                        setResult(Activity.RESULT_OK, getIntent());
+                        finish();
+                    } else {
+                        Log.d("DEBUG", "Error: Flashing firmware failed.");
+
+                        CharSequence snackbarMsg = "Failed to flash firmware. If it keeps failing, use kv4p.com web flasher.";
+                        errorSnackbar = Snackbar.make(ctx, findViewById(R.id.firmwareTopLevelView), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+                                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+                        errorSnackbar.setAction("Retry", new View.OnClickListener() {
+                                    @Override
+                                    public void onClick(View view) {
+                                        errorSnackbar.dismiss();
+                                        startFlashing();
+                                    }
+                                });
+
+                        // Make the text of the snackbar larger.
+                        TextView snackbarActionTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+                        snackbarActionTextView.setTextSize(20);
+                        TextView snackbarTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+                        snackbarTextView.setTextSize(20);
+
+                        errorSnackbar.show();
+                    }
+                }
+            });
         });
     }
 

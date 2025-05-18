@@ -513,26 +513,24 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
 
             // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
-            if (null != threadPoolExecutor) {
-                threadPoolExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
+            threadPoolExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
 
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                radioAudioService.setRadioType(
-                                        "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
-                                                ? RadioAudioService.RADIO_MODULE_UHF
-                                                : RadioAudioService.RADIO_MODULE_VHF
-                                );
-                                radioAudioService.start();
-                            }
-                        });
-                    }
-                });
-            }
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            radioAudioService.setRadioType(
+                                    "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
+                                            ? RadioAudioService.RADIO_MODULE_UHF
+                                            : RadioAudioService.RADIO_MODULE_VHF
+                            );
+                            radioAudioService.start();
+                        }
+                    });
+                }
+            });
         }
 
         @Override
@@ -705,10 +703,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -879,10 +873,6 @@ public class MainActivity extends AppCompatActivity {
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
 
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
         final APRSMessage aprsMessage = new APRSMessage();
         aprsMessage.type = APRSMessage.MESSAGE_TYPE;
         aprsMessage.fromCallsign = callsign.toUpperCase().trim();
@@ -955,7 +945,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applySettings() {
-        if (viewModel.appDb == null || threadPoolExecutor == null) {
+        if (viewModel.appDb == null) {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
 
@@ -1393,7 +1383,7 @@ public class MainActivity extends AppCompatActivity {
         memoriesAdapter.notifyDataSetChanged();
 
         // Save most recent freq so we can restore it on app restart
-        if (threadPoolExecutor == null || wasForced) { // wasForced means user didn't actually type in the frequency (we shouldn't save it)
+        if (wasForced) { // wasForced means user didn't actually type in the frequency (we shouldn't save it)
             return;
         }
         threadPoolExecutor.execute(new Runnable() {
@@ -1873,10 +1863,6 @@ public class MainActivity extends AppCompatActivity {
         PopupMenu groupsMenu = new PopupMenu(themedContext, view);
         groupsMenu.inflate(R.menu.groups_menu);
 
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -1915,9 +1901,6 @@ public class MainActivity extends AppCompatActivity {
         groupSelector.setText(groupName + " ▼");
 
         // Save most recent group selection so we can restore it on app restart
-        if (threadPoolExecutor == null) {
-            return;
-        }
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {

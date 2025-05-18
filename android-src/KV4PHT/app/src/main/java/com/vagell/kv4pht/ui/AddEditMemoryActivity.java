@@ -62,12 +62,9 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             isVhfRadio = (extras.getBoolean("isVhfRadio"));
             if (!isAdd) { // Edit
                 mMemoryId = extras.getInt("memoryId");
-                threadPoolExecutor.execute(new Runnable() {
-                       @Override
-                       public void run() {
-                           mMemory = MainViewModel.appDb.channelMemoryDao().getById(mMemoryId);
-                           populateOriginalValues();
-                       }
+                threadPoolExecutor.execute(() -> {
+                    mMemory = MainViewModel.appDb.channelMemoryDao().getById(mMemoryId);
+                    populateOriginalValues();
                 });
             } else { // Add
                 populateDefaults();
@@ -136,36 +133,30 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
     private void populateMemoryGroups() {
         final Activity activity = this;
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                if( MainViewModel.appDb == null ) {
-                    //For example direct call other app intent.
-                    //If app is not already open do not nullpointer-exception.
-                    MainViewModel preloader = new MainViewModel();
-                    preloader.setActivity(activity);
-                    preloader.loadData();
-                }
-                List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
-
-                // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
-                for (int i = 0; i < memoryGroups.size(); i++) {
-                    String name = memoryGroups.get(i);
-                    if (name == null || name.trim().length() == 0) {
-                        memoryGroups.remove(i);
-                        i--;
-                    }
-                }
-
-                activity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        AutoCompleteTextView editMemoryGroupTextView = findViewById(R.id.editMemoryGroupTextInputEditText);
-                        ArrayAdapter arrayAdapter = new ArrayAdapter(activity, R.layout.dropdown_item, memoryGroups);
-                        editMemoryGroupTextView.setAdapter(arrayAdapter);
-                    }
-                });
+        threadPoolExecutor.execute(() -> {
+            if( MainViewModel.appDb == null ) {
+                //For example direct call other app intent.
+                //If app is not already open do not nullpointer-exception.
+                MainViewModel preloader = new MainViewModel();
+                preloader.setActivity(activity);
+                preloader.loadData();
             }
+            List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
+
+            // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
+            for (int i = 0; i < memoryGroups.size(); i++) {
+                String name = memoryGroups.get(i);
+                if (name == null || name.trim().length() == 0) {
+                    memoryGroups.remove(i);
+                    i--;
+                }
+            }
+
+            activity.runOnUiThread(() -> {
+                AutoCompleteTextView editMemoryGroupTextView = findViewById(R.id.editMemoryGroupTextInputEditText);
+                ArrayAdapter arrayAdapter = new ArrayAdapter(activity, R.layout.dropdown_item, memoryGroups);
+                editMemoryGroupTextView.setAdapter(arrayAdapter);
+            });
         });
     }
 
@@ -350,17 +341,14 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         memory.skipDuringScan = skipDuringScan;
 
         final ChannelMemory finalMemory = memory;
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                if (isAdd) {
-                    MainViewModel.appDb.channelMemoryDao().insertAll(finalMemory);
-                } else {
-                    MainViewModel.appDb.channelMemoryDao().update(finalMemory);
-                }
-                setResult(Activity.RESULT_OK, getIntent());
-                finish();
+        threadPoolExecutor.execute(() -> {
+            if (isAdd) {
+                MainViewModel.appDb.channelMemoryDao().insertAll(finalMemory);
+            } else {
+                MainViewModel.appDb.channelMemoryDao().update(finalMemory);
             }
+            setResult(Activity.RESULT_OK, getIntent());
+            finish();
         });
     }
 
