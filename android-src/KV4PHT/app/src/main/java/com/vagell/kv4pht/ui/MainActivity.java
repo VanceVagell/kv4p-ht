@@ -940,7 +940,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applySettings() {
-        if (viewModel.appDb == null) {
+        if (MainViewModel.appDb == null) {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
 
