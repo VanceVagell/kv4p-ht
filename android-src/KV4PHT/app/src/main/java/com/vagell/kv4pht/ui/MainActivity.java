@@ -1100,22 +1100,21 @@ public class MainActivity extends AppCompatActivity {
                         final boolean finalHighpass = highpass;
                         final boolean finalLowpass = lowpass;
 
-                        if (threadPoolExecutor != null) { // Could be null if app is in background, and user is just listening to scanning.
-                            threadPoolExecutor.execute(new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (radioAudioService != null) {
-                                        if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP
-                                            && radioAudioService.getMode() != RadioAudioService.MODE_SCAN
-                                            && radioAudioService.isRadioConnected()
-                                        ){
-                                            radioAudioService.setMode(RadioAudioService.MODE_RX);
-                                            radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
-                                        }
+                        // Could be null if app is in background, and user is just listening to scanning.
+                        threadPoolExecutor.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (radioAudioService != null) {
+                                    if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP
+                                        && radioAudioService.getMode() != RadioAudioService.MODE_SCAN
+                                        && radioAudioService.isRadioConnected()
+                                    ){
+                                        radioAudioService.setMode(RadioAudioService.MODE_RX);
+                                        radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
                                     }
                                 }
-                            });
-                        }
+                            }
+                        });
 
                         if (stickyPTTSetting != null) {
                             stickyPTT = Boolean.parseBoolean(stickyPTTSetting.value);
@@ -1138,30 +1137,28 @@ public class MainActivity extends AppCompatActivity {
 
                         // Get this first, since we show a butter if beaconing is enabled afterwards, and want to include accuracy in it.
                         if (aprsPositionAccuracy != null) {
-                            if (threadPoolExecutor != null)
-                                threadPoolExecutor.execute(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        if (radioAudioService != null) {
-                                            radioAudioService.setAprsPositionAccuracy(
-                                                    aprsPositionAccuracy.value.equals(getString(R.string.exact)) ?
-                                                            RadioAudioService.APRS_POSITION_EXACT :
-                                                            RadioAudioService.APRS_POSITION_APPROX);
-                                        }
+                            threadPoolExecutor.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (radioAudioService != null) {
+                                        radioAudioService.setAprsPositionAccuracy(
+                                                aprsPositionAccuracy.value.equals(getString(R.string.exact)) ?
+                                                        RadioAudioService.APRS_POSITION_EXACT :
+                                                        RadioAudioService.APRS_POSITION_APPROX);
                                     }
-                                });
+                                }
+                            });
                         }
 
                         if (aprsBeaconPosition != null) {
-                            if (threadPoolExecutor != null)
-                                threadPoolExecutor.execute(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        if (radioAudioService != null) {
-                                            radioAudioService.setAprsBeaconPosition(Boolean.parseBoolean(aprsBeaconPosition.value));
-                                        }
+                            threadPoolExecutor.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (radioAudioService != null) {
+                                        radioAudioService.setAprsBeaconPosition(Boolean.parseBoolean(aprsBeaconPosition.value));
                                     }
-                                });
+                                }
+                            });
 
                             if (Boolean.parseBoolean(aprsBeaconPosition.value)) {
                                 requestPositionPermissions();
@@ -1431,21 +1428,20 @@ public class MainActivity extends AppCompatActivity {
                 showFrequency(activeFrequencyStr);
 
                 // Save most recent memory so we can restore it on app restart
-                if (threadPoolExecutor != null) { // Could be null if user is just listening to scan in another app, etc.
-                    threadPoolExecutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
-                            if (lastMemoryIdSetting != null) {
-                                lastMemoryIdSetting.value = "" + memoryId;
-                                viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
-                            } else {
-                                lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
-                                viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
-                            }
+                // Could be null if user is just listening to scan in another app, etc.
+                threadPoolExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                        if (lastMemoryIdSetting != null) {
+                            lastMemoryIdSetting.value = "" + memoryId;
+                            viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                        } else {
+                            lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
+                            viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
                         }
-                    });
-                }
+                    }
+                });
                 return;
             }
         }
