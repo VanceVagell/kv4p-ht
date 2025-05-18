@@ -51,7 +51,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class SettingsActivity extends AppCompatActivity {
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,9 +59,6 @@ public class SettingsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_settings);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         populateOriginalValues();
         populateRadioModuleTypes();
@@ -74,17 +71,9 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onDestroy() {
+        super.onDestroy();
         threadPoolExecutor.shutdownNow();
-        threadPoolExecutor = null;
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
     private void populateBandwidths() {

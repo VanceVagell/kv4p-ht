@@ -35,10 +35,8 @@ import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
-import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
-import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.URLUtil;
@@ -61,23 +59,17 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.CancellationTokenSource;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.snackbar.Snackbar;
-import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
-import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -86,7 +78,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class FindRepeatersActivity extends AppCompatActivity {
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor =  new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());;
     private Snackbar errorSnackbar = null;
     private String filename = null; // Name of CSV file that was downloaded
     private long downloadId = 0; // So we can tell when the download is done
@@ -100,9 +92,6 @@ public class FindRepeatersActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_find_repeaters);
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         // Listen for file downloads so we can detect when CSV download is done.
         IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
@@ -264,20 +253,6 @@ public class FindRepeatersActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        threadPoolExecutor.shutdownNow();
-        threadPoolExecutor = null;
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
-    }
-
-    @Override
     protected void onStart() {
         super.onStart();
     }
@@ -294,6 +269,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(onDownloadComplete);
+        threadPoolExecutor.shutdownNow();
     }
 
     /**

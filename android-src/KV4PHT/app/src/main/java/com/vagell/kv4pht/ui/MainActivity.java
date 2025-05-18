@@ -141,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView aprsRecyclerView;
     private APRSAdapter aprsAdapter;
 
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());;
 
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
@@ -165,9 +165,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         // Bind data to the UI via the MainViewModel class
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
@@ -566,11 +563,8 @@ public class MainActivity extends AppCompatActivity {
         releaseRxAudioVisualizer();
 
         try {
-            if (threadPoolExecutor != null) {
-                threadPoolExecutor.shutdownNow();
-                threadPoolExecutor = null;
-            }
-        } catch (Exception e) { }
+            threadPoolExecutor.shutdownNow();
+        } catch (Exception ignored) { }
 
         try {
             if (radioAudioService != null) {
@@ -583,21 +577,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-
-        if (threadPoolExecutor != null) {
-            threadPoolExecutor.shutdownNow();
-            threadPoolExecutor = null;
-        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-
-        // TODO unclear why threadPoolExecutor sometimes breaks when we start another activity, but
-        // we recreate it here as a workaround.
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
             @Override

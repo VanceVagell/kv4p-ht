@@ -44,7 +44,8 @@ import java.util.concurrent.TimeUnit;
 public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isAdd = true; // false means we're editing a memory, not adding
     private boolean isVhfRadio = true; // false means UHF radio
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
+            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());;
     private int mMemoryId;
     private ChannelMemory mMemory;
 
@@ -54,9 +55,6 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         setContentView(R.layout.activity_add_edit_memory);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         Bundle extras = getIntent().getExtras();
         if (extras != null) {
@@ -125,21 +123,15 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
-
         // Put the cursor in the name field by default
         EditText nameEditText = findViewById(R.id.editNameTextInputEditText);
         nameEditText.requestFocus();
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-
+    protected void onDestroy() {
+        super.onDestroy();
         threadPoolExecutor.shutdownNow();
-        threadPoolExecutor = null;
     }
 
     private void populateMemoryGroups() {

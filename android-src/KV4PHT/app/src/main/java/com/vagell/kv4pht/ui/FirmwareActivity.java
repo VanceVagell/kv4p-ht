@@ -33,13 +33,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 
-import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
-import androidx.navigation.ui.AppBarConfiguration;
-import androidx.navigation.ui.NavigationUI;
-
 import com.hoho.android.usbserial.driver.UsbSerialPort;
-import com.vagell.kv4pht.databinding.ActivityFirmwareBinding;
 
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
@@ -50,7 +44,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class FirmwareActivity extends AppCompatActivity {
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
+            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());;
     private Snackbar errorSnackbar = null;
 
     @Override
@@ -59,22 +54,12 @@ public class FirmwareActivity extends AppCompatActivity {
         setContentView(R.layout.activity_firmware);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // Or firmware writing will fail when app is paused
 
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onDestroy() {
+        super.onDestroy();
         threadPoolExecutor.shutdownNow();
-        threadPoolExecutor = null;
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
     @Override
