@@ -45,7 +45,6 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isAdd = true; // false means we're editing a memory, not adding
     private boolean isVhfRadio = true; // false means UHF radio
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-    private int mMemoryId;
     private ChannelMemory mMemory;
 
     @Override
@@ -59,6 +58,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         if (extras != null) {
             isAdd = (extras.getInt("requestCode") == MainActivity.REQUEST_ADD_MEMORY);
             isVhfRadio = (extras.getBoolean("isVhfRadio"));
+            int mMemoryId;
             if (!isAdd) { // Edit
                 mMemoryId = extras.getInt("memoryId");
                 threadPoolExecutor.execute(() -> {
