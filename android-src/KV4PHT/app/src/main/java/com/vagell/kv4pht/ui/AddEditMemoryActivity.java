@@ -44,8 +44,7 @@ import java.util.concurrent.TimeUnit;
 public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isAdd = true; // false means we're editing a memory, not adding
     private boolean isVhfRadio = true; // false means UHF radio
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2,
-            2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private int mMemoryId;
     private ChannelMemory mMemory;
 

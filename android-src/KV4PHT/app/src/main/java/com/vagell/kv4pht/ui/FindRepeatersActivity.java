@@ -78,7 +78,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class FindRepeatersActivity extends AppCompatActivity {
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private Snackbar errorSnackbar = null;
     private String filename = null; // Name of CSV file that was downloaded
     private long downloadId = 0; // So we can tell when the download is done
