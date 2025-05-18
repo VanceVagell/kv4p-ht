@@ -2641,5 +2641,11 @@ the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
 
+############## LICENSE FOR: esp32-stubs
+
+The binaries in JSON format distributed in classpath are released as 
+Free Software under GNU General Public License Version 2 or later. 
+They were released at https://github.com/espressif/esptool-legacy-flasher-stub/releases/tag/v1.4.0 
+from where the sources can be obtained.
 
 
