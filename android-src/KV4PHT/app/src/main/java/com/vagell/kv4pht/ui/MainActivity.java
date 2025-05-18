@@ -141,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView aprsRecyclerView;
     private APRSAdapter aprsAdapter;
 
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
 
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
@@ -570,11 +570,6 @@ public class MainActivity extends AppCompatActivity {
                 radioAudioService = null;
             }
         } catch (Exception e) { }
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
     }
 
     @Override
