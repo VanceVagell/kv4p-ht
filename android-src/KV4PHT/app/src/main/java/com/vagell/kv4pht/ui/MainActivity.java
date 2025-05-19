@@ -525,11 +525,6 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                radioAudioService.setRadioType(
-                                        "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
-                                                ? RadioAudioService.RADIO_MODULE_UHF
-                                                : RadioAudioService.RADIO_MODULE_VHF
-                                );
                                 radioAudioService.start();
                             }
                         });
@@ -1003,14 +998,6 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        // The module type setting is most important, because if it changed then
-                        // we need to reconnect to the ESP32 (it had incorrect module type).
-                        if (moduleTypeSetting != null) {
-                            if (radioAudioService != null) {
-                                radioAudioService.setRadioType(moduleTypeSetting.value.equals("UHF") ?
-                                        RadioAudioService.RADIO_MODULE_UHF : RadioAudioService.RADIO_MODULE_VHF);
-                            }
-                        }
 
                         if (callsignSetting != null) {
                             callsign = callsignSetting.value;

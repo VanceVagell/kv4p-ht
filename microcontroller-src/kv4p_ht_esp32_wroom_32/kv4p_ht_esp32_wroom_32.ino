@@ -132,7 +132,7 @@ void doConfig(Config const &config) {
   result = sa818.volume(hw.volume);
   result = sa818.filters(false, false, false);
   uint8_t features = (hw.features.hasHL ? FEATURE_HAS_HL : 0) | (hw.features.hasPhysPTT ? FEATURE_HAS_PHY_PTT : 0);
-  sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, features);
+  sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, features);
   esp_task_wdt_reset();
 }
 

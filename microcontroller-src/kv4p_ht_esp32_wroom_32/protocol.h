@@ -149,11 +149,12 @@ void inline sendRssi(uint8_t rssi) {
   __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
 }
 
-void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize, uint8_t features) {
+void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features) {
   Version params = {
     .ver = ver,
     .radioModuleStatus = radioModuleStatus,
     .windowSize = windowSize,
+    .rfModuleType = rfModuleType,
     .features = features,
   };
   __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));

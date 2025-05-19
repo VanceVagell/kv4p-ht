@@ -153,25 +153,6 @@ public final class Protocol {
     }
 
     @Getter
-    public enum HardwareVersion {
-        HW_VER_V1(0x00),
-        HW_VER_V2_0C(0xFF),
-        HW_VER_V2_0D(0xF0);
-        private final int value;
-        HardwareVersion(int value) {
-            this.value = value;
-        }
-        public static HardwareVersion fromValue(int value) {
-            for (HardwareVersion version : HardwareVersion.values()) {
-                if (version.getValue() == value) {
-                    return version;
-                }
-            }
-            throw new IllegalArgumentException("Unexpected value: " + value);
-        }
-    }
-
-    @Getter
     public enum RfModuleType {
         RF_SA818_VHF(0),
         RF_SA818_UHF(1);
@@ -211,20 +192,19 @@ public final class Protocol {
     public static class FirmwareVersion {
         private final short ver;  // equivalent to uint16_t
         private final RadioStatus radioModuleStatus;  // equivalent to char
-        private final HardwareVersion hardwareVersion;
         private final int windowSize; // equivalent to size_t
         private final RfModuleType moduleType;
         private final boolean hasHl;
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 9)
+                .filter(p -> len == 12)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
                     .ver(b.getShort())
                     .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
                     .windowSize(b.getInt())
-                    .moduleType(RfModuleType.fromValue(b.get()))
+                    .moduleType(RfModuleType.fromValue(b.getInt()))
                     .hasHl((b.get() & 0x01) != 0)
                     .build());
         }

@@ -926,10 +926,8 @@ public class RadioAudioService extends Service {
      */
     public void setRadioType(String radioType) {
         Log.d("DEBUG", "setRadioType: " + radioType);
-
         if (!this.radioType.equals(radioType)) {
             this.radioType = radioType;
-
             // Ensure frequencies we're using match the radioType
             if (radioType.equals(RADIO_MODULE_VHF)) {
                 setMinRadioFreq(VHF_MIN_FREQ);
@@ -941,13 +939,6 @@ public class RadioAudioService extends Service {
                 setMinHamFreq(min70cmTxFreq);
                 setMaxHamFreq(max70cmTxFreq);
                 setMaxRadioFreq(UHF_MAX_FREQ);
-            }
-
-            if (mode != MODE_STARTUP) {
-                // Re-init connection to ESP32 so it knows what kind of module it has.
-                setMode(MODE_STARTUP);
-                checkedFirmwareVersion = false;
-                checkFirmwareVersion();
             }
         }
     }
@@ -1195,7 +1186,7 @@ public class RadioAudioService extends Service {
                 }
                 Log.i("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
                 radioModuleNotFound = ver.getRadioModuleStatus() != RadioStatus.RADIO_STATUS_FOUND;
-                this.radioType = RfModuleType.RF_SA818_VHF.equals(ver.getModuleType()) ? RADIO_MODULE_VHF : RADIO_MODULE_UHF;
+                setRadioType(RfModuleType.RF_SA818_VHF.equals(ver.getModuleType()) ? RADIO_MODULE_VHF : RADIO_MODULE_UHF);
                 this.hasHighLowPowerSwitch = ver.isHasHl();
                 if (radioModuleNotFound) {
                     callbacks.radioModuleNotFound();
