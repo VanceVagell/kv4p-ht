@@ -101,6 +101,8 @@ void printHardwareConfig() {
   _LOGI("  LED_PIN      = %d", hw.pins.ledPin);
   _LOGI("  ADC_ATTEN    = %d", hw.adcAttenuation);
   _LOGI("  ADC_BIAS     = %.3f", hw.adcBias);
+  _LOGI("  VOLUME       = %d", hw.volume);
+  _LOGI("  RF_MODULE_TYPE = %d", hw.rfModuleType);
 #endif
 }
 

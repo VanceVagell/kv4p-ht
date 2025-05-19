@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # esp-idf NVS partition generation tool. Tool helps in generating NVS-compatible
 # partition binary, with key-value pair entries provided via a CSV file.

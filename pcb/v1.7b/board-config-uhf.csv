@@ -15,4 +15,4 @@ LED_PIN,data,i8,2
 ADC_ATTEN,data,i8,3
 ADC_BIAS,data,hex2bin,3FE00000
 STOPPED_COLOR,data,hex2bin,002000
-RF_MODULE_TYPE,data,u8,0
+RF_MODULE_TYPE,data,u8,1
