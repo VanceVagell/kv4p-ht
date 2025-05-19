@@ -70,6 +70,6 @@ dependencies {
     implementation 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
     implementation 'io.github.jaredmdobson:concentus:1.0.1'
-    implementation 'io.github.dkaukov:esp32-flash-lib:1.1.15'
+    implementation 'io.github.dkaukov:esp32-flash-lib:1.1.16'
     implementation 'dev.bright.slf4android:slf4android:0.1.8'
 }
