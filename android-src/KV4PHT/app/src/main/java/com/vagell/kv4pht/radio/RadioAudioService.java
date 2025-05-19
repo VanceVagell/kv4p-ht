@@ -219,7 +219,7 @@ public class RadioAudioService extends Service {
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
 
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
 
     public enum MicGainBoost {
         NONE,
@@ -477,7 +477,6 @@ public class RadioAudioService extends Service {
     public void onCreate() {
         super.onCreate();
         SecureRandom random = new SecureRandom();
-        threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         messageNumber = random.nextInt(APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
@@ -512,11 +511,7 @@ public class RadioAudioService extends Service {
             audioTrack.release();
             audioTrack = null;
         }
-
-        if (threadPoolExecutor != null) {
-            threadPoolExecutor.shutdownNow();
-            threadPoolExecutor = null;
-        }
+      threadPoolExecutor.shutdownNow();
     }
 
     private void createNotificationChannels() {
@@ -529,9 +524,6 @@ public class RadioAudioService extends Service {
     }
 
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        if (null == hostToEsp32) {
-            return;
-        }
         hostToEsp32.filters(Filters.builder()
             .high(highpass)
             .low(lowpass)
@@ -1077,15 +1069,16 @@ public class RadioAudioService extends Service {
     }
 
     public void sendAudioToESP32(float[] samples, boolean dataMode) {
-        if (null == hostToEsp32) {
-            return;
-        }
         if (!dataMode) {
             samples = applyMicGain(samples);
         }
         byte[] audioFrame = new byte[Protocol.PROTO_MTU];
         int encodedLength = opusEncoder.encode(samples, audioFrame);
         hostToEsp32.txAudio(java.util.Arrays.copyOfRange(audioFrame, 0, encodedLength));
+    }
+
+    public boolean isRadioConnected() {
+        return hostToEsp32 != null;
     }
 
     public static UsbSerialPort getUsbSerialPort() {

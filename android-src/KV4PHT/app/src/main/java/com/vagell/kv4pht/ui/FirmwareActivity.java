@@ -33,13 +33,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 
-import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
-import androidx.navigation.ui.AppBarConfiguration;
-import androidx.navigation.ui.NavigationUI;
-
 import com.hoho.android.usbserial.driver.UsbSerialPort;
-import com.vagell.kv4pht.databinding.ActivityFirmwareBinding;
 
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
@@ -50,7 +44,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class FirmwareActivity extends AppCompatActivity {
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private Snackbar errorSnackbar = null;
 
     @Override
@@ -59,22 +53,12 @@ public class FirmwareActivity extends AppCompatActivity {
         setContentView(R.layout.activity_firmware);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // Or firmware writing will fail when app is paused
 
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onDestroy() {
+        super.onDestroy();
         threadPoolExecutor.shutdownNow();
-        threadPoolExecutor = null;
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
     }
 
     @Override
@@ -105,77 +89,74 @@ public class FirmwareActivity extends AppCompatActivity {
             return;
         }
         final Context ctx = this;
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                UsbSerialPort serialPort = RadioAudioService.getUsbSerialPort();
-                if (null == serialPort) {
-                    Log.d("DEBUG", "Error: Unexpected null serial port in FirmwareActivity.");
-                    // TODO report in UI that serial port not found, with option to retry
-                }
-                FirmwareUtils.flashFirmware(ctx, serialPort, new FirmwareUtils.FirmwareCallback() {
-                    @Override
-                    public void connectedToBootloader() {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                setStatusText("Flashing 0%");
-                                findViewById(R.id.firmwareInstructionText1).setVisibility(View.GONE);
-                                findViewById(R.id.firmwareInstructionImage).setVisibility(View.GONE);
-                                findViewById(R.id.firmwareButtons).setVisibility(View.GONE);
-                                findViewById(R.id.firmwareInstructionText2).setVisibility(View.VISIBLE);
-                                CircularProgressIndicator progressIndicator = findViewById(R.id.firmwareProgressIndicator);
-                                progressIndicator.setIndeterminate(false);
-                                progressIndicator.setProgress(0);
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void reportProgress(int percent) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                setStatusText("Flashing " + percent + "%");
-                                CircularProgressIndicator progressIndicator = findViewById(R.id.firmwareProgressIndicator);
-                                progressIndicator.setIndeterminate(false);
-                                progressIndicator.setProgress(percent);
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void doneFlashing(boolean success) {
-                        Log.d("DEBUG", "doneFlashing, success: " + success);
-
-                        if (success) {
-                            setResult(Activity.RESULT_OK, getIntent());
-                            finish();
-                        } else {
-                            Log.d("DEBUG", "Error: Flashing firmware failed.");
-
-                            CharSequence snackbarMsg = "Failed to flash firmware. If it keeps failing, use kv4p.com web flasher.";
-                            errorSnackbar = Snackbar.make(ctx, findViewById(R.id.firmwareTopLevelView), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-                                    .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
-                            errorSnackbar.setAction("Retry", new View.OnClickListener() {
-                                        @Override
-                                        public void onClick(View view) {
-                                            errorSnackbar.dismiss();
-                                            startFlashing();
-                                        }
-                                    });
-
-                            // Make the text of the snackbar larger.
-                            TextView snackbarActionTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
-                            snackbarActionTextView.setTextSize(20);
-                            TextView snackbarTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
-                            snackbarTextView.setTextSize(20);
-
-                            errorSnackbar.show();
-                        }
-                    }
-                });
+        threadPoolExecutor.execute(() -> {
+            UsbSerialPort serialPort = RadioAudioService.getUsbSerialPort();
+            if (null == serialPort) {
+                Log.d("DEBUG", "Error: Unexpected null serial port in FirmwareActivity.");
+                // TODO report in UI that serial port not found, with option to retry
             }
+            FirmwareUtils.flashFirmware(ctx, serialPort, new FirmwareUtils.FirmwareCallback() {
+                @Override
+                public void connectedToBootloader() {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            setStatusText("Flashing 0%");
+                            findViewById(R.id.firmwareInstructionText1).setVisibility(View.GONE);
+                            findViewById(R.id.firmwareInstructionImage).setVisibility(View.GONE);
+                            findViewById(R.id.firmwareButtons).setVisibility(View.GONE);
+                            findViewById(R.id.firmwareInstructionText2).setVisibility(View.VISIBLE);
+                            CircularProgressIndicator progressIndicator1 = findViewById(R.id.firmwareProgressIndicator);
+                            progressIndicator1.setIndeterminate(false);
+                            progressIndicator1.setProgress(0);
+                        }
+                    });
+                }
+
+                @Override
+                public void reportProgress(int percent) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            setStatusText("Flashing " + percent + "%");
+                            CircularProgressIndicator progressIndicator1 = findViewById(R.id.firmwareProgressIndicator);
+                            progressIndicator1.setIndeterminate(false);
+                            progressIndicator1.setProgress(percent);
+                        }
+                    });
+                }
+
+                @Override
+                public void doneFlashing(boolean success) {
+                    Log.d("DEBUG", "doneFlashing, success: " + success);
+
+                    if (success) {
+                        setResult(Activity.RESULT_OK, getIntent());
+                        finish();
+                    } else {
+                        Log.d("DEBUG", "Error: Flashing firmware failed.");
+
+                        CharSequence snackbarMsg = "Failed to flash firmware. If it keeps failing, use kv4p.com web flasher.";
+                        errorSnackbar = Snackbar.make(ctx, findViewById(R.id.firmwareTopLevelView), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+                                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
+                        errorSnackbar.setAction("Retry", new View.OnClickListener() {
+                                    @Override
+                                    public void onClick(View view) {
+                                        errorSnackbar.dismiss();
+                                        startFlashing();
+                                    }
+                                });
+
+                        // Make the text of the snackbar larger.
+                        TextView snackbarActionTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+                        snackbarActionTextView.setTextSize(20);
+                        TextView snackbarTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+                        snackbarTextView.setTextSize(20);
+
+                        errorSnackbar.show();
+                    }
+                }
+            });
         });
     }
 
