@@ -62,29 +62,35 @@ void loadHardwareConfig() {
   hw.pins.pttPhys2  = prefs.getChar("PHYS_PTT2",    DEFAULT_PHYS_PTT_PIN2);
   hw.pins.pixelsPin = prefs.getChar("PIXELS_PIN",   DEFAULT_PIXELS_PIN);
   hw.pins.ledPin    = prefs.getChar("LED_PIN",      DEFAULT_LED_PIN);
+  hw.pins.hlPin     = prefs.getChar("HL_PIN",       DEFAULT_HL_PIN);
   hw.adcAttenuation = (adc_atten_t) prefs.getChar("ADC_ATTEN", DEFAULT_ADC_ATTENUATION);
   hw.adcBias        = prefs.getFloat("ADC_BIAS",    DEFAULT_ADC_BIAS_VOLTAGE);
   prefs.getBytes("STOPPED_COLOR", &hw.stoppedColor, sizeof(RGBColor));
+  hw.volume        = prefs.getUChar("VOLUME",       DEFAULT_VOLUME);
+  hw.rfModuleType = (RfModuleType) prefs.getUChar("RF_MODULE_TYPE", DEFAULT_RF_MODULE_TYPE);
   prefs.end();
 }
 
 void saveHardwareConfig() {
   prefs.begin("hwconfig", false); // read-write mode
   prefs.putBool("HWCONFIG",     true);
-  prefs.putChar("RXD2_PIN",     hw.pins.rxd2Pin);
-  prefs.putChar("TXD2_PIN",     hw.pins.txd2Pin);
-  prefs.putChar("DAC_PIN",      hw.pins.dacPin);
-  prefs.putChar("ADC_PIN",      hw.pins.adcPin);
-  prefs.putChar("PTT_PIN",      hw.pins.pttPin);
-  prefs.putChar("PD_PIN",       hw.pins.pdPin);
-  prefs.putChar("SQ_PIN",       hw.pins.sqPin);
-  prefs.putChar("PHYS_PTT1",    hw.pins.pttPhys1);
-  prefs.putChar("PHYS_PTT2",    hw.pins.pttPhys2);
-  prefs.putChar("PIXELS_PIN",   hw.pins.pixelsPin);
-  prefs.putChar("LED_PIN",      hw.pins.ledPin);
-  prefs.putChar("ADC_ATTEN",    hw.adcAttenuation);
-  prefs.putFloat("ADC_BIAS",    hw.adcBias);
+  prefs.putChar("RXD2_PIN",       hw.pins.rxd2Pin);
+  prefs.putChar("TXD2_PIN",       hw.pins.txd2Pin);
+  prefs.putChar("DAC_PIN",        hw.pins.dacPin);
+  prefs.putChar("ADC_PIN",        hw.pins.adcPin);
+  prefs.putChar("PTT_PIN",        hw.pins.pttPin);
+  prefs.putChar("PD_PIN",         hw.pins.pdPin);
+  prefs.putChar("SQ_PIN",         hw.pins.sqPin);
+  prefs.putChar("PHYS_PTT1",      hw.pins.pttPhys1);
+  prefs.putChar("PHYS_PTT2",      hw.pins.pttPhys2);
+  prefs.putChar("PIXELS_PIN",     hw.pins.pixelsPin);
+  prefs.putChar("LED_PIN",        hw.pins.ledPin);
+  prefs.putChar("HL_PIN",         hw.pins.hlPin);
+  prefs.putChar("ADC_ATTEN",      hw.adcAttenuation);
+  prefs.putFloat("ADC_BIAS",      hw.adcBias);
   prefs.putBytes("STOPPED_COLOR", &hw.stoppedColor, sizeof(RGBColor));
+  prefs.putUChar("VOLUME",        hw.volume);
+  prefs.putUChar("RF_MODULE_TYPE", hw.rfModuleType);
   prefs.end();
 }
 
@@ -117,4 +123,7 @@ void inline boardSetup() {
         break;
     }
   }
+  // Set up the hardware features
+  hw.features.hasHL = (hw.pins.hlPin != -1);
+  hw.features.hasPhysPTT = (hw.pins.pttPhys1 != -1 || hw.pins.pttPhys2 != -1);
 }

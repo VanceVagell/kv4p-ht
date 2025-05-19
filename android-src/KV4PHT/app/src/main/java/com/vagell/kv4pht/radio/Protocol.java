@@ -39,7 +39,8 @@ public final class Protocol {
         COMMAND_HOST_FILTERS(0x04),  // [COMMAND_HOST_FILTERS(Filters)]
         COMMAND_HOST_STOP(0x05),     // [COMMAND_HOST_STOP()]
         COMMAND_HOST_CONFIG(0x06),   // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
-        COMMAND_HOST_TX_AUDIO(0x07); // [COMMAND_HOST_TX_AUDIO(byte[])]
+        COMMAND_HOST_TX_AUDIO(0x07), // [COMMAND_HOST_TX_AUDIO(byte[])]
+        COMMAND_HOST_HL(0x08);       // [COMMAND_HOST_HL(Hl)]
         private final int value;
         SndCommand(int value) {
             this.value = value;
@@ -94,31 +95,13 @@ public final class Protocol {
         }
     }
 
-    @Getter
-    public enum ModuleType {
-        SA818_VHF(0x4),
-        SA818_UHF(0x1 | 0x4);
-        private final int value;
-        ModuleType(int value) {
-            this.value = value;
-        }
-        public static ModuleType fromValue(int value) {
-            for (ModuleType version : ModuleType.values()) {
-                if (version.getValue() == value) {
-                    return version;
-                }
-            }
-            throw new IllegalArgumentException("Unexpected value: " + value);
-        }
-    }
-
     @Data
     @Builder
     public static class Config {
-        private final ModuleType moduleType;
+        private final boolean isHigh;
         public byte[] toBytes() {
             byte[] bytes = new byte[1];
-            bytes[0] = (byte) moduleType.getValue();
+            bytes[0] = isHigh ? (byte) 0x01 : (byte) 0x00;
             return bytes;
         }
     }
@@ -159,6 +142,16 @@ public final class Protocol {
         }
     }
 
+    @Data
+    @Builder
+    public static class HlState {
+        private final boolean isHighPower;
+        public byte[] toBytes() {
+            byte result = isHighPower ? (byte) 0x01 : (byte) 0x00;
+            return new byte[]{result};
+        }
+    }
+
     @Getter
     public enum HardwareVersion {
         HW_VER_V1(0x00),
@@ -172,6 +165,24 @@ public final class Protocol {
             for (HardwareVersion version : HardwareVersion.values()) {
                 if (version.getValue() == value) {
                     return version;
+                }
+            }
+            throw new IllegalArgumentException("Unexpected value: " + value);
+        }
+    }
+
+    @Getter
+    public enum RfModuleType {
+        RF_SA818_VHF(0),
+        RF_SA818_UHF(1);
+        private final int value;
+        RfModuleType(int value) {
+            this.value = value;
+        }
+        public static RfModuleType fromValue(int value) {
+            for (RfModuleType moduleType : RfModuleType.values()) {
+                if (moduleType.getValue() == value) {
+                    return moduleType;
                 }
             }
             throw new IllegalArgumentException("Unexpected value: " + value);
@@ -202,6 +213,8 @@ public final class Protocol {
         private final RadioStatus radioModuleStatus;  // equivalent to char
         private final HardwareVersion hardwareVersion;
         private final int windowSize; // equivalent to size_t
+        private final RfModuleType moduleType;
+        private final boolean hasHl;
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
                 .filter(p -> len == 7)
@@ -211,6 +224,8 @@ public final class Protocol {
                     .ver(b.getShort())
                     .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
                     .windowSize(b.getInt())
+                    .moduleType(RfModuleType.fromValue(b.get()))
+                    .hasHl((b.get() & 0x01) != 0)
                     .build());
         }
     }
@@ -318,6 +333,10 @@ public final class Protocol {
             } finally {
                 lock.unlock();
             }
+        }
+
+        public void setHighPower(HlState state) {
+            sendCommand(SndCommand.COMMAND_HOST_HL, state.toBytes());
         }
     }
 

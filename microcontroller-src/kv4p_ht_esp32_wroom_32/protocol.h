@@ -34,7 +34,8 @@ enum RcvCommand {
   COMMAND_HOST_FILTERS   = 0x04, // [COMMAND_HOST_FILTERS(Filters)]
   COMMAND_HOST_STOP      = 0x05, // [COMMAND_HOST_STOP()] 
   COMMAND_HOST_CONFIG    = 0x06, // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
-  COMMAND_HOST_TX_AUDIO  = 0x07  // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
+  COMMAND_HOST_TX_AUDIO  = 0x07, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
+  COMMAND_HOST_HL        = 0x08, // [COMMAND_HOST_HL(Hl)]
 };
 
 // Outgoing commands (ESP32 -> Android)
@@ -56,11 +57,15 @@ enum SndCommand {
 
 // COMMAND_VERSION parameters
 struct version {
-  uint16_t    ver;
-  char        radioModuleStatus;
-  size_t      windowSize;
+  uint16_t     ver;
+  char         radioModuleStatus;
+  size_t       windowSize;
+  RfModuleType rfModuleType;
+  uint8_t      features; 
 } __attribute__((__packed__));
 typedef struct version Version;
+#define FEATURE_HAS_HL      (1 << 0)
+#define FEATURE_HAS_PHY_PTT (1 << 1)
 
 // COMMAND_SMETER_REPORT parameters
 struct rssi {
@@ -90,8 +95,8 @@ typedef struct filters Filters;
 #define FILTER_LOW  (1 << 2)
 
 // COMMAND_HOST_CONFIG parameters
-struct config {
-  uint8_t radioType; 
+struct config { 
+  bool isHigh;   
 } __attribute__((__packed__));
 typedef struct config Config;
 
@@ -101,6 +106,11 @@ struct window_update {
 } __attribute__((__packed__));
 typedef struct window_update WindowUpdate;
 
+// COMMAND_HOST_HL parameters
+struct hlState {
+  bool isHigh; 
+} __attribute__((__packed__));
+typedef struct hlState HlState;
 
 /**
  * Send a command with params
@@ -139,11 +149,12 @@ void inline sendRssi(uint8_t rssi) {
   __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
 }
 
-void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize) {
+void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize, uint8_t features) {
   Version params = {
     .ver = ver,
     .radioModuleStatus = radioModuleStatus,
-    .windowSize = windowSize
+    .windowSize = windowSize,
+    .features = features,
   };
   __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
 }

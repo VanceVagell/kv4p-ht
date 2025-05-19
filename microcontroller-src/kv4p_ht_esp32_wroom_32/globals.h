@@ -20,6 +20,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Arduino.h>
 #include <driver/adc.h>
 
+// RF module types
+enum RfModuleType {
+  RF_SA818_VHF = 0,
+  RF_SA818_UHF = 1,
+};
+
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 48000
 
@@ -46,9 +52,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_PHYS_PTT_PIN2 33  // Optional. See above.
 #define DEFAULT_LED_PIN        2  // Built in LED
 #define DEFAULT_PIXELS_PIN    13  // NeoPixel data pin
+#define DEFAULT_HL_PIN        -1  // High/Low pin for the radio module. -1 means not used.
 
 #define DEFAULT_ADC_BIAS_VOLTAGE     1.75
 #define DEFAULT_ADC_ATTENUATION      ADC_ATTEN_DB_12
+#define DEFAULT_RF_MODULE_TYPE       RF_SA818_VHF
+#define DEFAULT_VOLUME               8
 
 // Mode of the app, which is essentially a state machine
 enum Mode {
@@ -82,14 +91,22 @@ struct PinConfig {
   int8_t pttPhys2;
   int8_t ledPin;
   int8_t pixelsPin;
+  int8_t hlPin;
+};
+
+struct FeatureFlags {
+  bool hasHL: 1; // High/Low pin
+  bool hasPhysPTT: 1; // PTT pin
 };
 
 struct HWConfig {
   PinConfig pins;
+  FeatureFlags features;
   float adcBias;
   adc_atten_t adcAttenuation;
   uint8_t volume;
   RGBColor stoppedColor;
+  RfModuleType rfModuleType;
 };
 
 HWConfig hw = {
@@ -104,10 +121,16 @@ HWConfig hw = {
     .pttPhys1 = DEFAULT_PHYS_PTT_PIN1,
     .pttPhys2 = DEFAULT_PHYS_PTT_PIN2,
     .ledPin = DEFAULT_LED_PIN,
-    .pixelsPin = DEFAULT_PIXELS_PIN
+    .pixelsPin = DEFAULT_PIXELS_PIN,
+    .hlPin = DEFAULT_HL_PIN,
+  },
+  .features = {
+    .hasHL = (DEFAULT_HL_PIN != -1),
+    .hasPhysPTT = (DEFAULT_PHYS_PTT_PIN1 != -1 || DEFAULT_PHYS_PTT_PIN2 != -1)
   },
   .adcBias = DEFAULT_ADC_BIAS_VOLTAGE,
   .adcAttenuation = DEFAULT_ADC_ATTENUATION,
   .volume = 8,
-  .stoppedColor = {0, 32, 0}
+  .stoppedColor = {0, 32, 0},
+  .rfModuleType = DEFAULT_RF_MODULE_TYPE
 };

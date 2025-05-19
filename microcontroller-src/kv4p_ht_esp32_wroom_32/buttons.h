@@ -27,14 +27,18 @@ boolean isPhysPttDown     = false;
 Debounce pttDebounce(DEBOUNCE_MS);
 
 void inline buttonsSetup() {
-  pinMode(hw.pins.pttPhys1, INPUT_PULLUP);
-  pinMode(hw.pins.pttPhys2, INPUT_PULLUP);
+  if (hw.features.hasPhysPTT) {
+    pinMode(hw.pins.pttPhys1, INPUT_PULLUP);
+    pinMode(hw.pins.pttPhys2, INPUT_PULLUP);
+  }
 }
 
 void inline buttonsLoop() {
-  bool debouncedPttState = pttDebounce.debounce(digitalRead(hw.pins.pttPhys1) == LOW || digitalRead(hw.pins.pttPhys2) == LOW);
-  if (debouncedPttState != isPhysPttDown) {
+  if (hw.features.hasPhysPTT) {
+    bool debouncedPttState = pttDebounce.debounce(digitalRead(hw.pins.pttPhys1) == LOW || digitalRead(hw.pins.pttPhys2) == LOW);
+    if (debouncedPttState != isPhysPttDown) {
       isPhysPttDown = debouncedPttState;
       sendPhysPttState(isPhysPttDown);
+    }
   }
 }

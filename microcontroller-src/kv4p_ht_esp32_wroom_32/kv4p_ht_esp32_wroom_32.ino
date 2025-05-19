@@ -90,6 +90,10 @@ void setup() {
   pinMode(hw.pins.sqPin, INPUT);
   pinMode(hw.pins.pttPin, OUTPUT);
   digitalWrite(hw.pins.pttPin, HIGH);  // Rx
+  if (hw.features.hasHL) {
+    pinMode(hw.pins.hlPin, OUTPUT);
+    digitalWrite(hw.pins.hlPin, LOW);  // High power
+  }
   // Communication with DRA818V radio module via GPIO pins
   Serial2.begin(9600, SERIAL_8N1, hw.pins.rxd2Pin, hw.pins.txd2Pin);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
@@ -104,10 +108,13 @@ void setup() {
 }
 
 void doConfig(Config const &config) {
-  if(config.radioType == SA818_UHF) {
+  if (hw.rfModuleType == RF_SA818_UHF) {
     sa818 = sa818_uhf;
   } else {
     sa818 = sa818_vhf;
+  }
+  if (hw.features.hasHL) {
+    digitalWrite(hw.pins.hlPin, config.isHigh ? LOW : HIGH);
   }
   int result = -1;
   uint32_t waitStart = millis();
@@ -124,7 +131,8 @@ void doConfig(Config const &config) {
   }
   result = sa818.volume(hw.volume);
   result = sa818.filters(false, false, false);
-  sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE);
+  uint8_t features = (hw.features.hasHL ? FEATURE_HAS_HL : 0) | (hw.features.hasPhysPTT ? FEATURE_HAS_PHY_PTT : 0);
+  sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, features);
   esp_task_wdt_reset();
 }
 
@@ -174,7 +182,17 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
         processTxAudio(params, param_len);
         esp_task_wdt_reset();
       }
-      break;                              
+      break;
+    case COMMAND_HOST_HL:
+      if (param_len == sizeof(HlState)) {
+        HlState hl;
+        memcpy(&hl, params, sizeof(HlState));
+        if (hw.features.hasHL) {
+          digitalWrite(hw.pins.hlPin, hl.isHigh ? LOW : HIGH);
+        }
+        esp_task_wdt_reset();
+      }
+      break;                                
   }
 }
 
