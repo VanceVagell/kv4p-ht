@@ -217,7 +217,7 @@ public final class Protocol {
         private final boolean hasHl;
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 7)
+                .filter(p -> len == 9)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
