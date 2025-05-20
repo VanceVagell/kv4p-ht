@@ -91,6 +91,13 @@ void setup() {
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(115200);
+  Serial.println();
+  Serial.println("===== kv4p serial output =====");
+  Serial.println("This port will emit binary data using the kv4p protocol.");
+  Serial.println("You will see watchdog resets — this is expected behavior.");
+  Serial.println("Use `logcat` or a kv4p decoder to view readable logs.");
+  Serial.println("More info: https://github.com/VanceVagell/kv4p-ht/blob/main/microcontroller-src/kv4p_ht_esp32_wroom_32/readme.md");
+  Serial.println("==============================");
   // Hardware dependent pin assignments.
   switch (hardware_version) {
     case HW_VER_V1:
