@@ -132,6 +132,11 @@ void printEnvironment() {
   _LOGI("PSRAM size: %d", ESP.getPsramSize());
   _LOGI("FLASH size: %d", ESP.getFlashChipSize());
   _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
+  _LOGI("Compiled on: %s", __DATE__ " " __TIME__);
+  _LOGI("Git Commit: %s", GIT_COMMIT_ID);
+  _LOGI("Git branch: %s", GIT_BRANCH);
+  _LOGI("Git Commit date: %s", GIT_COMMIT_DATE);
+  _LOGI("Git is dirty: %d", GIT_DIRTY);
   _LOGI("Hardware version: 0x%02x", hardware_version);
   _LOGI("---");
 #endif  
