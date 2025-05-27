@@ -141,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView aprsRecyclerView;
     private APRSAdapter aprsAdapter;
 
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
 
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
@@ -165,9 +165,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         // Bind data to the UI via the MainViewModel class
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
@@ -516,26 +513,24 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
 
             // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
-            if (null != threadPoolExecutor) {
-                threadPoolExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
+            threadPoolExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
 
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                radioAudioService.setRadioType(
-                                        "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
-                                                ? RadioAudioService.RADIO_MODULE_UHF
-                                                : RadioAudioService.RADIO_MODULE_VHF
-                                );
-                                radioAudioService.start();
-                            }
-                        });
-                    }
-                });
-            }
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            radioAudioService.setRadioType(
+                                    "UHF".equals(Optional.ofNullable(moduleTypeSetting).map(setting -> setting.value).orElse("VHF"))
+                                            ? RadioAudioService.RADIO_MODULE_UHF
+                                            : RadioAudioService.RADIO_MODULE_VHF
+                            );
+                            radioAudioService.start();
+                        }
+                    });
+                }
+            });
         }
 
         @Override
@@ -566,11 +561,8 @@ public class MainActivity extends AppCompatActivity {
         releaseRxAudioVisualizer();
 
         try {
-            if (threadPoolExecutor != null) {
-                threadPoolExecutor.shutdownNow();
-                threadPoolExecutor = null;
-            }
-        } catch (Exception e) { }
+            threadPoolExecutor.shutdownNow();
+        } catch (Exception ignored) { }
 
         try {
             if (radioAudioService != null) {
@@ -581,23 +573,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-
-        if (threadPoolExecutor != null) {
-            threadPoolExecutor.shutdownNow();
-            threadPoolExecutor = null;
-        }
-    }
-
-    @Override
     protected void onResume() {
         super.onResume();
-
-        // TODO unclear why threadPoolExecutor sometimes breaks when we start another activity, but
-        // we recreate it here as a workaround.
-        threadPoolExecutor = new ThreadPoolExecutor(2,
-                10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
         viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
             @Override
@@ -719,10 +696,6 @@ public class MainActivity extends AppCompatActivity {
                     aprsMessage.comment = comment;
                 } catch (Exception e) { }
             }
-        }
-
-        if (threadPoolExecutor == null) {
-            return;
         }
 
         threadPoolExecutor.execute(new Runnable() {
@@ -895,10 +868,6 @@ public class MainActivity extends AppCompatActivity {
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
 
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
         final APRSMessage aprsMessage = new APRSMessage();
         aprsMessage.type = APRSMessage.MESSAGE_TYPE;
         aprsMessage.fromCallsign = callsign.toUpperCase().trim();
@@ -971,7 +940,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applySettings() {
-        if (viewModel.appDb == null || threadPoolExecutor == null) {
+        if (MainViewModel.appDb == null) {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
 
@@ -1126,20 +1095,21 @@ public class MainActivity extends AppCompatActivity {
                         final boolean finalHighpass = highpass;
                         final boolean finalLowpass = lowpass;
 
-                        if (threadPoolExecutor != null) { // Could be null if app is in background, and user is just listening to scanning.
-                            threadPoolExecutor.execute(new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (radioAudioService != null) {
-                                        if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP &&
-                                                radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
-                                            radioAudioService.setMode(RadioAudioService.MODE_RX);
-                                            radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
-                                        }
+                        // Could be null if app is in background, and user is just listening to scanning.
+                        threadPoolExecutor.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (radioAudioService != null) {
+                                    if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP
+                                        && radioAudioService.getMode() != RadioAudioService.MODE_SCAN
+                                        && radioAudioService.isRadioConnected()
+                                    ){
+                                        radioAudioService.setMode(RadioAudioService.MODE_RX);
+                                        radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
                                     }
                                 }
-                            });
-                        }
+                            }
+                        });
 
                         if (stickyPTTSetting != null) {
                             stickyPTT = Boolean.parseBoolean(stickyPTTSetting.value);
@@ -1162,30 +1132,28 @@ public class MainActivity extends AppCompatActivity {
 
                         // Get this first, since we show a butter if beaconing is enabled afterwards, and want to include accuracy in it.
                         if (aprsPositionAccuracy != null) {
-                            if (threadPoolExecutor != null)
-                                threadPoolExecutor.execute(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        if (radioAudioService != null) {
-                                            radioAudioService.setAprsPositionAccuracy(
-                                                    aprsPositionAccuracy.value.equals(getString(R.string.exact)) ?
-                                                            RadioAudioService.APRS_POSITION_EXACT :
-                                                            RadioAudioService.APRS_POSITION_APPROX);
-                                        }
+                            threadPoolExecutor.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (radioAudioService != null) {
+                                        radioAudioService.setAprsPositionAccuracy(
+                                                aprsPositionAccuracy.value.equals(getString(R.string.exact)) ?
+                                                        RadioAudioService.APRS_POSITION_EXACT :
+                                                        RadioAudioService.APRS_POSITION_APPROX);
                                     }
-                                });
+                                }
+                            });
                         }
 
                         if (aprsBeaconPosition != null) {
-                            if (threadPoolExecutor != null)
-                                threadPoolExecutor.execute(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        if (radioAudioService != null) {
-                                            radioAudioService.setAprsBeaconPosition(Boolean.parseBoolean(aprsBeaconPosition.value));
-                                        }
+                            threadPoolExecutor.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (radioAudioService != null) {
+                                        radioAudioService.setAprsBeaconPosition(Boolean.parseBoolean(aprsBeaconPosition.value));
                                     }
-                                });
+                                }
+                            });
 
                             if (Boolean.parseBoolean(aprsBeaconPosition.value)) {
                                 requestPositionPermissions();
@@ -1407,7 +1375,7 @@ public class MainActivity extends AppCompatActivity {
         memoriesAdapter.notifyDataSetChanged();
 
         // Save most recent freq so we can restore it on app restart
-        if (threadPoolExecutor == null || wasForced) { // wasForced means user didn't actually type in the frequency (we shouldn't save it)
+        if (wasForced) { // wasForced means user didn't actually type in the frequency (we shouldn't save it)
             return;
         }
         threadPoolExecutor.execute(new Runnable() {
@@ -1455,21 +1423,20 @@ public class MainActivity extends AppCompatActivity {
                 showFrequency(activeFrequencyStr);
 
                 // Save most recent memory so we can restore it on app restart
-                if (threadPoolExecutor != null) { // Could be null if user is just listening to scan in another app, etc.
-                    threadPoolExecutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
-                            if (lastMemoryIdSetting != null) {
-                                lastMemoryIdSetting.value = "" + memoryId;
-                                viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
-                            } else {
-                                lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
-                                viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
-                            }
+                // Could be null if user is just listening to scan in another app, etc.
+                threadPoolExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                        if (lastMemoryIdSetting != null) {
+                            lastMemoryIdSetting.value = "" + memoryId;
+                            viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                        } else {
+                            lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
+                            viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
                         }
-                    });
-                }
+                    }
+                });
                 return;
             }
         }
@@ -1693,6 +1660,9 @@ public class MainActivity extends AppCompatActivity {
         while (isRecording) {
             int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
             if (samples == RadioAudioService.OPUS_FRAME_SIZE) {
+                if (!radioAudioService.isRadioConnected()) {
+                    throw new IllegalStateException("Radio not connected, cannot send audio.");
+                }
                 radioAudioService.sendAudioToESP32(audioBuffer, false);
                 // Accumulate samples across buffers
                 for (int i = 0; i < samples; i++) {
@@ -1910,10 +1880,6 @@ public class MainActivity extends AppCompatActivity {
         PopupMenu groupsMenu = new PopupMenu(themedContext, view);
         groupsMenu.inflate(R.menu.groups_menu);
 
-        if (threadPoolExecutor == null) {
-            return;
-        }
-
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -1952,9 +1918,6 @@ public class MainActivity extends AppCompatActivity {
         groupSelector.setText(groupName + " ▼");
 
         // Save most recent group selection so we can restore it on app restart
-        if (threadPoolExecutor == null) {
-            return;
-        }
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
