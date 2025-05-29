@@ -53,6 +53,7 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.LiveData;
+import lombok.Setter;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -99,7 +100,6 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -113,6 +113,7 @@ import java.util.concurrent.TimeUnit;
 public class RadioAudioService extends Service {
 
     private static final  String FIRMWARE_TAG = "firmware";
+    private static final RadioAudioServiceCallbacks NO_OP_CALLBACKS = new RadioAudioServiceCallbacks() {};
 
     // Binder given to clients.
     private final IBinder binder = new RadioBinder();
@@ -134,7 +135,8 @@ public class RadioAudioService extends Service {
     public static final byte SILENT_BYTE = 0;
 
     // Callbacks to the Activity that started us
-    private RadioAudioServiceCallbacks callbacks = null;
+    @Setter
+    private @NonNull RadioAudioServiceCallbacks callbacks = NO_OP_CALLBACKS;
 
     // For transmitting audio to ESP32 / radio
     public static final int AUDIO_SAMPLE_RATE = 48000;
@@ -214,7 +216,7 @@ public class RadioAudioService extends Service {
     private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
 
-    private ThreadPoolExecutor threadPoolExecutor = null;
+    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
 
     public enum MicGainBoost {
         NONE,
@@ -256,6 +258,32 @@ public class RadioAudioService extends Service {
             // Return this instance of RadioService so clients can call public methods.
             return RadioAudioService.this;
         }
+    }
+
+    /**
+     * Callbacks for the activity to implement, so it can be notified of various events.
+     */
+    public interface RadioAudioServiceCallbacks {
+        default void radioMissing() {}
+        default void radioConnected() {}
+        default void hideSnackbar() {}
+        default void radioModuleHandshake() {}
+        default void radioModuleNotFound() {}
+        default void audioTrackCreated() {}
+        default void packetReceived(APRSPacket aprsPacket) {}
+        default void scannedToMemory(int memoryId) {}
+        default void outdatedFirmware(int firmwareVer) {}
+        default void missingFirmware() {}
+        default void txStarted() {}
+        default void txEnded() {}
+        default void chatError(String snackbarText) {}
+        default void sMeterUpdate(int value) {}
+        default void aprsBeaconing(boolean beaconing, int accuracy) {}
+        default void sentAprsBeacon(double latitude, double longitude) {}
+        default void unknownLocation() {}
+        default void forceTunedToFreq(String newFreqStr) {}
+        default void forcedPttStart() {}
+        default void forcedPttEnd() {}
     }
 
     @Override
@@ -446,7 +474,6 @@ public class RadioAudioService extends Service {
     public void onCreate() {
         super.onCreate();
         SecureRandom random = new SecureRandom();
-        threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
         messageNumber = random.nextInt(APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
@@ -472,53 +499,6 @@ public class RadioAudioService extends Service {
         this.channelMemoriesLiveData = channelMemoriesLiveData;
     }
 
-    public interface RadioAudioServiceCallbacks {
-
-        public void radioMissing();
-
-        public void radioConnected();
-
-        public void hideSnackbar();
-
-        public void radioModuleHandshake();
-
-        public void radioModuleNotFound();
-
-        public void audioTrackCreated();
-
-        public void packetReceived(APRSPacket aprsPacket);
-
-        public void scannedToMemory(int memoryId);
-
-        public void outdatedFirmware(int firmwareVer);
-
-        public void missingFirmware();
-
-        public void txStarted();
-
-        public void txEnded();
-
-        public void chatError(String snackbarText);
-
-        public void sMeterUpdate(int value);
-
-        public void aprsBeaconing(boolean beaconing, int accuracy);
-
-        public void sentAprsBeacon(double latitude, double longitude);
-
-        public void unknownLocation();
-
-        public void forceTunedToFreq(String newFreqStr);
-
-        public void forcedPttStart();
-
-        public void forcedPttEnd();
-    }
-
-    public void setCallbacks(RadioAudioServiceCallbacks callbacks) {
-        this.callbacks = callbacks;
-    }
-
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -528,11 +508,7 @@ public class RadioAudioService extends Service {
             audioTrack.release();
             audioTrack = null;
         }
-
-        if (threadPoolExecutor != null) {
-            threadPoolExecutor.shutdownNow();
-            threadPoolExecutor = null;
-        }
+      threadPoolExecutor.shutdownNow();
     }
 
     private void createNotificationChannels() {
@@ -545,9 +521,6 @@ public class RadioAudioService extends Service {
     }
 
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        if (null == hostToEsp32) {
-            return;
-        }
         hostToEsp32.filters(Filters.builder()
             .high(highpass)
             .low(lowpass)
@@ -743,9 +716,7 @@ public class RadioAudioService extends Service {
         audioTrackVolume = 0.0f;
         audioTrack.setAuxEffectSendLevel(0.0f);
 
-        if (callbacks != null) {
-            callbacks.audioTrackCreated();
-        }
+        callbacks.audioTrackCreated();
     }
 
     private void setTxRunAwayTimer() {
@@ -771,12 +742,12 @@ public class RadioAudioService extends Service {
     public void startPtt() {
         if (mode == MODE_RX && txAllowed) {
             setMode(MODE_TX);
-            Optional.ofNullable(callbacks).ifPresent(cb -> cb.sMeterUpdate(0));
+            callbacks.sMeterUpdate(0);
             setTxRunAwayTimer();
             hostToEsp32.pttDown();
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
-            Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txStarted);
+            callbacks.txStarted();
         } else {
             Log.d("DEBUG", "Warning: Attempted startPtt when it should not happen.");
             new Throwable().printStackTrace();
@@ -789,7 +760,7 @@ public class RadioAudioService extends Service {
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
             hostToEsp32.pttUp();
-            Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::txEnded);
+            callbacks.txEnded();
         }
     }
 
@@ -806,9 +777,7 @@ public class RadioAudioService extends Service {
         if (null == usbIoManager) {
             Log.d("DEBUG", "Warning: usbManager was null in findESP32Device. Retrying momentarily.");
 
-            if (callbacks != null) {
-                callbacks.radioMissing(); // Not quite accurate, but this situation is likely transient/race condition.
-            }
+            callbacks.radioMissing(); // Not quite accurate, but this situation is likely transient/race condition.
 
             try {
                 Thread.sleep(1000);
@@ -832,14 +801,10 @@ public class RadioAudioService extends Service {
 
         if (esp32Device == null) {
             Log.d("DEBUG", "No ESP32 detected");
-            if (callbacks != null) {
-                callbacks.radioMissing();
-            }
+            callbacks.radioMissing();
         } else {
             Log.d("DEBUG", "Found ESP32.");
-            if (callbacks != null) {
-                callbacks.hideSnackbar();
-            }
+            callbacks.hideSnackbar();
             setupSerialConnection();
         }
     }
@@ -869,9 +834,7 @@ public class RadioAudioService extends Service {
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
             Log.d("DEBUG", "Error: no available USB drivers.");
-            if (callbacks != null) {
-                callbacks.radioMissing();
-            }
+            callbacks.radioMissing();
             return;
         }
 
@@ -880,9 +843,7 @@ public class RadioAudioService extends Service {
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
             Log.d("DEBUG", "Error: couldn't open USB device.");
-            if (callbacks != null) {
-                callbacks.radioMissing();
-            }
+            callbacks.radioMissing();
             return;
         }
 
@@ -893,9 +854,7 @@ public class RadioAudioService extends Service {
             serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.d("DEBUG", "Error: couldn't open USB serial port.");
-            if (callbacks != null) {
-                callbacks.radioMissing();
-            }
+            callbacks.radioMissing();
             return;
         }
 
@@ -1014,9 +973,7 @@ public class RadioAudioService extends Service {
         setMode(MODE_RX);
         // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
         setScanning(false);
-        if (callbacks != null) {
-            callbacks.radioConnected();
-        }
+        callbacks.radioConnected();
     }
 
     public void setScanning(boolean scanning, boolean goToRxMode) {
@@ -1091,9 +1048,7 @@ public class RadioAudioService extends Service {
                 // If squelch is off (0), use squelch=1 during scanning.
                 tuneToMemory(candidate, squelch > 0 ? squelch : 1, true);
 
-                if (callbacks != null) {
-                    callbacks.scannedToMemory(candidate.memoryId);
-                }
+                callbacks.scannedToMemory(candidate.memoryId);
                 return;
             }
 
@@ -1120,15 +1075,16 @@ public class RadioAudioService extends Service {
     }
 
     public void sendAudioToESP32(float[] samples, boolean dataMode) {
-        if (null == hostToEsp32) {
-            return;
-        }
         if (!dataMode) {
             samples = applyMicGain(samples);
         }
         byte[] audioFrame = new byte[Protocol.PROTO_MTU];
         int encodedLength = opusEncoder.encode(samples, audioFrame);
         hostToEsp32.txAudio(java.util.Arrays.copyOfRange(audioFrame, 0, encodedLength));
+    }
+
+    public boolean isRadioConnected() {
+        return hostToEsp32 != null;
     }
 
     public static UsbSerialPort getUsbSerialPort() {
@@ -1214,9 +1170,7 @@ public class RadioAudioService extends Service {
         if (audioTrack != null) {
             audioTrack.stop();
         }
-        if (callbacks != null) {
-            callbacks.radioModuleHandshake();
-        }
+        callbacks.radioModuleHandshake();
         checkFirmwareVersion();
     }
 
@@ -1226,13 +1180,13 @@ public class RadioAudioService extends Service {
                 if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                     Log.e("DEBUG", "Error: ESP32 app firmware " + ver.getVer() + " is older than latest firmware "
                             + FirmwareUtils.PACKAGED_FIRMWARE_VER);
-                    Optional.ofNullable(callbacks).ifPresent(cb -> cb.outdatedFirmware(ver.getVer()));
+                    callbacks.outdatedFirmware(ver.getVer());
                     return;
                 }
                 Log.i("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
                 radioModuleNotFound = ver.getRadioModuleStatus() != RadioStatus.RADIO_STATUS_FOUND;
                 if (radioModuleNotFound) {
-                    Optional.ofNullable(callbacks).ifPresent(RadioAudioServiceCallbacks::radioModuleNotFound);
+                    callbacks.radioModuleNotFound();
                 } else {
                     hostToEsp32.setFlowControlWindow(ver.getWindowSize());
                     initAfterESP32Connected();
@@ -1334,9 +1288,7 @@ public class RadioAudioService extends Service {
                 }
 
                 // Let our parent Activity know about the packet, so it can display chat.
-                if (callbacks != null) {
-                    callbacks.packetReceived(aprsPacket);
-                }
+                callbacks.packetReceived(aprsPacket);
             }
         };
 

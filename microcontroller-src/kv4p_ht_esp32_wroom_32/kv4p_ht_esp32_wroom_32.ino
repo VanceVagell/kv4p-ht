@@ -144,7 +144,7 @@ void doConfig(Config const &config) {
   while (result != 1) {
     result = sa818.handshake();  // Wait for module to start up
     esp_task_wdt_reset();
-    if ((millis() - waitStart) > 2000) {  // Give the radio module 2 seconds max before giving up on it
+    if ((millis() - waitStart) > 3000) {  // Give the radio module a few seconds max before giving up on it
       radioModuleStatus = RADIO_MODULE_NOT_FOUND;
       break;
     }
