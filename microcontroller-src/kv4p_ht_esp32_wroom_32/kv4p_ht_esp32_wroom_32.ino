@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "txAudio.h"
 #include "buttons.h"
 #include "utils.h"
+#include "board.h"
 
 const uint16_t FIRMWARE_VER = 14;
 
@@ -52,13 +53,13 @@ void setMode(Mode newMode) {
   switch (mode) {
     case MODE_STOPPED:
       _LOGI("MODE_STOPPED");
-      digitalWrite(PTT_PIN, HIGH);
+      digitalWrite(hw.pins.pttPin, HIGH);
       endI2STx();
       endI2SRx();
     break;
     case MODE_RX:
       _LOGI("MODE_RX");
-      digitalWrite(PTT_PIN, HIGH);
+      digitalWrite(hw.pins.pttPin, HIGH);
       squelchDebounce.forceState(true);
       endI2STx();
       initI2SRx();
@@ -66,27 +67,15 @@ void setMode(Mode newMode) {
     case MODE_TX:
       _LOGI("MODE_TX");
       txStartTime = millis();
-      digitalWrite(PTT_PIN, LOW);
+      digitalWrite(hw.pins.pttPin, LOW);
       endI2SRx();
       initI2STx();
     break;
   }
 }
 
-hw_ver_t get_hardware_version() {
-  pinMode(HW_VER_PIN_0, INPUT);
-  pinMode(HW_VER_PIN_1, INPUT);
-  hw_ver_t ver = 0x00;
-  ver |= (digitalRead(HW_VER_PIN_0) == HIGH ? 0x0F : 0x00);
-  ver |= (digitalRead(HW_VER_PIN_1) == HIGH ? 0xF0 : 0x00);
-  // In the future, we're replace these with analogRead()s and
-  // use values between 0x0 and 0xF. For now, just binary.
-  return ver;
-}
-
 void setup() {
-  // Used for setup, need to know early.
-  hardware_version = get_hardware_version();
+  boardSetup();
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
@@ -98,42 +87,27 @@ void setup() {
   Serial.println("Use `logcat` or a kv4p decoder to view readable logs.");
   Serial.println("More info: https://github.com/VanceVagell/kv4p-ht/blob/main/microcontroller-src/kv4p_ht_esp32_wroom_32/readme.md");
   Serial.println("==============================");
-  // Hardware dependent pin assignments.
-  switch (hardware_version) {
-    case HW_VER_V1:
-      COLOR_HW_VER = {0, 32, 0};
-      sqPin = SQ_PIN_HW1;
-      break;
-    case HW_VER_V2_0C:
-      COLOR_HW_VER = {32, 0, 0};
-      sqPin = SQ_PIN_HW2;
-      break;
-    case HW_VER_V2_0D:
-      COLOR_HW_VER = {0, 0, 32};
-      sqPin = SQ_PIN_HW2;
-      break;
-    default:
-      // Unknown version detected. Indicate this some way?
-      COLOR_HW_VER = {16, 16, 16};
-      break;
-  }
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
   buttonsSetup();
   // Set up radio module defaults
-  pinMode(PD_PIN, OUTPUT);
-  digitalWrite(PD_PIN, HIGH);  // Power on
-  pinMode(sqPin, INPUT);
-  pinMode(PTT_PIN, OUTPUT);
-  digitalWrite(PTT_PIN, HIGH);  // Rx
+  pinMode(hw.pins.pdPin, OUTPUT);
+  digitalWrite(hw.pins.pdPin, HIGH);  // Power on
+  pinMode(hw.pins.sqPin, INPUT);
+  pinMode(hw.pins.pttPin, OUTPUT);
+  digitalWrite(hw.pins.pttPin, HIGH);  // Rx
+  if (hw.features.hasHL) {
+    pinMode(hw.pins.hlPin, OUTPUT);
+    digitalWrite(hw.pins.hlPin, LOW);  // High power
+  }
   // Communication with DRA818V radio module via GPIO pins
-  Serial2.begin(9600, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
+  Serial2.begin(9600, SERIAL_8N1, hw.pins.rxd2Pin, hw.pins.txd2Pin);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
   //
   debugSetup();
   // Begin in STOPPED mode
-  squelched = (digitalRead(sqPin) == HIGH);
+  squelched = (digitalRead(hw.pins.sqPin) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
   sendHello();
@@ -141,10 +115,13 @@ void setup() {
 }
 
 void doConfig(Config const &config) {
-  if(config.radioType == SA818_UHF) {
+  if (hw.rfModuleType == RF_SA818_UHF) {
     sa818 = sa818_uhf;
   } else {
     sa818 = sa818_vhf;
+  }
+  if (hw.features.hasHL) {
+    digitalWrite(hw.pins.hlPin, config.isHigh ? LOW : HIGH);
   }
   int result = -1;
   uint32_t waitStart = millis();
@@ -159,14 +136,10 @@ void doConfig(Config const &config) {
   if (result == 1) {  // Did we hear back from radio?
     radioModuleStatus = RADIO_MODULE_FOUND;
   }
-  if (hardware_version == HW_VER_V2_0C) {
-    // v2.0c has a lower input ADC range.
-    result = sa818.volume(6);
-  } else {
-    result = sa818.volume(8);
-  }
+  result = sa818.volume(hw.volume);
   result = sa818.filters(false, false, false);
-  sendVersion(FIRMWARE_VER, radioModuleStatus, hardware_version, USB_BUFFER_SIZE);
+  uint8_t features = (hw.features.hasHL ? FEATURE_HAS_HL : 0) | (hw.features.hasPhysPTT ? FEATURE_HAS_PHY_PTT : 0);
+  sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, features);
   esp_task_wdt_reset();
 }
 
@@ -216,7 +189,17 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
         processTxAudio(params, param_len);
         esp_task_wdt_reset();
       }
-      break;                              
+      break;
+    case COMMAND_HOST_HL:
+      if (param_len == sizeof(HlState)) {
+        HlState hl;
+        memcpy(&hl, params, sizeof(HlState));
+        if (hw.features.hasHL) {
+          digitalWrite(hw.pins.hlPin, hl.isHigh ? LOW : HIGH);
+        }
+        esp_task_wdt_reset();
+      }
+      break;                                
   }
 }
 
@@ -241,7 +224,7 @@ void rssiLoop() {
 }
 
 void loop() {
-  squelched = squelchDebounce.debounce((digitalRead(sqPin) == HIGH));
+  squelched = squelchDebounce.debounce((digitalRead(hw.pins.sqPin) == HIGH));
   debugLoop();
   ledLoop();
   buttonsLoop();
