@@ -204,6 +204,7 @@ public class RadioAudioService extends Service {
     private boolean txAllowed = true;
     public static final String RADIO_MODULE_VHF = "v";
     public static final String RADIO_MODULE_UHF = "u";
+    @Getter
     private String radioType = RADIO_MODULE_VHF;
     private boolean radioModuleNotFound = false;
     private boolean checkedFirmwareVersion = false;
@@ -287,6 +288,7 @@ public class RadioAudioService extends Service {
         default void forceTunedToFreq(String newFreqStr) {}
         default void forcedPttStart() {}
         default void forcedPttEnd() {}
+        default void setRadioType(String ratioType) {}
     }
 
     @Override
@@ -918,6 +920,7 @@ public class RadioAudioService extends Service {
      */
     public void setRadioType(String radioType) {
         Log.d("DEBUG", "setRadioType: " + radioType);
+        callbacks.setRadioType(radioType);
         if (!this.radioType.equals(radioType)) {
             this.radioType = radioType;
             // Ensure frequencies we're using match the radioType
@@ -935,22 +938,15 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public String getRadioType() {
-        return radioType;
-    }
-
     private void checkFirmwareVersion() {
         checkedFirmwareVersion = true; // To prevent multiple USB connect events from spamming the ESP32 with requests (which can cause logic errors).
-
         // Verify that the firmware of the ESP32 app is supported.
         setMode(MODE_STARTUP);
-
         hostToEsp32.stop();
         hostToEsp32.config(Config.builder()
             .isHigh(isHighPower)
             .build());
         // The version is actually evaluated in handleESP32Data().
-
         // If we don't hear back from the ESP32, it means the firmware is either not
         // installed or it's somehow corrupt.
         timeOutHandler.removeCallbacksAndMessages(null);

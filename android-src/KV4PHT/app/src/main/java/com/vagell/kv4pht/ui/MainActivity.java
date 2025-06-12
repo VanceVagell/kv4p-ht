@@ -94,6 +94,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import static android.view.View.GONE;
+import static android.view.View.VISIBLE;
+
 public class MainActivity extends AppCompatActivity {
     // For transmitting audio to ESP32 / radio
     private AudioRecord audioRecord;
@@ -315,6 +318,7 @@ public class MainActivity extends AppCompatActivity {
             RadioAudioService.RadioAudioServiceCallbacks callbacks = new RadioAudioService.RadioAudioServiceCallbacks() {
                 @Override
                 public void radioMissing() {
+                    showBand(BandType.BAND_UNKNOWN);
                     sMeterUpdate(0); // No rx when no radio
                     showUSBSnackbar();
                     findViewById(R.id.pttButton).setClickable(false);
@@ -325,6 +329,17 @@ public class MainActivity extends AppCompatActivity {
                     hideSnackbar();
                     applySettings();
                     findViewById(R.id.pttButton).setClickable(true);
+                }
+
+                @Override
+                public void setRadioType(String ratioType) {
+                    if (ratioType.equals(RadioAudioService.RADIO_MODULE_VHF)) {
+                        showBand(BandType.BAND_VHF);
+                    } else if (ratioType.equals(RadioAudioService.RADIO_MODULE_UHF)) {
+                        showBand(BandType.BAND_UHF);
+                    } else {
+                        showBand(BandType.BAND_UNKNOWN);
+                    }
                 }
 
                 @Override
@@ -733,13 +748,13 @@ public class MainActivity extends AppCompatActivity {
     private void showScreen(ScreenType screenType) {
         // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
         // Controls for voice mode
-        findViewById(R.id.voiceModeLineHolder).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
-        findViewById(R.id.pttButton).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
-        findViewById(R.id.memoriesList).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
-        findViewById(R.id.voiceModeBottomControls).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.GONE : View.VISIBLE);
+        findViewById(R.id.voiceModeLineHolder).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
+        findViewById(R.id.pttButton).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
+        findViewById(R.id.memoriesList).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
+        findViewById(R.id.voiceModeBottomControls).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
 
         // Controls for text mode
-        findViewById(R.id.textModeContainer).setVisibility(screenType == ScreenType.SCREEN_CHAT ? View.VISIBLE : View.GONE);
+        findViewById(R.id.textModeContainer).setVisibility(screenType == ScreenType.SCREEN_CHAT ? VISIBLE : GONE);
 
         if (screenType == ScreenType.SCREEN_CHAT) {
             // Stop scanning when we enter chat mode, we don't want to tx data on an unexpected
@@ -756,19 +771,19 @@ public class MainActivity extends AppCompatActivity {
                 showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(false);
-                findViewById(R.id.sendButtonOverlay).setVisibility(View.VISIBLE);
+                findViewById(R.id.sendButtonOverlay).setVisibility(VISIBLE);
             } else {
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(true);
                 if (callsignSnackbar != null) {
                     callsignSnackbar.dismiss();
                 }
-                findViewById(R.id.sendButtonOverlay).setVisibility(View.GONE);
+                findViewById(R.id.sendButtonOverlay).setVisibility(GONE);
             }
         } else if (screenType == ScreenType.SCREEN_VOICE){
             hideKeyboard();
-            findViewById(R.id.frequencyContainer).setVisibility(View.VISIBLE);
-            findViewById(R.id.rxAudioCircle).setVisibility(View.VISIBLE);
+            findViewById(R.id.frequencyContainer).setVisibility(VISIBLE);
+            findViewById(R.id.rxAudioCircle).setVisibility(VISIBLE);
 
             if (callsignSnackbar != null) {
                 callsignSnackbar.dismiss();
@@ -974,10 +989,10 @@ public class MainActivity extends AppCompatActivity {
                             // Enable or prevent APRS texting depending on if callsign was set.
                             if (callsign.length() == 0) {
                                 findViewById(R.id.sendButton).setEnabled(false);
-                                findViewById(R.id.sendButtonOverlay).setVisibility(View.VISIBLE);
+                                findViewById(R.id.sendButtonOverlay).setVisibility(VISIBLE);
                             } else {
                                 findViewById(R.id.sendButton).setEnabled(true);
-                                findViewById(R.id.sendButtonOverlay).setVisibility(View.GONE);
+                                findViewById(R.id.sendButtonOverlay).setVisibility(GONE);
                             }
 
                             if (radioAudioService != null) {
@@ -1304,12 +1319,12 @@ public class MainActivity extends AppCompatActivity {
 
                 if (heightDiff > screenHeight * 0.25) { // If more than 25% of the screen height is reduced
                     // Keyboard is visible, hide the top view
-                    frequencyView.setVisibility(View.GONE);
-                    rxAudioCircleView.setVisibility(View.GONE);
+                    frequencyView.setVisibility(GONE);
+                    rxAudioCircleView.setVisibility(GONE);
                 } else {
                     // Keyboard is hidden, show the top view
-                    frequencyView.setVisibility(View.VISIBLE);
-                    rxAudioCircleView.setVisibility(View.VISIBLE);
+                    frequencyView.setVisibility(VISIBLE);
+                    rxAudioCircleView.setVisibility(VISIBLE);
                 }
             }
         });
@@ -1449,6 +1464,31 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+    public enum BandType {
+        BAND_VHF, BAND_UHF, BAND_UNKNOWN
+    }
+
+    private void showBand(BandType bandType) {
+        runOnUiThread(() -> {
+            EditText bandField = findViewById(R.id.activeBand);
+            if (bandField == null) return;
+            switch (bandType) {
+                case BAND_VHF:
+                    bandField.setText(getString(R.string.vhf));
+                    bandField.setVisibility(View.VISIBLE);
+                    break;
+                case BAND_UHF:
+                    bandField.setText(getString(R.string.uhf));
+                    bandField.setVisibility(View.VISIBLE);
+                    break;
+                default:
+                    bandField.setVisibility(View.GONE);
+                    break;
+            }
+        });
+    }
+
 
     protected void startPttUi(boolean dataMode) {
         if (!dataMode) {

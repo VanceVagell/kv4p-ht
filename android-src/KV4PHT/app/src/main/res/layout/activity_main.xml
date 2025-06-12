@@ -128,95 +128,111 @@
                     android:singleLine="true"
                     android:inputType="numberDecimal" />
 
-                <LinearLayout
-                    android:id="@+id/sMeter"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_gravity="center"
-                    android:gravity="bottom"
-                    android:paddingTop="4dp"> <!-- Content description set in Java -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
 
-                    <View
-                        android:id="@+id/sMeter1"
-                        android:layout_width="12dp"
-                        android:layout_height="2dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                    <EditText
+                        android:id="@+id/activeBand"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:text="@string/vhf"
+                        android:background="@color/clear"
+                        android:textColor="@color/band"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        android:visibility="invisible"
+                        android:layout_marginEnd="32dp"
+                        android:gravity="end"
+                        android:textStyle="bold"
+                        tools:visibility="visible" />
 
-                    <View
-                        android:id="@+id/sMeter2"
-                        android:layout_width="12dp"
-                        android:layout_height="3dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                    <LinearLayout
+                        android:id="@+id/sMeter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="bottom"
+                        android:paddingTop="4dp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent">
 
-                    <View
-                        android:id="@+id/sMeter3"
-                        android:layout_width="12dp"
-                        android:layout_height="4dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                        <View
+                            android:id="@+id/sMeter1"
+                            android:layout_width="12dp"
+                            android:layout_height="2dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
 
-                    <View
-                        android:id="@+id/sMeter4"
-                        android:layout_width="12dp"
-                        android:layout_height="5dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                        <View
+                            android:id="@+id/sMeter2"
+                            android:layout_width="12dp"
+                            android:layout_height="3dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
 
-                    <View
-                        android:id="@+id/sMeter5"
-                        android:layout_width="12dp"
-                        android:layout_height="6dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                        <View
+                            android:id="@+id/sMeter3"
+                            android:layout_width="12dp"
+                            android:layout_height="4dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
 
-                    <View
-                        android:id="@+id/sMeter6"
-                        android:layout_width="12dp"
-                        android:layout_height="7dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                        <View
+                            android:id="@+id/sMeter4"
+                            android:layout_width="12dp"
+                            android:layout_height="5dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
 
-                    <View
-                        android:id="@+id/sMeter7"
-                        android:layout_width="12dp"
-                        android:layout_height="8dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                        <View
+                            android:id="@+id/sMeter5"
+                            android:layout_width="12dp"
+                            android:layout_height="6dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
 
-                    <View
-                        android:id="@+id/sMeter8"
-                        android:layout_width="12dp"
-                        android:layout_height="9dp"
-                        android:layout_marginRight="6dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
+                        <View
+                            android:id="@+id/sMeter6"
+                            android:layout_width="12dp"
+                            android:layout_height="7dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
 
-                    <View
-                        android:id="@+id/sMeter9"
-                        android:layout_width="12dp"
-                        android:layout_height="10dp"
-                        android:background="@color/primary"
-                        android:alpha="0.2"
-                        android:focusable="false"/>
-                </LinearLayout>
+                        <View
+                            android:id="@+id/sMeter7"
+                            android:layout_width="12dp"
+                            android:layout_height="8dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
+
+                        <View
+                            android:id="@+id/sMeter8"
+                            android:layout_width="12dp"
+                            android:layout_height="9dp"
+                            android:layout_marginEnd="6dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
+
+                        <View
+                            android:id="@+id/sMeter9"
+                            android:layout_width="12dp"
+                            android:layout_height="10dp"
+                            android:background="@color/primary"
+                            android:alpha="0.2" />
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.appcompat.widget.LinearLayoutCompat
                     android:id="@+id/voiceModeLineHolder"

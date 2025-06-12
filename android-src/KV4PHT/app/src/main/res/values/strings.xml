@@ -34,6 +34,8 @@
     <string name="to_display">To:</string>
     <string name="all_memories_display1">ALL MEMORIES ▼</string>
     <string name="kv4p_ht" translatable="false">kv4p HT</string>
+    <string name="vhf" translatable="false">VHF</string>
+    <string name="uhf" translatable="false">UHF</string>
     <string name="push_to_talk_display">Push to talk</string>
     <string name="welcome_to_display">Welcome to</string>
     <string name="send_message_display">Send message</string>
