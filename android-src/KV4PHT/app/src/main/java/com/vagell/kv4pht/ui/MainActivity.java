@@ -508,7 +508,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
 
-            radioAudioService.setCallbacks(callbacks);
+            radioAudioService.callbacks = callbacks;
             applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
 
@@ -1788,6 +1788,54 @@ public class MainActivity extends AppCompatActivity {
         if (radioAudioService != null) {
             radioAudioService.setScanning(radioAudioService.getMode() != RadioAudioService.MODE_SCAN, true);
         }
+    }
+
+    private void checkFreqButtons(float currFreq, float delta) {
+        ImageButton decreaseFreqButton = findViewById(R.id.decreaseFreqButton);
+        decreaseFreqButton.setEnabled(currFreq - delta > radioAudioService.getMinRadioFreq());
+
+        ImageButton increaseFreqButton = findViewById(R.id.increaseFreqButton);
+        increaseFreqButton.setEnabled(currFreq + delta < radioAudioService.getMaxRadioFreq());
+    }
+
+    public void increaseFreqClicked(View view) {
+        if (radioAudioService == null) {
+            return;
+        }
+
+        float currFreq = radioAudioService.getActiveFrequency();
+        if (currFreq == 0.0f) {
+            // the radio is not really working
+            return;
+        }
+
+        float delta = radioAudioService.getBandwidth();
+
+        String newFreqStr = RadioAudioService.makeSafeHamFreq(Float.toString(currFreq + delta));
+        radioAudioService.tuneToFreq(newFreqStr, squelch, false);  // Fixes invalid freq if we are at the limits.
+        tuneToFreqUi(newFreqStr, false);
+
+        checkFreqButtons(currFreq, delta);
+    }
+
+    public void decreaseFreqClicked(View view) {
+        if (radioAudioService == null) {
+            return;
+        }
+
+        float currFreq = radioAudioService.getActiveFrequency();
+        if (currFreq == 0.0f) {
+            // the radio is not really working
+            return;
+        }
+
+        float delta = radioAudioService.getBandwidth();
+
+        String newFreqStr = RadioAudioService.makeSafeHamFreq(Float.toString(currFreq - delta));
+        radioAudioService.tuneToFreq(newFreqStr, squelch, false);  // Fixes invalid freq if we are at the limits.
+        tuneToFreqUi(newFreqStr, false);
+
+        checkFreqButtons(currFreq, delta);
     }
 
     public void singleBeaconButtonClicked(View view) {

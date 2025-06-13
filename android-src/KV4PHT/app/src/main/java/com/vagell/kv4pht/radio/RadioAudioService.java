@@ -136,7 +136,7 @@ public class RadioAudioService extends Service {
 
     // Callbacks to the Activity that started us
     @Setter
-    private @NonNull RadioAudioServiceCallbacks callbacks = NO_OP_CALLBACKS;
+    public @NonNull RadioAudioServiceCallbacks callbacks = NO_OP_CALLBACKS;
 
     // For transmitting audio to ESP32 / radio
     public static final int AUDIO_SAMPLE_RATE = 48000;
@@ -318,6 +318,14 @@ public class RadioAudioService extends Service {
         this.bandwidth = bandwidth;
     }
 
+    public float getBandwidth() {
+	if (this.bandwidth == "Wide") {
+		return 0.025f;    // 25 KHz
+	} else {
+		return 0.0125f;   // 12.5 KHz
+	}
+    }
+
     public void setMinRadioFreq(float newMinFreq) {
         minRadioFreq = newMinFreq;
 
@@ -328,6 +336,10 @@ public class RadioAudioService extends Service {
         }
     }
 
+    public float getMinRadioFreq() {
+        return minRadioFreq;
+    }
+
     public void setMaxRadioFreq(float newMaxFreq) {
         maxRadioFreq = newMaxFreq;
 
@@ -336,6 +348,10 @@ public class RadioAudioService extends Service {
             tuneToFreq(String.format(java.util.Locale.US, "%.4f", min2mTxFreq), squelch, true);
             callbacks.forceTunedToFreq(activeFrequencyStr);
         }
+    }
+
+    public float getMaxRadioFreq() {
+        return maxRadioFreq;
     }
 
     // These methods enforce the limits below (which change when we switch bands)
@@ -448,6 +464,10 @@ public class RadioAudioService extends Service {
 
     public String getActiveFrequencyStr() {
         return activeFrequencyStr;
+    }
+
+    public float getActiveFrequency() {
+        return Float.parseFloat(makeSafeHamFreq(activeFrequencyStr));
     }
 
     public void setActiveMemoryId(int activeMemoryId) {
