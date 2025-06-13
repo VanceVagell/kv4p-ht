@@ -91,6 +91,13 @@ void setup() {
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
   Serial.begin(115200);
+  Serial.println();
+  Serial.println("===== kv4p serial output =====");
+  Serial.println("This port will emit binary data using the kv4p protocol.");
+  Serial.println("You will see watchdog resets — this is expected behavior.");
+  Serial.println("Use `logcat` or a kv4p decoder to view readable logs.");
+  Serial.println("More info: https://github.com/VanceVagell/kv4p-ht/blob/main/microcontroller-src/kv4p_ht_esp32_wroom_32/readme.md");
+  Serial.println("==============================");
   // Hardware dependent pin assignments.
   switch (hardware_version) {
     case HW_VER_V1:
@@ -139,26 +146,19 @@ void doConfig(Config const &config) {
   } else {
     sa818 = sa818_vhf;
   }
-  int result = -1;
-  uint32_t waitStart = millis();
-  while (result != 1) {
-    result = sa818.handshake();  // Wait for module to start up
+  radioModuleStatus = RADIO_MODULE_NOT_FOUND;
+  // The sa818.handshake() has 3 retries internally with 2 seconds between each attempt.
+  // We have 3 retries on top of that, so total wait time is up to 20 seconds.
+  // This should allow the radio module to power up and respond.
+  for (int i = 0; i < 3; i++) {
     esp_task_wdt_reset();
-    if ((millis() - waitStart) > 3000) {  // Give the radio module a few seconds max before giving up on it
-      radioModuleStatus = RADIO_MODULE_NOT_FOUND;
+    if (sa818.handshake()) { //Check if radio responded to handshake attempt
+      radioModuleStatus = RADIO_MODULE_FOUND;
+      sa818.volume(hardware_version == HW_VER_V2_0C ? 6 : 8); // v2.0c has a lower input ADC range.
+      sa818.filters(false, false, false);
       break;
     }
   }
-  if (result == 1) {  // Did we hear back from radio?
-    radioModuleStatus = RADIO_MODULE_FOUND;
-  }
-  if (hardware_version == HW_VER_V2_0C) {
-    // v2.0c has a lower input ADC range.
-    result = sa818.volume(6);
-  } else {
-    result = sa818.volume(8);
-  }
-  result = sa818.filters(false, false, false);
   sendVersion(FIRMWARE_VER, radioModuleStatus, hardware_version, USB_BUFFER_SIZE);
   esp_task_wdt_reset();
 }
