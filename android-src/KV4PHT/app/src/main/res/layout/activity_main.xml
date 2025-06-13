@@ -121,9 +121,10 @@
                         android:id="@+id/freqMinus"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
-                        android:layout_gravity="center_vertical"
                         android:layout_margin="10dp"
-                        android:background="@drawable/ic_minus"
+                        android:layout_marginLeft="24dp"
+                        android:layout_gravity="center_vertical"
+                        android:background="@drawable/ic_keyboard_arrow_down"
                         android:onClick="decreaseFreqClicked"/>
 
                     <EditText
@@ -145,11 +146,12 @@
 
                     <ImageButton
                         android:id="@+id/freqPlus"
-                        android:layout_margin="10dp"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
+                        android:layout_margin="10dp"
+                        android:layout_marginRight="24dp"
                         android:layout_gravity="center_vertical"
-                        android:background="@drawable/ic_plus"
+                        android:background="@drawable/ic_keyboard_arrow_up"
                         android:onClick="increaseFreqClicked"/>
                 </LinearLayout>
 
