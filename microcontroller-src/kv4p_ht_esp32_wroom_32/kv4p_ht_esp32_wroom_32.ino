@@ -123,21 +123,19 @@ void doConfig(Config const &config) {
   if (hw.features.hasHL) {
     digitalWrite(hw.pins.hlPin, config.isHigh ? LOW : HIGH);
   }
-  int result = -1;
-  uint32_t waitStart = millis();
-  while (result != 1) {
-    result = sa818.handshake();  // Wait for module to start up
+  radioModuleStatus = RADIO_MODULE_NOT_FOUND;
+  // The sa818.handshake() has 3 retries internally with 2 seconds between each attempt.
+  // We have 3 retries on top of that, so total wait time is up to 20 seconds.
+  // This should allow the radio module to power up and respond.
+  for (int i = 0; i < 3; i++) {
     esp_task_wdt_reset();
-    if ((millis() - waitStart) > 3000) {  // Give the radio module a few seconds max before giving up on it
-      radioModuleStatus = RADIO_MODULE_NOT_FOUND;
+    if (sa818.handshake()) { //Check if radio responded to handshake attempt
+      radioModuleStatus = RADIO_MODULE_FOUND;
+      sa818.volume(hardware_version == HW_VER_V2_0C ? 6 : 8); // v2.0c has a lower input ADC range.
+      sa818.filters(false, false, false);
       break;
     }
   }
-  if (result == 1) {  // Did we hear back from radio?
-    radioModuleStatus = RADIO_MODULE_FOUND;
-  }
-  result = sa818.volume(hw.volume);
-  result = sa818.filters(false, false, false);
   uint8_t features = (hw.features.hasHL ? FEATURE_HAS_HL : 0) | (hw.features.hasPhysPTT ? FEATURE_HAS_PHY_PTT : 0);
   sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, features);
   esp_task_wdt_reset();
