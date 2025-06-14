@@ -83,4 +83,16 @@ public abstract class AppDatabase extends RoomDatabase {
             .fallbackToDestructiveMigration()
             .build();
     }
+
+    public void saveAppSetting(String key, String value) {
+        AppSettingDao dao = appSettingDao();
+        AppSetting setting = dao.getByName(key);
+        if (setting == null) {
+            setting = new AppSetting(key, value);
+            dao.insertAll(setting);
+        } else {
+            setting.value = value;
+            dao.update(setting);
+        }
+    }
 }

@@ -89,4 +89,9 @@
     <string name="find_repeaters_instructions">登录 RepeaterBook，或注册新账户。</string>
     <string name="nearby_repeaters_found">找到附近中继台：&#160;</string>
     <string name="save_repeaters_group_instructions">您想将这些新的中继台保存到哪个频道组？</string>
+    <string name="rf_power">Power</string>
+    <string-array name="rf_power_options">
+        <item>High</item>
+        <item>Low</item>
+    </string-array>
 </resources>
