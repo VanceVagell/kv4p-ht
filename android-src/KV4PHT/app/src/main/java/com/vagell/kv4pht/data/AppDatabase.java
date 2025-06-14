@@ -49,6 +49,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final Migration MIGRATION_3_4 = new MigrationFrom3To4();
     public static final Migration MIGRATION_4_5 = new MigrationFrom4To5();
 
+    @SuppressWarnings("java:S3077")
     private static volatile AppDatabase INSTANCE;
 
     /**
