@@ -27,10 +27,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.ArrayAdapter;
-import android.widget.AutoCompleteTextView;
-import android.widget.Switch;
-import android.widget.TextView;
+import android.widget.*;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -141,6 +138,13 @@ public class SettingsActivity extends AppCompatActivity {
         rfPowerTextView.setThreshold(1);
         // Set default text to first item
         rfPowerTextView.setText(rfPowerOptions[0], false);
+        boolean hasHighLowPowerSwitch = getIntent().getBooleanExtra("hasHighLowPowerSwitch", false);
+        LinearLayout rfPowerLayout = findViewById(R.id.rfPowerLayout);
+        if (hasHighLowPowerSwitch) {
+            rfPowerLayout.setVisibility(View.VISIBLE);
+        } else {
+            rfPowerLayout.setVisibility(View.GONE);
+        }
     }
 
     private void setTextIfPresent(Map<String, String> settings, String key, int viewId) {

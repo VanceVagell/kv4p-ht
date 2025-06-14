@@ -88,10 +88,13 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
@@ -882,217 +885,138 @@ public class MainActivity extends AppCompatActivity {
 
     private void applySettings() {
         if (!viewModel.isLoaded()) {
-            return; // DB not yet loaded (e.g. radio attached before DB init completed)
+            return;
         }
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                AppSetting callsignSetting = viewModel.getAppDb().appSettingDao().getByName("callsign");
-                AppSetting squelchSetting = viewModel.getAppDb().appSettingDao().getByName("squelch");
-                AppSetting emphasisSetting = viewModel.getAppDb().appSettingDao().getByName("emphasis");
-                AppSetting highpassSetting = viewModel.getAppDb().appSettingDao().getByName("highpass");
-                AppSetting lowpassSetting = viewModel.getAppDb().appSettingDao().getByName("lowpass");
-                AppSetting stickyPTTSetting = viewModel.getAppDb().appSettingDao().getByName("stickyPTT");
-                AppSetting disableAnimationsSetting = viewModel.getAppDb().appSettingDao().getByName("disableAnimations");
-                AppSetting aprsBeaconPosition = viewModel.getAppDb().appSettingDao().getByName("aprsBeaconPosition");
-                AppSetting aprsPositionAccuracy = viewModel.getAppDb().appSettingDao().getByName("aprsPositionAccuracy");
-                AppSetting bandwidthSetting = viewModel.getAppDb().appSettingDao().getByName("bandwidth");
-                AppSetting min2mTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("min2mTxFreq");
-                AppSetting max2mTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("max2mTxFreq");
-                AppSetting min70cmTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("min70cmTxFreq");
-                AppSetting max70cmTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("max70cmTxFreq");
-                AppSetting micGainBoostSetting = viewModel.getAppDb().appSettingDao().getByName("micGainBoost");
-                AppSetting lastMemoryId = viewModel.getAppDb().appSettingDao().getByName("lastMemoryId");
-                AppSetting lastFreq = viewModel.getAppDb().appSettingDao().getByName("lastFreq");
-                AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName("lastGroup");
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-
-                        if (callsignSetting != null) {
-                            callsign = callsignSetting.value;
-
-                            // Enable or prevent APRS texting depending on if callsign was set.
-                            if (callsign.length() == 0) {
-                                findViewById(R.id.sendButton).setEnabled(false);
-                                findViewById(R.id.sendButtonOverlay).setVisibility(VISIBLE);
-                            } else {
-                                findViewById(R.id.sendButton).setEnabled(true);
-                                findViewById(R.id.sendButtonOverlay).setVisibility(GONE);
-                            }
-
-                            if (radioAudioService != null) {
-                                radioAudioService.setCallsign(callsign);
-                            }
-                        }
-
-                        if (lastGroupSetting != null && !lastGroupSetting.value.equals("")) {
-                            selectMemoryGroup(lastGroupSetting.value);
-                        }
-
-                        if (min2mTxFreqSetting != null) {
-                            int min2mTxFreq = Integer.parseInt(min2mTxFreqSetting.value);
-                            if (radioAudioService != null) {
-                                radioAudioService.setMin2mTxFreq(min2mTxFreq);
-                            }
-                        }
-
-                        if (max2mTxFreqSetting != null) {
-                            int max2mTxFreq = Integer.parseInt(max2mTxFreqSetting.value);
-                            if (radioAudioService != null) {
-                                radioAudioService.setMax2mTxFreq(max2mTxFreq);
-                            }
-                        }
-
-                        if (min70cmTxFreqSetting != null) {
-                            int min70cmTxFreq = Integer.parseInt(min70cmTxFreqSetting.value);
-                            if (radioAudioService != null) {
-                                radioAudioService.setMin70cmTxFreq(min70cmTxFreq);
-                            }
-                        }
-
-                        if (max70cmTxFreqSetting != null) {
-                            int max70cmTxFreq = Integer.parseInt(max70cmTxFreqSetting.value);
-                            if (radioAudioService != null) {
-                                radioAudioService.setMax70cmTxFreq(max70cmTxFreq);
-                            }
-                        }
-
-                        if (lastMemoryId != null && !lastMemoryId.value.equals("-1")) {
-                            activeMemoryId = Integer.parseInt(lastMemoryId.value);
-
-                            if (radioAudioService != null) {
-                                radioAudioService.setActiveMemoryId(activeMemoryId);
-                            }
-                        } else {
-                            activeMemoryId = -1;
-                            if (lastFreq != null) {
-                                activeFrequencyStr = lastFreq.value;
-                            } else {
-                                activeFrequencyStr = "0.0000"; // Will force radioAudioService to use minimum freq in current band
-                            }
-                        }
-
-                        if (bandwidthSetting != null) {
-                            if (radioAudioService != null) {
-                                radioAudioService.setBandwidth(bandwidthSetting.value);
-                            }
-                        }
-
-                        if (micGainBoostSetting != null) {
-                            String micGainBoost = micGainBoostSetting.value;
-                            if (radioAudioService != null) {
-                                radioAudioService.setMicGainBoost(micGainBoost);
-                            }
-                        }
-
-                        if (squelchSetting != null) {
-                            squelch = Integer.parseInt(squelchSetting.value); // The tuneTo() calls below pass squelch to RadioAudioService.
-                        }
-                        if (activeMemoryId > -1) {
-                            if (radioAudioService != null) {
-                                radioAudioService.tuneToMemory(activeMemoryId, squelch, radioAudioService.getMode() == RadioAudioService.MODE_RX);
-                                tuneToMemoryUi(activeMemoryId);
-                            }
-                        } else {
-                            if (radioAudioService != null) {
-                                radioAudioService.tuneToFreq(activeFrequencyStr, squelch, radioAudioService.getMode() == RadioAudioService.MODE_RX);
-                                tuneToFreqUi(activeFrequencyStr, radioAudioService.getMode() == RadioAudioService.MODE_RX);
-                            }
-                        }
-                        if (radioAudioService != null) {
-                            radioAudioService.setSquelch(squelch); // We do this after tuning, so tuneToMemory and tuneToFreq will apply a new squelch if it was changed.
-                        }
-
-                        boolean emphasis = true; // Default all filters to on first time app is installed (best audio experience for most users).
-                        boolean highpass = true;
-                        boolean lowpass = true;
-                        if (emphasisSetting != null) {
-                            emphasis = Boolean.parseBoolean(emphasisSetting.value);
-                        }
-
-                        if (highpassSetting != null) {
-                            highpass = Boolean.parseBoolean(highpassSetting.value);
-                        }
-
-                        if (lowpassSetting != null) {
-                            lowpass = Boolean.parseBoolean(lowpassSetting.value);
-                        }
-
-                        final boolean finalEmphasis = emphasis;
-                        final boolean finalHighpass = highpass;
-                        final boolean finalLowpass = lowpass;
-
-                        // Could be null if app is in background, and user is just listening to scanning.
-                        threadPoolExecutor.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (radioAudioService != null) {
-                                    if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP
-                                        && radioAudioService.getMode() != RadioAudioService.MODE_SCAN
-                                        && radioAudioService.isRadioConnected()
-                                    ){
-                                        radioAudioService.setMode(RadioAudioService.MODE_RX);
-                                        radioAudioService.setFilters(finalEmphasis, finalHighpass, finalLowpass);
-                                    }
-                                }
-                            }
-                        });
-
-                        if (stickyPTTSetting != null) {
-                            stickyPTT = Boolean.parseBoolean(stickyPTTSetting.value);
-                        }
-
-                        if (disableAnimationsSetting != null) {
-                            disableAnimations = Boolean.parseBoolean(disableAnimationsSetting.value);
-                            if (disableAnimations) {
-                                // Hide the rx audio visualization
-                                ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
-                                ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
-                                layoutParams.width = 0;
-                                layoutParams.height = 0;
-                                rxAudioView.setLayoutParams(layoutParams);
-
-                                // Hide the tx audio visualization
-                                updateRecordingVisualization(100, 0.0f);
-                            }
-                        }
-
-                        // Get this first, since we show a butter if beaconing is enabled afterwards, and want to include accuracy in it.
-                        if (aprsPositionAccuracy != null) {
-                            threadPoolExecutor.execute(new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (radioAudioService != null) {
-                                        radioAudioService.setAprsPositionAccuracy(
-                                                aprsPositionAccuracy.value.equals(getString(R.string.exact)) ?
-                                                        RadioAudioService.APRS_POSITION_EXACT :
-                                                        RadioAudioService.APRS_POSITION_APPROX);
-                                    }
-                                }
-                            });
-                        }
-
-                        if (aprsBeaconPosition != null) {
-                            threadPoolExecutor.execute(new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (radioAudioService != null) {
-                                        radioAudioService.setAprsBeaconPosition(Boolean.parseBoolean(aprsBeaconPosition.value));
-                                    }
-                                }
-                            });
-
-                            if (Boolean.parseBoolean(aprsBeaconPosition.value)) {
-                                requestPositionPermissions();
-                            }
-                        }
-                    }
-                });
-            }
+        threadPoolExecutor.execute(() -> {
+            final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
+                .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
+            runOnUiThread(() -> {
+                applyRfPower(settings);
+                applySquelch(settings);
+                applyCallsign(settings);
+                applyGroupAndMemory(settings);
+                applyTxFreqLimits(settings);
+                applyBandwidthAndGain(settings);
+                applyFilters(settings);
+                applyDisableAnimations(settings);
+                applyAprs(settings);
+            });
         });
     }
+
+    private void applyRfPower(Map<String, String> settings) {
+        List<String> powerOptions = Arrays.asList(getResources().getStringArray(R.array.rf_power_options));
+        String power = settings.getOrDefault("rfPower", powerOptions.get(0));
+        if (radioAudioService != null) {
+            radioAudioService.setHighPower(powerOptions.indexOf(power) == 0);
+        }
+    }
+
+    private void applyCallsign(Map<String, String> settings) {
+        String callsign = settings.getOrDefault("callsign", "");
+        this.callsign = callsign;
+        boolean empty = callsign.isEmpty();
+        findViewById(R.id.sendButton).setEnabled(!empty);
+        findViewById(R.id.sendButtonOverlay).setVisibility(empty ? VISIBLE : GONE);
+        if (radioAudioService != null) {
+            radioAudioService.setCallsign(callsign);
+        }
+    }
+
+    private void applyGroupAndMemory(Map<String, String> settings) {
+        String group = settings.get("lastGroup");
+        if (group != null && !group.isEmpty()) {
+            selectMemoryGroup(group);
+        }
+        String lastMemoryIdStr = settings.get("lastMemoryId");
+        String lastFreq = settings.getOrDefault("lastFreq", "0.0000");
+        activeMemoryId = (lastMemoryIdStr != null && !lastMemoryIdStr.equals("-1")) ? Integer.parseInt(lastMemoryIdStr) : -1;
+        activeFrequencyStr = (activeMemoryId == -1) ? lastFreq : null;
+        if (radioAudioService != null) {
+            if (activeMemoryId > -1) {
+                radioAudioService.setActiveMemoryId(activeMemoryId);
+                radioAudioService.tuneToMemory(activeMemoryId, squelch, radioAudioService.getMode() == RadioAudioService.MODE_RX);
+                tuneToMemoryUi(activeMemoryId);
+            } else {
+                radioAudioService.tuneToFreq(activeFrequencyStr, squelch, radioAudioService.getMode() == RadioAudioService.MODE_RX);
+                tuneToFreqUi(activeFrequencyStr, radioAudioService.getMode() == RadioAudioService.MODE_RX);
+            }
+        }
+    }
+
+    private void applyTxFreqLimits(Map<String, String> settings) {
+        if (radioAudioService == null) return;
+        String min2m = settings.get("min2mTxFreq");
+        String max2m = settings.get("max2mTxFreq");
+        String min70 = settings.get("min70cmTxFreq");
+        String max70 = settings.get("max70cmTxFreq");
+        if (min2m != null) RadioAudioService.setMin2mTxFreq(Integer.parseInt(min2m));
+        if (max2m != null) RadioAudioService.setMax2mTxFreq(Integer.parseInt(max2m));
+        if (min70 != null) RadioAudioService.setMin70cmTxFreq(Integer.parseInt(min70));
+        if (max70 != null) RadioAudioService.setMax70cmTxFreq(Integer.parseInt(max70));
+    }
+
+    private void applyBandwidthAndGain(Map<String, String> settings) {
+        if (radioAudioService == null) return;
+        String bandwidth = settings.get("bandwidth");
+        String gain = settings.get("micGainBoost");
+        if (bandwidth != null) radioAudioService.setBandwidth(bandwidth);
+        if (gain != null) radioAudioService.setMicGainBoost(gain);
+    }
+
+    private void applySquelch(Map<String, String> settings) {
+        String squelchStr = settings.get("squelch");
+        if (squelchStr == null) return;
+        squelch = Integer.parseInt(squelchStr);
+        if (radioAudioService != null) {
+            radioAudioService.setSquelch(squelch);
+        }
+    }
+
+    private void applyFilters(Map<String, String> settings) {
+        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault("emphasis", "true"));
+        boolean highpass = Boolean.parseBoolean(settings.getOrDefault("highpass", "true"));
+        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault("lowpass", "true"));
+        if (radioAudioService != null && radioAudioService.isRadioConnected()) {
+            threadPoolExecutor.execute(() -> {
+                if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP && radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
+                    radioAudioService.setMode(RadioAudioService.MODE_RX);
+                    radioAudioService.setFilters(emphasis, highpass, lowpass);
+                }
+            });
+        }
+    }
+
+    private void applyDisableAnimations(Map<String, String> settings) {
+        disableAnimations = Boolean.parseBoolean(settings.getOrDefault("disableAnimations", "false"));
+        if (disableAnimations) {
+            ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
+            ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
+            layoutParams.width = 0;
+            layoutParams.height = 0;
+            rxAudioView.setLayoutParams(layoutParams);
+            updateRecordingVisualization(100, 0.0f);
+        }
+    }
+
+    private void applyAprs(Map<String, String> settings) {
+        String accuracy = settings.get("aprsPositionAccuracy");
+        String beacon = settings.get("aprsBeaconPosition");
+
+        if (accuracy != null && radioAudioService != null) {
+            threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
+                accuracy.equals(getString(R.string.exact)) ?
+                    RadioAudioService.APRS_POSITION_EXACT :
+                    RadioAudioService.APRS_POSITION_APPROX));
+        }
+
+        if (beacon != null && radioAudioService != null) {
+            boolean beaconEnabled = Boolean.parseBoolean(beacon);
+            threadPoolExecutor.execute(() -> radioAudioService.setAprsBeaconPosition(beaconEnabled));
+            if (beaconEnabled) requestPositionPermissions();
+        }
+    }
+
 
     @SuppressLint("ClickableViewAccessibility")
     private void attachListeners() {
@@ -1966,6 +1890,9 @@ public class MainActivity extends AppCompatActivity {
 
         Intent intent = new Intent("com.vagell.kv4pht.SETTINGS_ACTION");
         intent.putExtra("requestCode", REQUEST_SETTINGS);
+        if (radioAudioService != null && radioAudioService.isRadioConnected()) {
+            intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
+        }
         startActivityForResult(intent, REQUEST_SETTINGS);
     }
 
