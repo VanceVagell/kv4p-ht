@@ -51,6 +51,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
+import androidx.lifecycle.ViewModelProvider;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -84,6 +85,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
     private long downloadId = 0; // So we can tell when the download is done
     private List<RepeaterInfo> nearbyRepeaters = null;
     private String locality = null;
+    private MainViewModel viewModel;
 
     // Android permission stuff
     private static final int REQUEST_LOCATION_PERMISSION_CODE = 1;
@@ -91,6 +93,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
         setContentView(R.layout.activity_find_repeaters);
 
         // Listen for file downloads so we can detect when CSV download is done.
@@ -489,16 +492,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     private void populateMemoryGroups() {
         final Activity activity = this;
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                if(MainViewModel.appDb == null) {
-                    MainViewModel preloader = new MainViewModel();
-                    preloader.setActivity(activity);
-                    preloader.loadData();
-                }
-                List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
-
+        threadPoolExecutor.execute(() -> {
+            viewModel.loadDataAsync(() -> {
+                List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
                 // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
                 for (int i = 0; i < memoryGroups.size(); i++) {
                     String name = memoryGroups.get(i);
@@ -507,7 +503,6 @@ public class FindRepeatersActivity extends AppCompatActivity {
                         i--;
                     }
                 }
-
                 activity.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -516,7 +511,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                         editMemoryGroupTextView.setAdapter(arrayAdapter);
                     }
                 });
-            }
+            });
         });
     }
 
@@ -550,7 +545,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             @Override
             public void run() {
                 for (int i = 0; i < memoriesToAdd.size(); i++) {
-                    MainViewModel.appDb.channelMemoryDao().insertAll(memoriesToAdd.get(i));
+                    viewModel.getAppDb().channelMemoryDao().insertAll(memoriesToAdd.get(i));
                 }
                 setResult(Activity.RESULT_OK, getIntent());
                 finish();

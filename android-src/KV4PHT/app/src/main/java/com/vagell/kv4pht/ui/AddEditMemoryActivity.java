@@ -30,6 +30,7 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
@@ -46,9 +47,11 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     private boolean isVhfRadio = true; // false means UHF radio
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private ChannelMemory mMemory;
+    private MainViewModel viewModel;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_edit_memory);
 
@@ -62,7 +65,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             if (!isAdd) { // Edit
                 mMemoryId = extras.getInt("memoryId");
                 threadPoolExecutor.execute(() -> {
-                    mMemory = MainViewModel.appDb.channelMemoryDao().getById(mMemoryId);
+                    mMemory = viewModel.getAppDb().channelMemoryDao().getById(mMemoryId);
                     populateOriginalValues();
                 });
             } else { // Add
@@ -133,14 +136,12 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     private void populateMemoryGroups() {
         final Activity activity = this;
         threadPoolExecutor.execute(() -> {
-            if( MainViewModel.appDb == null ) {
+            if( viewModel.getAppDb() == null ) {
                 //For example direct call other app intent.
                 //If app is not already open do not nullpointer-exception.
-                MainViewModel preloader = new MainViewModel();
-                preloader.setActivity(activity);
-                preloader.loadData();
+                MainViewModel preloader = new ViewModelProvider(this).get(MainViewModel.class);
             }
-            List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
+            List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
 
             // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
             for (int i = 0; i < memoryGroups.size(); i++) {
@@ -342,9 +343,9 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         final ChannelMemory finalMemory = memory;
         threadPoolExecutor.execute(() -> {
             if (isAdd) {
-                MainViewModel.appDb.channelMemoryDao().insertAll(finalMemory);
+                viewModel.getAppDb().channelMemoryDao().insertAll(finalMemory);
             } else {
-                MainViewModel.appDb.channelMemoryDao().update(finalMemory);
+                viewModel.getAppDb().channelMemoryDao().update(finalMemory);
             }
             setResult(Activity.RESULT_OK, getIntent());
             finish();

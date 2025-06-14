@@ -38,6 +38,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
@@ -52,10 +53,12 @@ import java.util.concurrent.TimeUnit;
 
 public class SettingsActivity extends AppCompatActivity {
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+    private MainViewModel viewModel = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
         setContentView(R.layout.activity_settings);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         populateOriginalValues();
@@ -136,21 +139,21 @@ public class SettingsActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                AppSetting callsignSetting = MainViewModel.appDb.appSettingDao().getByName("callsign");
-                AppSetting squelchSetting = MainViewModel.appDb.appSettingDao().getByName("squelch");
-                AppSetting emphasisSetting = MainViewModel.appDb.appSettingDao().getByName("emphasis");
-                AppSetting highpassSetting = MainViewModel.appDb.appSettingDao().getByName("highpass");
-                AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
-                AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
-                AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
-                AppSetting aprsBeaconPosition = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
-                AppSetting aprsPositionAccuracy = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
-                AppSetting bandwidthSetting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
-                AppSetting min2mTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("min2mTxFreq");
-                AppSetting max2mTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("max2mTxFreq");
-                AppSetting min70cmTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
-                AppSetting max70cmTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
-                AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
+                AppSetting callsignSetting = viewModel.getAppDb().appSettingDao().getByName("callsign");
+                AppSetting squelchSetting = viewModel.getAppDb().appSettingDao().getByName("squelch");
+                AppSetting emphasisSetting = viewModel.getAppDb().appSettingDao().getByName("emphasis");
+                AppSetting highpassSetting = viewModel.getAppDb().appSettingDao().getByName("highpass");
+                AppSetting lowpassSetting = viewModel.getAppDb().appSettingDao().getByName("lowpass");
+                AppSetting stickyPTTSetting = viewModel.getAppDb().appSettingDao().getByName("stickyPTT");
+                AppSetting disableAnimationsSetting = viewModel.getAppDb().appSettingDao().getByName("disableAnimations");
+                AppSetting aprsBeaconPosition = viewModel.getAppDb().appSettingDao().getByName("aprsBeaconPosition");
+                AppSetting aprsPositionAccuracy = viewModel.getAppDb().appSettingDao().getByName("aprsPositionAccuracy");
+                AppSetting bandwidthSetting = viewModel.getAppDb().appSettingDao().getByName("bandwidth");
+                AppSetting min2mTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("min2mTxFreq");
+                AppSetting max2mTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("max2mTxFreq");
+                AppSetting min70cmTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("min70cmTxFreq");
+                AppSetting max70cmTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("max70cmTxFreq");
+                AppSetting micGainBoostSetting = viewModel.getAppDb().appSettingDao().getByName("micGainBoost");
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -455,14 +458,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setAprsBeaconPosition(boolean enabled) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("aprsBeaconPosition");
 
             if (setting == null) {
                 setting = new AppSetting("aprsBeaconPosition", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -473,14 +476,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setAprsPositionAccuracy(String aprsPositionAccuracy) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("aprsPositionAccuracy");
 
             if (setting == null) {
                 setting = new AppSetting("aprsPositionAccuracy", aprsPositionAccuracy);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = aprsPositionAccuracy;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -491,14 +494,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setBandwidth(String bandwidth) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("bandwidth");
 
             if (setting == null) {
                 setting = new AppSetting("bandwidth", bandwidth);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = bandwidth;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -509,14 +512,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setMin2mTxFreq(String minFreq) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("min2mTxFreq");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("min2mTxFreq");
 
             if (setting == null) {
                 setting = new AppSetting("min2mTxFreq", minFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = minFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -527,14 +530,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setMax2mTxFreq(String maxFreq) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("max2mTxFreq");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("max2mTxFreq");
 
             if (setting == null) {
                 setting = new AppSetting("max2mTxFreq", maxFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = maxFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -545,14 +548,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setMin70cmTxFreq(String minFreq) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("min70cmTxFreq");
 
             if (setting == null) {
                 setting = new AppSetting("min70cmTxFreq", minFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = minFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -563,14 +566,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setMax70cmTxFreq(String maxFreq) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("max70cmTxFreq");
 
             if (setting == null) {
                 setting = new AppSetting("max70cmTxFreq", maxFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = maxFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -582,14 +585,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setMicGainBoost(String micGainBoost) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("micGainBoost");
 
             if (setting == null) {
                 setting = new AppSetting("micGainBoost", micGainBoost);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = micGainBoost;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -600,14 +603,14 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("callsign");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("callsign");
 
             if (setting == null) {
                 setting = new AppSetting("callsign", callsign);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = callsign;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -615,14 +618,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setSquelch(int squelch) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("squelch");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("squelch");
 
             if (setting == null) {
                 setting = new AppSetting("squelch", "" + squelch);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = "" + squelch;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -630,14 +633,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setEmphasisFilter(boolean enabled) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("emphasis");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("emphasis");
 
             if (setting == null) {
                 setting = new AppSetting("emphasis", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -645,14 +648,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setHighpassFilter(boolean enabled) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("highpass");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("highpass");
 
             if (setting == null) {
                 setting = new AppSetting("highpass", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -660,14 +663,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setLowpassFilter(boolean enabled) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("lowpass");
 
             if (setting == null) {
                 setting = new AppSetting("lowpass", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -675,14 +678,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setStickyPTT(boolean enabled) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("stickyPTT");
 
             if (setting == null) {
                 setting = new AppSetting("stickyPTT", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
@@ -690,14 +693,14 @@ public class SettingsActivity extends AppCompatActivity {
     private void setNoAnimations(boolean enabled) {
 
         threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
+            AppSetting setting = viewModel.getAppDb().appSettingDao().getByName("disableAnimations");
 
             if (setting == null) {
                 setting = new AppSetting("disableAnimations", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
+                viewModel.getAppDb().appSettingDao().insertAll(setting);
             } else {
                 setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
+                viewModel.getAppDb().appSettingDao().update(setting);
             }
         });
     }
