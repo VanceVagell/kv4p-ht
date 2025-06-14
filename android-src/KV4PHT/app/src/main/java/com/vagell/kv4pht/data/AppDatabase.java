@@ -49,7 +49,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final Migration MIGRATION_3_4 = new MigrationFrom3To4();
     public static final Migration MIGRATION_4_5 = new MigrationFrom4To5();
 
-    private static volatile AppDatabase INSTANCE;
+    private static AppDatabase INSTANCE;
 
     /**
      * Returns the singleton instance of the database.
