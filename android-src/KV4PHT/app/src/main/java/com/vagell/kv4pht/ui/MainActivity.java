@@ -89,7 +89,6 @@ import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -171,7 +170,6 @@ public class MainActivity extends AppCompatActivity {
 
         // Bind data to the UI via the MainViewModel class
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
-        viewModel.setActivity(this);
         ActivityMainBinding binding = DataBindingUtil.setContentView(this, R.layout.activity_main);
         binding.setLifecycleOwner(this);
         binding.setVariable(BR.viewModel, viewModel);
@@ -200,26 +198,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onMemoryDelete(ChannelMemory memory) {
                 String freq = memory.frequency;
-                viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
-                    @Override
-                    public void onDeleteMemoryDone() {
-                        viewModel.loadData();
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                memoriesAdapter.notifyDataSetChanged();
-
-                                if (radioAudioService != null) {
-                                    radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
-                                    tuneToFreqUi(freq, false);
-                                }
-
-                                viewModel.setCallback(null);
-                            }
-                        });
+                viewModel.deleteMemoryAsync(memory, () -> viewModel.loadDataAsync(() -> {
+                    memoriesAdapter.notifyDataSetChanged();
+                    if (radioAudioService != null) {
+                        radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
+                        tuneToFreqUi(freq, false);
                     }
-                });
-                viewModel.deleteMemory(memory);
+                }));
             }
 
             @Override
@@ -294,14 +279,7 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         registerReceiver(usbReceiver, filter);
 
-        viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
-            @Override
-            public void onLoadDataDone() {
-                applySettings();
-                viewModel.setCallback(null);
-            }
-        });
-        viewModel.loadData();
+        viewModel.loadDataAsync(this::applySettings);
     }
 
     final Context context = this;
@@ -484,19 +462,9 @@ public class MainActivity extends AppCompatActivity {
                     myBeacon.positionLat = latitude;
                     myBeacon.positionLong = longitude;
                     myBeacon.timestamp = java.time.Instant.now().getEpochSecond();
-
-                    threadPoolExecutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            MainViewModel.appDb.aprsMessageDao().insertAll(myBeacon);
-                            viewModel.loadData();
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    aprsAdapter.notifyDataSetChanged();
-                                }
-                            });
-                        }
+                    threadPoolExecutor.execute(() -> {
+                        viewModel.getAppDb().aprsMessageDao().insertAll(myBeacon);
+                        viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
                     });
                 }
 
@@ -526,6 +494,7 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.setCallbacks(callbacks);
             applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
+            runOnUiThread(() -> radioAudioService.start());
         }
 
         @Override
@@ -570,16 +539,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-
-        viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
-            @Override
-            public void onLoadDataDone() {
-                applySettings();
-                viewModel.setCallback(null);
-            }
-        });
-        viewModel.loadData();
-
+        viewModel.loadDataAsync(this::applySettings);
         // If we lost reference to the radioAudioService, re-establish it
         if (null == radioAudioService) {
             Intent intent = new Intent(this, RadioAudioService.class);
@@ -699,28 +659,21 @@ public class MainActivity extends AppCompatActivity {
                 APRSMessage oldAPRSMessage = null;
                 if (aprsMessage.wasAcknowledged) {
                     // When this is an ack, we don't insert anything in the DB, we try to find that old message to ack it.
-                    oldAPRSMessage = MainViewModel.appDb.aprsMessageDao().getMsgToAck(aprsMessage.toCallsign, aprsMessage.msgNum);
+                    oldAPRSMessage = viewModel.getAppDb().aprsMessageDao().getMsgToAck(aprsMessage.toCallsign, aprsMessage.msgNum);
                     if (null == oldAPRSMessage) {
                         Log.d("DEBUG", "Can't ack unknown APRS message from: " + aprsMessage.toCallsign + " with msg number: " + aprsMessage.msgNum);
                         return;
                     } else {
                         // Ack an old message
                         oldAPRSMessage.wasAcknowledged = true;
-                        MainViewModel.appDb.aprsMessageDao().update(oldAPRSMessage);
+                        viewModel.getAppDb().aprsMessageDao().update(oldAPRSMessage);
                     }
                 } else {
                     // Not an ack, add a message
-                    MainViewModel.appDb.aprsMessageDao().insertAll(aprsMessage);
+                    viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
                 }
 
-                viewModel.loadData();
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        aprsAdapter.notifyDataSetChanged();
-                    }
-                });
+                viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
             }
         });
     }
@@ -874,15 +827,8 @@ public class MainActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                MainViewModel.appDb.aprsMessageDao().insertAll(aprsMessage);
-                viewModel.loadData();
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        aprsAdapter.notifyDataSetChanged();
-                    }
-                });
+                viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
+                viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
             }
         });
 
@@ -935,33 +881,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applySettings() {
-        if (MainViewModel.appDb == null) {
+        if (!viewModel.isLoaded()) {
             return; // DB not yet loaded (e.g. radio attached before DB init completed)
         }
-
-        Activity thisActivity = this;
-
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                AppSetting callsignSetting = viewModel.appDb.appSettingDao().getByName("callsign");
-                AppSetting squelchSetting = viewModel.appDb.appSettingDao().getByName("squelch");
-                AppSetting emphasisSetting = viewModel.appDb.appSettingDao().getByName("emphasis");
-                AppSetting highpassSetting = viewModel.appDb.appSettingDao().getByName("highpass");
-                AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");
-                AppSetting stickyPTTSetting = viewModel.appDb.appSettingDao().getByName("stickyPTT");
-                AppSetting disableAnimationsSetting = viewModel.appDb.appSettingDao().getByName("disableAnimations");
-                AppSetting aprsBeaconPosition = viewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
-                AppSetting aprsPositionAccuracy = viewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
-                AppSetting bandwidthSetting = viewModel.appDb.appSettingDao().getByName("bandwidth");
-                AppSetting min2mTxFreqSetting = viewModel.appDb.appSettingDao().getByName("min2mTxFreq");
-                AppSetting max2mTxFreqSetting = viewModel.appDb.appSettingDao().getByName("max2mTxFreq");
-                AppSetting min70cmTxFreqSetting = viewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
-                AppSetting max70cmTxFreqSetting = viewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
-                AppSetting micGainBoostSetting = viewModel.appDb.appSettingDao().getByName("micGainBoost");
-                AppSetting lastMemoryId = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
-                AppSetting lastFreq = viewModel.appDb.appSettingDao().getByName("lastFreq");
-                AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
+                AppSetting callsignSetting = viewModel.getAppDb().appSettingDao().getByName("callsign");
+                AppSetting squelchSetting = viewModel.getAppDb().appSettingDao().getByName("squelch");
+                AppSetting emphasisSetting = viewModel.getAppDb().appSettingDao().getByName("emphasis");
+                AppSetting highpassSetting = viewModel.getAppDb().appSettingDao().getByName("highpass");
+                AppSetting lowpassSetting = viewModel.getAppDb().appSettingDao().getByName("lowpass");
+                AppSetting stickyPTTSetting = viewModel.getAppDb().appSettingDao().getByName("stickyPTT");
+                AppSetting disableAnimationsSetting = viewModel.getAppDb().appSettingDao().getByName("disableAnimations");
+                AppSetting aprsBeaconPosition = viewModel.getAppDb().appSettingDao().getByName("aprsBeaconPosition");
+                AppSetting aprsPositionAccuracy = viewModel.getAppDb().appSettingDao().getByName("aprsPositionAccuracy");
+                AppSetting bandwidthSetting = viewModel.getAppDb().appSettingDao().getByName("bandwidth");
+                AppSetting min2mTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("min2mTxFreq");
+                AppSetting max2mTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("max2mTxFreq");
+                AppSetting min70cmTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("min70cmTxFreq");
+                AppSetting max70cmTxFreqSetting = viewModel.getAppDb().appSettingDao().getByName("max70cmTxFreq");
+                AppSetting micGainBoostSetting = viewModel.getAppDb().appSettingDao().getByName("micGainBoost");
+                AppSetting lastMemoryId = viewModel.getAppDb().appSettingDao().getByName("lastMemoryId");
+                AppSetting lastFreq = viewModel.getAppDb().appSettingDao().getByName("lastFreq");
+                AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName("lastGroup");
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -1368,23 +1311,23 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 synchronized(ctx) { // Avoid 2 threads checking if something is set / setting it at once.
-                    AppSetting lastFreqSetting = viewModel.appDb.appSettingDao().getByName("lastFreq");
+                    AppSetting lastFreqSetting = viewModel.getAppDb().appSettingDao().getByName("lastFreq");
                     if (lastFreqSetting != null) {
                         lastFreqSetting.value = frequencyStr;
-                        viewModel.appDb.appSettingDao().update(lastFreqSetting);
+                        viewModel.getAppDb().appSettingDao().update(lastFreqSetting);
                     } else {
                         lastFreqSetting = new AppSetting("lastFreq", frequencyStr);
-                        viewModel.appDb.appSettingDao().insertAll(lastFreqSetting);
+                        viewModel.getAppDb().appSettingDao().insertAll(lastFreqSetting);
                     }
 
                     // And clear out any saved memory ID, so we restore to a simplex freq on restart.
-                    AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                    AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName("lastMemoryId");
                     if (lastMemoryIdSetting != null) {
                         lastMemoryIdSetting.value = "-1";
-                        viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                        viewModel.getAppDb().appSettingDao().update(lastMemoryIdSetting);
                     } else {
                         lastMemoryIdSetting = new AppSetting("lastMemoryId", "-1");
-                        viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                        viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
                     }
                 }
             }
@@ -1413,13 +1356,13 @@ public class MainActivity extends AppCompatActivity {
                 threadPoolExecutor.execute(new Runnable() {
                     @Override
                     public void run() {
-                        AppSetting lastMemoryIdSetting = viewModel.appDb.appSettingDao().getByName("lastMemoryId");
+                        AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName("lastMemoryId");
                         if (lastMemoryIdSetting != null) {
                             lastMemoryIdSetting.value = "" + memoryId;
-                            viewModel.appDb.appSettingDao().update(lastMemoryIdSetting);
+                            viewModel.getAppDb().appSettingDao().update(lastMemoryIdSetting);
                         } else {
                             lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
-                            viewModel.appDb.appSettingDao().insertAll(lastMemoryIdSetting);
+                            viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
                         }
                     }
                 });
@@ -1868,7 +1811,7 @@ public class MainActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                List<String> memoryGroups = MainViewModel.appDb.channelMemoryDao().getGroups();
+                List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
                 for (int i = 0; i < memoryGroups.size(); i++) {
                     String groupName = memoryGroups.get(i);
                     if (groupName != null && groupName.trim().length() > 0) {
@@ -1896,8 +1839,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void selectMemoryGroup(String groupName) {
         this.selectedMemoryGroup = groupName.equals(getString(R.string.all_memories)) ? null : groupName;
-        viewModel.loadData();
-
+        viewModel.loadDataAsync(() -> {});
         // Add drop-down arrow to end of selected group to suggest it's tappable
         TextView groupSelector = findViewById(R.id.groupSelector);
         groupSelector.setText(groupName + " ▼");
@@ -1906,13 +1848,13 @@ public class MainActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                AppSetting lastGroupSetting = viewModel.appDb.appSettingDao().getByName("lastGroup");
+                AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName("lastGroup");
                 if (lastGroupSetting != null) {
                     lastGroupSetting.value = groupName == null ? "" : groupName;
-                    viewModel.appDb.appSettingDao().update(lastGroupSetting);
+                    viewModel.getAppDb().appSettingDao().update(lastGroupSetting);
                 } else {
                     lastGroupSetting = new AppSetting("lastGroup", "" + groupName == null ? "" : groupName);
-                    viewModel.appDb.appSettingDao().insertAll(lastGroupSetting);
+                    viewModel.getAppDb().appSettingDao().insertAll(lastGroupSetting);
                 }
             }
         });
@@ -1925,8 +1867,7 @@ public class MainActivity extends AppCompatActivity {
         switch (requestCode) {
             case REQUEST_ADD_MEMORY:
                 if (resultCode == Activity.RESULT_OK) {
-                    viewModel.loadData();
-                    memoriesAdapter.notifyDataSetChanged();
+                    viewModel.loadDataAsync(() -> memoriesAdapter.notifyDataSetChanged());
                 }
                 break;
             case REQUEST_EDIT_MEMORY:
@@ -1934,35 +1875,23 @@ public class MainActivity extends AppCompatActivity {
                     // Add an observer to the model so we know when it's done reloading
                     // the edited memory, so we can tune to it.
                     final int editedMemoryId = data.getExtras().getInt("memoryId");
-                    viewModel.setCallback(new MainViewModel.MainViewModelCallback() {
-                        @Override
-                        public void onLoadDataDone() {
-                            super.onLoadDataDone();
+                    viewModel.loadDataAsync(() -> runOnUiThread(() -> {
+                        memoriesAdapter.notifyDataSetChanged();
+                        // Tune to the edited memory to force any changes to be applied (e.g. new tone
+                        // or frequency).
+                        List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+                        for (int i = 0; i < channelMemories.size(); i++) {
+                            if (channelMemories.get(i).memoryId == editedMemoryId) {
+                                viewModel.highlightMemory(channelMemories.get(i));
 
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    memoriesAdapter.notifyDataSetChanged();
-                                    // Tune to the edited memory to force any changes to be applied (e.g. new tone
-                                    // or frequency).
-                                    List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
-                                    for (int i = 0; i < channelMemories.size(); i++) {
-                                        if (channelMemories.get(i).memoryId == editedMemoryId) {
-                                            viewModel.highlightMemory(channelMemories.get(i));
-
-                                            if (radioAudioService != null) {
-                                                radioAudioService.tuneToMemory(channelMemories.get(i), squelch, false);
-                                            }
-
-                                            tuneToMemoryUi(channelMemories.get(i).memoryId);
-                                        }
-                                    }
-                                    viewModel.setCallback(null);
+                                if (radioAudioService != null) {
+                                    radioAudioService.tuneToMemory(channelMemories.get(i), squelch, false);
                                 }
-                            });
+
+                                tuneToMemoryUi(channelMemories.get(i).memoryId);
+                            }
                         }
-                    });
-                    viewModel.loadData();
+                    }));
                 }
                 break;
             case REQUEST_SETTINGS:
