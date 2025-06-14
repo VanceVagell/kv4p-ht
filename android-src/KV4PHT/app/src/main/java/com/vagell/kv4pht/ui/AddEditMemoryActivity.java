@@ -136,11 +136,6 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     private void populateMemoryGroups() {
         final Activity activity = this;
         threadPoolExecutor.execute(() -> {
-            if( viewModel.getAppDb() == null ) {
-                //For example direct call other app intent.
-                //If app is not already open do not nullpointer-exception.
-                MainViewModel preloader = new ViewModelProvider(this).get(MainViewModel.class);
-            }
             List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
 
             // Remove any blank memory groups from the list (shouldn't have been saved, ideally).

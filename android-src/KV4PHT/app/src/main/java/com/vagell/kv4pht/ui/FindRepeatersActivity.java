@@ -492,27 +492,22 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     private void populateMemoryGroups() {
         final Activity activity = this;
-        threadPoolExecutor.execute(() -> {
-            viewModel.loadDataAsync(() -> {
-                List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
-                // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
-                for (int i = 0; i < memoryGroups.size(); i++) {
-                    String name = memoryGroups.get(i);
-                    if (name == null || name.trim().length() == 0) {
-                        memoryGroups.remove(i);
-                        i--;
-                    }
+        threadPoolExecutor.execute(() -> viewModel.loadDataAsync(() -> {
+            List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
+            // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
+            for (int i = 0; i < memoryGroups.size(); i++) {
+                String name = memoryGroups.get(i);
+                if (name == null || name.trim().length() == 0) {
+                    memoryGroups.remove(i);
+                    i--;
                 }
-                activity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        AutoCompleteTextView editMemoryGroupTextView = findViewById(R.id.findRepeatersGroupTextInputEditText);
-                        ArrayAdapter arrayAdapter = new ArrayAdapter(activity, R.layout.dropdown_item, memoryGroups);
-                        editMemoryGroupTextView.setAdapter(arrayAdapter);
-                    }
-                });
+            }
+            activity.runOnUiThread(() -> {
+                AutoCompleteTextView editMemoryGroupTextView = findViewById(R.id.findRepeatersGroupTextInputEditText);
+                ArrayAdapter arrayAdapter = new ArrayAdapter(activity, R.layout.dropdown_item, memoryGroups);
+                editMemoryGroupTextView.setAdapter(arrayAdapter);
             });
-        });
+        }));
     }
 
     public void findRepeatersSaveButtonClicked(View view) {

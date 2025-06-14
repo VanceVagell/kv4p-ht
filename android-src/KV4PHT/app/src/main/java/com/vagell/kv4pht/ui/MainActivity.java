@@ -893,7 +893,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 applyRfPower(settings);
                 applySquelch(settings);
-                applyCallsign(settings);
+                applyCallSign(settings);
                 applyGroupAndMemory(settings);
                 applyTxFreqLimits(settings);
                 applyBandwidthAndGain(settings);
@@ -912,9 +912,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyCallsign(Map<String, String> settings) {
-        String callsign = settings.getOrDefault("callsign", "");
-        this.callsign = callsign;
+    private void applyCallSign(Map<String, String> settings) {
+        this.callsign = settings.getOrDefault("callsign", "");;
         boolean empty = callsign.isEmpty();
         findViewById(R.id.sendButton).setEnabled(!empty);
         findViewById(R.id.sendButtonOverlay).setVisibility(empty ? VISIBLE : GONE);

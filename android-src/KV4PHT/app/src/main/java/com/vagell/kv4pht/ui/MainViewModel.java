@@ -49,7 +49,6 @@ public class MainViewModel extends AndroidViewModel {
     public MainViewModel(@NotNull Application application) {
         super(application);
         appDb = AppDatabase.getInstance(application.getApplicationContext());
-        //loadDataAsync(() -> {});
     }
 
     private void loadData() {
