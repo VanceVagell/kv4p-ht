@@ -526,21 +526,6 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.setCallbacks(callbacks);
             applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
-
-            // Can only retrieve moduleType from DB async, so we do that and tell radioAudioService.
-            threadPoolExecutor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    final AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            radioAudioService.start();
-                        }
-                    });
-                }
-            });
         }
 
         @Override
@@ -961,7 +946,6 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 AppSetting callsignSetting = viewModel.appDb.appSettingDao().getByName("callsign");
                 AppSetting squelchSetting = viewModel.appDb.appSettingDao().getByName("squelch");
-                AppSetting moduleTypeSetting = viewModel.appDb.appSettingDao().getByName("moduleType");
                 AppSetting emphasisSetting = viewModel.appDb.appSettingDao().getByName("emphasis");
                 AppSetting highpassSetting = viewModel.appDb.appSettingDao().getByName("highpass");
                 AppSetting lowpassSetting = viewModel.appDb.appSettingDao().getByName("lowpass");

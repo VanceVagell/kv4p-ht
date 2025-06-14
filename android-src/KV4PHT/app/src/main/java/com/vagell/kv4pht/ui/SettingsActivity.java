@@ -57,11 +57,8 @@ public class SettingsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
-
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
         populateOriginalValues();
-        populateRadioModuleTypes();
         populateBandwidths();
         populateMinFrequencies();
         populateMaxFrequencies();
@@ -78,86 +75,59 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateBandwidths() {
         AutoCompleteTextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
-
-        List<String> bandwidths = new ArrayList<String>();
+        List<String> bandwidths = new ArrayList<>();
         bandwidths.add("Wide");
         bandwidths.add("Narrow");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
+        ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, bandwidths);
         bandwidthTextView.setAdapter(arrayAdapter);
-    }
-
-    private void populateRadioModuleTypes() {
-        AutoCompleteTextView radioModuleTypeTextView = findViewById(R.id.radioModuleTypeTextView);
-
-        List<String> bandwidths = new ArrayList<String>();
-        bandwidths.add("VHF");
-        bandwidths.add("UHF");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
-        radioModuleTypeTextView.setAdapter(arrayAdapter);
     }
 
     private void populateMinFrequencies() {
         AutoCompleteTextView min2mFreqTextView = findViewById(R.id.min2mFreqTextView);
-
         List<String> min2mFreqs = new ArrayList<String>();
         min2mFreqs.add("144MHz");
-
-        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, min2mFreqs);
+        ArrayAdapter<String> arrayAdapter1 = new ArrayAdapter<>(this, R.layout.dropdown_item, min2mFreqs);
         min2mFreqTextView.setAdapter(arrayAdapter1);
-
         AutoCompleteTextView min70cmFreqTextView = findViewById(R.id.min70cmFreqTextView);
-
         List<String> min70cmFreqs = new ArrayList<String>();
         min70cmFreqs.add("420MHz");
         min70cmFreqs.add("430MHz");
-
-        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, min70cmFreqs);
+        ArrayAdapter<String> arrayAdapter2 = new ArrayAdapter<>(this, R.layout.dropdown_item, min70cmFreqs);
         min70cmFreqTextView.setAdapter(arrayAdapter2);
     }
 
     private void populateMaxFrequencies() {
         AutoCompleteTextView max2mFreqTextView = findViewById(R.id.max2mFreqTextView);
-
         List<String> max2mFreqs = new ArrayList<String>();
         max2mFreqs.add("148MHz");
         max2mFreqs.add("146MHz");
-
-        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, max2mFreqs);
+        ArrayAdapter<String> arrayAdapter1 = new ArrayAdapter<>(this, R.layout.dropdown_item, max2mFreqs);
         max2mFreqTextView.setAdapter(arrayAdapter1);
-
         AutoCompleteTextView max70cmFreqTextView = findViewById(R.id.max70cmFreqTextView);
-
         List<String> max70cmFreqs = new ArrayList<String>();
         max70cmFreqs.add("450MHz");
         max70cmFreqs.add("440MHz");
-
-        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, max70cmFreqs);
+        ArrayAdapter<String> arrayAdapter2 = new ArrayAdapter<>(this, R.layout.dropdown_item, max70cmFreqs);
         max70cmFreqTextView.setAdapter(arrayAdapter2);
     }
 
     private void populateMicGainOptions() {
         AutoCompleteTextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
-
         List<String> micGainOptions = new ArrayList<String>();
         micGainOptions.add("None");
         micGainOptions.add("Low");
         micGainOptions.add("Med");
         micGainOptions.add("High");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, micGainOptions);
+        ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, micGainOptions);
         micGainBoostTextView.setAdapter(arrayAdapter);
     }
 
     private void populateAprsOptions() {
         AutoCompleteTextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
-
         List<String> positionAccuracyOptions = new ArrayList<String>();
         positionAccuracyOptions.add("Exact");
         positionAccuracyOptions.add("Approx");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, positionAccuracyOptions);
+        ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, positionAccuracyOptions);
         aprsPositionAccuracyTextView.setAdapter(arrayAdapter);
     }
 
@@ -168,7 +138,6 @@ public class SettingsActivity extends AppCompatActivity {
             public void run() {
                 AppSetting callsignSetting = MainViewModel.appDb.appSettingDao().getByName("callsign");
                 AppSetting squelchSetting = MainViewModel.appDb.appSettingDao().getByName("squelch");
-                AppSetting moduleTypeSetting = MainViewModel.appDb.appSettingDao().getByName("moduleType");
                 AppSetting emphasisSetting = MainViewModel.appDb.appSettingDao().getByName("emphasis");
                 AppSetting highpassSetting = MainViewModel.appDb.appSettingDao().getByName("highpass");
                 AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
@@ -196,38 +165,33 @@ public class SettingsActivity extends AppCompatActivity {
                             squelchSlider.setValue(Float.parseFloat(squelchSetting.value));
                         }
 
-                        if (moduleTypeSetting != null) {
-                            AutoCompleteTextView radioModuleTypeTextView = (AutoCompleteTextView) findViewById(R.id.radioModuleTypeTextView);
-                            radioModuleTypeTextView.setText(moduleTypeSetting.value, false);
-                        }
-
                         if (emphasisSetting != null) {
-                            Switch emphasisSwitch = (Switch) (findViewById(R.id.emphasisSwitch));
+                            Switch emphasisSwitch = findViewById(R.id.emphasisSwitch);
                             emphasisSwitch.setChecked(Boolean.parseBoolean(emphasisSetting.value));
                         }
 
                         if (highpassSetting != null) {
-                            Switch highpassSwitch = (Switch) (findViewById(R.id.highpassSwitch));
+                            Switch highpassSwitch = findViewById(R.id.highpassSwitch);
                             highpassSwitch.setChecked(Boolean.parseBoolean(highpassSetting.value));
                         }
 
                         if (lowpassSetting != null) {
-                            Switch lowpassSwitch = (Switch) (findViewById(R.id.lowpassSwitch));
+                            Switch lowpassSwitch = findViewById(R.id.lowpassSwitch);
                             lowpassSwitch.setChecked(Boolean.parseBoolean(lowpassSetting.value));
                         }
 
                         if (stickyPTTSetting != null) {
-                            Switch stickyPTTSwitch = (Switch) (findViewById(R.id.stickyPTTSwitch));
+                            Switch stickyPTTSwitch = findViewById(R.id.stickyPTTSwitch);
                             stickyPTTSwitch.setChecked(Boolean.parseBoolean(stickyPTTSetting.value));
                         }
 
                         if (disableAnimationsSetting != null) {
-                            Switch noAnimationsSwitch = (Switch) (findViewById(R.id.noAnimationsSwitch));
+                            Switch noAnimationsSwitch = findViewById(R.id.noAnimationsSwitch);
                             noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
                         }
 
                         if (aprsBeaconPosition != null) {
-                            Switch aprsPositionSwitch = (Switch) (findViewById(R.id.aprsPositionSwitch));
+                            Switch aprsPositionSwitch = findViewById(R.id.aprsPositionSwitch);
                             aprsPositionSwitch.setChecked(Boolean.parseBoolean(aprsBeaconPosition.value));
                         }
 
@@ -317,23 +281,6 @@ public class SettingsActivity extends AppCompatActivity {
             @SuppressLint("RestrictedApi")
             public void onValueChange(@NonNull Slider slider, float v, boolean b) {
                 setSquelch((int)slider.getValue());
-            }
-        });
-
-        TextView radioModuleTypeTextView = findViewById(R.id.radioModuleTypeTextView);
-        radioModuleTypeTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.radioModuleTypeTextView)).getText().toString().trim();
-                setRadioModuleType(newText);
             }
         });
 
@@ -533,24 +480,6 @@ public class SettingsActivity extends AppCompatActivity {
                 MainViewModel.appDb.appSettingDao().insertAll(setting);
             } else {
                 setting.value = aprsPositionAccuracy;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
-    }
-
-    /**
-     * @param radioModuleType "VHF" or "UHF"
-     */
-    private void setRadioModuleType(String radioModuleType) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("moduleType");
-
-            if (setting == null) {
-                setting = new AppSetting("moduleType", radioModuleType);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = radioModuleType;
                 MainViewModel.appDb.appSettingDao().update(setting);
             }
         });

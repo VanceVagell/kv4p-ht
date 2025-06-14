@@ -38,7 +38,6 @@
     <string name="callsign_or_cq">呼号或者CQ</string>
     <string name="squelch">静噪等级</string>
     <string name="filters">滤波器</string>
-    <string name="radio_module_type">射频模块类型</string>
     <string name="accessibility">无障碍</string>
     <string name="closed_captions">CC字幕</string>
     <string name="system_setting">系统设置</string>

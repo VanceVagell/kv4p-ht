@@ -49,7 +49,6 @@
     <string name="visualization_of_current_transmit_audio_volume" translatable="false">Visualization of current transmit audio volume</string>
     <string name="squelch">Squelch</string>
     <string name="filters">Filters</string>
-    <string name="radio_module_type">Radio module type</string>
     <string name="accessibility">Accessibility</string>
     <string name="closed_captions">Closed captions</string>
     <string name="system_setting">System setting</string>
