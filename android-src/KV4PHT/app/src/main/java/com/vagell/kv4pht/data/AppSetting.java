@@ -22,6 +22,7 @@ import androidx.annotation.NonNull;
 import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
+import lombok.Getter;
 
 @Entity(tableName = "app_settings")
 public class AppSetting {
@@ -34,9 +35,11 @@ public class AppSetting {
 
     @PrimaryKey(autoGenerate = false)
     @ColumnInfo(name = "name")
+    @Getter
     @NonNull
     public String name;
 
     @ColumnInfo(name = "value")
+    @Getter
     public String value;
 }
