@@ -50,11 +50,13 @@ import java.util.stream.Collectors;
 public class SettingsActivity extends AppCompatActivity {
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private MainViewModel viewModel = null;
+    private boolean hasHighLowPowerSwitch = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
+        hasHighLowPowerSwitch = getIntent().getBooleanExtra("hasHighLowPowerSwitch", false);
         setContentView(R.layout.activity_settings);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         populateOriginalValues(this::attachListeners);
@@ -136,14 +138,16 @@ public class SettingsActivity extends AppCompatActivity {
         ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, rfPowerOptions);
         rfPowerTextView.setAdapter(arrayAdapter);
         rfPowerTextView.setThreshold(1);
-        // Set default text to first item
-        rfPowerTextView.setText(rfPowerOptions[0], false);
-        boolean hasHighLowPowerSwitch = getIntent().getBooleanExtra("hasHighLowPowerSwitch", false);
-        LinearLayout rfPowerLayout = findViewById(R.id.rfPowerLayout);
         if (hasHighLowPowerSwitch) {
-            rfPowerLayout.setVisibility(View.VISIBLE);
+            rfPowerTextView.setEnabled(true);
+            rfPowerTextView.setFocusable(true);
+            rfPowerTextView.setClickable(true);
         } else {
-            rfPowerLayout.setVisibility(View.GONE);
+            rfPowerTextView.setEnabled(false);
+            rfPowerTextView.setFocusable(false);
+            rfPowerTextView.setClickable(false);
+            // Set default text to first item
+            rfPowerTextView.setText(rfPowerOptions[0], false);
         }
     }
 
@@ -199,7 +203,9 @@ public class SettingsActivity extends AppCompatActivity {
                 setDropdownIfPresent(settings, "min70cmTxFreq", R.id.min70cmFreqTextView, "MHz");
                 setDropdownIfPresent(settings, "max70cmTxFreq", R.id.max70cmFreqTextView, "MHz");
                 setDropdownIfPresent(settings, "micGainBoost", R.id.micGainBoostTextView);
-                setDropdownIfPresent(settings, "rfPower", R.id.rfPowerTextView);
+                if (hasHighLowPowerSwitch) {
+                    setDropdownIfPresent(settings, "rfPower", R.id.rfPowerTextView);
+                }
                 callback.run();
             });
         });
