@@ -1410,7 +1410,7 @@ public class MainActivity extends AppCompatActivity {
                     bandField.setVisibility(View.VISIBLE);
                     break;
                 default:
-                    bandField.setVisibility(View.GONE);
+                    bandField.setVisibility(View.INVISIBLE);
                     break;
             }
         });
