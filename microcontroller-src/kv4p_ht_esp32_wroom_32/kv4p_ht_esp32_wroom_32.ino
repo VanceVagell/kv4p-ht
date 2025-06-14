@@ -131,7 +131,7 @@ void doConfig(Config const &config) {
     esp_task_wdt_reset();
     if (sa818.handshake()) { //Check if radio responded to handshake attempt
       radioModuleStatus = RADIO_MODULE_FOUND;
-      sa818.volume(hardware_version == HW_VER_V2_0C ? 6 : 8); // v2.0c has a lower input ADC range.
+      sa818.volume(hw.volume);
       sa818.filters(false, false, false);
       break;
     }
