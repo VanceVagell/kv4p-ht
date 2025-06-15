@@ -1319,6 +1319,7 @@ public class MainActivity extends AppCompatActivity {
         BAND_VHF, BAND_UHF, BAND_UNKNOWN
     }
 
+    @SuppressWarnings("java:S3398")
     private void showBand(BandType bandType) {
         runOnUiThread(() -> {
             EditText bandField = findViewById(R.id.activeBand);
