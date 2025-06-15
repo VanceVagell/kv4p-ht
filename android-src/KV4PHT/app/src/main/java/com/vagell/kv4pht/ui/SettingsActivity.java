@@ -45,6 +45,7 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import java.util.stream.Collectors;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -154,23 +155,23 @@ public class SettingsActivity extends AppCompatActivity {
                 .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
             runOnUiThread(() -> {
                 String mhz = getString(R.string.mhz);
-                setTextIfPresent(settings, "callsign", R.id.callsignTextInputEditText);
-                setSliderIfPresent(settings, "squelch", R.id.squelchSlider);
-                setSwitchIfPresent(settings, "emphasis", R.id.emphasisSwitch);
-                setSwitchIfPresent(settings, "highpass", R.id.highpassSwitch);
-                setSwitchIfPresent(settings, "lowpass", R.id.lowpassSwitch);
-                setSwitchIfPresent(settings, "stickyPTT", R.id.stickyPTTSwitch);
-                setSwitchIfPresent(settings, "disableAnimations", R.id.noAnimationsSwitch);
-                setSwitchIfPresent(settings, "aprsBeaconPosition", R.id.aprsPositionSwitch);
-                setDropdownIfPresent(settings, "aprsPositionAccuracy", R.id.aprsPositionAccuracyTextView);
-                setDropdownIfPresent(settings, "bandwidth", R.id.bandwidthTextView);
-                setDropdownIfPresent(settings, "min2mTxFreq", R.id.min2mFreqTextView, mhz);
-                setDropdownIfPresent(settings, "max2mTxFreq", R.id.max2mFreqTextView, mhz);
-                setDropdownIfPresent(settings, "min70cmTxFreq", R.id.min70cmFreqTextView, mhz);
-                setDropdownIfPresent(settings, "max70cmTxFreq", R.id.max70cmFreqTextView, mhz);
-                setDropdownIfPresent(settings, "micGainBoost", R.id.micGainBoostTextView);
+                setTextIfPresent(settings, AppSetting.SETTING_CALLSIGN, R.id.callsignTextInputEditText);
+                setSliderIfPresent(settings, AppSetting.SETTING_SQUELCH, R.id.squelchSlider);
+                setSwitchIfPresent(settings, AppSetting.SETTING_EMPHASIS, R.id.emphasisSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_HIGHPASS, R.id.highpassSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_LOWPASS, R.id.lowpassSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_STICKY_PTT, R.id.stickyPTTSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
+                setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
+                setDropdownIfPresent(settings, AppSetting.SETTING_BANDWIDTH, R.id.bandwidthTextView);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MIN_70_CM_TX_FREQ, R.id.min70cmFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MAX_70_CM_TX_FREQ, R.id.max70cmFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MIC_GAIN_BOOST, R.id.micGainBoostTextView);
                 if (hasHighLowPowerSwitch) {
-                    setDropdownIfPresent(settings, "rfPower", R.id.rfPowerTextView);
+                    setDropdownIfPresent(settings, AppSetting.SETTING_RF_POWER, R.id.rfPowerTextView);
                 }
                 callback.run();
             });
@@ -223,7 +224,7 @@ public class SettingsActivity extends AppCompatActivity {
         ((Switch) findViewById(id)).setOnCheckedChangeListener((buttonView, isChecked) -> onChange.accept(isChecked));
     }
 
-    private void attachSlider(int viewId, Consumer<Integer> onValueChanged) {
+    private void attachSlider(int viewId, IntConsumer onValueChanged) {
         Slider slider = findViewById(viewId);
         slider.addOnChangeListener((s, value, fromUser) -> onValueChanged.accept((int) value));
     }
@@ -252,66 +253,66 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setAprsBeaconPosition(boolean enabled) {
-        saveAppSettingAsync("aprsBeaconPosition", Boolean.toString(enabled));
+        saveAppSettingAsync(AppSetting.SETTING_APRS_BEACON_POSITION, Boolean.toString(enabled));
     }
 
     private void setAprsPositionAccuracy(String accuracy) {
-        saveAppSettingAsync("aprsPositionAccuracy", accuracy);
+        saveAppSettingAsync(AppSetting.SETTING_APRS_POSITION_ACCURACY, accuracy);
     }
 
     private void setBandwidth(String bandwidth) {
-        saveAppSettingAsync("bandwidth", bandwidth);
+        saveAppSettingAsync(AppSetting.SETTING_BANDWIDTH, bandwidth);
     }
 
     private void setMin2mTxFreq(String freq) {
-        saveAppSettingAsync("min2mTxFreq", freq);
+        saveAppSettingAsync(AppSetting.SETTING_MIN_2_M_TX_FREQ, freq);
     }
 
     private void setMax2mTxFreq(String freq) {
-        saveAppSettingAsync("max2mTxFreq", freq);
+        saveAppSettingAsync(AppSetting.SETTING_MAX_2_M_TX_FREQ, freq);
     }
 
     private void setMin70cmTxFreq(String freq) {
-        saveAppSettingAsync("min70cmTxFreq", freq);
+        saveAppSettingAsync(AppSetting.SETTING_MIN_70_CM_TX_FREQ, freq);
     }
 
     private void setMax70cmTxFreq(String freq) {
-        saveAppSettingAsync("max70cmTxFreq", freq);
+        saveAppSettingAsync(AppSetting.SETTING_MAX_70_CM_TX_FREQ, freq);
     }
 
     private void setMicGainBoost(String level) {
-        saveAppSettingAsync("micGainBoost", level);
+        saveAppSettingAsync(AppSetting.SETTING_MIC_GAIN_BOOST, level);
     }
 
     private void setRfPower(String rfPower) {
-        saveAppSettingAsync("rfPower", rfPower);
+        saveAppSettingAsync(AppSetting.SETTING_RF_POWER, rfPower);
     }
 
     private void setCallsign(String callsign) {
-        saveAppSettingAsync("callsign", callsign);
+        saveAppSettingAsync(AppSetting.SETTING_CALLSIGN, callsign);
     }
 
     private void setSquelch(int squelch) {
-        saveAppSettingAsync("squelch", Integer.toString(squelch));
+        saveAppSettingAsync(AppSetting.SETTING_SQUELCH, Integer.toString(squelch));
     }
 
     private void setEmphasisFilter(boolean enabled) {
-        saveAppSettingAsync("emphasis", Boolean.toString(enabled));
+        saveAppSettingAsync(AppSetting.SETTING_EMPHASIS, Boolean.toString(enabled));
     }
 
     private void setHighpassFilter(boolean enabled) {
-        saveAppSettingAsync("highpass", Boolean.toString(enabled));
+        saveAppSettingAsync(AppSetting.SETTING_HIGHPASS, Boolean.toString(enabled));
     }
 
     private void setLowpassFilter(boolean enabled) {
-        saveAppSettingAsync("lowpass", Boolean.toString(enabled));
+        saveAppSettingAsync(AppSetting.SETTING_LOWPASS, Boolean.toString(enabled));
     }
 
     private void setStickyPTT(boolean enabled) {
-        saveAppSettingAsync("stickyPTT", Boolean.toString(enabled));
+        saveAppSettingAsync(AppSetting.SETTING_STICKY_PTT, Boolean.toString(enabled));
     }
 
     private void setNoAnimations(boolean enabled) {
-        saveAppSettingAsync("disableAnimations", Boolean.toString(enabled));
+        saveAppSettingAsync(AppSetting.SETTING_DISABLE_ANIMATIONS, Boolean.toString(enabled));
     }
 }

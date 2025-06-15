@@ -513,8 +513,8 @@ public class MainActivity extends AppCompatActivity {
         super.onStart();
 
         Intent intent = new Intent(this, RadioAudioService.class);
-        intent.putExtra("callsign", callsign);
-        intent.putExtra("squelch", squelch);
+        intent.putExtra(AppSetting.SETTING_CALLSIGN, callsign);
+        intent.putExtra(AppSetting.SETTING_SQUELCH, squelch);
         intent.putExtra("activeMemoryId", activeMemoryId);
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
 
@@ -546,8 +546,8 @@ public class MainActivity extends AppCompatActivity {
         // If we lost reference to the radioAudioService, re-establish it
         if (null == radioAudioService) {
             Intent intent = new Intent(this, RadioAudioService.class);
-            intent.putExtra("callsign", callsign);
-            intent.putExtra("squelch", squelch);
+            intent.putExtra(AppSetting.SETTING_CALLSIGN, callsign);
+            intent.putExtra(AppSetting.SETTING_SQUELCH, squelch);
             intent.putExtra("activeMemoryId", activeMemoryId);
             intent.putExtra("activeFrequencyStr", activeFrequencyStr);
 
@@ -906,14 +906,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyRfPower(Map<String, String> settings) {
         List<String> powerOptions = Arrays.asList(getResources().getStringArray(R.array.rf_power_options));
-        String power = settings.getOrDefault("rfPower", powerOptions.get(0));
+        String power = settings.getOrDefault(AppSetting.SETTING_RF_POWER, powerOptions.get(0));
         if (radioAudioService != null) {
             radioAudioService.setHighPower(powerOptions.indexOf(power) == 0);
         }
     }
 
     private void applyCallSign(Map<String, String> settings) {
-        this.callsign = settings.getOrDefault("callsign", "");;
+        this.callsign = settings.getOrDefault(AppSetting.SETTING_CALLSIGN, "");
         boolean empty = callsign.isEmpty();
         findViewById(R.id.sendButton).setEnabled(!empty);
         findViewById(R.id.sendButtonOverlay).setVisibility(empty ? VISIBLE : GONE);
@@ -923,12 +923,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyGroupAndMemory(Map<String, String> settings) {
-        String group = settings.get("lastGroup");
+        String group = settings.get(AppSetting.SETTING_LAST_GROUP);
         if (group != null && !group.isEmpty()) {
             selectMemoryGroup(group);
         }
-        String lastMemoryIdStr = settings.get("lastMemoryId");
-        String lastFreq = settings.getOrDefault("lastFreq", "0.0000");
+        String lastMemoryIdStr = settings.get(AppSetting.SETTING_LAST_MEMORY_ID);
+        String lastFreq = settings.getOrDefault(AppSetting.SETTING_LAST_FREQ, "0.0000");
         activeMemoryId = (lastMemoryIdStr != null && !lastMemoryIdStr.equals("-1")) ? Integer.parseInt(lastMemoryIdStr) : -1;
         activeFrequencyStr = (activeMemoryId == -1) ? lastFreq : null;
         if (radioAudioService != null) {
@@ -945,10 +945,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyTxFreqLimits(Map<String, String> settings) {
         if (radioAudioService == null) return;
-        String min2m = settings.get("min2mTxFreq");
-        String max2m = settings.get("max2mTxFreq");
-        String min70 = settings.get("min70cmTxFreq");
-        String max70 = settings.get("max70cmTxFreq");
+        String min2m = settings.get(AppSetting.SETTING_MIN_2_M_TX_FREQ);
+        String max2m = settings.get(AppSetting.SETTING_MAX_2_M_TX_FREQ);
+        String min70 = settings.get(AppSetting.SETTING_MIN_70_CM_TX_FREQ);
+        String max70 = settings.get(AppSetting.SETTING_MAX_70_CM_TX_FREQ);
         if (min2m != null) RadioAudioService.setMin2mTxFreq(Integer.parseInt(min2m));
         if (max2m != null) RadioAudioService.setMax2mTxFreq(Integer.parseInt(max2m));
         if (min70 != null) RadioAudioService.setMin70cmTxFreq(Integer.parseInt(min70));
@@ -957,14 +957,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyBandwidthAndGain(Map<String, String> settings) {
         if (radioAudioService == null) return;
-        String bandwidth = settings.get("bandwidth");
-        String gain = settings.get("micGainBoost");
+        String bandwidth = settings.get(AppSetting.SETTING_BANDWIDTH);
+        String gain = settings.get(AppSetting.SETTING_MIC_GAIN_BOOST);
         if (bandwidth != null) radioAudioService.setBandwidth(bandwidth);
         if (gain != null) radioAudioService.setMicGainBoost(gain);
     }
 
     private void applySquelch(Map<String, String> settings) {
-        String squelchStr = settings.get("squelch");
+        String squelchStr = settings.get(AppSetting.SETTING_SQUELCH);
         if (squelchStr == null) return;
         squelch = Integer.parseInt(squelchStr);
         if (radioAudioService != null) {
@@ -973,9 +973,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyFilters(Map<String, String> settings) {
-        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault("emphasis", "true"));
-        boolean highpass = Boolean.parseBoolean(settings.getOrDefault("highpass", "true"));
-        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault("lowpass", "true"));
+        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_EMPHASIS, "true"));
+        boolean highpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_HIGHPASS, "true"));
+        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_LOWPASS, "true"));
         if (radioAudioService != null && radioAudioService.isRadioConnected()) {
             threadPoolExecutor.execute(() -> {
                 if (radioAudioService.getMode() != RadioAudioService.MODE_STARTUP && radioAudioService.getMode() != RadioAudioService.MODE_SCAN) {
@@ -987,7 +987,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyDisableAnimations(Map<String, String> settings) {
-        disableAnimations = Boolean.parseBoolean(settings.getOrDefault("disableAnimations", "false"));
+        disableAnimations = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_DISABLE_ANIMATIONS, "false"));
         if (disableAnimations) {
             ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
             ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
@@ -999,8 +999,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyAprs(Map<String, String> settings) {
-        String accuracy = settings.get("aprsPositionAccuracy");
-        String beacon = settings.get("aprsBeaconPosition");
+        String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
+        String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
 
         if (accuracy != null && radioAudioService != null) {
             threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
@@ -1234,22 +1234,22 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 synchronized(ctx) { // Avoid 2 threads checking if something is set / setting it at once.
-                    AppSetting lastFreqSetting = viewModel.getAppDb().appSettingDao().getByName("lastFreq");
+                    AppSetting lastFreqSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_FREQ);
                     if (lastFreqSetting != null) {
                         lastFreqSetting.value = frequencyStr;
                         viewModel.getAppDb().appSettingDao().update(lastFreqSetting);
                     } else {
-                        lastFreqSetting = new AppSetting("lastFreq", frequencyStr);
+                        lastFreqSetting = new AppSetting(AppSetting.SETTING_LAST_FREQ, frequencyStr);
                         viewModel.getAppDb().appSettingDao().insertAll(lastFreqSetting);
                     }
 
                     // And clear out any saved memory ID, so we restore to a simplex freq on restart.
-                    AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName("lastMemoryId");
+                    AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_MEMORY_ID);
                     if (lastMemoryIdSetting != null) {
                         lastMemoryIdSetting.value = "-1";
                         viewModel.getAppDb().appSettingDao().update(lastMemoryIdSetting);
                     } else {
-                        lastMemoryIdSetting = new AppSetting("lastMemoryId", "-1");
+                        lastMemoryIdSetting = new AppSetting(AppSetting.SETTING_LAST_MEMORY_ID, "-1");
                         viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
                     }
                 }
@@ -1279,12 +1279,12 @@ public class MainActivity extends AppCompatActivity {
                 threadPoolExecutor.execute(new Runnable() {
                     @Override
                     public void run() {
-                        AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName("lastMemoryId");
+                        AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_MEMORY_ID);
                         if (lastMemoryIdSetting != null) {
                             lastMemoryIdSetting.value = "" + memoryId;
                             viewModel.getAppDb().appSettingDao().update(lastMemoryIdSetting);
                         } else {
-                            lastMemoryIdSetting = new AppSetting("lastMemoryId", "" + memoryId);
+                            lastMemoryIdSetting = new AppSetting(AppSetting.SETTING_LAST_MEMORY_ID, "" + memoryId);
                             viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
                         }
                     }
@@ -1771,12 +1771,12 @@ public class MainActivity extends AppCompatActivity {
         threadPoolExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName("lastGroup");
+                AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_GROUP);
                 if (lastGroupSetting != null) {
                     lastGroupSetting.value = groupName == null ? "" : groupName;
                     viewModel.getAppDb().appSettingDao().update(lastGroupSetting);
                 } else {
-                    lastGroupSetting = new AppSetting("lastGroup", "" + groupName == null ? "" : groupName);
+                    lastGroupSetting = new AppSetting(AppSetting.SETTING_LAST_GROUP, "" + groupName == null ? "" : groupName);
                     viewModel.getAppDb().appSettingDao().insertAll(lastGroupSetting);
                 }
             }

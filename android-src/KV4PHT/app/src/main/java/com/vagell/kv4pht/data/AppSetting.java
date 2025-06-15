@@ -26,6 +26,26 @@ import lombok.Getter;
 
 @Entity(tableName = "app_settings")
 public class AppSetting {
+    public static final String SETTING_LAST_GROUP = "lastGroup";
+    public static final String SETTING_LAST_MEMORY_ID = "lastMemoryId";
+    public static final String SETTING_LAST_FREQ = "lastFreq";
+    public static final String SETTING_MIN_2_M_TX_FREQ = "min2mTxFreq";
+    public static final String SETTING_MAX_2_M_TX_FREQ = "max2mTxFreq";
+    public static final String SETTING_MIN_70_CM_TX_FREQ = "min70cmTxFreq";
+    public static final String SETTING_MAX_70_CM_TX_FREQ = "max70cmTxFreq";
+    public static final String SETTING_RF_POWER = "rfPower";
+    public static final String SETTING_BANDWIDTH = "bandwidth";
+    public static final String SETTING_MIC_GAIN_BOOST = "micGainBoost";
+    public static final String SETTING_SQUELCH = "squelch";
+    public static final String SETTING_EMPHASIS = "emphasis";
+    public static final String SETTING_HIGHPASS = "highpass";
+    public static final String SETTING_LOWPASS = "lowpass";
+    public static final String SETTING_DISABLE_ANIMATIONS = "disableAnimations";
+    public static final String SETTING_APRS_POSITION_ACCURACY = "aprsPositionAccuracy";
+    public static final String SETTING_APRS_BEACON_POSITION = "aprsBeaconPosition";
+    public static final String SETTING_CALLSIGN = "callsign";
+    public static final String SETTING_STICKY_PTT = "stickyPTT";
+
     public AppSetting() {};
 
     public AppSetting(@NonNull String name, String value) {
