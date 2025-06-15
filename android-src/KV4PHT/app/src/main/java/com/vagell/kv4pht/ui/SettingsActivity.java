@@ -75,8 +75,8 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setDropdownOptions(int viewId, List<String> options) {
-        AutoCompleteTextView view = findViewById(viewId);
-        view.setAdapter(new ArrayAdapter<>(this, R.layout.dropdown_item, options));
+        this.<AutoCompleteTextView>findViewById(viewId)
+            .setAdapter(new ArrayAdapter<>(this, R.layout.dropdown_item, options));
     }
 
     private void populateBandwidths() {
@@ -120,22 +120,20 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setTextIfPresent(Map<String, String> settings, String key, int viewId) {
         if (settings.containsKey(key)) {
-            TextInputEditText view = findViewById(viewId);
-            view.setText(settings.get(key));
+            this.<TextInputEditText>findViewById(viewId).setText(settings.get(key));
         }
     }
 
     private void setSwitchIfPresent(Map<String, String> settings, String key, int viewId) {
         if (settings.containsKey(key)) {
-            Switch view = findViewById(viewId);
-            view.setChecked(Boolean.parseBoolean(settings.get(key)));
+            this.<Switch>findViewById(viewId).setChecked(Boolean.parseBoolean(settings.get(key)));
         }
     }
 
     private void setSliderIfPresent(Map<String, String> settings, String key, int viewId) {
         if (settings.containsKey(key)) {
-            Slider view = findViewById(viewId);
-            view.setValue(Float.parseFloat(Optional.ofNullable(settings.get(key)).orElse("0")));
+            this.<Slider>findViewById(viewId)
+                .setValue(Float.parseFloat(Optional.ofNullable(settings.get(key)).orElse("0")));
         }
     }
 
@@ -145,8 +143,8 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId, String suffix) {
         if (settings.containsKey(key)) {
-            AutoCompleteTextView view = findViewById(viewId);
-            view.setText(String.format("%s%s", settings.get(key), suffix), false);
+            this.<AutoCompleteTextView>findViewById(viewId)
+                .setText(String.format("%s%s", settings.get(key), suffix), false);
         }
     }
 
