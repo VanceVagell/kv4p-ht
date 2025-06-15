@@ -37,6 +37,7 @@ import com.vagell.kv4pht.data.migrations.MigrationFrom4To5;
     version = 5,
     entities = {AppSetting.class, ChannelMemory.class, APRSMessage.class}
 )
+@SuppressWarnings("java:S6548")
 public abstract class AppDatabase extends RoomDatabase {
 
     public abstract AppSettingDao appSettingDao();
@@ -49,7 +50,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final Migration MIGRATION_3_4 = new MigrationFrom3To4();
     public static final Migration MIGRATION_4_5 = new MigrationFrom4To5();
 
-    @SuppressWarnings("java:S3077")
+    @SuppressWarnings({"java:S3077", "java:S3008"})
     private static volatile AppDatabase INSTANCE;
 
     /**
