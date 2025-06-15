@@ -1773,10 +1773,10 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_GROUP);
                 if (lastGroupSetting != null) {
-                    lastGroupSetting.value = groupName == null ? "" : groupName;
+                    lastGroupSetting.value = groupName;
                     viewModel.getAppDb().appSettingDao().update(lastGroupSetting);
                 } else {
-                    lastGroupSetting = new AppSetting(AppSetting.SETTING_LAST_GROUP, "" + groupName == null ? "" : groupName);
+                    lastGroupSetting = new AppSetting(AppSetting.SETTING_LAST_GROUP, groupName);
                     viewModel.getAppDb().appSettingDao().insertAll(lastGroupSetting);
                 }
             }
