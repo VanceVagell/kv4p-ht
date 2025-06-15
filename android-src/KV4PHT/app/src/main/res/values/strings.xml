@@ -108,4 +108,5 @@
         <item>High</item>
         <item>Low</item>
     </string-array>
+    <string name="mhz">MHz</string>
 </resources>

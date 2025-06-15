@@ -38,17 +38,17 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class SettingsActivity extends AppCompatActivity {
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+    private final ExecutorService threadPoolExecutor = Executors.newSingleThreadExecutor();
     private MainViewModel viewModel = null;
     private boolean hasHighLowPowerSwitch = false;
 
@@ -71,72 +71,39 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        threadPoolExecutor.shutdownNow();
+        threadPoolExecutor.shutdown();
+    }
+
+    private void setDropdownOptions(int viewId, List<String> options) {
+        AutoCompleteTextView view = findViewById(viewId);
+        view.setAdapter(new ArrayAdapter<>(this, R.layout.dropdown_item, options));
     }
 
     private void populateBandwidths() {
-        AutoCompleteTextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
-        List<String> bandwidths = new ArrayList<>();
-        bandwidths.add(getResources().getString(R.string.wide));
-        bandwidths.add(getResources().getString(R.string.narrow));
-        ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, bandwidths);
-        bandwidthTextView.setAdapter(arrayAdapter);
+        setDropdownOptions(R.id.bandwidthTextView, List.of(getString(R.string.wide), getString(R.string.narrow)));
     }
 
     private void populateMinFrequencies() {
-        AutoCompleteTextView min2mFreqTextView = findViewById(R.id.min2mFreqTextView);
-        List<String> min2mFreqs = new ArrayList<String>();
-        min2mFreqs.add("144MHz");
-        ArrayAdapter<String> arrayAdapter1 = new ArrayAdapter<>(this, R.layout.dropdown_item, min2mFreqs);
-        min2mFreqTextView.setAdapter(arrayAdapter1);
-        AutoCompleteTextView min70cmFreqTextView = findViewById(R.id.min70cmFreqTextView);
-        List<String> min70cmFreqs = new ArrayList<String>();
-        min70cmFreqs.add("420MHz");
-        min70cmFreqs.add("430MHz");
-        ArrayAdapter<String> arrayAdapter2 = new ArrayAdapter<>(this, R.layout.dropdown_item, min70cmFreqs);
-        min70cmFreqTextView.setAdapter(arrayAdapter2);
+        setDropdownOptions(R.id.min2mFreqTextView, List.of("144MHz"));
+        setDropdownOptions(R.id.min70cmFreqTextView, List.of("420MHz", "430MHz"));
     }
 
     private void populateMaxFrequencies() {
-        AutoCompleteTextView max2mFreqTextView = findViewById(R.id.max2mFreqTextView);
-        List<String> max2mFreqs = new ArrayList<String>();
-        max2mFreqs.add("148MHz");
-        max2mFreqs.add("146MHz");
-        ArrayAdapter<String> arrayAdapter1 = new ArrayAdapter<>(this, R.layout.dropdown_item, max2mFreqs);
-        max2mFreqTextView.setAdapter(arrayAdapter1);
-        AutoCompleteTextView max70cmFreqTextView = findViewById(R.id.max70cmFreqTextView);
-        List<String> max70cmFreqs = new ArrayList<String>();
-        max70cmFreqs.add("450MHz");
-        max70cmFreqs.add("440MHz");
-        ArrayAdapter<String> arrayAdapter2 = new ArrayAdapter<>(this, R.layout.dropdown_item, max70cmFreqs);
-        max70cmFreqTextView.setAdapter(arrayAdapter2);
+        setDropdownOptions(R.id.max2mFreqTextView, List.of("148MHz", "146MHz"));
+        setDropdownOptions(R.id.max70cmFreqTextView, List.of("450MHz", "440MHz"));
     }
 
     private void populateMicGainOptions() {
-        AutoCompleteTextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
-        List<String> micGainOptions = new ArrayList<String>();
-        micGainOptions.add("None");
-        micGainOptions.add("Low");
-        micGainOptions.add("Med");
-        micGainOptions.add("High");
-        ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, micGainOptions);
-        micGainBoostTextView.setAdapter(arrayAdapter);
+        setDropdownOptions(R.id.micGainBoostTextView, List.of("None", "Low", "Med", "High"));
     }
 
     private void populateAprsOptions() {
-        AutoCompleteTextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
-        List<String> positionAccuracyOptions = new ArrayList<>();
-        positionAccuracyOptions.add("Exact");
-        positionAccuracyOptions.add("Approx");
-        ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, positionAccuracyOptions);
-        aprsPositionAccuracyTextView.setAdapter(arrayAdapter);
+        setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
     }
 
     private void populateRadioOptions() {
         AutoCompleteTextView rfPowerTextView = findViewById(R.id.rfPowerTextView);
-        String[] rfPowerOptions = getResources().getStringArray(R.array.rf_power_options);
-        ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, R.layout.dropdown_item, rfPowerOptions);
-        rfPowerTextView.setAdapter(arrayAdapter);
+        setDropdownOptions(R.id.rfPowerTextView, Arrays.asList(getResources().getStringArray(R.array.rf_power_options)));
         rfPowerTextView.setThreshold(1);
         if (hasHighLowPowerSwitch) {
             rfPowerTextView.setEnabled(true);
@@ -147,7 +114,7 @@ public class SettingsActivity extends AppCompatActivity {
             rfPowerTextView.setFocusable(false);
             rfPowerTextView.setClickable(false);
             // Set default text to first item
-            rfPowerTextView.setText(rfPowerOptions[0], false);
+            rfPowerTextView.setText(getResources().getStringArray(R.array.rf_power_options)[0], false);
         }
     }
 
@@ -168,7 +135,7 @@ public class SettingsActivity extends AppCompatActivity {
     private void setSliderIfPresent(Map<String, String> settings, String key, int viewId) {
         if (settings.containsKey(key)) {
             Slider view = findViewById(viewId);
-            view.setValue(Float.parseFloat(settings.get(key)));
+            view.setValue(Float.parseFloat(Optional.ofNullable(settings.get(key)).orElse("0")));
         }
     }
 
@@ -179,7 +146,7 @@ public class SettingsActivity extends AppCompatActivity {
     private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId, String suffix) {
         if (settings.containsKey(key)) {
             AutoCompleteTextView view = findViewById(viewId);
-            view.setText(settings.get(key) + suffix, false);
+            view.setText(String.format("%s%s", settings.get(key), suffix), false);
         }
     }
 
@@ -188,6 +155,7 @@ public class SettingsActivity extends AppCompatActivity {
             final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
                 .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
             runOnUiThread(() -> {
+                String mhz = getString(R.string.mhz);
                 setTextIfPresent(settings, "callsign", R.id.callsignTextInputEditText);
                 setSliderIfPresent(settings, "squelch", R.id.squelchSlider);
                 setSwitchIfPresent(settings, "emphasis", R.id.emphasisSwitch);
@@ -198,10 +166,10 @@ public class SettingsActivity extends AppCompatActivity {
                 setSwitchIfPresent(settings, "aprsBeaconPosition", R.id.aprsPositionSwitch);
                 setDropdownIfPresent(settings, "aprsPositionAccuracy", R.id.aprsPositionAccuracyTextView);
                 setDropdownIfPresent(settings, "bandwidth", R.id.bandwidthTextView);
-                setDropdownIfPresent(settings, "min2mTxFreq", R.id.min2mFreqTextView, "MHz");
-                setDropdownIfPresent(settings, "max2mTxFreq", R.id.max2mFreqTextView, "MHz");
-                setDropdownIfPresent(settings, "min70cmTxFreq", R.id.min70cmFreqTextView, "MHz");
-                setDropdownIfPresent(settings, "max70cmTxFreq", R.id.max70cmFreqTextView, "MHz");
+                setDropdownIfPresent(settings, "min2mTxFreq", R.id.min2mFreqTextView, mhz);
+                setDropdownIfPresent(settings, "max2mTxFreq", R.id.max2mFreqTextView, mhz);
+                setDropdownIfPresent(settings, "min70cmTxFreq", R.id.min70cmFreqTextView, mhz);
+                setDropdownIfPresent(settings, "max70cmTxFreq", R.id.max70cmFreqTextView, mhz);
                 setDropdownIfPresent(settings, "micGainBoost", R.id.micGainBoostTextView);
                 if (hasHighLowPowerSwitch) {
                     setDropdownIfPresent(settings, "rfPower", R.id.rfPowerTextView);
@@ -222,7 +190,7 @@ public class SettingsActivity extends AppCompatActivity {
             // Make the text of the snackbar larger.
             TextView snackbarActionTextView = (TextView) ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
             snackbarActionTextView.setTextSize(20);
-            TextView snackbarTextView = (TextView) ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+            TextView snackbarTextView = ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
             snackbarTextView.setTextSize(20);
 
             ccSnackbar.show();
@@ -237,16 +205,20 @@ public class SettingsActivity extends AppCompatActivity {
     private void attachTextView(int viewId, Consumer<String> onTextChanged) {
         TextView view = findViewById(viewId);
         view.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                // NOOP
+            }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // NOOP
+            }
             @Override public void afterTextChanged(Editable s) {
                 onTextChanged.accept(s.toString().trim());
             }
         });
     }
 
-    private String extractPrefix(String text, int length) {
-        return (text != null && text.length() >= length) ? text.substring(0, length) : text;
+    private String extractPrefix(String text) {
+        return (text != null && text.length() >= 3) ? text.substring(0, 3) : text;
     }
 
     private void attachSwitch(int id, Consumer<Boolean> onChange) {
@@ -262,10 +234,10 @@ public class SettingsActivity extends AppCompatActivity {
         attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
         attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
         attachTextView(R.id.bandwidthTextView, this::setBandwidth);
-        attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text, 3)));
-        attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text, 3)));
-        attachTextView(R.id.min70cmFreqTextView, text -> setMin70cmTxFreq(extractPrefix(text, 3)));
-        attachTextView(R.id.max70cmFreqTextView, text -> setMax70cmTxFreq(extractPrefix(text, 3)));
+        attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text)));
+        attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text)));
+        attachTextView(R.id.min70cmFreqTextView, text -> setMin70cmTxFreq(extractPrefix(text)));
+        attachTextView(R.id.max70cmFreqTextView, text -> setMax70cmTxFreq(extractPrefix(text)));
         attachTextView(R.id.micGainBoostTextView, this::setMicGainBoost);
         attachTextView(R.id.rfPowerTextView, this::setRfPower);
         attachSlider(R.id.squelchSlider, this::setSquelch);
@@ -278,9 +250,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void saveAppSettingAsync(String key, String value) {
-        threadPoolExecutor.execute(() -> {
-            viewModel.getAppDb().saveAppSetting(key, value);
-        });
+        threadPoolExecutor.execute(() -> viewModel.getAppDb().saveAppSetting(key, value));
     }
 
     private void setAprsBeaconPosition(boolean enabled) {
