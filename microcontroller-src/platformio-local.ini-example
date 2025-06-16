@@ -1,0 +1,5 @@
+; Only build one version of the code locally.
+
+[platformio]
+
+default_envs = esp32dev-release
