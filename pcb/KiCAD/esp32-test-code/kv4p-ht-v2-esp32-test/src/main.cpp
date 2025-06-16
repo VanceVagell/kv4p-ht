@@ -121,7 +121,7 @@ void setup() {
 void loop() {
     static uint8_t phase = 0;
     uint32_t now=millis();
-    digitalWrite(PIN_STOCK_LED, (now/500)%2 ? HIGH : LOW);
+    //digitalWrite(PIN_STOCK_LED, (now/500)%2 ? HIGH : LOW);
     print_buttons();
     if (phase != (now/900)%5) {
         phase = (now/900)%5;
@@ -143,9 +143,15 @@ void loop() {
     pixels.show();
 
 
-    while (Serial2.available()) {
-        char c = Serial2.read();
-        IF_SERIAL && Serial.print(c);
+    if (Serial2.available()) {
+        digitalWrite(PIN_STOCK_LED, HIGH);
+        while (Serial2.available()) {
+            char c = Serial2.read();
+            IF_SERIAL && Serial.print(c);
+        }
+    }
+    else {
+        digitalWrite(PIN_STOCK_LED, LOW);
     }
     while (Serial.available()) {
         char c = Serial.read();
@@ -167,7 +173,7 @@ void loop() {
         IF_SERIAL && Serial.println(COR_STATE ? "Squelch open" : "Squelch closed");
     }
 
-    if (last_time/5000 != now/5000) {
+    if (last_time/3000 != now/3000) {
         // Once a second
         //IF_SERIAL && Serial.println("Boop.");
         //IF_SERIAL && Serial.println(dra->handshake());
