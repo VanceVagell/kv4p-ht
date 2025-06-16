@@ -28,6 +28,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "buttons.h"
 #include "utils.h"
 
+#include "hardware-test.h"
+
+// Set some default values.  Used to be set in globals.h, but that breaks #pragma once
+hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
+Mode mode = MODE_STOPPED;
+bool squelched = false;
+uint8_t sqPin = SQ_PIN_HW1;
+
 const uint16_t FIRMWARE_VER = 14;
 
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
@@ -87,6 +95,7 @@ hw_ver_t get_hardware_version() {
 void setup() {
   // Used for setup, need to know early.
   hardware_version = get_hardware_version();
+
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
@@ -97,6 +106,7 @@ void setup() {
   Serial.println("You will see watchdog resets — this is expected behavior.");
   Serial.println("Use `logcat` or a kv4p decoder to view readable logs.");
   Serial.println("More info: https://github.com/VanceVagell/kv4p-ht/blob/main/microcontroller-src/kv4p_ht_esp32_wroom_32/readme.md");
+  Serial.println("To enter Hardware Test mode, Reset the board while pressing both PTT buttons.");
   Serial.println("==============================");
   // Hardware dependent pin assignments.
   switch (hardware_version) {
@@ -117,13 +127,24 @@ void setup() {
       COLOR_HW_VER = {16, 16, 16};
       break;
   }
+
+  // Test mode is enabled by pressing both PTT buttons on RESET.
+  buttonsSetup();
+  if (digitalRead(PHYS_PTT_PIN1) == LOW && digitalRead(PHYS_PTT_PIN2) == LOW) {
+    // Go into the hardware test code.  This bypasses the ENTIRE kv4p application.
+    Serial.println("Both PTT are pressed, entering Hardware Test Mode. Reset (without pressing PTT) to enter kv4p HT mode.");
+    test_setup();
+    // Never returns.
+  }
+
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
-  buttonsSetup();
   // Set up radio module defaults
   pinMode(PD_PIN, OUTPUT);
   digitalWrite(PD_PIN, HIGH);  // Power on
+  pinMode(PIN_RADIO_HI_LOW, OUTPUT);
+  digitalWrite(PIN_RADIO_HI_LOW, LOW); // LOW disables the MOSFET pull-down, which puts the radio in High Power mode.
   pinMode(sqPin, INPUT);
   pinMode(PTT_PIN, OUTPUT);
   digitalWrite(PTT_PIN, HIGH);  // Rx

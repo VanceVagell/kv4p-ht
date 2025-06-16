@@ -42,8 +42,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define PD_PIN        19
 #define SQ_PIN_HW1    32  // 
 #define SQ_PIN_HW2     4  // Squelch pin. In v2.0c, this is GPIO 4. In v1.x and v2.0d, this is GPIO 32.
-#define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
-#define PHYS_PTT_PIN2 33  // Optional. See above.
+
+// Connections to v2 hardware
+#define PIN_BUTTON_PTT_RIGHT (5)
+#define PIN_BUTTON_PTT_LEFT (33)
+#define PIN_BUTTON_PROGRAM (0)               // The "Boot" or "Program" button on the ESP32 modules.
+#define PIN_STOCK_LED (2)                    // The LED that comes on the ESP32 dev boards, recreated on v2.
+#define PIN_RADIO_HI_LOW (23)
+#define PIN_GPIOHEAD_2 (12)                  // GPIO Header pins. _2 is pin 2, etc.
+#define PIN_NEOPIXEL (13)                    // NeoPixel pin.
+#define PIN_GPIOHEAD_4 (14)
+#define PIN_GPIOHEAD_6 (15)
+#define PIN_SAOHEAD_SDA (21)                 // SAO I2C pins.
+#define PIN_SAOHEAD_SCK (22)
+#define PIN_SAOHEAD_5 (26)
+#define PIN_SAOHEAD_6 (27)
+#define PIN_GPIOHEAD_7 (32)
+#define PIN_GPIOHEAD_8 (35)
+#define PHYS_PTT_PIN1 PIN_BUTTON_PTT_RIGHT   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
+#define PHYS_PTT_PIN2 PIN_BUTTON_PTT_LEFT    // Optional. See above.
+
 
 #define ADC_BIAS_VOLTAGE     1.75
 #define ADC_ATTENUATION      ADC_ATTEN_DB_12
@@ -68,7 +86,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // #define HW_VER_?? (0x0F)  // Unused
 
 typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if we want.
-hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
+extern hw_ver_t hardware_version;
 
 // Mode of the app, which is essentially a state machine
 enum Mode {
@@ -76,13 +94,13 @@ enum Mode {
   MODE_RX,
   MODE_STOPPED
 };
-Mode mode = MODE_STOPPED;
+extern Mode mode;
 
 // Current SQ status
-bool squelched = false;
+extern bool squelched;
 
 // Forward declarations
 void setMode(Mode newMode);
 
 // Squelch pin
-uint8_t sqPin = SQ_PIN_HW1;
+extern uint8_t sqPin;
