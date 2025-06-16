@@ -1,5 +1,8 @@
-; Only build one version of the code locally.
+; If you have any changes you want/need to make locally, copy this file to
+; platformio-local.ini (remove the -example) and apply your changes.
+
 
 [platformio]
 
+; Only build one version of the code locally.
 default_envs = esp32dev-release
