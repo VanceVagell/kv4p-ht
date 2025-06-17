@@ -21,10 +21,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "globals.h"
 
 // Built in LED
-#define LED_PIN 2
+#define LED_PIN PIN_STOCK_LED      // Now defined in globals.h
 
 // NeoPixel support
-#define PIXELS_PIN 13
+#define PIXELS_PIN PIN_NEOPIXEL    // Now defined in globals.h
 #define NUM_PIXELS 1
 
 struct RGBColor {
@@ -37,25 +37,16 @@ const RGBColor COLOR_RX_SQL_CLOSED = {0, 0, 32};
 const RGBColor COLOR_RX_SQL_OPEN = {0, 32, 0};
 const RGBColor COLOR_TX = {16, 16, 0};
 const RGBColor COLOR_BLACK = {0, 0, 0};
-RGBColor COLOR_HW_VER = COLOR_BLACK;
+extern RGBColor COLOR_HW_VER;
 
-void neopixelColor(const RGBColor &c, uint8_t bright = 255) {
-  uint8_t red = (uint16_t(c.red) * bright + 128) >> 8;
-  uint8_t green = (uint16_t(c.green) * bright + 128) >> 8;
-  uint8_t blue = (uint16_t(c.blue) * bright + 128) >> 8;
-  neopixelWrite(PIXELS_PIN, red, green, blue);
-}
+void neopixelColor(const RGBColor &c, uint8_t bright = 255);
 
 // Calculate a float between min and max, that ramps from min to max in half of breath_every,
 // and from max to min the second half of breath_every.
 // now and breath_every are arbitrary units, but usually are milliseconds from millis().
-uint8_t calcBreath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max) {
-  uint16_t amplitude = max - min; // Ensure enough range for calculations
-  uint16_t bright = ((now % breath_every) * 512) / breath_every; // Scale to 0-512
-  if (bright > 255) bright = 512 - bright; // Fold >255 back down to 255-0
-  return ((bright * amplitude) / 255) + min;
-}
+uint8_t calcBreath(uint32_t now, uint32_t breath_every, uint8_t min, uint8_t max);
 
+// Inline can stay in the .h file.
 void inline showLEDs() {
   // When to actually act?
   static uint32_t next_time = 0;
