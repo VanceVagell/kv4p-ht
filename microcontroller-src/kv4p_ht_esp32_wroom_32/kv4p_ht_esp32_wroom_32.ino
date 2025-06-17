@@ -133,7 +133,7 @@ void setup() {
   if (digitalRead(PHYS_PTT_PIN1) == LOW && digitalRead(PHYS_PTT_PIN2) == LOW) {
     // Go into the hardware test code.  This bypasses the ENTIRE kv4p application.
     Serial.println("Both PTT are pressed, entering Hardware Test Mode. Reset (without pressing PTT) to enter kv4p HT mode.");
-    test_setup();
+    testSetup();
     // Never returns.
   }
 

@@ -6,4 +6,4 @@
 #pragma once
 
 // Entry point for hardware test code.
-void test_setup(void);
+void testSetup(void);
