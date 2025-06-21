@@ -18,115 +18,83 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.ui;
 
-import android.app.Activity;
-
+import android.app.Application;
+import androidx.annotation.NonNull;
+import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
-import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.ViewModel;
-import androidx.room.Room;
 
+import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.data.APRSMessage;
 import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.data.ChannelMemory;
+import lombok.Getter;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class MainViewModel extends ViewModel {
+public class MainViewModel extends AndroidViewModel {
     // Database holding various user-defined app parameters
-    public static AppDatabase appDb = null;
-    private Activity activity = null;
+    @Getter
+    @NonNull
+    private final AppDatabase appDb;
 
+    AtomicBoolean loaded = new AtomicBoolean(false);
     // LiveData holding the list of ChannelMemory objects
     private final MutableLiveData<List<ChannelMemory>> channelMemories = new MutableLiveData<>();
-
     // LiveData holding the list of APRSMessage objects
     private final MutableLiveData<List<APRSMessage>> aprsMessages = new MutableLiveData<>();
 
-    private MainViewModelCallback callback;
-
-    public static class MainViewModelCallback {
-        public void onLoadDataDone() { };
-        public void onDeleteMemoryDone() { };
+    public MainViewModel(@NotNull Application application) {
+        super(application);
+        appDb = AppDatabase.getInstance(application.getApplicationContext());
     }
 
-    public void setCallback(MainViewModelCallback callback) {
-        this.callback = callback;
+    private void loadData() {
+        channelMemories.postValue(getAppDb().channelMemoryDao().getAll());
+        aprsMessages.postValue(getAppDb().aprsMessageDao().getAll());
+        loaded.set(true);
     }
 
-    public void setActivity(Activity activity) {
-        this.activity = activity;
-    }
-
-    public void loadData() {
-        if (appDb == null) {
-            appDb = AppDatabase.getInstance(activity.getApplicationContext());
-        }
-
-        Executor executor = Executors.newSingleThreadExecutor();
-        executor.execute(() -> {
-            List<ChannelMemory> memoryData = appDb.channelMemoryDao().getAll();
-            channelMemories.postValue(memoryData);
-
-            List<APRSMessage> aprsData = appDb.aprsMessageDao().getAll();
-            aprsMessages.postValue(aprsData);
-
-            if (callback != null) {
-                callback.onLoadDataDone();
-            }
+    public void loadDataAsync(Runnable callback) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            loadData();
+            callback.run();
         });
-    }
-
-    public LiveData<List<ChannelMemory>> getChannelMemories() {
-        return channelMemories;
     }
 
     public LiveData<List<APRSMessage>> getAPRSMessages() {
         return aprsMessages;
     }
 
+    public LiveData<List<ChannelMemory>> getChannelMemories() {
+        return channelMemories;
+    }
+
     public void highlightMemory(ChannelMemory memory) {
         List<ChannelMemory> memories = channelMemories.getValue();
         if (memories == null) { return; }
-        for (int i = 0; i < memories.size(); i++) {
-            memories.get(i).setHighlighted(false);
+        for (ChannelMemory channelMemory : memories) {
+            channelMemory.setHighlighted(false);
         }
         if (memory != null) {
             memory.setHighlighted(true);
         }
     }
 
-    public void deleteMemory(ChannelMemory memory) {
-        Executor executor = Executors.newSingleThreadExecutor();
-        executor.execute(() -> {
-            appDb.channelMemoryDao().delete(memory);
-            if (callback != null) {
-                callback.onDeleteMemoryDone();
-            }
+    private void deleteMemory(ChannelMemory memory) {
+        getAppDb().channelMemoryDao().delete(memory);
+    }
+
+    public void deleteMemoryAsync(ChannelMemory memory, Runnable callback) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            deleteMemory(memory);
+            callback.run();
         });
     }
 
-    // Only displays memories that have the given group, or if group
-    // is null displays all memories (no filter).
-    public void filterMemories(String group) {
-        setCallback(new MainViewModelCallback() {
-            @Override
-            public void onLoadDataDone() {
-                setCallback(null);
-                List<ChannelMemory> memories = channelMemories.getValue();
-
-                if (group == null) {
-                    return;
-                }
-
-                for (int i = 0; i < memories.size(); i++) {
-                    if (!memories.get(i).group.equals(group)) {
-                        memories.remove(i--);
-                    }
-                }
-            }
-        });
-        loadData(); // Repopulate all memories, then filter (see callback above)
+    public boolean isLoaded() {
+        return loaded.get();
     }
 }
