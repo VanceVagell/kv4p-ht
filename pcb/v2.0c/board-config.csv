@@ -13,7 +13,7 @@ PHYS_PTT2,data,i8,33
 PIXELS_PIN,data,i8,13
 LED_PIN,data,i8,2
 ADC_ATTEN,data,i8,0
-ADC_BIAS,data,hex2bin,3FE00000
+ADC_BIAS,data,string,0.00
 STOPPED_COLOR,data,hex2bin,200000
 RF_MODULE_TYPE,data,u8,0
 VOLUME,data,i8,6
