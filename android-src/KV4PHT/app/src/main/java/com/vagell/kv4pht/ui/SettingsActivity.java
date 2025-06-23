@@ -104,16 +104,17 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateRadioOptions() {
         AutoCompleteTextView rfPowerTextView = findViewById(R.id.rfPowerTextView);
-        setDropdownOptions(R.id.rfPowerTextView, Arrays.asList(getResources().getStringArray(R.array.rf_power_options)));
         rfPowerTextView.setThreshold(1);
         if (hasHighLowPowerSwitch) {
             rfPowerTextView.setEnabled(true);
             rfPowerTextView.setFocusable(true);
             rfPowerTextView.setClickable(true);
+            setDropdownOptions(R.id.rfPowerTextView, Arrays.asList(getResources().getStringArray(R.array.rf_power_options)));
         } else {
             rfPowerTextView.setEnabled(false);
             rfPowerTextView.setFocusable(false);
             rfPowerTextView.setClickable(false);
+            rfPowerTextView.setAdapter(null);
             // Set default text to first item
             rfPowerTextView.setText(getResources().getStringArray(R.array.rf_power_options)[0], false);
         }
