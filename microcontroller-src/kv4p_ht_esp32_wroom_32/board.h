@@ -53,33 +53,33 @@ bool isHardwareConfigExists() {
 
 void loadHardwareConfig() {
   prefs.begin("hwconfig", true); // read-only
-  hw.pins.pinRxd2   = prefs.getChar("PIN_RXD2",     DEFAULT_PIN_RXD2);
-  hw.pins.pinTxd2   = prefs.getChar("PIN_TXD2",     DEFAULT_PIN_TXD2);
-  hw.pins.pinDac    = prefs.getChar("PIN_DAC",      DEFAULT_PIN_DAC);
-  hw.pins.pinAdc    = prefs.getChar("PIN_ADC",      DEFAULT_PIN_ADC);
-  hw.pins.pinPtt    = prefs.getChar("PIN_PTT",      DEFAULT_PIN_PTT);
-  hw.pins.pinPd     = prefs.getChar("PIN_PD",       DEFAULT_PIN_PD);
-  hw.pins.pinSq     = prefs.getChar("PIN_SQ",       DEFAULT_PIN_SQ);
-  hw.pins.pinPttPhys1  = prefs.getChar("PIN_PHYS_PTT1",    DEFAULT_PIN_PHYS_PTT1);
-  hw.pins.pinPttPhys2  = prefs.getChar("PIN_PHYS_PTT2",    DEFAULT_PIN_PHYS_PTT2);
-  hw.pins.pinPixels = prefs.getChar("PIN_PIXELS",   DEFAULT_PIN_PIXELS);
-  hw.pins.pinLed    = prefs.getChar("PIN_LED",      DEFAULT_PIN_LED);
-  hw.pins.pinHl     = prefs.getChar("PIN_HL",       DEFAULT_PIN_HL);
-  hw.adcAttenuation = (adc_atten_t) prefs.getChar("ADC_ATTEN", DEFAULT_ADC_ATTENUATION);
-  hw.adcBias        =  prefs.getString("ADC_BIAS", TOSTRING(DEFAULT_ADC_BIAS_VOLTAGE)).toFloat();
+  hw.pins.pinRfModuleRxd   = prefs.getChar("PIN_RF_RXD",   DEFAULT_PIN_RF_RXD);
+  hw.pins.pinRfModuleTxd   = prefs.getChar("PIN_RF_TXD",   DEFAULT_PIN_RF_TXD);
+  hw.pins.pinAudioOut      = prefs.getChar("PIN_AUDIO_OUT",DEFAULT_PIN_AUDIO_OUT);
+  hw.pins.pinAdc           = prefs.getChar("PIN_AUDIO_IN", DEFAULT_PIN_AUDIO_IN);
+  hw.pins.pinPtt           = prefs.getChar("PIN_PTT",      DEFAULT_PIN_PTT);
+  hw.pins.pinPd            = prefs.getChar("PIN_PD",       DEFAULT_PIN_PD);
+  hw.pins.pinSq            = prefs.getChar("PIN_SQ",       DEFAULT_PIN_SQ);
+  hw.pins.pinPttPhys1      = prefs.getChar("PIN_PHYS_PTT1",DEFAULT_PIN_PHYS_PTT1);
+  hw.pins.pinPttPhys2      = prefs.getChar("PIN_PHYS_PTT2",DEFAULT_PIN_PHYS_PTT2);
+  hw.pins.pinPixels        = prefs.getChar("PIN_PIXELS",   DEFAULT_PIN_PIXELS);
+  hw.pins.pinLed           = prefs.getChar("PIN_LED",      DEFAULT_PIN_LED);
+  hw.pins.pinHl            = prefs.getChar("PIN_HL",       DEFAULT_PIN_HL);
+  hw.adcAttenuation        = (adc_atten_t) prefs.getChar("ADC_ATTEN",DEFAULT_ADC_ATTENUATION);
+  hw.adcBias               = prefs.getString("ADC_BIAS", TOSTRING(DEFAULT_ADC_BIAS_VOLTAGE)).toFloat();
   prefs.getBytes("STOPPED_COLOR", &hw.stoppedColor, sizeof(RGBColor));
-  hw.volume        = prefs.getUChar("VOLUME",       DEFAULT_VOLUME);
-  hw.rfModuleType = (RfModuleType) prefs.getUChar("RF_MODULE_TYPE", DEFAULT_RF_MODULE_TYPE);
+  hw.volume                = prefs.getUChar("VOLUME",       DEFAULT_VOLUME);
+  hw.rfModuleType          = (RfModuleType) prefs.getUChar("RF_MODULE_TYPE", DEFAULT_RF_MODULE_TYPE);
   prefs.end();
 }
 
 void saveHardwareConfig() {
   prefs.begin("hwconfig", false); // read-write mode
   prefs.putBool("HWCONFIG",        true);
-  prefs.putChar("PIN_RXD2",        hw.pins.pinRxd2);
-  prefs.putChar("PIN_TXD2",        hw.pins.pinTxd2);
-  prefs.putChar("PIN_DAC",         hw.pins.pinDac);
-  prefs.putChar("PIN_ADC",         hw.pins.pinAdc);
+  prefs.putChar("PIN_RF_RXD",      hw.pins.pinRfModuleRxd);
+  prefs.putChar("PIN_RF_TXD",      hw.pins.pinRfModuleTxd);
+  prefs.putChar("PIN_AUDIO_OUT",   hw.pins.pinAudioOut);
+  prefs.putChar("PIN_AUDIO_IN",    hw.pins.pinAdc);
   prefs.putChar("PIN_PTT",         hw.pins.pinPtt);
   prefs.putChar("PIN_PD",          hw.pins.pinPd);
   prefs.putChar("PIN_SQ",          hw.pins.pinSq);
@@ -89,7 +89,7 @@ void saveHardwareConfig() {
   prefs.putChar("PIN_LED",         hw.pins.pinLed);
   prefs.putChar("PIN_HL",          hw.pins.pinHl);
   prefs.putChar("ADC_ATTEN",       hw.adcAttenuation);
-  prefs.putString("ADC_BIAS",      String(hw.adcBias, 6));
+  prefs.putString("ADC_BIAS",String(hw.adcBias, 6));
   prefs.putBytes("STOPPED_COLOR",  &hw.stoppedColor, sizeof(RGBColor));
   prefs.putUChar("VOLUME",         hw.volume);
   prefs.putUChar("RF_MODULE_TYPE", hw.rfModuleType);

@@ -102,7 +102,7 @@ void setup() {
     digitalWrite(hw.pins.pinHl, LOW);  // High power
   }
   // Communication with DRA818V radio module via GPIO pins
-  Serial2.begin(9600, SERIAL_8N1, hw.pins.pinRxd2, hw.pins.pinTxd2);
+  Serial2.begin(9600, SERIAL_8N1, hw.pins.pinRfModuleRxd, hw.pins.pinRfModuleTxd);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
   //
   debugSetup();

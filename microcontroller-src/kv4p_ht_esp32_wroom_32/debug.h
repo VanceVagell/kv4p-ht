@@ -88,9 +88,9 @@ int debug_log_printf(SndCommand cmd, const char* format, ...) {
 void printHardwareConfig() {
 #ifndef RELEASE  
   _LOGI("Hardware Configuration:");
-  _LOGI("  PIN_RXD2       = %d",   hw.pins.pinRxd2);
-  _LOGI("  PIN_TXD2       = %d",   hw.pins.pinTxd2);
-  _LOGI("  PIN_DAC        = %d",   hw.pins.pinDac);
+  _LOGI("  PIN_RXD2       = %d",   hw.pins.pinRfModuleRxd);
+  _LOGI("  PIN_TXD2       = %d",   hw.pins.pinRfModuleTxd);
+  _LOGI("  PIN_DAC        = %d",   hw.pins.pinAudioOut);
   _LOGI("  PIN_ADC        = %d",   hw.pins.pinAdc);
   _LOGI("  PIN_PTT        = %d",   hw.pins.pinPtt);
   _LOGI("  PIN_PD         = %d",   hw.pins.pinPd);

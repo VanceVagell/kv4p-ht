@@ -41,10 +41,10 @@ enum RfModuleType {
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
 // Connections to radio module
-#define DEFAULT_PIN_RXD2      16
-#define DEFAULT_PIN_TXD2      17
-#define DEFAULT_PIN_DAC       25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
-#define DEFAULT_PIN_ADC       34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
+#define DEFAULT_PIN_RF_RXD    16
+#define DEFAULT_PIN_RF_TXD    17
+#define DEFAULT_PIN_AUDIO_OUT 25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
+#define DEFAULT_PIN_AUDIO_IN  34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
 #define DEFAULT_PIN_PTT       18  // Keys up the radio module
 #define DEFAULT_PIN_PD        19
 #define DEFAULT_PIN_SQ        32  //
@@ -83,9 +83,9 @@ struct RGBColor {
 
 struct PinConfig {
   int8_t pinSq;
-  int8_t pinRxd2;
-  int8_t pinTxd2;
-  int8_t pinDac;
+  int8_t pinRfModuleRxd;
+  int8_t pinRfModuleTxd;
+  int8_t pinAudioOut;
   int8_t pinAdc;
   int8_t pinPtt;
   int8_t pinPd;
@@ -114,10 +114,10 @@ struct HWConfig {
 HWConfig hw = {
   .pins = {
     .pinSq = DEFAULT_PIN_SQ,
-    .pinRxd2 = DEFAULT_PIN_RXD2,
-    .pinTxd2 = DEFAULT_PIN_TXD2,
-    .pinDac = DEFAULT_PIN_DAC,
-    .pinAdc = DEFAULT_PIN_ADC,
+    .pinRfModuleRxd = DEFAULT_PIN_RF_RXD,
+    .pinRfModuleTxd = DEFAULT_PIN_RF_TXD,
+    .pinAudioOut = DEFAULT_PIN_AUDIO_OUT,
+    .pinAdc = DEFAULT_PIN_AUDIO_IN,
     .pinPtt = DEFAULT_PIN_PTT,
     .pinPd = DEFAULT_PIN_PD,
     .pinPttPhys1 = DEFAULT_PIN_PHYS_PTT1,
