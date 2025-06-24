@@ -53,13 +53,13 @@ void setMode(Mode newMode) {
   switch (mode) {
     case MODE_STOPPED:
       _LOGI("MODE_STOPPED");
-      digitalWrite(hw.pins.pttPin, HIGH);
+      digitalWrite(hw.pins.pinPtt, HIGH);
       endI2STx();
       endI2SRx();
     break;
     case MODE_RX:
       _LOGI("MODE_RX");
-      digitalWrite(hw.pins.pttPin, HIGH);
+      digitalWrite(hw.pins.pinPtt, HIGH);
       squelchDebounce.forceState(true);
       endI2STx();
       initI2SRx();
@@ -67,7 +67,7 @@ void setMode(Mode newMode) {
     case MODE_TX:
       _LOGI("MODE_TX");
       txStartTime = millis();
-      digitalWrite(hw.pins.pttPin, LOW);
+      digitalWrite(hw.pins.pinPtt, LOW);
       endI2SRx();
       initI2STx();
     break;
@@ -92,22 +92,22 @@ void setup() {
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
   buttonsSetup();
   // Set up radio module defaults
-  pinMode(hw.pins.pdPin, OUTPUT);
-  digitalWrite(hw.pins.pdPin, HIGH);  // Power on
-  pinMode(hw.pins.sqPin, INPUT);
-  pinMode(hw.pins.pttPin, OUTPUT);
-  digitalWrite(hw.pins.pttPin, HIGH);  // Rx
+  pinMode(hw.pins.pinPd, OUTPUT);
+  digitalWrite(hw.pins.pinPd, HIGH);  // Power on
+  pinMode(hw.pins.pinSq, INPUT);
+  pinMode(hw.pins.pinPtt, OUTPUT);
+  digitalWrite(hw.pins.pinPtt, HIGH);  // Rx
   if (hw.features.hasHL) {
-    pinMode(hw.pins.hlPin, OUTPUT);
-    digitalWrite(hw.pins.hlPin, LOW);  // High power
+    pinMode(hw.pins.pinHl, OUTPUT);
+    digitalWrite(hw.pins.pinHl, LOW);  // High power
   }
   // Communication with DRA818V radio module via GPIO pins
-  Serial2.begin(9600, SERIAL_8N1, hw.pins.rxd2Pin, hw.pins.txd2Pin);
+  Serial2.begin(9600, SERIAL_8N1, hw.pins.pinRxd2, hw.pins.pinTxd2);
   Serial2.setTimeout(10);  // Very short so we don't tie up rx audio while reading from radio module (responses are tiny so this is ok)
   //
   debugSetup();
   // Begin in STOPPED mode
-  squelched = (digitalRead(hw.pins.sqPin) == HIGH);
+  squelched = (digitalRead(hw.pins.pinSq) == HIGH);
   setMode(MODE_STOPPED);
   ledSetup();
   sendHello();
@@ -121,7 +121,7 @@ void doConfig(Config const &config) {
     sa818 = sa818_vhf;
   }
   if (hw.features.hasHL) {
-    digitalWrite(hw.pins.hlPin, config.isHigh ? LOW : HIGH);
+    digitalWrite(hw.pins.pinHl, config.isHigh ? LOW : HIGH);
   }
   radioModuleStatus = RADIO_MODULE_NOT_FOUND;
   // The sa818.handshake() has 3 retries internally with 2 seconds between each attempt.
@@ -193,7 +193,7 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
         HlState hl;
         memcpy(&hl, params, sizeof(HlState));
         if (hw.features.hasHL) {
-          digitalWrite(hw.pins.hlPin, hl.isHigh ? LOW : HIGH);
+          digitalWrite(hw.pins.pinHl, hl.isHigh ? LOW : HIGH);
         }
         esp_task_wdt_reset();
       }
@@ -222,7 +222,7 @@ void rssiLoop() {
 }
 
 void loop() {
-  squelched = squelchDebounce.debounce((digitalRead(hw.pins.sqPin) == HIGH));
+  squelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
   debugLoop();
   ledLoop();
   buttonsLoop();

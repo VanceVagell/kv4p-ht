@@ -32,7 +32,7 @@ void neopixelColor(const RGBColor &c, uint8_t bright = 255) {
   uint8_t red = (uint16_t(c.red) * bright + 128) >> 8;
   uint8_t green = (uint16_t(c.green) * bright + 128) >> 8;
   uint8_t blue = (uint16_t(c.blue) * bright + 128) >> 8;
-  neopixelWrite(hw.pins.pixelsPin, red, green, blue);
+  neopixelWrite(hw.pins.pinPixels, red, green, blue);
 }
 
 // Calculate a float between min and max, that ramps from min to max in half of breath_every,
@@ -56,11 +56,11 @@ void inline showLEDs() {
     next_time = now + update_every;
     switch (mode) {
       case MODE_STOPPED:
-        digitalWrite(hw.pins.ledPin, LOW);
+        digitalWrite(hw.pins.pinLed, LOW);
         neopixelColor(hw.stoppedColor);
         break;
       case MODE_RX:
-        digitalWrite(hw.pins.ledPin, LOW);
+        digitalWrite(hw.pins.pinLed, LOW);
         if (squelched) {
           neopixelColor(COLOR_RX_SQL_CLOSED, calcBreath(now, 2000, 32, 255));
         } else {
@@ -68,7 +68,7 @@ void inline showLEDs() {
         }
         break;
       case MODE_TX:
-        digitalWrite(hw.pins.ledPin, HIGH);
+        digitalWrite(hw.pins.pinLed, HIGH);
         neopixelColor(COLOR_TX);
         break;
     }
@@ -77,8 +77,8 @@ void inline showLEDs() {
 
 void inline ledSetup() {
   // Debug LED
-  pinMode(hw.pins.ledPin, OUTPUT);
-  digitalWrite(hw.pins.ledPin, LOW);
+  pinMode(hw.pins.pinLed, OUTPUT);
+  digitalWrite(hw.pins.pinLed, LOW);
   showLEDs();
 }
 

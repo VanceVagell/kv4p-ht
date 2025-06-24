@@ -37,7 +37,7 @@ const uint16_t RUNAWAY_TX_SEC = 200;
 void initI2STx() {  
   auto config = out.defaultConfig(TX_MODE);
   config.copyFrom(txInfo);
-  config.adc_pin = hw.pins.dacPin;
+  config.adc_pin = hw.pins.pinDac;
   config.is_blocking_write = true;
   config.use_apll = true;
   config.auto_clear = false;
