@@ -88,21 +88,22 @@ int debug_log_printf(SndCommand cmd, const char* format, ...) {
 void printHardwareConfig() {
 #ifndef RELEASE  
   _LOGI("Hardware Configuration:");
-  _LOGI("  RXD2_PIN     = %d", hw.pins.pinRxd2);
-  _LOGI("  TXD2_PIN     = %d", hw.pins.pinTxd2);
-  _LOGI("  DAC_PIN      = %d", hw.pins.pinDac);
-  _LOGI("  ADC_PIN      = %d", hw.pins.pinAdc);
-  _LOGI("  PTT_PIN      = %d", hw.pins.pinPtt);
-  _LOGI("  PD_PIN       = %d", hw.pins.pinPd);
-  _LOGI("  SQ_PIN_HW1   = %d", hw.pins.pinSq);
-  _LOGI("  PHYS_PTT1    = %d", hw.pins.pinPttPhys1);
-  _LOGI("  PHYS_PTT2    = %d", hw.pins.pinPttPhys2);
-  _LOGI("  PIXELS_PIN   = %d", hw.pins.pinPixels);
-  _LOGI("  LED_PIN      = %d", hw.pins.pinLed);
-  _LOGI("  ADC_ATTEN    = %d", hw.adcAttenuation);
-  _LOGI("  ADC_BIAS     = %.3f", hw.adcBias);
-  _LOGI("  VOLUME       = %d", hw.volume);
-  _LOGI("  RF_MODULE_TYPE = %d", hw.rfModuleType);
+  _LOGI("  PIN_RXD2       = %d",   hw.pins.pinRxd2);
+  _LOGI("  PIN_TXD2       = %d",   hw.pins.pinTxd2);
+  _LOGI("  PIN_DAC        = %d",   hw.pins.pinDac);
+  _LOGI("  PIN_ADC        = %d",   hw.pins.pinAdc);
+  _LOGI("  PIN_PTT        = %d",   hw.pins.pinPtt);
+  _LOGI("  PIN_PD         = %d",   hw.pins.pinPd);
+  _LOGI("  PIN_SQ         = %d",   hw.pins.pinSq);
+  _LOGI("  PIN_PHYS_PTT1  = %d",   hw.pins.pinPttPhys1);
+  _LOGI("  PIN_PHYS_PTT2  = %d",   hw.pins.pinPttPhys2);
+  _LOGI("  PIN_PIXELS     = %d",   hw.pins.pinPixels);
+  _LOGI("  PIN_LED        = %d",   hw.pins.pinLed);
+  _LOGI("  ADC_ATTEN      = %d",   hw.adcAttenuation);
+  _LOGI("  ADC_BIAS       = %.3f", hw.adcBias);
+  _LOGI("  VOLUME         = %d",   hw.volume);
+  _LOGI("  RF_MODULE_TYPE = %d",   hw.rfModuleType);
+  _LOGI("  PIN_HL         = %d",   hw.pins.pinHl);
 #endif
 }
 
