@@ -59,6 +59,7 @@ enum RfModuleType {
 #define DEFAULT_ADC_ATTENUATION      ADC_ATTEN_DB_12
 #define DEFAULT_RF_MODULE_TYPE       RF_SA818_VHF
 #define DEFAULT_VOLUME               8
+#define DEFAULT_STOPPED_COLOR        {0, 32, 0}
 
 // Mode of the app, which is essentially a state machine
 enum Mode {
@@ -132,6 +133,6 @@ HWConfig hw = {
   .adcBias = DEFAULT_ADC_BIAS_VOLTAGE,
   .adcAttenuation = DEFAULT_ADC_ATTENUATION,
   .volume = DEFAULT_VOLUME,
-  .stoppedColor = {0, 32, 0},
+  .stoppedColor = DEFAULT_STOPPED_COLOR,
   .rfModuleType = DEFAULT_RF_MODULE_TYPE
 };
