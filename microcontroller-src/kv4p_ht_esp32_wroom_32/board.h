@@ -56,7 +56,7 @@ void loadHardwareConfig() {
   hw.pins.pinRfModuleRxd   = prefs.getChar("PIN_RF_RXD",   DEFAULT_PIN_RF_RXD);
   hw.pins.pinRfModuleTxd   = prefs.getChar("PIN_RF_TXD",   DEFAULT_PIN_RF_TXD);
   hw.pins.pinAudioOut      = prefs.getChar("PIN_AUDIO_OUT",DEFAULT_PIN_AUDIO_OUT);
-  hw.pins.pinAdc           = prefs.getChar("PIN_AUDIO_IN", DEFAULT_PIN_AUDIO_IN);
+  hw.pins.pinAudioIn           = prefs.getChar("PIN_AUDIO_IN", DEFAULT_PIN_AUDIO_IN);
   hw.pins.pinPtt           = prefs.getChar("PIN_PTT",      DEFAULT_PIN_PTT);
   hw.pins.pinPd            = prefs.getChar("PIN_PD",       DEFAULT_PIN_PD);
   hw.pins.pinSq            = prefs.getChar("PIN_SQ",       DEFAULT_PIN_SQ);
@@ -79,7 +79,7 @@ void saveHardwareConfig() {
   prefs.putChar("PIN_RF_RXD",      hw.pins.pinRfModuleRxd);
   prefs.putChar("PIN_RF_TXD",      hw.pins.pinRfModuleTxd);
   prefs.putChar("PIN_AUDIO_OUT",   hw.pins.pinAudioOut);
-  prefs.putChar("PIN_AUDIO_IN",    hw.pins.pinAdc);
+  prefs.putChar("PIN_AUDIO_IN",    hw.pins.pinAudioIn);
   prefs.putChar("PIN_PTT",         hw.pins.pinPtt);
   prefs.putChar("PIN_PD",          hw.pins.pinPd);
   prefs.putChar("PIN_SQ",          hw.pins.pinSq);

@@ -94,7 +94,7 @@ void initI2SRx() {
   config.is_auto_center_read = false; // We use dcOffsetRemover instead
   config.use_apll = true;
   config.auto_clear = false;
-  config.adc_pin = hw.pins.pinAdc;
+  config.adc_pin = hw.pins.pinAudioIn;
   config.sample_rate = AUDIO_SAMPLE_RATE * 1.02; // 2% over sample rate to avoid buffer underruns
   in.begin(config);
   rxEnc.setAudioInfo(rxInfo);

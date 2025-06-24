@@ -86,7 +86,7 @@ struct PinConfig {
   int8_t pinRfModuleRxd;
   int8_t pinRfModuleTxd;
   int8_t pinAudioOut;
-  int8_t pinAdc;
+  int8_t pinAudioIn;
   int8_t pinPtt;
   int8_t pinPd;
   int8_t pinPttPhys1;
@@ -117,7 +117,7 @@ HWConfig hw = {
     .pinRfModuleRxd = DEFAULT_PIN_RF_RXD,
     .pinRfModuleTxd = DEFAULT_PIN_RF_TXD,
     .pinAudioOut = DEFAULT_PIN_AUDIO_OUT,
-    .pinAdc = DEFAULT_PIN_AUDIO_IN,
+    .pinAudioIn = DEFAULT_PIN_AUDIO_IN,
     .pinPtt = DEFAULT_PIN_PTT,
     .pinPd = DEFAULT_PIN_PD,
     .pinPttPhys1 = DEFAULT_PIN_PHYS_PTT1,
