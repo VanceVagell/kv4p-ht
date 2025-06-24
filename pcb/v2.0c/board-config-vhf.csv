@@ -17,4 +17,4 @@ ADC_BIAS,data,string,0.00
 STOPPED_COLOR,data,hex2bin,200000
 RF_MODULE_TYPE,data,u8,0
 VOLUME,data,i8,6
-PIN_PIN_HL,data,i8,23
+PIN_HL,data,i8,23
