@@ -102,7 +102,7 @@ void printHardwareConfig() {
   _LOGI("  ADC_ATTEN      = %d",   hw.adcAttenuation);
   _LOGI("  ADC_BIAS       = %.3f", hw.adcBias);
   _LOGI("  VOLUME         = %d",   hw.volume);
-  _LOGI("  RF_MODULE_TYPE = %d",   hw.rfModuleType);
+  _LOGI("  RF_MODULE_TYPE = %s",   hw.rfModuleType == RF_SA818_VHF ? "RF_SA818_VHF" : "RF_SA818_UHF");
   _LOGI("  PIN_HL         = %d",   hw.pins.pinHl);
 #endif
 }
