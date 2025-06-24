@@ -96,7 +96,7 @@ void saveHardwareConfig() {
   prefs.end();
 }
 
-hw_ver_t get_hardware_version() {
+hw_ver_t getHardwareVersion() {
   pinMode(HW_VER_PIN_0, INPUT);
   pinMode(HW_VER_PIN_1, INPUT);
   hw_ver_t ver = 0x00;
@@ -110,7 +110,7 @@ void inline boardSetup() {
     loadHardwareConfig();
   } else {
     // Fallback to legacy detection
-    switch (get_hardware_version()) {
+    switch (getHardwareVersion()) {
       case HW_VER_V2_0C:
         hw.stoppedColor = {32, 0, 0};
         hw.pins.pinSq = 4;
