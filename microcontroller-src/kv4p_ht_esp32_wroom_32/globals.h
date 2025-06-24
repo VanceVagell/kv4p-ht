@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2024 Vance Vagell
+Copyright (C) 2025 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -53,6 +53,7 @@ enum RfModuleType {
 #define DEFAULT_PIN_LED        2  // Built in LED
 #define DEFAULT_PIN_PIXELS    13  // NeoPixel data pin
 #define DEFAULT_PIN_HL        -1  // High/Low pin for the radio module. -1 means not used.
+#define DEFAULT_VOLUME         8  // Default SA8x8 module audio volume
 
 #define DEFAULT_ADC_BIAS_VOLTAGE     1.75
 #define DEFAULT_ADC_ATTENUATION      ADC_ATTEN_DB_12
@@ -130,7 +131,7 @@ HWConfig hw = {
   },
   .adcBias = DEFAULT_ADC_BIAS_VOLTAGE,
   .adcAttenuation = DEFAULT_ADC_ATTENUATION,
-  .volume = 8,
+  .volume = DEFAULT_VOLUME,
   .stoppedColor = {0, 32, 0},
   .rfModuleType = DEFAULT_RF_MODULE_TYPE
 };
