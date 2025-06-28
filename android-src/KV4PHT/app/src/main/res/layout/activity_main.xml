@@ -476,8 +476,8 @@
                 android:orientation="vertical"
                 app:menu="@menu/bottom_nav_menu"
                 android:layout_marginTop="48dp"
-                app:itemTextColor="@color/bottom_nav_color"
-                app:itemIconTint="@color/bottom_nav_color"
+                app:itemTextColor="@color/bottom_nav_text"
+                app:itemIconTint="@color/bottom_nav_icon"
                 app:itemActiveIndicatorStyle="@style/Theme.BottomNavigationView.ActiveIndicator"
                 android:background="@color/medium_gray"/>
 
