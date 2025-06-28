@@ -118,7 +118,7 @@
                     android:layout_weight="1">
 
                     <ImageButton
-                        android:id="@+id/freqMinus"
+                        android:id="@+id/decreaseFreqButton"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:layout_margin="10dp"
@@ -145,7 +145,7 @@
                         android:inputType="numberDecimal" />
 
                     <ImageButton
-                        android:id="@+id/freqPlus"
+                        android:id="@+id/increaseFreqButton"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
                         android:layout_margin="10dp"
