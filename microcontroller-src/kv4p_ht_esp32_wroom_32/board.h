@@ -116,11 +116,13 @@ void inline boardSetup() {
         hw.pins.pinSq = 4;
         hw.adcAttenuation = ADC_ATTEN_DB_0;
         hw.volume = 6;
+        hw.pins.pinHl = 23;
         saveHardwareConfig();
         break;
       case HW_VER_V2_0D:
         hw.stoppedColor = {0, 0, 32};
         hw.pins.pinSq = 4;
+        hw.pins.pinHl = 23;
         saveHardwareConfig();
         break;
     }
