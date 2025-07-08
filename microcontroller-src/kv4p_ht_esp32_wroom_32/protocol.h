@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Delimeter must also match Android app
 const uint8_t COMMAND_DELIMITER[] = {0xDE, 0xAD, 0xBE, 0xEF};
 #define DELIMITER_LENGTH sizeof(COMMAND_DELIMITER)
+#define REQUIRE_TRIVIALLY_COPYABLE(T) static_assert(std::is_trivially_copyable<T>::value, #T " must be trivially copyable!")
 
 // Incoming commands (Android -> ESP32)
 enum RcvCommand {
@@ -56,67 +57,67 @@ enum SndCommand {
 };
 
 // COMMAND_VERSION parameters
-struct version {
+struct [[gnu::packed]] Version {
   uint16_t     ver;
   char         radioModuleStatus;
   size_t       windowSize;
   RfModuleType rfModuleType;
   uint8_t      features; 
-} __attribute__((__packed__));
-typedef struct version Version;
+};
+REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define FEATURE_HAS_HL      (1 << 0)
 #define FEATURE_HAS_PHY_PTT (1 << 1)
 
 // COMMAND_SMETER_REPORT parameters
-struct rssi {
+struct [[gnu::packed]] Rssi {
   uint8_t     rssi;
-} __attribute__((__packed__));
-typedef struct rssi Rssi;
+};
+REQUIRE_TRIVIALLY_COPYABLE(Rssi);
 
 // COMMAND_HOST_GROUP parameters
-struct group {
+struct [[gnu::packed]] Group {
   uint8_t bw;
   float freq_tx;
   float freq_rx;
   uint8_t ctcss_tx;
   uint8_t squelch;
   uint8_t ctcss_rx;
-} __attribute__((__packed__));
-typedef struct group Group;
+};
+REQUIRE_TRIVIALLY_COPYABLE(Group);
 
 // COMMAND_HOST_FILTERS parameters
-struct filters {
+struct [[gnu::packed]] Filters {
   uint8_t flags;  // Uses bitmask for pre, high, and low
-} __attribute__((__packed__));
-typedef struct filters Filters;
+};
+REQUIRE_TRIVIALLY_COPYABLE(Filters);
 
 #define FILTER_PRE  (1 << 0)
 #define FILTER_HIGH (1 << 1)
 #define FILTER_LOW  (1 << 2)
 
 // COMMAND_HOST_CONFIG parameters
-struct config { 
+struct [[gnu::packed]] Config { 
   bool isHigh;   
-} __attribute__((__packed__));
-typedef struct config Config;
+};
+REQUIRE_TRIVIALLY_COPYABLE(Config);
 
 // COMMAND_WINDOW_ACK parameters
-struct window_update {
+struct [[gnu::packed]] WindowUpdate {
   size_t size; 
-} __attribute__((__packed__));
-typedef struct window_update WindowUpdate;
+};
+REQUIRE_TRIVIALLY_COPYABLE(WindowUpdate);
 
 // COMMAND_HOST_HL parameters
-struct hlState {
+struct [[gnu::packed]] HlState {
   bool isHigh; 
-} __attribute__((__packed__));
-typedef struct hlState HlState;
+};
+REQUIRE_TRIVIALLY_COPYABLE(HlState);
 
 /**
  * Send a command with params
  * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
  */
-void __sendCmdToHost(SndCommand cmd, const byte *params, size_t paramsLen) {
+void __sendCmdToHost(SndCommand cmd, const uint8_t *params, size_t paramsLen) {
   // Safety check: limit paramsLen to 255 for 1-byte length
   if (paramsLen > PROTO_MTU) {
     paramsLen = PROTO_MTU;  // or handle differently (split, or error, etc.)
@@ -164,7 +165,7 @@ void inline sendPhysPttState(bool isPhysPttDown) {
   __sendCmdToHost(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
 }
 
-void inline sendAudio(const byte *data, size_t len) {
+void inline sendAudio(const uint8_t *data, size_t len) {
   __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
 }
 

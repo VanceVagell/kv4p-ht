@@ -75,13 +75,13 @@ bool squelched = false;
 // Forward declarations
 void setMode(Mode newMode);
 
-struct RGBColor {
+struct [[gnu::packed]] RGBColor {
   uint8_t red;
   uint8_t green;
   uint8_t blue;
 };
 
-struct PinConfig {
+struct [[gnu::packed]] PinConfig {
   int8_t pinSq;
   int8_t pinRfModuleRxd;
   int8_t pinRfModuleTxd;
@@ -96,12 +96,12 @@ struct PinConfig {
   int8_t pinHl;
 };
 
-struct FeatureFlags {
+struct [[gnu::packed]] FeatureFlags {
   bool hasHL: 1; // High/Low pin
   bool hasPhysPTT: 1; // PTT pin
 };
 
-struct HWConfig {
+struct [[gnu::packed]] HWConfig {
   PinConfig pins;
   FeatureFlags features;
   float adcBias;
