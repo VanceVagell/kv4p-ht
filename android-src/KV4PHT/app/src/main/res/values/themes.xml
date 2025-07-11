@@ -16,7 +16,7 @@
     </style>
 
     <style name="Theme.BottomNavigationView.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">@color/primary_veryfaint</item>
+        <item name="android:color">@color/primary_deselected</item>
     </style>
 
     <style name="Custom.PopupMenu" parent="Widget.AppCompat.PopupMenu">

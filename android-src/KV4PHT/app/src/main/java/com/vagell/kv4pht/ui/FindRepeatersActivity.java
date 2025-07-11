@@ -86,6 +86,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
     private List<RepeaterInfo> nearbyRepeaters = null;
     private String locality = null;
     private MainViewModel viewModel;
+    private double latitude = 0, longitude = 0;
 
     // Android permission stuff
     private static final int REQUEST_LOCATION_PERMISSION_CODE = 1;
@@ -121,6 +122,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             return;
         }
 
+        FindRepeatersActivity ctx = this;
         fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
                 .addOnSuccessListener(new OnSuccessListener<Location>() {
                     @Override
@@ -130,7 +132,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
                             double latitude = location.getLatitude();
                             double longitude = location.getLongitude();
                             findLocalityAsync(latitude, longitude);
-                            startCSVDownload(latitude, longitude);
+                            ctx.latitude = latitude;
+                            ctx.longitude = longitude;
+                            startCSVDownload();
                         } else {
                             showErrorSnackbar("Failed to find your GPS location (it came back null).");
                             return;
@@ -196,7 +200,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     }
 
-    private void startCSVDownload(double latitude, double longitude) {
+    private void startCSVDownload() {
         String downloadRepeatersUrlStr = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
                 latitude + "&long=" + longitude + "&distance=25&Dunit=m&band1=14&band2=&call=&use=OPEN&status_id=1";
 
@@ -253,6 +257,47 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
         // Load your initial URL
         webView.loadUrl("https://www.repeaterbook.com");
+    }
+
+    /** Alternative method for people who's webview doesn't let us track when login is complete. */
+    public void findRepeatersDownloadButtonClicked(View view) {
+        String downloadRepeatersUrlStr = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
+                latitude + "&long=" + longitude + "&distance=25&Dunit=m&band1=14&band2=&call=&use=OPEN&status_id=1";
+
+        // Initialize the WebView
+        WebView webView = findViewById(R.id.repeaterBookWebView);
+
+        // Enable JavaScript if your webpage needs it
+        webView.getSettings().setJavaScriptEnabled(true);
+
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent,
+                                        String contentDisposition, String mimeType,
+                                        long contentLength) {
+                Log.d("DEBUG", "RepeaterBook CSV download started.");
+
+                // Fetch cookies to maintain session
+                String cookies = CookieManager.getInstance().getCookie(url);
+
+                // Now download the file using Android's DownloadManager
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                request.addRequestHeader("Cookie", cookies);
+                request.addRequestHeader("User-Agent", userAgent);
+                request.setMimeType(mimeType);
+                request.setDescription("Downloading repeater CSV...");
+                filename = URLUtil.guessFileName(url, contentDisposition, mimeType);
+                request.setTitle(filename);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimeType));
+
+                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                downloadId = dm.enqueue(request);
+            }
+        });
+
+        // Load your initial URL
+        webView.loadUrl(downloadRepeatersUrlStr);
     }
 
     @Override
@@ -485,6 +530,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
             AutoCompleteTextView autoCompleteTextView = (AutoCompleteTextView) findViewById(R.id.findRepeatersGroupTextInputEditText);
             autoCompleteTextView.setText(locality);
         }
+
+        // Hide "Download" button.
+        findViewById(R.id.findRepeatersDownloadButton).setVisibility(View.GONE);
 
         // Show a "SAVE" button to the right of Cancel.
         findViewById(R.id.findRepeatersSaveButton).setVisibility(View.VISIBLE);
