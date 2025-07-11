@@ -69,7 +69,6 @@
     </com.google.android.material.textfield.TextInputLayout>
 
     <LinearLayout
-        android:id="@+id/firmwareButtons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -78,6 +77,21 @@
         android:layout_marginLeft="24dp"
         android:layout_marginRight="24dp"
         android:layout_marginBottom="32dp">
+
+        <Button
+            android:id="@+id/findRepeatersDownloadButton"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_weight="0"
+            android:background="?android:attr/selectableItemBackground"
+            android:text="@string/download_display"
+            android:textSize="20dp"
+            android:textFontWeight="500"
+            android:textColor="@color/primary"
+            android:textAllCaps="false"
+            android:enabled="true"
+            android:onClick="findRepeatersDownloadButtonClicked"
+            android:layout_marginRight="8dp"/>
 
         <Button
             android:layout_width="wrap_content"

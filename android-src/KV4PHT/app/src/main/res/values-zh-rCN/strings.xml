@@ -12,6 +12,7 @@
     <string name="add_memory_display">记忆频道</string>
     <string name="show_advanced_options_display">高级选项</string>
     <string name="cancel_display">取消</string>
+    <string name="download_display">下载</string>
     <string name="custom_offset_khz_display">自定义频差（kHz）</string>
     <string name="none_display">无</string>
     <string name="none_display1">无</string>
@@ -87,7 +88,7 @@
     <string name="more_display">更多</string>
     <string name="find_repeaters_menu_item">查找附近的中继台</string>
     <string name="find_repeaters_title">附近中继台</string>
-    <string name="find_repeaters_instructions">登录 RepeaterBook，或注册新账户。</string>
+    <string name="find_repeaters_instructions">登录 RepeaterBook，或注册新账户。然后，附近的中继器应该会自动下载。如果没有，请尝试点击下方的“下载”。</string>
     <string name="nearby_repeaters_found">找到附近中继台：&#160;</string>
     <string name="save_repeaters_group_instructions">您想将这些新的中继台保存到哪个频道组？</string>
 </resources>
