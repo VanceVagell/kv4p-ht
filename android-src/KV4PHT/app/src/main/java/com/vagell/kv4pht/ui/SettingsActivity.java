@@ -150,6 +150,11 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    private void setDropdownWithDefault(Map<String, String> settings, String key, int viewId, String defaultValue) {
+        this.<AutoCompleteTextView>findViewById(viewId)
+            .setText(settings.getOrDefault(key, defaultValue), false);
+    }
+
     private void populateOriginalValues(Runnable callback) {
         threadPoolExecutor.execute(() -> {
             final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
@@ -172,7 +177,8 @@ public class SettingsActivity extends AppCompatActivity {
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_70_CM_TX_FREQ, R.id.max70cmFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIC_GAIN_BOOST, R.id.micGainBoostTextView);
                 if (hasHighLowPowerSwitch) {
-                    setDropdownIfPresent(settings, AppSetting.SETTING_RF_POWER, R.id.rfPowerTextView);
+                    setDropdownWithDefault(settings, AppSetting.SETTING_RF_POWER, R.id.rfPowerTextView,
+                        getResources().getStringArray(R.array.rf_power_options)[0]);
                 }
                 callback.run();
             });
