@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2024 Vance Vagell
+Copyright (C) 2025 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ const uint16_t RUNAWAY_TX_SEC = 200;
 void initI2STx() {  
   auto config = out.defaultConfig(TX_MODE);
   config.copyFrom(txInfo);
-  config.adc_pin = DAC_PIN;
+  config.adc_pin = hw.pins.pinAudioOut;
   config.is_blocking_write = true;
   config.use_apll = true;
   config.auto_clear = false;

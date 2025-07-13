@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2024 Vance Vagell
+Copyright (C) 2025 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,30 +20,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Arduino.h>
 #include "globals.h"
 
-// Built in LED
-#define LED_PIN 2
-
-// NeoPixel support
-#define PIXELS_PIN 13
 #define NUM_PIXELS 1
 
-struct RGBColor {
-  uint8_t red;
-  uint8_t green;
-  uint8_t blue;
-};
 const RGBColor COLOR_STOPPED = {0, 0, 0};
 const RGBColor COLOR_RX_SQL_CLOSED = {0, 0, 32};
 const RGBColor COLOR_RX_SQL_OPEN = {0, 32, 0};
 const RGBColor COLOR_TX = {16, 16, 0};
 const RGBColor COLOR_BLACK = {0, 0, 0};
-RGBColor COLOR_HW_VER = COLOR_BLACK;
 
 void neopixelColor(const RGBColor &c, uint8_t bright = 255) {
   uint8_t red = (uint16_t(c.red) * bright + 128) >> 8;
   uint8_t green = (uint16_t(c.green) * bright + 128) >> 8;
   uint8_t blue = (uint16_t(c.blue) * bright + 128) >> 8;
-  neopixelWrite(PIXELS_PIN, red, green, blue);
+  neopixelWrite(hw.pins.pinPixels, red, green, blue);
 }
 
 // Calculate a float between min and max, that ramps from min to max in half of breath_every,
@@ -67,11 +56,11 @@ void inline showLEDs() {
     next_time = now + update_every;
     switch (mode) {
       case MODE_STOPPED:
-        digitalWrite(LED_PIN, LOW);
-        neopixelColor(COLOR_HW_VER);
+        digitalWrite(hw.pins.pinLed, LOW);
+        neopixelColor(hw.stoppedColor);
         break;
       case MODE_RX:
-        digitalWrite(LED_PIN, LOW);
+        digitalWrite(hw.pins.pinLed, LOW);
         if (squelched) {
           neopixelColor(COLOR_RX_SQL_CLOSED, calcBreath(now, 2000, 32, 255));
         } else {
@@ -79,7 +68,7 @@ void inline showLEDs() {
         }
         break;
       case MODE_TX:
-        digitalWrite(LED_PIN, HIGH);
+        digitalWrite(hw.pins.pinLed, HIGH);
         neopixelColor(COLOR_TX);
         break;
     }
@@ -88,8 +77,8 @@ void inline showLEDs() {
 
 void inline ledSetup() {
   // Debug LED
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  pinMode(hw.pins.pinLed, OUTPUT);
+  digitalWrite(hw.pins.pinLed, LOW);
   showLEDs();
 }
 

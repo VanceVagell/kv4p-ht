@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2024 Vance Vagell
+Copyright (C) 2025 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +18,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <Arduino.h>
+#include <driver/adc.h>
+
+// RF module types
+enum RfModuleType {
+  RF_SA818_VHF = 0,
+  RF_SA818_UHF = 1,
+};
 
 // Audio sampling rate, must match what Android app expects (and sends).
 #define AUDIO_SAMPLE_RATE 48000
@@ -34,41 +41,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define I2S_ADC_CHANNEL ADC1_CHANNEL_6
 
 // Connections to radio module
-#define RXD2_PIN      16
-#define TXD2_PIN      17
-#define DAC_PIN       25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
-#define ADC_PIN       34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
-#define PTT_PIN       18  // Keys up the radio module
-#define PD_PIN        19
-#define SQ_PIN_HW1    32  // 
-#define SQ_PIN_HW2     4  // Squelch pin. In v2.0c, this is GPIO 4. In v1.x and v2.0d, this is GPIO 32.
-#define PHYS_PTT_PIN1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
-#define PHYS_PTT_PIN2 33  // Optional. See above.
+#define DEFAULT_PIN_RF_RXD    16
+#define DEFAULT_PIN_RF_TXD    17
+#define DEFAULT_PIN_AUDIO_OUT 25  // This constant not used, just here for reference. GPIO 25 is implied by use of I2S_DAC_CHANNEL_RIGHT_EN.
+#define DEFAULT_PIN_AUDIO_IN  34  // If this is changed, you may need to manually edit adc1_config_channel_atten() below too.
+#define DEFAULT_PIN_PTT       18  // Keys up the radio module
+#define DEFAULT_PIN_PD        19
+#define DEFAULT_PIN_SQ        32  //
+#define DEFAULT_PIN_PHYS_PTT1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
+#define DEFAULT_PIN_PHYS_PTT2 33  // Optional. See above.
+#define DEFAULT_PIN_LED        2  // Built in LED
+#define DEFAULT_PIN_PIXELS    13  // NeoPixel data pin
+#define DEFAULT_PIN_HL        -1  // High/Low pin for the radio module. -1 means not used.
+#define DEFAULT_VOLUME         8  // Default SA8x8 module audio volume
 
-#define ADC_BIAS_VOLTAGE     1.75
-#define ADC_ATTENUATION      ADC_ATTEN_DB_12
-#define ADC_ATTENUATION_v20C ADC_ATTEN_DB_0  // v2.0c has a lower input ADC range
-
-// Hardware version detection
-#define HW_VER_PIN_0  39  // 0x0F
-#define HW_VER_PIN_1  36  // 0xF0
-// LOW = 0, HIGH = F, 1 <= analog values <= E
-
-//  Hardware Version Summary:
-//  +-------------+------------+-----------------+-------------------------------------------------------------------+
-//  | Version     | Squelch Pin| ADC Attenuation | Notes                                                             |
-//  +-------------+------------+-----------------+-------------------------------------------------------------------+
-//  | HW_VER_V1   | GPIO32     | 12dB            | Original version, full feature set                                |
-//  | HW_VER_V2_0C| GPIO4      | 0dB             | Switched to GPIO4 for squelch and lower ADC input range (0–1.1V). |
-//  | HW_VER_V2_0D| GPIO4      | 12dB            | Same squelch pin as V2.0C; ADC range restored to normal (~3.3V).  |
-//  +-------------+------------+-----------------+-------------------------------------------------------------------+
-#define HW_VER_V1     (0x00)
-#define HW_VER_V2_0C  (0xFF)
-#define HW_VER_V2_0D  (0xF0)
-// #define HW_VER_?? (0x0F)  // Unused
-
-typedef uint8_t hw_ver_t;  // This allows us to do a lot more in the future if we want.
-hw_ver_t hardware_version = HW_VER_V1;  // lowest common denominator
+#define DEFAULT_ADC_BIAS_VOLTAGE     1.75
+#define DEFAULT_ADC_ATTENUATION      ADC_ATTEN_DB_12
+#define DEFAULT_RF_MODULE_TYPE       RF_SA818_VHF
+#define DEFAULT_VOLUME               8
+#define DEFAULT_STOPPED_COLOR        {0, 32, 0}
 
 // Mode of the app, which is essentially a state machine
 enum Mode {
@@ -84,5 +75,64 @@ bool squelched = false;
 // Forward declarations
 void setMode(Mode newMode);
 
-// Squelch pin
-uint8_t sqPin = SQ_PIN_HW1;
+struct [[gnu::packed]] RGBColor {
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+};
+
+struct [[gnu::packed]] PinConfig {
+  int8_t pinSq;
+  int8_t pinRfModuleRxd;
+  int8_t pinRfModuleTxd;
+  int8_t pinAudioOut;
+  int8_t pinAudioIn;
+  int8_t pinPtt;
+  int8_t pinPd;
+  int8_t pinPttPhys1;
+  int8_t pinPttPhys2;
+  int8_t pinLed;
+  int8_t pinPixels;
+  int8_t pinHl;
+};
+
+struct [[gnu::packed]] FeatureFlags {
+  bool hasHL: 1; // High/Low pin
+  bool hasPhysPTT: 1; // PTT pin
+};
+
+struct [[gnu::packed]] HWConfig {
+  PinConfig pins;
+  FeatureFlags features;
+  float adcBias;
+  adc_atten_t adcAttenuation;
+  uint8_t volume;
+  RGBColor stoppedColor;
+  RfModuleType rfModuleType;
+};
+
+HWConfig hw = {
+  .pins = {
+    .pinSq = DEFAULT_PIN_SQ,
+    .pinRfModuleRxd = DEFAULT_PIN_RF_RXD,
+    .pinRfModuleTxd = DEFAULT_PIN_RF_TXD,
+    .pinAudioOut = DEFAULT_PIN_AUDIO_OUT,
+    .pinAudioIn = DEFAULT_PIN_AUDIO_IN,
+    .pinPtt = DEFAULT_PIN_PTT,
+    .pinPd = DEFAULT_PIN_PD,
+    .pinPttPhys1 = DEFAULT_PIN_PHYS_PTT1,
+    .pinPttPhys2 = DEFAULT_PIN_PHYS_PTT2,
+    .pinLed = DEFAULT_PIN_LED,
+    .pinPixels = DEFAULT_PIN_PIXELS,
+    .pinHl = DEFAULT_PIN_HL,
+  },
+  .features = {
+    .hasHL = (DEFAULT_PIN_HL != -1),
+    .hasPhysPTT = (DEFAULT_PIN_PHYS_PTT1 != -1 || DEFAULT_PIN_PHYS_PTT2 != -1)
+  },
+  .adcBias = DEFAULT_ADC_BIAS_VOLTAGE,
+  .adcAttenuation = DEFAULT_ADC_ATTENUATION,
+  .volume = DEFAULT_VOLUME,
+  .stoppedColor = DEFAULT_STOPPED_COLOR,
+  .rfModuleType = DEFAULT_RF_MODULE_TYPE
+};

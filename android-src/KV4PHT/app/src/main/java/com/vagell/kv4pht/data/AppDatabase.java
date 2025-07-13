@@ -30,26 +30,71 @@ import com.vagell.kv4pht.data.migrations.MigrationFrom2To3;
 import com.vagell.kv4pht.data.migrations.MigrationFrom3To4;
 import com.vagell.kv4pht.data.migrations.MigrationFrom4To5;
 
+/**
+ * Singleton Room database for kv4p HT application.
+ */
 @Database(
-        version = 5,
-        entities = {AppSetting.class, ChannelMemory.class, APRSMessage.class})
+    version = 5,
+    entities = {AppSetting.class, ChannelMemory.class, APRSMessage.class}
+)
+@SuppressWarnings("java:S6548")
 public abstract class AppDatabase extends RoomDatabase {
+
     public abstract AppSettingDao appSettingDao();
     public abstract ChannelMemoryDao channelMemoryDao();
     public abstract APRSMessageDao aprsMessageDao();
 
+    // Migrations
     public static final Migration MIGRATION_1_2 = new MigrationFrom1To2();
     public static final Migration MIGRATION_2_3 = new MigrationFrom2To3();
     public static final Migration MIGRATION_3_4 = new MigrationFrom3To4();
     public static final Migration MIGRATION_4_5 = new MigrationFrom4To5();
 
+    @SuppressWarnings({"java:S3077", "java:S3008"})
+    private static volatile AppDatabase INSTANCE;
+
+    /**
+     * Returns the singleton instance of the database.
+     * Thread-safe and scoped to the application context.
+     */
     public static AppDatabase getInstance(Context context) {
-        return Room.databaseBuilder(context.getApplicationContext(), AppDatabase.class, "kv4pht-db")
-                .addMigrations(MIGRATION_1_2)
-                .addMigrations(MIGRATION_2_3)
-                .addMigrations(MIGRATION_3_4)
-                .addMigrations(MIGRATION_4_5)
-                .fallbackToDestructiveMigration()
-                .build();
+        if (INSTANCE == null) {
+            synchronized (AppDatabase.class) {
+                if (INSTANCE == null) {
+                    INSTANCE = buildDatabase(context);
+                }
+            }
+        }
+        return INSTANCE;
+    }
+
+    /**
+     * Internal builder for the Room database.
+     * Add or remove `fallbackToDestructiveMigration()` depending on build type or app policy.
+     */
+    private static AppDatabase buildDatabase(Context context) {
+        return Room.databaseBuilder(context, AppDatabase.class, "kv4pht-db")
+            .addMigrations(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5
+            )
+            // WARNING: This will delete all user data if migration is missing.
+            // Remove or guard this call in production.
+            .fallbackToDestructiveMigration()
+            .build();
+    }
+
+    public void saveAppSetting(String key, String value) {
+        AppSettingDao dao = appSettingDao();
+        AppSetting setting = dao.getByName(key);
+        if (setting == null) {
+            setting = new AppSetting(key, value);
+            dao.insertAll(setting);
+        } else {
+            setting.value = value;
+            dao.update(setting);
+        }
     }
 }

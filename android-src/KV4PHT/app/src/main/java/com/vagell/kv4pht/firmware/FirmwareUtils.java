@@ -1,157 +1,171 @@
 package com.vagell.kv4pht.firmware;
 
-import android.content.Context;
-import android.util.Log;
-
-import com.hoho.android.usbserial.driver.UsbSerialPort;
-import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.firmware.bearconsole.CommandInterfaceESP32;
-import com.vagell.kv4pht.firmware.bearconsole.UploadSTM32CallBack;
-import com.vagell.kv4pht.firmware.bearconsole.UploadSTM32Errors;
+import static org.dkaukov.esp32.chip.Esp32ChipId.ESP32;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
-public class FirmwareUtils {
-    private static boolean isFlashing = false;
-    private static int progressPercent = 0;
+import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.vagell.kv4pht.R;
 
-    // Whenever there is new firmware, put the files in res/raw, and update these constants.
+import org.dkaukov.esp32.chip.FlashRegion;
+import org.dkaukov.esp32.core.EspFlasherApi;
+import org.dkaukov.esp32.core.EspFlasherApi.StartStage;
+import org.dkaukov.esp32.io.ProgressCallback;
+import org.dkaukov.esp32.io.SerialTransport;
+import org.dkaukov.esp32.protocol.EspFlasherProtocol;
+import org.slf4j.LoggerFactory;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.util.Log;
+import lombok.SneakyThrows;
+import pl.brightinventions.slf4android.LogLevel;
+import pl.brightinventions.slf4android.LoggerConfiguration;
+
+public final class FirmwareUtils {
+    private static final String TAG = FirmwareUtils.class.getSimpleName();
+    private static final String TAG_ESP32_FLASHER = EspFlasherProtocol.class.getSimpleName();
+
+    private static final AtomicBoolean isFlashing = new AtomicBoolean(false);
+
     public static final int PACKAGED_FIRMWARE_VER = 14;
-    private static final int FIRMWARE_FILE_1_ID = R.raw.bootloader;
-    private static final int FIRMWARE_FILE_2_ID = R.raw.partitions;
-    private static final int FIRMWARE_FILE_3_ID = R.raw.boot_app0; // This one never changes, it's the Arduino ESP32 bootloader
-    private static final int FIRMWARE_FILE_4_ID = R.raw.firmware_v14;
 
-    public FirmwareUtils() {
+    private static final int ESP32_BOOTLOADER = R.raw.bootloader;
+    private static final int ESP32_PARTITION_TABLE = R.raw.partitions;
+    private static final int ESP32_BOOT_APP_0 = R.raw.boot_app0;
+    private static final int ESP32_APP = R.raw.firmware_v14;
+
+    static {
+        LoggerFactory.getLogger(EspFlasherProtocol.class).trace("Init..");
+        LoggerConfiguration.configuration().setLogLevel(LoggerFactory.getLogger(EspFlasherProtocol.class).getName(),
+            LogLevel.DEBUG);
     }
 
-    public static boolean isFlashing() {
-        return isFlashing;
+    public static class ResourceLoadingException extends RuntimeException {
+        @SuppressLint("DefaultLocale")
+        public ResourceLoadingException(int id, IOException cause) {
+            super(String.format("Failed to read resource: %d", id), cause);
+        }
     }
+
+    private FirmwareUtils() {}
 
     public interface FirmwareCallback {
-        public void connectedToBootloader();
-        public void reportProgress(int percent);
-        public void doneFlashing(boolean success);
+        void connectedToBootloader();
+        void reportProgress(int percent);
+        void doneFlashing(boolean success);
     }
 
     public static void flashFirmware(Context ctx, UsbSerialPort usbSerialPort, FirmwareCallback callback) {
-        if (isFlashing) {
-            Log.d("DEBUG", "Warning: Attempted to call FirmwareUtils.flashFirmware() while already flashing.");
+        if (!isFlashing.compareAndSet(false, true)) {
+            Log.w(TAG, "Warning: Already flashing.");
             return;
         }
-        isFlashing = true;
-        boolean failed = false;
-        InputStream firmwareFile1 = null;
-        InputStream firmwareFile2 = null;
-        InputStream firmwareFile3 = null;
-        InputStream firmwareFile4 = null;
-        CommandInterfaceESP32 cmd;
+        try {
+            setBaudRate(usbSerialPort, EspFlasherApi.ESP_ROM_BAUD);
+            Log.i(TAG, "Starting firmware flash, version: " + PACKAGED_FIRMWARE_VER);
+            Map<FlashRegion, byte[]> flashRegions = new EnumMap<>(FlashRegion.class);
+            flashRegions.put(FlashRegion.BOOTLOADER, readResource(ctx, ESP32_BOOTLOADER));
+            flashRegions.put(FlashRegion.PARTITION_TABLE, readResource(ctx, ESP32_PARTITION_TABLE));
+            flashRegions.put(FlashRegion.APP_BOOTLOADER, readResource(ctx, ESP32_BOOT_APP_0));
+            flashRegions.put(FlashRegion.APP_0, readResource(ctx, ESP32_APP));
+            StartStage flasher = EspFlasherApi.connect(getSerialTransport(usbSerialPort))
+                .withCallBack(getProgressCallback(flashRegions, callback));
+            callback.connectedToBootloader();
+            flasher.withBaudRate(EspFlasherApi.ESP_ROM_BAUD_HIGHEST, b -> setBaudRate(usbSerialPort, b))
+                .chipDetect()
+                .loadStub()
+                .withCompression(false)
+                .writeFlash(ESP32.getRegion(FlashRegion.BOOTLOADER), flashRegions.get(FlashRegion.BOOTLOADER))
+                .writeFlash(ESP32.getRegion(FlashRegion.PARTITION_TABLE), flashRegions.get(FlashRegion.PARTITION_TABLE))
+                .writeFlash(ESP32.getRegion(FlashRegion.APP_BOOTLOADER), flashRegions.get(FlashRegion.APP_BOOTLOADER))
+                .withCompression(true)
+                .writeFlash(ESP32.getRegion(FlashRegion.APP_0), flashRegions.get(FlashRegion.APP_0))
+                .reset();
+            Log.i(TAG, "Firmware flash completed successfully.");
+            callback.doneFlashing(true);
+        } catch (Exception e) {
+            Log.e(TAG, "Firmware flashing failed", e);
+            callback.doneFlashing(false);
+        } finally {
+            isFlashing.set(false);
+        }
+    }
 
-        UploadSTM32CallBack UpCallback = new UploadSTM32CallBack() {
+    public static boolean isFlashing() {
+        return isFlashing.get();
+    }
+
+    @SneakyThrows
+    private static void setBaudRate(UsbSerialPort usbSerialPort, int baudRate) {
+        usbSerialPort.setParameters(baudRate, UsbSerialPort.DATABITS_8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+    }
+
+    private static SerialTransport getSerialTransport(UsbSerialPort usbSerialPort) {
+        return new SerialTransport() {
             @Override
-            public void onPreUpload() {
-                Log.d("DEBUG", "onPreUpload");
+            public int read(byte[] buffer, int length) throws IOException {
+                return usbSerialPort.read(buffer, length, 100);
             }
-
             @Override
-            public void onUploading(int value) {
-                Log.d("DEBUG", "onUploading: " + value);
-
-                // Some of the file writes take a while, show finer-grained progress for those.
-                if (progressPercent >= 20 && progressPercent < 30) {
-                    int newPercent = Math.min(50, (int) (20 + (10 * ((float) value / 100.0f))));
-                    trackProgress(callback, newPercent);
-                }
-                else if (progressPercent >= 50) {
-                    int newPercent = Math.min(100, (int) (50 + (50 * ((float) value / 100.0f))));
-                    trackProgress(callback, newPercent);
-                }
+            public void write(byte[] buffer, int length) throws IOException {
+                usbSerialPort.write(buffer, length, 0);
             }
-
             @Override
-            public void onInfo(String value) {
-                Log.d("DEBUG", "onInfo: " + value);
-            }
-
-            @Override
-            public void onPostUpload(boolean success) {
-                Log.d("DEBUG", "onPostUpload: " + success);
-            }
-
-            @Override
-            public void onCancel() {
-                Log.d("DEBUG", "onCancel");
-            }
-
-            @Override
-            public void onError(UploadSTM32Errors err) {
-                Log.d("DEBUG", "onError: " + err);
+            public void setControlLines(boolean dtr, boolean rts) throws IOException {
+                usbSerialPort.setDTRandRTS(dtr, rts);
             }
         };
-        cmd = new CommandInterfaceESP32(ctx, UpCallback, usbSerialPort);
-
-        firmwareFile1 = ctx.getResources().openRawResource(FIRMWARE_FILE_1_ID);
-        firmwareFile2 = ctx.getResources().openRawResource(FIRMWARE_FILE_2_ID);
-        firmwareFile3 = ctx.getResources().openRawResource(FIRMWARE_FILE_3_ID);
-        firmwareFile4 = ctx.getResources().openRawResource(FIRMWARE_FILE_4_ID);
-
-        Log.d("DEBUG", "Attempting to init ESP32 for firmware flash");
-
-        boolean ret = cmd.initChip();
-        if (!ret) {
-            Log.d("DEBUG", "ESP32 failed to init, return value: " + ret);
-            failed = true;
-        }
-        if (!failed) {
-            callback.connectedToBootloader();
-            // cmd.loadStubFromFile(); // Does not work
-            // cmd.changeBaudRate(); // Faster baud can't work without stub loader
-            trackProgress(callback, 10);
-            cmd.init();
-            trackProgress(callback, 20);
-
-            Log.d("DEBUG", "Flashing firmware");
-            cmd.flashData(readFirmwareBytes(firmwareFile1), 0x1000, 0);
-            trackProgress(callback, 30);
-            cmd.flashData(readFirmwareBytes(firmwareFile2), 0x8000, 0);
-            trackProgress(callback, 40);
-            cmd.flashData(readFirmwareBytes(firmwareFile3), 0xe000, 0);
-            trackProgress(callback, 50);
-            cmd.flashData(readFirmwareBytes(firmwareFile4), 0x10000, 0);
-
-            // we have finished flashing, reboot ESP32
-            cmd.reset();
-
-            Log.d("DEBUG", "Done flashing firmware");
-        }
-        callback.doneFlashing(!failed);
-        progressPercent = 0;
-        isFlashing = false;
     }
 
-    private static void trackProgress(FirmwareCallback callback, int newProgressPercent) {
-        progressPercent = newProgressPercent;
-        callback.reportProgress(progressPercent);
-    }
-
-    private static byte[] readFirmwareBytes(InputStream stream) {
-        Log.d("DEBUG", "Reading firmware binary file");
-        ByteArrayOutputStream byteArrayOutputStream = null;
-        int i;
-        try {
-            byteArrayOutputStream = new ByteArrayOutputStream();
-            i = stream.read();
-            while (i != -1) {
-                byteArrayOutputStream.write(i);
-                i = stream.read();
+    private static ProgressCallback getProgressCallback(Map<FlashRegion, byte[]> flashRegions, FirmwareCallback callback) {
+        return new ProgressCallback() {
+            int part = 0;
+            final int[] regionSizes = Stream.of(
+                    FlashRegion.BOOTLOADER,
+                    FlashRegion.PARTITION_TABLE,
+                    FlashRegion.APP_BOOTLOADER,
+                    FlashRegion.APP_0)
+                .mapToInt(region -> Objects.requireNonNull(flashRegions.get(region)).length).toArray();
+            final int totalSize = IntStream.of(regionSizes).sum();
+            int completedSoFar = 0;
+            @Override
+            public void onProgress(float pct) {
+                if (part >= regionSizes.length) return;
+                callback.reportProgress(Math.round((completedSoFar + regionSizes[part] * (pct / 100.0f)) * 100.0f / totalSize));
             }
-            stream.close();
+            @Override
+            public void onInfo(String value) {
+                Log.d(TAG_ESP32_FLASHER, value);
+            }
+            @Override
+            public void onEnd() {
+                part++;
+                completedSoFar = IntStream.of(regionSizes).limit(part).sum();
+            }
+        };
+    }
+
+    private static byte[] readResource(Context ctx, int resourceId) {
+        Log.d(TAG, "Reading resource ID: " + resourceId);
+        try (InputStream inputStream = ctx.getResources().openRawResource(resourceId);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+            return outputStream.toByteArray();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new ResourceLoadingException(resourceId, e);
         }
-        return byteArrayOutputStream.toByteArray();
     }
 }

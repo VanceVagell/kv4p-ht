@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2024 Vance Vagell
+Copyright (C) 2025 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -78,15 +78,11 @@ DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
 
 inline void injectADCBias() {
   dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
-  dac_output_voltage(DAC_CHANNEL_2, (255.0 / 3.3) * ADC_BIAS_VOLTAGE);
+  dac_output_voltage(DAC_CHANNEL_2, (255.0 / 3.3) * hw.adcBias);
 } 
 
 inline void setUpADCAttenuator() {
-  if (hardware_version == HW_VER_V2_0C) { // v2.0c has a lower input ADC range
-    adc1_config_channel_atten(I2S_ADC_CHANNEL, ADC_ATTENUATION_v20C);
-  } else {
-    adc1_config_channel_atten(I2S_ADC_CHANNEL, ADC_ATTENUATION);
-  }
+  adc1_config_channel_atten(I2S_ADC_CHANNEL, hw.adcAttenuation);
 }
 
 void initI2SRx() {
@@ -98,7 +94,7 @@ void initI2SRx() {
   config.is_auto_center_read = false; // We use dcOffsetRemover instead
   config.use_apll = true;
   config.auto_clear = false;
-  config.adc_pin = ADC_PIN;
+  config.adc_pin = hw.pins.pinAudioIn;
   config.sample_rate = AUDIO_SAMPLE_RATE * 1.02; // 2% over sample rate to avoid buffer underruns
   in.begin(config);
   rxEnc.setAudioInfo(rxInfo);

@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2024 Vance Vagell
+Copyright (C) 2025 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -85,6 +85,28 @@ int debug_log_printf(SndCommand cmd, const char* format, ...) {
   return len;
 }
 
+void printHardwareConfig() {
+#ifndef RELEASE  
+  _LOGI("Hardware Configuration:");
+  _LOGI("  PIN_RF_RXD     = %d",   hw.pins.pinRfModuleRxd);
+  _LOGI("  PIN_RF_TXD     = %d",   hw.pins.pinRfModuleTxd);
+  _LOGI("  PIN_AUDIO_OUT  = %d",   hw.pins.pinAudioOut);
+  _LOGI("  PIN_AUDIO_IN   = %d",   hw.pins.pinAudioIn);
+  _LOGI("  PIN_PTT        = %d",   hw.pins.pinPtt);
+  _LOGI("  PIN_PD         = %d",   hw.pins.pinPd);
+  _LOGI("  PIN_SQ         = %d",   hw.pins.pinSq);
+  _LOGI("  PIN_PHYS_PTT1  = %d",   hw.pins.pinPttPhys1);
+  _LOGI("  PIN_PHYS_PTT2  = %d",   hw.pins.pinPttPhys2);
+  _LOGI("  PIN_PIXELS     = %d",   hw.pins.pinPixels);
+  _LOGI("  PIN_LED        = %d",   hw.pins.pinLed);
+  _LOGI("  ADC_ATTEN      = %d",   hw.adcAttenuation);
+  _LOGI("  ADC_BIAS       = %.3f", hw.adcBias);
+  _LOGI("  VOLUME         = %d",   hw.volume);
+  _LOGI("  RF_MODULE_TYPE = %s",   hw.rfModuleType == RF_SA818_VHF ? "RF_SA818_VHF" : "RF_SA818_UHF");
+  _LOGI("  PIN_HL         = %d",   hw.pins.pinHl);
+#endif
+}
+
 void printEnvironment() {
 #ifndef RELEASE
   esp_reset_reason_t reset_reason = esp_reset_reason();
@@ -132,7 +154,6 @@ void printEnvironment() {
   _LOGI("PSRAM size: %d", ESP.getPsramSize());
   _LOGI("FLASH size: %d", ESP.getFlashChipSize());
   _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
-  _LOGI("Hardware version: 0x%02x", hardware_version);
   _LOGI("---");
 #endif  
 }
@@ -169,6 +190,7 @@ void measureLoopFrequency() {
 
 void inline debugSetup() {
   printEnvironment();
+  printHardwareConfig();
 }
 
 void inline debugLoop() {

@@ -20,8 +20,6 @@ package com.vagell.kv4pht.radio;
 
 import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
-import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_UHF;
-import static com.vagell.kv4pht.radio.Protocol.ModuleType.SA818_VHF;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -53,6 +51,7 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.LiveData;
+import lombok.Getter;
 import lombok.Setter;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -89,8 +88,10 @@ import com.vagell.kv4pht.radio.Protocol.Config;
 import com.vagell.kv4pht.radio.Protocol.Filters;
 import com.vagell.kv4pht.radio.Protocol.FrameParser;
 import com.vagell.kv4pht.radio.Protocol.Group;
+import com.vagell.kv4pht.radio.Protocol.HlState;
 import com.vagell.kv4pht.radio.Protocol.RadioStatus;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
+import com.vagell.kv4pht.radio.Protocol.RfModuleType;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
 import com.vagell.kv4pht.ui.ToneHelper;
@@ -203,18 +204,21 @@ public class RadioAudioService extends Service {
     private boolean txAllowed = true;
     public static final String RADIO_MODULE_VHF = "v";
     public static final String RADIO_MODULE_UHF = "u";
+    @Getter
     private String radioType = RADIO_MODULE_VHF;
     private boolean radioModuleNotFound = false;
     private boolean checkedFirmwareVersion = false;
     private boolean gotHello = false;
+    @Getter @Setter private boolean hasHighLowPowerSwitch = false;
+    @Getter private boolean isHighPower = true;
     private final Handler timeOutHandler = new Handler(Looper.getMainLooper());
 
     // Safety constants
-    private static int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
+    private static final int RUNAWAY_TX_TIMEOUT_SEC = 180; // Stop runaway tx after 3 minutes
 
     // Notification stuff
-    private static String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
-    private static int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
+    private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
+    private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
 
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 10, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
 
@@ -284,6 +288,7 @@ public class RadioAudioService extends Service {
         default void forceTunedToFreq(String newFreqStr) {}
         default void forcedPttStart() {}
         default void forcedPttEnd() {}
+        default void setRadioType(String ratioType) {}
     }
 
     @Override
@@ -915,10 +920,9 @@ public class RadioAudioService extends Service {
      */
     public void setRadioType(String radioType) {
         Log.d("DEBUG", "setRadioType: " + radioType);
-
+        callbacks.setRadioType(radioType);
         if (!this.radioType.equals(radioType)) {
             this.radioType = radioType;
-
             // Ensure frequencies we're using match the radioType
             if (radioType.equals(RADIO_MODULE_VHF)) {
                 setMinRadioFreq(VHF_MIN_FREQ);
@@ -931,32 +935,18 @@ public class RadioAudioService extends Service {
                 setMaxHamFreq(max70cmTxFreq);
                 setMaxRadioFreq(UHF_MAX_FREQ);
             }
-
-            if (mode != MODE_STARTUP) {
-                // Re-init connection to ESP32 so it knows what kind of module it has.
-                setMode(MODE_STARTUP);
-                checkedFirmwareVersion = false;
-                checkFirmwareVersion();
-            }
         }
-    }
-
-    public String getRadioType() {
-        return radioType;
     }
 
     private void checkFirmwareVersion() {
         checkedFirmwareVersion = true; // To prevent multiple USB connect events from spamming the ESP32 with requests (which can cause logic errors).
-
         // Verify that the firmware of the ESP32 app is supported.
         setMode(MODE_STARTUP);
-
         hostToEsp32.stop();
         hostToEsp32.config(Config.builder()
-            .moduleType(radioType.equals(RADIO_MODULE_UHF) ? SA818_UHF : SA818_VHF)
+            .isHigh(isHighPower)
             .build());
         // The version is actually evaluated in handleESP32Data().
-
         // If we don't hear back from the ESP32, it means the firmware is either not
         // installed or it's somehow corrupt.
         timeOutHandler.removeCallbacksAndMessages(null);
@@ -1185,6 +1175,8 @@ public class RadioAudioService extends Service {
                 }
                 Log.i("DEBUG", "Recent ESP32 app firmware version detected (" + ver + ").");
                 radioModuleNotFound = ver.getRadioModuleStatus() != RadioStatus.RADIO_STATUS_FOUND;
+                setRadioType(RfModuleType.RF_SA818_VHF.equals(ver.getModuleType()) ? RADIO_MODULE_VHF : RADIO_MODULE_UHF);
+                this.hasHighLowPowerSwitch = ver.isHasHl();
                 if (radioModuleNotFound) {
                     callbacks.radioModuleNotFound();
                 } else {
@@ -1506,5 +1498,16 @@ public class RadioAudioService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT);
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.notify(notificationTypeId, builder.build());
+    }
+
+    public void setHighPower(boolean highPower) {
+        if (isHighPower != highPower) {
+            isHighPower = highPower;
+            if (hostToEsp32 != null) {
+                hostToEsp32.setHighPower(HlState.builder()
+                    .isHighPower(highPower)
+                    .build());
+            }
+        }
     }
 }

@@ -18,7 +18,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.ui;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -28,246 +27,162 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.ArrayAdapter;
-import android.widget.AutoCompleteTextView;
-import android.widget.CompoundButton;
-import android.widget.EditText;
-import android.widget.Switch;
-import android.widget.TextView;
+import android.widget.*;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
+import java.util.stream.Collectors;
 
 public class SettingsActivity extends AppCompatActivity {
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+    private final ExecutorService threadPoolExecutor = Executors.newSingleThreadExecutor();
+    private MainViewModel viewModel = null;
+    private boolean hasHighLowPowerSwitch = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        viewModel = new ViewModelProvider(this).get(MainViewModel.class);
+        hasHighLowPowerSwitch = getIntent().getBooleanExtra("hasHighLowPowerSwitch", false);
         setContentView(R.layout.activity_settings);
-
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        populateOriginalValues();
-        populateRadioModuleTypes();
+        populateOriginalValues(this::attachListeners);
         populateBandwidths();
         populateMinFrequencies();
         populateMaxFrequencies();
         populateMicGainOptions();
         populateAprsOptions();
-        attachListeners();
+        populateRadioOptions();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        threadPoolExecutor.shutdownNow();
+        threadPoolExecutor.shutdown();
+    }
+
+    private void setDropdownOptions(int viewId, List<String> options) {
+        this.<AutoCompleteTextView>findViewById(viewId)
+            .setAdapter(new ArrayAdapter<>(this, R.layout.dropdown_item, options));
     }
 
     private void populateBandwidths() {
-        AutoCompleteTextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
-
-        List<String> bandwidths = new ArrayList<String>();
-        bandwidths.add("Wide");
-        bandwidths.add("Narrow");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
-        bandwidthTextView.setAdapter(arrayAdapter);
-    }
-
-    private void populateRadioModuleTypes() {
-        AutoCompleteTextView radioModuleTypeTextView = findViewById(R.id.radioModuleTypeTextView);
-
-        List<String> bandwidths = new ArrayList<String>();
-        bandwidths.add("VHF");
-        bandwidths.add("UHF");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, bandwidths);
-        radioModuleTypeTextView.setAdapter(arrayAdapter);
+        setDropdownOptions(R.id.bandwidthTextView, List.of(getString(R.string.wide), getString(R.string.narrow)));
     }
 
     private void populateMinFrequencies() {
-        AutoCompleteTextView min2mFreqTextView = findViewById(R.id.min2mFreqTextView);
-
-        List<String> min2mFreqs = new ArrayList<String>();
-        min2mFreqs.add("144MHz");
-
-        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, min2mFreqs);
-        min2mFreqTextView.setAdapter(arrayAdapter1);
-
-        AutoCompleteTextView min70cmFreqTextView = findViewById(R.id.min70cmFreqTextView);
-
-        List<String> min70cmFreqs = new ArrayList<String>();
-        min70cmFreqs.add("420MHz");
-        min70cmFreqs.add("430MHz");
-
-        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, min70cmFreqs);
-        min70cmFreqTextView.setAdapter(arrayAdapter2);
+        setDropdownOptions(R.id.min2mFreqTextView, List.of("144MHz"));
+        setDropdownOptions(R.id.min70cmFreqTextView, List.of("420MHz", "430MHz"));
     }
 
     private void populateMaxFrequencies() {
-        AutoCompleteTextView max2mFreqTextView = findViewById(R.id.max2mFreqTextView);
-
-        List<String> max2mFreqs = new ArrayList<String>();
-        max2mFreqs.add("148MHz");
-        max2mFreqs.add("146MHz");
-
-        ArrayAdapter arrayAdapter1 = new ArrayAdapter(this, R.layout.dropdown_item, max2mFreqs);
-        max2mFreqTextView.setAdapter(arrayAdapter1);
-
-        AutoCompleteTextView max70cmFreqTextView = findViewById(R.id.max70cmFreqTextView);
-
-        List<String> max70cmFreqs = new ArrayList<String>();
-        max70cmFreqs.add("450MHz");
-        max70cmFreqs.add("440MHz");
-
-        ArrayAdapter arrayAdapter2 = new ArrayAdapter(this, R.layout.dropdown_item, max70cmFreqs);
-        max70cmFreqTextView.setAdapter(arrayAdapter2);
+        setDropdownOptions(R.id.max2mFreqTextView, List.of("148MHz", "146MHz"));
+        setDropdownOptions(R.id.max70cmFreqTextView, List.of("450MHz", "440MHz"));
     }
 
     private void populateMicGainOptions() {
-        AutoCompleteTextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
-
-        List<String> micGainOptions = new ArrayList<String>();
-        micGainOptions.add("None");
-        micGainOptions.add("Low");
-        micGainOptions.add("Med");
-        micGainOptions.add("High");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, micGainOptions);
-        micGainBoostTextView.setAdapter(arrayAdapter);
+        setDropdownOptions(R.id.micGainBoostTextView, List.of("None", "Low", "Med", "High"));
     }
 
     private void populateAprsOptions() {
-        AutoCompleteTextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
-
-        List<String> positionAccuracyOptions = new ArrayList<String>();
-        positionAccuracyOptions.add("Exact");
-        positionAccuracyOptions.add("Approx");
-
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.dropdown_item, positionAccuracyOptions);
-        aprsPositionAccuracyTextView.setAdapter(arrayAdapter);
+        setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
     }
 
-    private void populateOriginalValues() {
+    private void populateRadioOptions() {
+        AutoCompleteTextView rfPowerTextView = findViewById(R.id.rfPowerTextView);
+        rfPowerTextView.setThreshold(1);
+        if (hasHighLowPowerSwitch) {
+            rfPowerTextView.setEnabled(true);
+            rfPowerTextView.setFocusable(true);
+            rfPowerTextView.setClickable(true);
+            setDropdownOptions(R.id.rfPowerTextView, Arrays.asList(getResources().getStringArray(R.array.rf_power_options)));
+        } else {
+            rfPowerTextView.setEnabled(false);
+            rfPowerTextView.setFocusable(false);
+            rfPowerTextView.setClickable(false);
+            rfPowerTextView.setAdapter(null);
+            // Set default text to first item
+            rfPowerTextView.setText(getResources().getStringArray(R.array.rf_power_options)[0], false);
+        }
+    }
 
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                AppSetting callsignSetting = MainViewModel.appDb.appSettingDao().getByName("callsign");
-                AppSetting squelchSetting = MainViewModel.appDb.appSettingDao().getByName("squelch");
-                AppSetting moduleTypeSetting = MainViewModel.appDb.appSettingDao().getByName("moduleType");
-                AppSetting emphasisSetting = MainViewModel.appDb.appSettingDao().getByName("emphasis");
-                AppSetting highpassSetting = MainViewModel.appDb.appSettingDao().getByName("highpass");
-                AppSetting lowpassSetting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
-                AppSetting stickyPTTSetting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
-                AppSetting disableAnimationsSetting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
-                AppSetting aprsBeaconPosition = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
-                AppSetting aprsPositionAccuracy = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
-                AppSetting bandwidthSetting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
-                AppSetting min2mTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("min2mTxFreq");
-                AppSetting max2mTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("max2mTxFreq");
-                AppSetting min70cmTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
-                AppSetting max70cmTxFreqSetting = MainViewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
-                AppSetting micGainBoostSetting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
+    private void setTextIfPresent(Map<String, String> settings, String key, int viewId) {
+        if (settings.containsKey(key)) {
+            this.<TextInputEditText>findViewById(viewId).setText(settings.get(key));
+        }
+    }
 
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (callsignSetting != null) {
-                            TextInputEditText callsignEditText = (TextInputEditText) (findViewById(R.id.callsignTextInputEditText));
-                            callsignEditText.setText(callsignSetting.value);
-                        }
+    private void setSwitchIfPresent(Map<String, String> settings, String key, int viewId) {
+        if (settings.containsKey(key)) {
+            this.<Switch>findViewById(viewId).setChecked(Boolean.parseBoolean(settings.get(key)));
+        }
+    }
 
-                        if (squelchSetting != null) {
-                            Slider squelchSlider = (Slider) (findViewById(R.id.squelchSlider));
-                            squelchSlider.setValue(Float.parseFloat(squelchSetting.value));
-                        }
+    private void setSliderIfPresent(Map<String, String> settings, String key, int viewId) {
+        if (settings.containsKey(key)) {
+            this.<Slider>findViewById(viewId)
+                .setValue(Float.parseFloat(Optional.ofNullable(settings.get(key)).orElse("0")));
+        }
+    }
 
-                        if (moduleTypeSetting != null) {
-                            AutoCompleteTextView radioModuleTypeTextView = (AutoCompleteTextView) findViewById(R.id.radioModuleTypeTextView);
-                            radioModuleTypeTextView.setText(moduleTypeSetting.value, false);
-                        }
+    private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId) {
+        setDropdownIfPresent(settings, key, viewId, "");
+    }
 
-                        if (emphasisSetting != null) {
-                            Switch emphasisSwitch = (Switch) (findViewById(R.id.emphasisSwitch));
-                            emphasisSwitch.setChecked(Boolean.parseBoolean(emphasisSetting.value));
-                        }
+    private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId, String suffix) {
+        if (settings.containsKey(key)) {
+            this.<AutoCompleteTextView>findViewById(viewId)
+                .setText(String.format("%s%s", settings.get(key), suffix), false);
+        }
+    }
 
-                        if (highpassSetting != null) {
-                            Switch highpassSwitch = (Switch) (findViewById(R.id.highpassSwitch));
-                            highpassSwitch.setChecked(Boolean.parseBoolean(highpassSetting.value));
-                        }
+    private void setDropdownWithDefault(Map<String, String> settings, String key, int viewId, String defaultValue) {
+        this.<AutoCompleteTextView>findViewById(viewId)
+            .setText(settings.getOrDefault(key, defaultValue), false);
+    }
 
-                        if (lowpassSetting != null) {
-                            Switch lowpassSwitch = (Switch) (findViewById(R.id.lowpassSwitch));
-                            lowpassSwitch.setChecked(Boolean.parseBoolean(lowpassSetting.value));
-                        }
-
-                        if (stickyPTTSetting != null) {
-                            Switch stickyPTTSwitch = (Switch) (findViewById(R.id.stickyPTTSwitch));
-                            stickyPTTSwitch.setChecked(Boolean.parseBoolean(stickyPTTSetting.value));
-                        }
-
-                        if (disableAnimationsSetting != null) {
-                            Switch noAnimationsSwitch = (Switch) (findViewById(R.id.noAnimationsSwitch));
-                            noAnimationsSwitch.setChecked(Boolean.parseBoolean(disableAnimationsSetting.value));
-                        }
-
-                        if (aprsBeaconPosition != null) {
-                            Switch aprsPositionSwitch = (Switch) (findViewById(R.id.aprsPositionSwitch));
-                            aprsPositionSwitch.setChecked(Boolean.parseBoolean(aprsBeaconPosition.value));
-                        }
-
-                        if (aprsPositionAccuracy != null) {
-                            AutoCompleteTextView aprsPositionAccuracyTextView = (AutoCompleteTextView) findViewById(R.id.aprsPositionAccuracyTextView);
-                            aprsPositionAccuracyTextView.setText(aprsPositionAccuracy.value, false);
-                        }
-
-                        if (bandwidthSetting != null) {
-                            AutoCompleteTextView bandwidthTextView = (AutoCompleteTextView) findViewById(R.id.bandwidthTextView);
-                            bandwidthTextView.setText(bandwidthSetting.value, false);
-                        }
-
-                        if (min2mTxFreqSetting != null) {
-                            AutoCompleteTextView min2mFreqTextView = (AutoCompleteTextView) findViewById(R.id.min2mFreqTextView);
-                            min2mFreqTextView.setText(min2mTxFreqSetting.value + "MHz", false);
-                        }
-
-                        if (max2mTxFreqSetting != null) {
-                            AutoCompleteTextView max2mFreqTextView = (AutoCompleteTextView) findViewById(R.id.max2mFreqTextView);
-                            max2mFreqTextView.setText(max2mTxFreqSetting.value + "MHz", false);
-                        }
-
-                        if (min70cmTxFreqSetting != null) {
-                            AutoCompleteTextView min70cmFreqTextView = (AutoCompleteTextView) findViewById(R.id.min70cmFreqTextView);
-                            min70cmFreqTextView.setText(min70cmTxFreqSetting.value + "MHz", false);
-                        }
-
-                        if (max70cmTxFreqSetting != null) {
-                            AutoCompleteTextView max70cmFreqTextView = (AutoCompleteTextView) findViewById(R.id.max70cmFreqTextView);
-                            max70cmFreqTextView.setText(max70cmTxFreqSetting.value + "MHz", false);
-                        }
-
-                        if (micGainBoostSetting != null) {
-                            AutoCompleteTextView micGainBoostTextView = (AutoCompleteTextView) findViewById(R.id.micGainBoostTextView);
-                            micGainBoostTextView.setText(micGainBoostSetting.value, false);
-                        }
-                    }
-                });
-            }});
+    private void populateOriginalValues(Runnable callback) {
+        threadPoolExecutor.execute(() -> {
+            final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
+                .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
+            runOnUiThread(() -> {
+                String mhz = getString(R.string.mhz);
+                setTextIfPresent(settings, AppSetting.SETTING_CALLSIGN, R.id.callsignTextInputEditText);
+                setSliderIfPresent(settings, AppSetting.SETTING_SQUELCH, R.id.squelchSlider);
+                setSwitchIfPresent(settings, AppSetting.SETTING_EMPHASIS, R.id.emphasisSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_HIGHPASS, R.id.highpassSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_LOWPASS, R.id.lowpassSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_STICKY_PTT, R.id.stickyPTTSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
+                setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
+                setDropdownIfPresent(settings, AppSetting.SETTING_BANDWIDTH, R.id.bandwidthTextView);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MIN_70_CM_TX_FREQ, R.id.min70cmFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MAX_70_CM_TX_FREQ, R.id.max70cmFreqTextView, mhz);
+                setDropdownIfPresent(settings, AppSetting.SETTING_MIC_GAIN_BOOST, R.id.micGainBoostTextView);
+                if (hasHighLowPowerSwitch) {
+                    setDropdownWithDefault(settings, AppSetting.SETTING_RF_POWER, R.id.rfPowerTextView,
+                        getResources().getStringArray(R.array.rf_power_options)[0]);
+                }
+                callback.run();
+            });
+        });
     }
 
     public void closedCaptionsButtonClicked(View view) {
@@ -281,7 +196,7 @@ public class SettingsActivity extends AppCompatActivity {
             // Make the text of the snackbar larger.
             TextView snackbarActionTextView = (TextView) ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
             snackbarActionTextView.setTextSize(20);
-            TextView snackbarTextView = (TextView) ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+            TextView snackbarTextView = ccSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
             snackbarTextView.setTextSize(20);
 
             ccSnackbar.show();
@@ -293,483 +208,118 @@ public class SettingsActivity extends AppCompatActivity {
         finish();
     }
 
+    private void attachTextView(int viewId, Consumer<String> onTextChanged) {
+        TextView view = findViewById(viewId);
+        view.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                // NOOP
+            }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // NOOP
+            }
+            @Override public void afterTextChanged(Editable s) {
+                onTextChanged.accept(s.toString().trim());
+            }
+        });
+    }
+
+    private String extractPrefix(String text) {
+        return (text != null && text.length() >= 3) ? text.substring(0, 3) : text;
+    }
+
+    private void attachSwitch(int id, Consumer<Boolean> onChange) {
+        ((Switch) findViewById(id)).setOnCheckedChangeListener((buttonView, isChecked) -> onChange.accept(isChecked));
+    }
+
+    private void attachSlider(int viewId, IntConsumer onValueChanged) {
+        Slider slider = findViewById(viewId);
+        slider.addOnChangeListener((s, value, fromUser) -> onValueChanged.accept((int) value));
+    }
+
     private void attachListeners() {
-        TextInputEditText callsignEditText = findViewById(R.id.callsignTextInputEditText);
-        callsignEditText.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
+        attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
+        attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
+        attachTextView(R.id.bandwidthTextView, this::setBandwidth);
+        attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text)));
+        attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text)));
+        attachTextView(R.id.min70cmFreqTextView, text -> setMin70cmTxFreq(extractPrefix(text)));
+        attachTextView(R.id.max70cmFreqTextView, text -> setMax70cmTxFreq(extractPrefix(text)));
+        attachTextView(R.id.micGainBoostTextView, this::setMicGainBoost);
+        attachTextView(R.id.rfPowerTextView, this::setRfPower);
+        attachSlider(R.id.squelchSlider, this::setSquelch);
+        attachSwitch(R.id.emphasisSwitch, this::setEmphasisFilter);
+        attachSwitch(R.id.highpassSwitch, this::setHighpassFilter);
+        attachSwitch(R.id.lowpassSwitch, this::setLowpassFilter);
+        attachSwitch(R.id.stickyPTTSwitch, this::setStickyPTT);
+        attachSwitch(R.id.noAnimationsSwitch, this::setNoAnimations);
+        attachSwitch(R.id.aprsPositionSwitch, this::setAprsBeaconPosition);
+    }
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                EditText callsignEditText = (EditText)(findViewById(R.id.callsignTextInputEditText));
-                setCallsign(callsignEditText.getText().toString().toUpperCase().trim());
-            }
-        });
-
-        Slider squelchSlider = findViewById(R.id.squelchSlider);
-        squelchSlider.addOnChangeListener(new Slider.OnChangeListener() {
-            @Override
-            @SuppressLint("RestrictedApi")
-            public void onValueChange(@NonNull Slider slider, float v, boolean b) {
-                setSquelch((int)slider.getValue());
-            }
-        });
-
-        TextView radioModuleTypeTextView = findViewById(R.id.radioModuleTypeTextView);
-        radioModuleTypeTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.radioModuleTypeTextView)).getText().toString().trim();
-                setRadioModuleType(newText);
-            }
-        });
-
-        Switch emphasisSwitch = findViewById(R.id.emphasisSwitch);
-        emphasisSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                setEmphasisFilter(isChecked);
-            }
-        });
-
-        Switch highpassSwitch = findViewById(R.id.highpassSwitch);
-        highpassSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                setHighpassFilter(isChecked);
-            }
-        });
-
-        Switch lowpassSwitch = findViewById(R.id.lowpassSwitch);
-        lowpassSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                setLowpassFilter(isChecked);
-            }
-        });
-
-        Switch stickyPTTSwitch = findViewById(R.id.stickyPTTSwitch);
-        stickyPTTSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                setStickyPTT(isChecked);
-            }
-        });
-
-        Switch noAnimationsSwitch = findViewById(R.id.noAnimationsSwitch);
-        noAnimationsSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                setNoAnimations(isChecked);
-            }
-        });
-
-        Switch aprsPositionSwitch = findViewById(R.id.aprsPositionSwitch);
-        aprsPositionSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                setAprsBeaconPosition(isChecked);
-            }
-        });
-
-        TextView aprsPositionAccuracyTextView = findViewById(R.id.aprsPositionAccuracyTextView);
-        aprsPositionAccuracyTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.aprsPositionAccuracyTextView)).getText().toString().trim();
-                setAprsPositionAccuracy(newText);
-            }
-        });
-
-        TextView bandwidthTextView = findViewById(R.id.bandwidthTextView);
-        bandwidthTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.bandwidthTextView)).getText().toString().trim();
-                setBandwidth(newText);
-            }
-        });
-
-        TextView min2mFreqTextView = findViewById(R.id.min2mFreqTextView);
-        min2mFreqTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.min2mFreqTextView)).getText().toString().trim();
-                setMin2mTxFreq(newText.substring(0, 3));
-            }
-        });
-
-        TextView max2mFreqTextView = findViewById(R.id.max2mFreqTextView);
-        max2mFreqTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.max2mFreqTextView)).getText().toString().trim();
-                setMax2mTxFreq(newText.substring(0, 3));
-            }
-        });
-
-        TextView min70cmFreqTextView = findViewById(R.id.min70cmFreqTextView);
-        min70cmFreqTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.min70cmFreqTextView)).getText().toString().trim();
-                setMin70cmTxFreq(newText.substring(0, 3));
-            }
-        });
-
-        TextView max70cmFreqTextView = findViewById(R.id.max70cmFreqTextView);
-        max70cmFreqTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.max70cmFreqTextView)).getText().toString().trim();
-                setMax70cmTxFreq(newText.substring(0, 3));
-            }
-        });
-
-        TextView micGainBoostTextView = findViewById(R.id.micGainBoostTextView);
-        micGainBoostTextView.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                String newText = ((TextView) findViewById(R.id.micGainBoostTextView)).getText().toString().trim();
-                setMicGainBoost(newText);
-            }
-        });
+    private void saveAppSettingAsync(String key, String value) {
+        threadPoolExecutor.execute(() -> viewModel.getAppDb().saveAppSetting(key, value));
     }
 
     private void setAprsBeaconPosition(boolean enabled) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsBeaconPosition");
-
-            if (setting == null) {
-                setting = new AppSetting("aprsBeaconPosition", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_APRS_BEACON_POSITION, Boolean.toString(enabled));
     }
 
-    /**
-     * @param aprsPositionAccuracy "Exact" or "Approx"
-     */
-    private void setAprsPositionAccuracy(String aprsPositionAccuracy) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("aprsPositionAccuracy");
-
-            if (setting == null) {
-                setting = new AppSetting("aprsPositionAccuracy", aprsPositionAccuracy);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = aprsPositionAccuracy;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+    private void setAprsPositionAccuracy(String accuracy) {
+        saveAppSettingAsync(AppSetting.SETTING_APRS_POSITION_ACCURACY, accuracy);
     }
 
-    /**
-     * @param radioModuleType "VHF" or "UHF"
-     */
-    private void setRadioModuleType(String radioModuleType) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("moduleType");
-
-            if (setting == null) {
-                setting = new AppSetting("moduleType", radioModuleType);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = radioModuleType;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
-    }
-
-    /**
-     * @param bandwidth Change the bandwidth to use, either "Wide" or "Narrow". (25kHz or 12.5kHz)
-     */
     private void setBandwidth(String bandwidth) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("bandwidth");
-
-            if (setting == null) {
-                setting = new AppSetting("bandwidth", bandwidth);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = bandwidth;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_BANDWIDTH, bandwidth);
     }
 
-    /**
-     * @param minFreq Megahertz as a string, e.g. "148".
-     */
-    private void setMin2mTxFreq(String minFreq) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("min2mTxFreq");
-
-            if (setting == null) {
-                setting = new AppSetting("min2mTxFreq", minFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = minFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+    private void setMin2mTxFreq(String freq) {
+        saveAppSettingAsync(AppSetting.SETTING_MIN_2_M_TX_FREQ, freq);
     }
 
-    /**
-     * @param maxFreq Megahertz as a string, e.g. "148".
-     */
-    private void setMax2mTxFreq(String maxFreq) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("max2mTxFreq");
-
-            if (setting == null) {
-                setting = new AppSetting("max2mTxFreq", maxFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = maxFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+    private void setMax2mTxFreq(String freq) {
+        saveAppSettingAsync(AppSetting.SETTING_MAX_2_M_TX_FREQ, freq);
     }
 
-    /**
-     * @param minFreq Megahertz as a string, e.g. "420".
-     */
-    private void setMin70cmTxFreq(String minFreq) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("min70cmTxFreq");
-
-            if (setting == null) {
-                setting = new AppSetting("min70cmTxFreq", minFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = minFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+    private void setMin70cmTxFreq(String freq) {
+        saveAppSettingAsync(AppSetting.SETTING_MIN_70_CM_TX_FREQ, freq);
     }
 
-    /**
-     * @param maxFreq Megahertz as a string, e.g. "450".
-     */
-    private void setMax70cmTxFreq(String maxFreq) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("max70cmTxFreq");
-
-            if (setting == null) {
-                setting = new AppSetting("max70cmTxFreq", maxFreq);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = maxFreq;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+    private void setMax70cmTxFreq(String freq) {
+        saveAppSettingAsync(AppSetting.SETTING_MAX_70_CM_TX_FREQ, freq);
     }
 
-    /**
-     * @param micGainBoost The level of software gain that should be added to mic audio.
-     *                     Should be one of "None", "Low", "Med", or "High".
-     */
-    private void setMicGainBoost(String micGainBoost) {
+    private void setMicGainBoost(String level) {
+        saveAppSettingAsync(AppSetting.SETTING_MIC_GAIN_BOOST, level);
+    }
 
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("micGainBoost");
-
-            if (setting == null) {
-                setting = new AppSetting("micGainBoost", micGainBoost);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = micGainBoost;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+    private void setRfPower(String rfPower) {
+        saveAppSettingAsync(AppSetting.SETTING_RF_POWER, rfPower);
     }
 
     private void setCallsign(String callsign) {
-        if (callsign == null) {
-            return;
-        }
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("callsign");
-
-            if (setting == null) {
-                setting = new AppSetting("callsign", callsign);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = callsign;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_CALLSIGN, callsign);
     }
 
     private void setSquelch(int squelch) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("squelch");
-
-            if (setting == null) {
-                setting = new AppSetting("squelch", "" + squelch);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = "" + squelch;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_SQUELCH, Integer.toString(squelch));
     }
 
     private void setEmphasisFilter(boolean enabled) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("emphasis");
-
-            if (setting == null) {
-                setting = new AppSetting("emphasis", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_EMPHASIS, Boolean.toString(enabled));
     }
 
     private void setHighpassFilter(boolean enabled) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("highpass");
-
-            if (setting == null) {
-                setting = new AppSetting("highpass", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_HIGHPASS, Boolean.toString(enabled));
     }
 
     private void setLowpassFilter(boolean enabled) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("lowpass");
-
-            if (setting == null) {
-                setting = new AppSetting("lowpass", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_LOWPASS, Boolean.toString(enabled));
     }
 
     private void setStickyPTT(boolean enabled) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("stickyPTT");
-
-            if (setting == null) {
-                setting = new AppSetting("stickyPTT", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_STICKY_PTT, Boolean.toString(enabled));
     }
 
     private void setNoAnimations(boolean enabled) {
-
-        threadPoolExecutor.execute(() -> {
-            AppSetting setting = MainViewModel.appDb.appSettingDao().getByName("disableAnimations");
-
-            if (setting == null) {
-                setting = new AppSetting("disableAnimations", "" + enabled);
-                MainViewModel.appDb.appSettingDao().insertAll(setting);
-            } else {
-                setting.value = "" + enabled;
-                MainViewModel.appDb.appSettingDao().update(setting);
-            }
-        });
+        saveAppSettingAsync(AppSetting.SETTING_DISABLE_ANIMATIONS, Boolean.toString(enabled));
     }
 }
