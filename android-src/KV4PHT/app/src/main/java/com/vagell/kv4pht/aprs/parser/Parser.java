@@ -52,7 +52,7 @@ public class Parser {
 				System.out.println("Via:	"+packet.getDigiString());
 				System.out.println("DTI:	"+packet.getDti());
 				System.out.println("Valid:	"+packet.isAprs());
-				InformationField data = packet.getAprsInformation();
+				InformationField data = packet.getPayload();
 				System.out.println("Data:	" + data);
 				if ( packet.isAprs() && data != null) {
 					System.out.println("    Type:	" + data.getClass().getName());
@@ -148,7 +148,7 @@ public class Parser {
 			packet.setComment("Invalid DTI");
 			return packet;
 		}
-		InformationField infoField = packet.getAprsInformation();
+		InformationField infoField = packet.getPayload();
 		int cursor = 0;
         switch ( dti ) {
         	case '/':
