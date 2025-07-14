@@ -766,7 +766,7 @@ public class MainActivity extends AppCompatActivity {
 
         String accuracyStr = (accuracy == RadioAudioService.APRS_POSITION_EXACT) ? getString(R.string.exact) : getString(R.string.approx);
         CharSequence snackbarMsg = getString(R.string.position_beacon_message_1) + accuracyStr + getString(R.string.position_beacon_message_2);
-        Snackbar beaconingSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_LONG)
+        Snackbar beaconingSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, LENGTH_LONG)
                 .setAction("Settings", new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
@@ -1839,7 +1839,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showSimpleSnackbar(String msg) {
-        Snackbar simpleSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), msg, Snackbar.LENGTH_LONG)
+        Snackbar simpleSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), msg, LENGTH_LONG)
                 .setBackgroundTint(getResources().getColor(R.color.primary))
                 .setTextColor(getResources().getColor(R.color.medium_gray));
 
