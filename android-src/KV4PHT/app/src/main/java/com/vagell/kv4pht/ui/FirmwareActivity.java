@@ -42,6 +42,8 @@ import com.vagell.kv4pht.radio.RadioServiceConnector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static com.google.android.material.snackbar.BaseTransientBottomBar.LENGTH_INDEFINITE;
+
 
 public class FirmwareActivity extends AppCompatActivity {
 
@@ -158,7 +160,7 @@ public class FirmwareActivity extends AppCompatActivity {
     }
 
     private void showErrorSnackBar(UsbSerialPort port) {
-        errorSnackbar = Snackbar.make(topLevelView, FAILED_TO_MESSAGE, Snackbar.LENGTH_INDEFINITE)
+        errorSnackbar = Snackbar.make(topLevelView, FAILED_TO_MESSAGE, LENGTH_INDEFINITE)
             .setBackgroundTint(Color.rgb(140, 20, 0))
             .setTextColor(Color.WHITE)
             .setActionTextColor(Color.WHITE)
