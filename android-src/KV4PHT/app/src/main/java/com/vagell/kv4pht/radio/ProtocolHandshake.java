@@ -35,6 +35,7 @@ import java.util.concurrent.TimeoutException;
  * Steps include waiting for a HELLO command, sending configuration, and verifying firmware version.
  * This class supports clean chaining with timeouts, and can be restarted if the ESP32 reboots.
  */
+@SuppressWarnings({"javaarchitecture:S7027"})
 class ProtocolHandshake {
     private static final String TAG = ProtocolHandshake.class.getSimpleName();
     private static final int HELLO_TIMEOUT_MS = 1000;
