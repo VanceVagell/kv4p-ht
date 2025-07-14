@@ -682,6 +682,7 @@ public class RadioAudioService extends Service {
                 try {
                     serialPort.close();
                 } catch (Exception ignored) {
+                    // Ignore, we don't care if it fails to close.
                 }
                 // Attempt to reconnect after the brief pause above.
                 handler.postDelayed(() -> findESP32Device(), 1000);

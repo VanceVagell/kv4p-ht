@@ -99,6 +99,7 @@ import java.util.stream.Collectors;
 
 import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
+import static com.google.android.material.snackbar.Snackbar.LENGTH_LONG;
 
 public class MainActivity extends AppCompatActivity {
     // For transmitting audio to ESP32 / radio
@@ -429,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void chatError(String text) {
-                    Snackbar snackbar = Snackbar.make(context, findViewById(R.id.mainTopLevelLayout), text, Snackbar.LENGTH_LONG)
+                    Snackbar snackbar = Snackbar.make(context, findViewById(R.id.mainTopLevelLayout), text, LENGTH_LONG)
                             .setBackgroundTint(Color.rgb(140, 20, 0))
                             .setTextColor(Color.WHITE)
                             .setAnchorView(findViewById(R.id.textChatInput));
