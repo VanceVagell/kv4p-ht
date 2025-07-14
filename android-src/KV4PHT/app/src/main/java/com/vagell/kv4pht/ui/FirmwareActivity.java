@@ -57,7 +57,11 @@ public class FirmwareActivity extends AppCompatActivity {
 
     private CircularProgressIndicator progressIndicator;
     private TextView firmwareStatusText;
-    private View instructionText1, instructionImage, instructionText2, firmwareButtons, topLevelView;
+    private View instructionText1;
+    private View instructionImage;
+    private View instructionText2;
+    private View firmwareButtons;
+    private View topLevelView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

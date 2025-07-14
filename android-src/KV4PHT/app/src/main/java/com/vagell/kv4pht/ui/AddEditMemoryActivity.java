@@ -126,9 +126,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        serviceConnector.bind(rs -> {
-           this.radioAudioService = rs;
-        });
+        serviceConnector.bind(rs -> this.radioAudioService = rs);
     }
 
     @Override
