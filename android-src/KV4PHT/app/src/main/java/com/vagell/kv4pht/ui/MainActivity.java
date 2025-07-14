@@ -21,6 +21,8 @@ package com.vagell.kv4pht.ui;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -63,6 +65,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.lifecycle.Observer;
@@ -491,6 +494,11 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void forcedPttEnd() { // When user releases physical PTT.
                     endPttUi();
+                }
+
+                @Override
+                public void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
+                    doShowNotification(notificationChannelId, notificationTypeId, title, message, tapIntentName);
                 }
             };
 
@@ -1912,5 +1920,41 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         moreMenu.show();
+    }
+
+    /**
+     * Shows a notification to the user.
+     *
+     * @param notificationChannelId The ID of the notification channel.
+     * @param notificationTypeId    The ID for the notification type.
+     * @param title                 The title of the notification.
+     * @param message               The message content of the notification.
+     * @param tapIntentName         The intent action name to handle taps on the notification.
+     */
+    private void doShowNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
+        if (notificationChannelId == null || title == null || message == null) {
+            Log.d("DEBUG", "Unexpected null in showNotification.");
+            return;
+        }
+        // Has the user disallowed notifications?
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        // If they tap the notification when doing something else, come back to this app
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setAction(tapIntentName);
+        intent.addCategory(Intent.CATEGORY_DEFAULT);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        // Notify the user they got a message.
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, notificationChannelId)
+            .setSmallIcon(R.drawable.ic_chat_notification)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true) // Dismiss on tap
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        notificationManager.notify(notificationTypeId, builder.build());
     }
 }

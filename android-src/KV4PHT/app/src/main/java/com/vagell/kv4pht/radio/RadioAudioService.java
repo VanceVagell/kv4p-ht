@@ -24,11 +24,9 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
@@ -47,8 +45,6 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresPermission;
-import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.LiveData;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationToken;
@@ -64,7 +60,6 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
-import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.APRSTypes;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
@@ -87,7 +82,6 @@ import com.vagell.kv4pht.radio.Protocol.Group;
 import com.vagell.kv4pht.radio.Protocol.HlState;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
-import com.vagell.kv4pht.ui.MainActivity;
 import com.vagell.kv4pht.ui.ToneHelper;
 
 import java.io.IOException;
@@ -108,7 +102,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     private static final String FIRMWARE_TAG = "firmware";
     private static final int RUNAWAY_TX_TIMEOUT_SEC = 180;
     // Intents this Activity can handle besides the one that starts it in default mode.
-    public static String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
+    public static final String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
 
     // === USB Device Matching ===
     private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
@@ -264,6 +258,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         default void forcedPttStart() {}
         default void forcedPttEnd() {}
         default void setRadioType(RadioModuleType ratioType) {}
+        default void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {}
     }
 
     @Override
@@ -912,9 +907,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     private void handleRxAudio(final byte[] param, final Integer len) {
         int decoded = opusDecoder.decode(param, len, pcmFloat);
         if (getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
-            if (afskDemodulator != null) {
-                afskDemodulator.addSamples(pcmFloat, decoded);
-            }
+            afskDemodulator.addSamples(pcmFloat, decoded);
             if (audioTrack != null) {
                 AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                 audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
@@ -975,7 +968,7 @@ public class RadioAudioService extends Service implements PacketHandler {
                 String target = msg.getTargetCallsign().trim().toUpperCase();
                 // Handle messages addressed to the current callsign
                 if (!msg.isAck() && target.equals(callsign.toUpperCase())) {
-                    showNotification(
+                    callbacks.showNotification(
                         MESSAGE_NOTIFICATION_CHANNEL_ID,
                         MESSAGE_NOTIFICATION_TO_YOU_ID,
                         aprsPacket.getSourceCall() + " messaged you",
@@ -1150,42 +1143,6 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     public int getAudioTrackSessionId() {
         return Optional.ofNullable(audioTrack).map(AudioTrack::getAudioSessionId).orElse(-1);
-    }
-
-    /**
-     * Shows a notification to the user.
-     *
-     * @param notificationChannelId The ID of the notification channel.
-     * @param notificationTypeId    The ID for the notification type.
-     * @param title                 The title of the notification.
-     * @param message               The message content of the notification.
-     * @param tapIntentName         The intent action name to handle taps on the notification.
-     */
-    private void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
-        if (notificationChannelId == null || title == null || message == null) {
-            Log.d(TAG, "Unexpected null in showNotification.");
-            return;
-        }
-        // Has the user disallowed notifications?
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-        // If they tap the notification when doing something else, come back to this app
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.setAction(tapIntentName);
-        intent.addCategory(Intent.CATEGORY_DEFAULT);
-        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        // Notify the user they got a message.
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, notificationChannelId)
-            .setSmallIcon(R.drawable.ic_chat_notification)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true) // Dismiss on tap
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
-        NotificationManager notificationManager = getSystemService(NotificationManager.class);
-        notificationManager.notify(notificationTypeId, builder.build());
     }
 
     /**
