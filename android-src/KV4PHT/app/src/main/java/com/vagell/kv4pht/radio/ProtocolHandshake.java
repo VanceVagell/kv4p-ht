@@ -67,6 +67,10 @@ class ProtocolHandshake {
             .thenCompose(this::sendConfigStep));
     }
 
+    public void onDestroy() {
+        protocolScheduler.shutdownNow();
+    }
+
     private void startFor(CompletionStage<Void> chain) {
         chain
             .thenCompose(this::waitForFirmwareVersion)

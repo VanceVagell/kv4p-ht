@@ -378,6 +378,7 @@ public class RadioAudioService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        protocolHandshake.onDestroy();
         if (audioTrack != null) {
             audioTrack.stop();
             audioTrack.release();
