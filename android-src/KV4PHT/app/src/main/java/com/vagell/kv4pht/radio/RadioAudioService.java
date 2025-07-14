@@ -412,24 +412,27 @@ public class RadioAudioService extends Service {
         if (!forceTune && activeFrequencyStr.equals(frequencyStr) && squelch == squelchLevel) {
             return; // Already tuned to this frequency with this squelch level.
         }
+        float freq;
+        try {
+            freq = Float.parseFloat(makeSafeHamFreq(frequencyStr));
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "Invalid frequency string: " + frequencyStr, e);
+            return;
+        }
         activeFrequencyStr = frequencyStr;
         squelch = squelchLevel;
         if (isRadioConnected()) {
             hostToEsp32.group(Group.builder()
-                .freqTx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
-                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .freqTx(freq)
+                .freqRx(freq)
                 .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
                 .squelch((byte) squelchLevel)
                 .build());
         }
-        try {
-            float freq = Float.parseFloat(makeSafeHamFreq(activeFrequencyStr));
-            float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
-            float offsetMaxFreq = maxHamFreq - halfBandwidth;
-            float offsetMinFreq = minHamFreq + halfBandwidth;
-            txAllowed = !(freq < offsetMinFreq) && !(freq > offsetMaxFreq);
-        } catch (NumberFormatException ignored) {
-        }
+        float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+        float offsetMaxFreq = maxHamFreq - halfBandwidth;
+        float offsetMinFreq = minHamFreq + halfBandwidth;
+        txAllowed = freq >= offsetMinFreq && freq <= offsetMaxFreq;
     }
 
     public String makeSafeHamFreq(String strFreq) {
