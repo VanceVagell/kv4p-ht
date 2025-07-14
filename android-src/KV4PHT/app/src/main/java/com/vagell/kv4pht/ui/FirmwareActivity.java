@@ -41,6 +41,7 @@ import com.vagell.kv4pht.radio.RadioServiceConnector;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static com.google.android.material.snackbar.BaseTransientBottomBar.LENGTH_INDEFINITE;
 
@@ -54,6 +55,7 @@ public class FirmwareActivity extends AppCompatActivity {
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
     private Snackbar errorSnackbar;
     private RadioServiceConnector serviceConnector;
+    private Future<?> flashingTask;
 
     private CircularProgressIndicator progressIndicator;
     private TextView firmwareStatusText;
@@ -99,7 +101,9 @@ public class FirmwareActivity extends AppCompatActivity {
 
     @SuppressLint("UnsafeIntentLaunch")
     public void firmwareCancelButtonClicked(View view) {
-        // TODO: actually cancel flashing
+        if (flashingTask != null) {
+            flashingTask.cancel(true); // sends an interrupt
+        }
         setResult(Activity.RESULT_CANCELED, getIntent());
         finish();
     }
@@ -114,7 +118,7 @@ public class FirmwareActivity extends AppCompatActivity {
             return;
         }
         updateInitialUi();
-        executor.execute(() -> FirmwareUtils.flashFirmware(
+        flashingTask = executor.submit(() -> FirmwareUtils.flashFirmware(
             this,
             serialPort,
             new FirmwareUtils.FirmwareCallback() {
