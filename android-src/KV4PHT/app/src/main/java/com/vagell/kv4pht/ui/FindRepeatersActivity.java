@@ -458,7 +458,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             r.degrees  = tryParseDouble(cols[11]);
 
             // If this repeater is below or above the frequencies this radio is capable of, skip it.
-            if (r.freq < radioAudioService.getMinRadioFreq() || r.freq > radioAudioService.getMaxRadioFreq()) {
+            if (radioAudioService == null || r.freq < radioAudioService.getMinRadioFreq() || r.freq > radioAudioService.getMaxRadioFreq()) {
                 continue;
             }
 
