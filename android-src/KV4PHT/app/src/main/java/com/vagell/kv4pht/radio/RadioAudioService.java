@@ -430,10 +430,8 @@ public class RadioAudioService extends Service {
                 .squelch((byte) squelchLevel)
                 .build());
         }
-        float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
-        float offsetMaxFreq = maxHamFreq - halfBandwidth;
-        float offsetMinFreq = minHamFreq + halfBandwidth;
-        txAllowed = freq >= offsetMinFreq && freq <= offsetMaxFreq;
+        final float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+        txAllowed = (freq >= (minHamFreq + halfBandwidth)) && (freq <= (maxHamFreq - halfBandwidth));
     }
 
     public String makeSafeHamFreq(String strFreq) {
@@ -459,49 +457,36 @@ public class RadioAudioService extends Service {
     }
 
     public void tuneToMemory(int memoryId, int squelchLevel, boolean forceTune) {
-        if (!forceTune && activeMemoryId == memoryId && squelch == squelchLevel) {
-            return; // Already tuned to this memory, with this squelch.
-        }
-        Optional.ofNullable(channelMemoriesLiveData)
-            .filter(i -> serialPort != null)
-            .filter(i -> mode != RadioMode.STARTUP)
+        if (forceTune || activeMemoryId != memoryId || squelch != squelchLevel) {
+            Optional.ofNullable(channelMemoriesLiveData)
                 .map(LiveData::getValue)
-                    .orElse(Collections.emptyList())
+                .orElse(Collections.emptyList())
                 .stream()
-                .filter(i -> i.memoryId == memoryId)
+                .filter(channelMemory -> channelMemory.memoryId == memoryId)
                 .findFirst()
                 .ifPresent(channelMemory -> tuneToMemory(channelMemory, squelchLevel, forceTune));
+        }
     }
 
     public void tuneToMemory(ChannelMemory memory, int squelchLevel, boolean forceTune) {
-        if (!forceTune && activeMemoryId == memory.memoryId && squelch == squelchLevel) {
-            return; // Already tuned to this memory, with this squelch.
-        }
-        if (mode == RadioMode.STARTUP) {
-            return; // Not fully loaded and initialized yet, don't tune.
-        }
-        if (memory == null) {
-            return;
+        if (memory == null || (!forceTune && activeMemoryId == memory.memoryId && squelch == squelchLevel) || mode == RadioMode.STARTUP) {
+            return; // Skip if memory is null, already tuned, or in STARTUP mode.
         }
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
-        float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
+        final float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
         if (isRadioConnected()) {
-            int rxToneIdx = ToneHelper.getToneIndex(memory.rxTone);
-            int txToneIdx = ToneHelper.getToneIndex(memory.txTone);
             hostToEsp32.group(Group.builder()
-                    .freqTx(txFreq)
-                    .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
-                    .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
-                    .squelch((byte) squelchLevel)
-                    .ctcssRx(rxToneIdx < 0 ? 0x00 : (byte) rxToneIdx)
-                    .ctcssTx(txToneIdx < 0 ? 0x00 : (byte) txToneIdx)
-                    .build());
+                .freqTx(txFreq)
+                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
+                .bw(bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5)
+                .squelch((byte) squelchLevel)
+                .ctcssRx((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)))
+                .ctcssTx((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)))
+                .build());
         }
-        float deviation = (bandwidth.equals("Wide") ? 0.005f : 0.0025f);
-        float offsetMaxFreq = maxHamFreq - deviation;
-        float offsetMinFreq = minHamFreq + deviation;
-        txAllowed = txFreq >= offsetMinFreq && txFreq <= offsetMaxFreq;
+        final float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+        txAllowed = (txFreq >= (minHamFreq + halfBandwidth)) && (txFreq <= (maxHamFreq - halfBandwidth));
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
