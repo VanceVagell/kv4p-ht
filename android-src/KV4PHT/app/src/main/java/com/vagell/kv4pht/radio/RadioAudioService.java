@@ -500,7 +500,7 @@ public class RadioAudioService extends Service {
         float deviation = (bandwidth.equals("Wide") ? 0.005f : 0.0025f);
         float offsetMaxFreq = maxHamFreq - deviation;
         float offsetMinFreq = minHamFreq + deviation;
-        txAllowed = !(txFreq < offsetMinFreq) && !(txFreq > offsetMaxFreq);
+        txAllowed = txFreq >= offsetMinFreq && txFreq <= offsetMaxFreq;
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
