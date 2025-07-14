@@ -299,6 +299,11 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             editFrequencyTextInputEditText.requestFocus();
             return;
         } else {
+            if (radioAudioService == null) {
+                editFrequencyTextInputEditText.setError("Service not available. Please try again later.");
+                editFrequencyTextInputEditText.requestFocus();
+                return;
+            }
             String formattedFrequency = radioAudioService.makeSafeHamFreq(frequency);
             if (formattedFrequency == null) {
                 editFrequencyTextInputEditText.setError("Enter a frequency like 144.0000");
