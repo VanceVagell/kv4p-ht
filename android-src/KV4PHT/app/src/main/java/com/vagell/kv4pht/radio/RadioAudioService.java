@@ -1104,7 +1104,6 @@ public class RadioAudioService extends Service {
             callbacks.chatError("Error in your callsign or recipient callsign.");
             return -1;
         }
-        // TODO: implement retry/ACK timer
         return messageNumber - 1;
     }
 
