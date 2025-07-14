@@ -217,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
                 intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
                 intent.putExtra("memoryId", memory.memoryId);
-                intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RadioModuleType.VHF)));
+                intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType() == RadioAudioService.RadioModuleType.VHF));
                 startActivityForResult(intent, REQUEST_EDIT_MEMORY);
             }
         });
