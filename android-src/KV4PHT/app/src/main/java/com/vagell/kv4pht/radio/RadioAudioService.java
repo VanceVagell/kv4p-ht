@@ -128,6 +128,7 @@ public class RadioAudioService extends Service {
     private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
+    public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
 
     // === Frequency Ranges ===
     private static final float VHF_MIN_FREQ = 134.0f;
@@ -489,8 +490,8 @@ public class RadioAudioService extends Service {
                     .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
                     .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
                     .squelch((byte) squelchLevel)
-                    .ctcssRx(Integer.valueOf(rxToneIdx == -1 ? 0 : rxToneIdx).byteValue())
-                    .ctcssTx(Integer.valueOf(txToneIdx == -1 ? 0 : txToneIdx).byteValue())
+                    .ctcssRx(rxToneIdx < 0 ? 0x00 : (byte) rxToneIdx)
+                    .ctcssTx(txToneIdx < 0 ? 0x00 : (byte) txToneIdx)
                     .build());
         }
         float deviation = (bandwidth.equals("Wide") ? 0.005f : 0.0025f);
@@ -1043,7 +1044,6 @@ public class RadioAudioService extends Service {
             return;
         }
         Log.i(TAG, "Beaconing position via APRS");
-        final List<Digipeater> digipeaters = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
         final boolean isApprox = aprsPositionAccuracy == APRS_POSITION_APPROX;
         final Position myPos = new Position(
             isApprox ? Math.round(latitude * 100.0) / 100.0 : latitude,
@@ -1051,7 +1051,7 @@ public class RadioAudioService extends Service {
         );
         try {
             final PositionField posField = new PositionField(("=" + myPos.toCompressedString()).getBytes(), "", 1);
-            final APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", digipeaters, posField.getRawBytes());
+            final APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
             txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
             callbacks.sentAprsBeacon(latitude, longitude);
@@ -1068,11 +1068,7 @@ public class RadioAudioService extends Service {
      */
     public void sendAckMessage(String to, String remoteMessageNum) {
         MessagePacket msgPacket = new MessagePacket(to, "ack" + remoteMessageNum, remoteMessageNum);
-        final List<Digipeater> digipeaters = List.of(
-            new Digipeater("WIDE1*"),
-            new Digipeater("WIDE2-1")
-        );
-        APRSPacket aprsPacket = new APRSPacket(callsign, to, digipeaters, msgPacket.getRawBytes());
+        APRSPacket aprsPacket = new APRSPacket(callsign, to, DEFAULT_DIGIPEATERS, msgPacket.getRawBytes());
         txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
     }
 
@@ -1097,8 +1093,7 @@ public class RadioAudioService extends Service {
             messageNumber = 0;
         }
         try {
-            List<Digipeater> digipeaters = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
-            APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, digipeaters, msgPacket.getRawBytes());
+            APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, DEFAULT_DIGIPEATERS, msgPacket.getRawBytes());
             Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
             txAX25Packet(ax25Packet);
         } catch (IllegalArgumentException e) {
