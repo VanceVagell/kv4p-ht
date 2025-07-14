@@ -100,6 +100,7 @@ import java.util.stream.Collectors;
 import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
 import static com.google.android.material.snackbar.Snackbar.LENGTH_LONG;
+import static com.vagell.kv4pht.radio.RadioAudioService.INTENT_OPEN_CHAT;
 
 public class MainActivity extends AppCompatActivity {
     // For transmitting audio to ESP32 / radio
@@ -159,9 +160,6 @@ public class MainActivity extends AppCompatActivity {
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
     private static int RECORD_ANIM_FPS = 30;
-
-    // Intents this Activity can handle besides the one that starts it in default mode.
-    public static String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
 
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;

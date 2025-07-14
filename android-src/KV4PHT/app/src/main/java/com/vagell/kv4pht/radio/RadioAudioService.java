@@ -107,6 +107,8 @@ public class RadioAudioService extends Service implements PacketHandler {
     private static final String TAG = RadioAudioService.class.getSimpleName();
     private static final String FIRMWARE_TAG = "firmware";
     private static final int RUNAWAY_TX_TIMEOUT_SEC = 180;
+    // Intents this Activity can handle besides the one that starts it in default mode.
+    public static String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
 
     // === USB Device Matching ===
     private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
@@ -978,7 +980,7 @@ public class RadioAudioService extends Service implements PacketHandler {
                         MESSAGE_NOTIFICATION_TO_YOU_ID,
                         aprsPacket.getSourceCall() + " messaged you",
                         msg.getMessageBody(),
-                        MainActivity.INTENT_OPEN_CHAT);
+                        INTENT_OPEN_CHAT);
                     // Send acknowledgment after a delay
                     handler.postDelayed(() -> sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), msg.getMessageNumber()), 1000);
                 }
