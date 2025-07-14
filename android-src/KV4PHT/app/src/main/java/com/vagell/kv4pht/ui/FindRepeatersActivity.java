@@ -576,7 +576,12 @@ public class FindRepeatersActivity extends AppCompatActivity {
             ChannelMemory memory = new ChannelMemory();
             memory.name = r.call + " • " + r.location;
             memory.group = group;
-            memory.frequency = radioAudioService.makeSafeHamFreq(String.valueOf(r.freq));
+            if (radioAudioService != null) {
+                memory.frequency = radioAudioService.makeSafeHamFreq(String.valueOf(r.freq));
+            } else {
+                Log.e("FindRepeatersActivity", "radioAudioService is null. Cannot set frequency.");
+                continue; // Skip this repeater if radioAudioService is unavailable
+            }
             if (r.offset < 0) {
                 memory.offset = ChannelMemory.OFFSET_DOWN;
             } else if (r.offset > 0) {
