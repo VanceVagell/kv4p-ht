@@ -1102,7 +1102,8 @@ public class RadioAudioService extends Service {
             Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
             txAX25Packet(ax25Packet);
         } catch (IllegalArgumentException e) {
-            callbacks.chatError("Error in your callsign or recipient callsign.");
+            Log.e(TAG, "Error: sending APRS packet", e);
+            callbacks.chatError(e.getMessage());
             return -1;
         }
         return messageNumber - 1;
