@@ -98,7 +98,7 @@ private float[] td_filter;
 		this(sample_rate,filter_length,6,null);
 	}
 
-  public Afsk1200Demodulator(int sample_rate, int filter_length, int emphasis, PacketHandler h) throws Exception {
+  public Afsk1200Demodulator(int sample_rate, int filter_length, int emphasis, PacketHandler h) {
   	super(sample_rate==8000 ? 16000 : sample_rate);
   	
   	if (sample_rate==8000) {
@@ -112,7 +112,7 @@ private float[] td_filter;
 	  	if (Afsk1200Filters.sample_rates[rate_index] == sample_rate) break;
 	  }
 		if (rate_index == Afsk1200Filters.sample_rates.length) {
-			throw new Exception("Sample rate "+sample_rate+" not supported");
+			throw new RuntimeException("Sample rate "+sample_rate+" not supported");
 		}
 			
 		handler = h;

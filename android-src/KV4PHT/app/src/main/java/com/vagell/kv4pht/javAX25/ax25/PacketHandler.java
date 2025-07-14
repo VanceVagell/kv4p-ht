@@ -20,5 +20,5 @@
 package com.vagell.kv4pht.javAX25.ax25;
 
 public interface PacketHandler {
-	public void handlePacket(byte[] packet);
+	void handlePacket(byte[] packet);
 }

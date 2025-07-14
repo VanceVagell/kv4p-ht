@@ -101,7 +101,7 @@ import java.util.concurrent.*;
  * application to focus primarily on the setup flows and UI, and ensures that the radio audio
  * continues to play even if the phone's screen is off or the user starts another app.
  */
-public class RadioAudioService extends Service {
+public class RadioAudioService extends Service implements PacketHandler {
 
     // === Constants ===
     private static final String TAG = RadioAudioService.class.getSimpleName();
@@ -177,8 +177,8 @@ public class RadioAudioService extends Service {
     private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
 
     // === AFSK Modem ===
-    private PacketModulator afskModulator = null;
-    private PacketDemodulator afskDemodulator = null;
+    private final PacketModulator afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
+    private final PacketDemodulator afskDemodulator = new Afsk1200MultiDemodulator(AUDIO_SAMPLE_RATE, this);
 
     // === APRS State ===
     private boolean aprsBeaconPosition = false;
@@ -362,7 +362,6 @@ public class RadioAudioService extends Service {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
         createNotificationChannels();
         initAudioTrack();
-        initAFSKModem();
         handler.postDelayed(this::findESP32Device, 10);
     }
 
@@ -963,42 +962,31 @@ public class RadioAudioService extends Service {
         }
     }
 
-    /**
-     * Initializes the AFSK modem for APRS packet handling.
-     * This method sets up the demodulator and modulator for AFSK 1200 baud.
-     */
-    private void initAFSKModem() {
-        PacketHandler packetHandler = data -> {
-            APRSPacket aprsPacket;
-            try {
-                aprsPacket = Parser.parseAX25(data);
-            } catch (Exception e) {
-                Log.d(TAG, "Unable to parse an APRS packet, skipping.");
-                return;
-            }
+    @Override
+    public void handlePacket(byte[] packet) {
+        try {
+            APRSPacket aprsPacket = Parser.parseAX25(packet);
             InformationField info = aprsPacket.getPayload();
-            if (info.getDataTypeIdentifier() == ':') { // APRS message type
+            // Check if the packet is an APRS message type
+            if (info.getDataTypeIdentifier() == ':') {
                 MessagePacket msg = new MessagePacket(info.getRawBytes(), aprsPacket.getDestinationCall());
                 String target = msg.getTargetCallsign().trim().toUpperCase();
+                // Handle messages addressed to the current callsign
                 if (!msg.isAck() && target.equals(callsign.toUpperCase())) {
                     showNotification(
                         MESSAGE_NOTIFICATION_CHANNEL_ID,
                         MESSAGE_NOTIFICATION_TO_YOU_ID,
                         aprsPacket.getSourceCall() + " messaged you",
                         msg.getMessageBody(),
-                        MainActivity.INTENT_OPEN_CHAT
-                    );
-                   handler.postDelayed(() ->
-                        sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), msg.getMessageNumber()), 1000);
+                        MainActivity.INTENT_OPEN_CHAT);
+                    // Send acknowledgment after a delay
+                    handler.postDelayed(() -> sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), msg.getMessageNumber()), 1000);
                 }
             }
+            // Notify callbacks about the received packet
             callbacks.packetReceived(aprsPacket);
-        };
-        try {
-            afskDemodulator = new Afsk1200MultiDemodulator(AUDIO_SAMPLE_RATE, packetHandler);
-            afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
         } catch (Exception e) {
-            Log.d(TAG, "Unable to create AFSK modem objects.");
+            Log.d(TAG, "Unable to parse an APRS packet, skipping.");
         }
     }
 
@@ -1010,11 +998,11 @@ public class RadioAudioService extends Service {
     @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
     public void sendPositionBeacon() {
         if (!txAllowed || getMode() != RadioMode.RX) {
-            Log.d("Beacon", "Skipping position beacon: tx not allowed or not in RX mode.");
+            Log.d(TAG, "Skipping position beacon: tx not allowed or not in RX mode.");
             return;
         }
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-            Log.d("Beacon", "Missing Google Play Services — cannot retrieve GPS location.");
+            Log.d(TAG, "Missing Google Play Services — cannot retrieve GPS location.");
             callbacks.unknownLocation();
             return;
         }
