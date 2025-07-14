@@ -151,9 +151,9 @@ public class RadioAudioService extends Service {
     @Getter
     private float maxRadioFreq = VHF_MAX_FREQ;
     @Setter
-    private float minHamFreq = min2mTxFreq;
+    private float minTxFreq = min2mTxFreq;
     @Setter
-    private float maxHamFreq = max2mTxFreq;
+    private float maxTxFreq = max2mTxFreq;
 
     public enum RadioModuleType {UNKNOWN, VHF, UHF}
 
@@ -403,6 +403,17 @@ public class RadioAudioService extends Service {
             .build());
     }
 
+    /**
+     * Determines if transmission (TX) is allowed on the given frequency.
+     *
+     * @param freq The frequency to check, in MHz.
+     * @return true if the frequency is within the allowed transmission range, false otherwise.
+     */
+    private boolean isTxAllowed(float freq) {
+        final float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+        return  (freq >= (minTxFreq + halfBandwidth)) && (freq <= (maxTxFreq - halfBandwidth));
+    }
+
     // Tell microcontroller to tune to the given frequency string, which must already be formatted
     // in the style the radio module expects.
     public void tuneToFreq(String frequencyStr, int squelchLevel, boolean forceTune) {
@@ -430,8 +441,7 @@ public class RadioAudioService extends Service {
                 .squelch((byte) squelchLevel)
                 .build());
         }
-        final float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
-        txAllowed = (freq >= (minHamFreq + halfBandwidth)) && (freq <= (maxHamFreq - halfBandwidth));
+        txAllowed = isTxAllowed(freq);
     }
 
     public String makeSafeHamFreq(String strFreq) {
@@ -443,7 +453,7 @@ public class RadioAudioService extends Service {
             }
             return formatFreq(Math.max(minRadioFreq, Math.min(freq, maxRadioFreq)));
         } catch (NumberFormatException e) {
-            return formatFreq(minHamFreq);
+            return formatFreq(minTxFreq);
         }
     }
 
@@ -485,8 +495,7 @@ public class RadioAudioService extends Service {
                 .ctcssTx((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)))
                 .build());
         }
-        final float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
-        txAllowed = (txFreq >= (minHamFreq + halfBandwidth)) && (txFreq <= (maxHamFreq - halfBandwidth));
+        txAllowed = isTxAllowed(txFreq);
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
@@ -693,20 +702,20 @@ public class RadioAudioService extends Service {
             // Ensure frequencies we're using match the radioType
             if (radioType.equals(RadioModuleType.VHF)) {
                 setMinRadioFreq(VHF_MIN_FREQ);
-                setMinHamFreq(min2mTxFreq);
-                setMaxHamFreq(max2mTxFreq);
+                setMinTxFreq(min2mTxFreq);
+                setMaxTxFreq(max2mTxFreq);
                 setMaxRadioFreq(VHF_MAX_FREQ);
             } else if (radioType.equals(RadioModuleType.UHF)) {
                 setMinRadioFreq(UHF_MIN_FREQ);
-                setMinHamFreq(min70cmTxFreq);
-                setMaxHamFreq(max70cmTxFreq);
+                setMinTxFreq(min70cmTxFreq);
+                setMaxTxFreq(max70cmTxFreq);
                 setMaxRadioFreq(UHF_MAX_FREQ);
             }
             Log.d(TAG, "Radio type set to: " + radioType);
             Log.d(TAG, "Min radio freq: " + minRadioFreq);
             Log.d(TAG, "Max radio freq: " + maxRadioFreq);
-            Log.d(TAG, "Min ham freq: " + minHamFreq);
-            Log.d(TAG, "Max ham freq: " + maxHamFreq);
+            Log.d(TAG, "Min tx freq: " + minTxFreq);
+            Log.d(TAG, "Max tx freq: " + maxTxFreq);
         }
     }
 
