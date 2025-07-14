@@ -314,10 +314,10 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void setRadioType(RadioAudioService.RadioModuleType ratioType) {
-                    if (ratioType.equals(RadioAudioService.RadioModuleType.VHF)) {
+                public void setRadioType(RadioAudioService.RadioModuleType radioType) {
+                    if (radioType.equals(RadioAudioService.RadioModuleType.VHF)) {
                         showBand(BandType.BAND_VHF);
-                    } else if (ratioType.equals(RadioAudioService.RadioModuleType.UHF)) {
+                    } else if (radioType.equals(RadioAudioService.RadioModuleType.UHF)) {
                         showBand(BandType.BAND_UHF);
                     } else {
                         showBand(BandType.BAND_UNKNOWN);
