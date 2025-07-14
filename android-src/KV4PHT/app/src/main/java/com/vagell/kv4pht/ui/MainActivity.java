@@ -1931,13 +1931,13 @@ public class MainActivity extends AppCompatActivity {
      * @param message               The message content of the notification.
      * @param tapIntentName         The intent action name to handle taps on the notification.
      */
-    private void doShowNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
+    public void doShowNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
         if (notificationChannelId == null || title == null || message == null) {
             Log.d("DEBUG", "Unexpected null in showNotification.");
             return;
         }
         // Has the user disallowed notifications?
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
         // If they tap the notification when doing something else, come back to this app
