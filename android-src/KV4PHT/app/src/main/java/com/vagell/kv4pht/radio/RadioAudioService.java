@@ -1188,12 +1188,12 @@ public class RadioAudioService extends Service {
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         // Notify the user they got a message.
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, notificationChannelId)
-                .setSmallIcon(R.drawable.ic_chat_notification)
-                .setContentTitle(title)
-                .setContentText(message)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true) // Dismiss on tap
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+            .setSmallIcon(R.drawable.ic_chat_notification)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true) // Dismiss on tap
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.notify(notificationTypeId, builder.build());
     }
