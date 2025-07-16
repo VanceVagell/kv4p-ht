@@ -82,7 +82,7 @@ public abstract class AppDatabase extends RoomDatabase {
             )
             // WARNING: This will delete all user data if migration is missing.
             // Remove or guard this call in production.
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(true)
             .build();
     }
 
