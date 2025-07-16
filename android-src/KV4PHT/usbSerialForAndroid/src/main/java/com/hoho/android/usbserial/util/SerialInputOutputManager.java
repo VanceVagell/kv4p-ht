@@ -302,7 +302,7 @@ public class SerialInputOutputManager {
                 UsbRequest request = new UsbRequest();
                 request.setClientData(buffer);
                 request.initialize(mSerialPort.getConnection(), mSerialPort.getReadEndpoint());
-                request.queue(buffer, buffer.capacity());
+                request.queue(buffer);
                 mReadPool.add(request);
             }
         }
@@ -334,7 +334,7 @@ public class SerialInputOutputManager {
                 }
                 completedBuffer.clear(); // Prepare for reuse
                 // Requeue the buffer and handle potential failures
-                if (!completedRequest.queue(completedBuffer, completedBuffer.capacity())) {
+                if (!completedRequest.queue(completedBuffer)) {
                     Log.e(TAG, "Failed to requeue the buffer");
                     throw new IOException("Failed to requeue the buffer");
                 }

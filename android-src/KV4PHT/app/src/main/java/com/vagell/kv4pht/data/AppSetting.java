@@ -46,8 +46,6 @@ public class AppSetting {
     public static final String SETTING_CALLSIGN = "callsign";
     public static final String SETTING_STICKY_PTT = "stickyPTT";
 
-    public AppSetting() {};
-
     public AppSetting(@NonNull String name, String value) {
         this.name = name;
         this.value = value;
