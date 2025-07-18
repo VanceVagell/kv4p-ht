@@ -828,7 +828,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             case COMMAND_SMETER_REPORT:
                 Protocol.Rssi.from(param, len)
                     .map(Protocol.Rssi::getSMeter9Value)
-                    .filter(i -> getMode() == RadioMode.RX || getMode() ==RadioMode.SCAN)
+                    .filter(i -> getMode() == RadioMode.RX || getMode() == RadioMode.SCAN)
                     .ifPresent(callbacks::sMeterUpdate);
                 break;
 
