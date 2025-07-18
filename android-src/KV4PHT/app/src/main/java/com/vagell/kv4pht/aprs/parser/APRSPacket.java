@@ -136,7 +136,7 @@ public class APRSPacket implements Serializable {
      * @return the hasFault
      */
     public boolean hasFault() {
-        return (this.hasFault | payload.hasFault());
+        return (this.hasFault || payload.hasFault());
     }
 
     public final void setComment(String comment) {
