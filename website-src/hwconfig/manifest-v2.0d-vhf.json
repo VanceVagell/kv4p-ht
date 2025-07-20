@@ -1,0 +1,13 @@
+{
+  "name": "PCB Manifest v2.0d VHF",
+  "version": "v2.0d-vhf",
+  "new_install_prompt_erase": false,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { "path": "../hwconfig/board-config-v2.0d-vhf.bin", "offset": 36864}
+      ]
+    }
+  ]
+}
