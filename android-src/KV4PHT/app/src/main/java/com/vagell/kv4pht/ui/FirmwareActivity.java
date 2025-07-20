@@ -18,8 +18,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.ui;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.content.Context;
 import android.graphics.Color;
 import android.os.Bundle;
 
@@ -37,137 +37,150 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
-import com.vagell.kv4pht.radio.RadioAudioService;
+import com.vagell.kv4pht.radio.RadioServiceConnector;
 
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import static com.google.android.material.snackbar.BaseTransientBottomBar.LENGTH_INDEFINITE;
+
 
 public class FirmwareActivity extends AppCompatActivity {
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-    private Snackbar errorSnackbar = null;
+
+    public static final CharSequence FAILED_TO_MESSAGE = "Failed to flash firmware. If it keeps failing, use kv4p.com web flasher.";
+    public static final String CONNECTING_TO_BOOTLOADER = "Connecting to bootloader...";
+    public static final String RETRY = "Retry";
+
+    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private Snackbar errorSnackbar;
+    private RadioServiceConnector serviceConnector;
+    private Future<?> flashingTask;
+
+    private CircularProgressIndicator progressIndicator;
+    private TextView firmwareStatusText;
+    private View instructionText1;
+    private View instructionImage;
+    private View instructionText2;
+    private View firmwareButtons;
+    private View topLevelView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_firmware);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // Or firmware writing will fail when app is paused
-
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        threadPoolExecutor.shutdownNow();
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        serviceConnector = new RadioServiceConnector(this);
+        firmwareStatusText = findViewById(R.id.firmwareStatusText);
+        progressIndicator = findViewById(R.id.firmwareProgressIndicator);
+        instructionText1 = findViewById(R.id.firmwareInstructionText1);
+        instructionImage = findViewById(R.id.firmwareInstructionImage);
+        instructionText2 = findViewById(R.id.firmwareInstructionText2);
+        firmwareButtons = findViewById(R.id.firmwareButtons);
+        topLevelView = findViewById(R.id.firmwareTopLevelView);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        startFlashing();
+        serviceConnector.bind(service -> startFlashing(service.getSerialPort()));
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        if (errorSnackbar != null) {
-            errorSnackbar.dismiss();
-        }
+        serviceConnector.unbind();
+        if (errorSnackbar != null) errorSnackbar.dismiss();
     }
 
-    private void startFlashing() {
-        setStatusText("Connecting to bootloader...");
-        findViewById(R.id.firmwareInstructionText1).setVisibility(View.VISIBLE);
-        findViewById(R.id.firmwareInstructionImage).setVisibility(View.VISIBLE);
-        findViewById(R.id.firmwareButtons).setVisibility(View.VISIBLE);
-        findViewById(R.id.firmwareInstructionText2).setVisibility(View.GONE);
-        CircularProgressIndicator progressIndicator = findViewById(R.id.firmwareProgressIndicator);
-        progressIndicator.setIndeterminate(true);
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        executor.shutdownNow();
+    }
 
-        // Start flashing, if we're not already.
-        if (FirmwareUtils.isFlashing()) {
+    @SuppressLint("UnsafeIntentLaunch")
+    public void firmwareCancelButtonClicked(View view) {
+        if (flashingTask != null) {
+            flashingTask.cancel(true); // sends an interrupt
+        }
+        setResult(Activity.RESULT_CANCELED, getIntent());
+        finish();
+    }
+
+    private void setStatusText(String text) {
+        firmwareStatusText.setText(text);
+    }
+
+    private void startFlashing(UsbSerialPort serialPort) {
+        if (FirmwareUtils.isFlashing() || serialPort == null) {
+            Log.w("FirmwareActivity", "Flashing already in progress or serialPort is null.");
             return;
         }
-        final Context ctx = this;
-        threadPoolExecutor.execute(() -> {
-            UsbSerialPort serialPort = RadioAudioService.getUsbSerialPort();
-            if (null == serialPort) {
-                Log.d("DEBUG", "Error: Unexpected null serial port in FirmwareActivity.");
-                // TODO report in UI that serial port not found, with option to retry
-            }
-            FirmwareUtils.flashFirmware(ctx, serialPort, new FirmwareUtils.FirmwareCallback() {
+        updateInitialUi();
+        flashingTask = executor.submit(() -> FirmwareUtils.flashFirmware(
+            this,
+            serialPort,
+            new FirmwareUtils.FirmwareCallback() {
                 @Override
                 public void connectedToBootloader() {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            setStatusText("Flashing 0%");
-                            findViewById(R.id.firmwareInstructionText1).setVisibility(View.GONE);
-                            findViewById(R.id.firmwareInstructionImage).setVisibility(View.GONE);
-                            findViewById(R.id.firmwareButtons).setVisibility(View.GONE);
-                            findViewById(R.id.firmwareInstructionText2).setVisibility(View.VISIBLE);
-                            CircularProgressIndicator progressIndicator1 = findViewById(R.id.firmwareProgressIndicator);
-                            progressIndicator1.setIndeterminate(false);
-                            progressIndicator1.setProgress(0);
-                        }
+                    runOnUiThread(() -> {
+                        setStatusText("Flashing 0%");
+                        toggleInstructionViews(false);
+                        firmwareButtons.setVisibility(View.GONE);
+                        instructionText2.setVisibility(View.VISIBLE);
+                        progressIndicator.setIndeterminate(false);
+                        progressIndicator.setProgress(0);
                     });
                 }
-
                 @Override
                 public void reportProgress(int percent) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            setStatusText("Flashing " + percent + "%");
-                            CircularProgressIndicator progressIndicator1 = findViewById(R.id.firmwareProgressIndicator);
-                            progressIndicator1.setIndeterminate(false);
-                            progressIndicator1.setProgress(percent);
-                        }
+                    runOnUiThread(() -> {
+                        setStatusText("Flashing " + percent + "%");
+                        progressIndicator.setProgress(percent);
                     });
                 }
-
+                @SuppressLint("UnsafeIntentLaunch")
                 @Override
                 public void doneFlashing(boolean success) {
-                    Log.d("DEBUG", "doneFlashing, success: " + success);
-
+                    Log.d("FirmwareActivity", "Flashing done: " + success);
                     if (success) {
                         setResult(Activity.RESULT_OK, getIntent());
                         finish();
                     } else {
-                        Log.d("DEBUG", "Error: Flashing firmware failed.");
-
-                        CharSequence snackbarMsg = "Failed to flash firmware. If it keeps failing, use kv4p.com web flasher.";
-                        errorSnackbar = Snackbar.make(ctx, findViewById(R.id.firmwareTopLevelView), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
-                                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
-                        errorSnackbar.setAction("Retry", new View.OnClickListener() {
-                                    @Override
-                                    public void onClick(View view) {
-                                        errorSnackbar.dismiss();
-                                        startFlashing();
-                                    }
-                                });
-
-                        // Make the text of the snackbar larger.
-                        TextView snackbarActionTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
-                        snackbarActionTextView.setTextSize(20);
-                        TextView snackbarTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
-                        snackbarTextView.setTextSize(20);
-
-                        errorSnackbar.show();
+                        showErrorSnackBar(serialPort);
                     }
                 }
+            }));
+    }
+
+    private void updateInitialUi() {
+        setStatusText(CONNECTING_TO_BOOTLOADER);
+        toggleInstructionViews(true);
+        firmwareButtons.setVisibility(View.VISIBLE);
+        instructionText2.setVisibility(View.GONE);
+        progressIndicator.setIndeterminate(true);
+    }
+
+    private void toggleInstructionViews(boolean showInitial) {
+        instructionText1.setVisibility(showInitial ? View.VISIBLE : View.GONE);
+        instructionImage.setVisibility(showInitial ? View.VISIBLE : View.GONE);
+    }
+
+    private void showErrorSnackBar(UsbSerialPort port) {
+        errorSnackbar = Snackbar.make(topLevelView, FAILED_TO_MESSAGE, LENGTH_INDEFINITE)
+            .setBackgroundTint(Color.rgb(140, 20, 0))
+            .setTextColor(Color.WHITE)
+            .setActionTextColor(Color.WHITE)
+            .setAction(RETRY, v -> {
+                errorSnackbar.dismiss();
+                startFlashing(port);
             });
-        });
-    }
-
-    private void setStatusText(String text) {
-        TextView firmwareStatusText = findViewById(R.id.firmwareStatusText);
-        firmwareStatusText.setText(text);
-    }
-
-    public void firmwareCancelButtonClicked(View view) {
-        // TODO actually cancel any firmware flashing in progress
-        setResult(Activity.RESULT_CANCELED, getIntent());
-        finish();
+        View snackbarView = errorSnackbar.getView();
+        TextView text = snackbarView.findViewById(com.google.android.material.R.id.snackbar_text);
+        TextView action = snackbarView.findViewById(com.google.android.material.R.id.snackbar_action);
+        text.setTextSize(20);
+        action.setTextSize(20);
+        errorSnackbar.show();
     }
 }

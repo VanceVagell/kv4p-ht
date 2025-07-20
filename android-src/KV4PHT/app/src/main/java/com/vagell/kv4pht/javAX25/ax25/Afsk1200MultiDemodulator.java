@@ -91,7 +91,7 @@ public class Afsk1200MultiDemodulator extends PacketDemodulator {
 	//private int sample_rate;
 	//private int max_sample_delay;
 
-	public Afsk1200MultiDemodulator(int sample_rate, PacketHandler h) throws Exception {
+	public Afsk1200MultiDemodulator(int sample_rate, PacketHandler h)  {
   	super(sample_rate);
 		//this.sample_rate = sample_rate;
 		this.h = h;

@@ -113,10 +113,18 @@ public final class FirmwareUtils {
         return new SerialTransport() {
             @Override
             public int read(byte[] buffer, int length) throws IOException {
+                if (Thread.currentThread().isInterrupted()) {
+                    Log.w(TAG, "Read operation interrupted, terminating.");
+                    throw new IOException("Read operation interrupted");
+                }
                 return usbSerialPort.read(buffer, length, 100);
             }
             @Override
             public void write(byte[] buffer, int length) throws IOException {
+                if (Thread.currentThread().isInterrupted()) {
+                    Log.w(TAG, "Write operation interrupted, terminating.");
+                    throw new IOException("Write operation interrupted");
+                }
                 usbSerialPort.write(buffer, length, 0);
             }
             @Override

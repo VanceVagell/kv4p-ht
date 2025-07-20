@@ -35,6 +35,7 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.radio.RadioAudioService;
+import com.vagell.kv4pht.radio.RadioServiceConnector;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,11 +49,14 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private ChannelMemory mMemory;
     private MainViewModel viewModel;
+    private RadioServiceConnector serviceConnector;
+    private RadioAudioService radioAudioService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
         super.onCreate(savedInstanceState);
+        serviceConnector = new RadioServiceConnector(this);
         setContentView(R.layout.activity_add_edit_memory);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -120,6 +124,12 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        serviceConnector.bind(rs -> this.radioAudioService = rs);
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         // Put the cursor in the name field by default
@@ -131,6 +141,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         threadPoolExecutor.shutdownNow();
+        serviceConnector.unbind();
     }
 
     private void populateMemoryGroups() {
@@ -286,7 +297,12 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             editFrequencyTextInputEditText.requestFocus();
             return;
         } else {
-            String formattedFrequency = RadioAudioService.makeSafeHamFreq(frequency);
+            if (radioAudioService == null) {
+                editFrequencyTextInputEditText.setError("Service not available. Please try again later.");
+                editFrequencyTextInputEditText.requestFocus();
+                return;
+            }
+            String formattedFrequency = radioAudioService.makeSafeHamFreq(frequency);
             if (formattedFrequency == null) {
                 editFrequencyTextInputEditText.setError("Enter a frequency like 144.0000");
                 editFrequencyTextInputEditText.requestFocus();

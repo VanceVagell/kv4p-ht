@@ -361,6 +361,9 @@ public final class Protocol {
                     processCommand();
                     resetParser();
                 }
+                if (commandParamLen > commandParams.length) {
+                    resetParser();
+                }
             } else {
                 if (paramIndex < commandParamLen) {
                     commandParams[paramIndex++] = b;

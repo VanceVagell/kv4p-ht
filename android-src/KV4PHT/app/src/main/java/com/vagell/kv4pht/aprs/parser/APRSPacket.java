@@ -20,244 +20,170 @@
  */
 package com.vagell.kv4pht.aprs.parser;
 
+import lombok.Getter;
+import lombok.Setter;
+import org.jetbrains.annotations.NotNull;
+
 import java.io.ByteArrayOutputStream;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 /**
- * 
  * @author johng
- *  This class represents a complete APRS AX.25 packet, as found in a TNC2-style string:
- *  SOURCE>DESTIN,VIA,VIA:payload
+ * This class represents a complete APRS AX.25 packet, as found in a TNC2-style string:
+ * SOURCE>DESTIN,VIA,VIA:payload
  */
 public class APRSPacket implements Serializable {
-    private static final long serialVersionUID = 1L;
-	private Date receivedTimestamp = null;
+
+	public static final Set<String> Q_CONSTRUCTS = Set.of("qar", "qas", "qac", "qao");
+	private static final long serialVersionUID = 1L;
+
+    @Getter
+    private final Date receivedTimestamp;
+
+    @Getter
+    @Setter
     private String originalString;
-	private String sourceCall;
-    private String destinationCall;
-    private ArrayList<Digipeater> digipeaters;
-    private char dti;
-    private InformationField aprsInformation;
+
+    private final List<Digipeater> digipeaters;
+
+    @Getter
+    private final String sourceCall;
+
+    @Getter
+    private final String destinationCall;
+
+    @Getter
+    private final char dti;
+
+    @Getter
+    private final InformationField payload;
+
+    @Setter
     private boolean hasFault;
-	private String comment;
+
+    private String comment;
 
     static final String REGEX_PATH_ALIASES = "^(WIDE|TRACE|RELAY)\\d*$";
-    
-    public APRSPacket( String source, String destination, ArrayList<Digipeater> digipeaters, byte[] body) {
-		receivedTimestamp = new Date(System.currentTimeMillis());
-        this.sourceCall=source.toUpperCase();
-        this.destinationCall=destination.toUpperCase();
-        if ( digipeaters == null ) {
-        	Digipeater aprsIs = new Digipeater("TCPIP*");
-        	this.digipeaters = new ArrayList<Digipeater>();
-        	this.digipeaters.add(aprsIs);
+
+    public APRSPacket(String source, String destination, List<Digipeater> digipeaters, byte[] payload) {
+        receivedTimestamp = new Date(System.currentTimeMillis());
+        this.sourceCall = source.toUpperCase();
+        this.destinationCall = destination.toUpperCase();
+		this.digipeaters = Optional.ofNullable(digipeaters).orElse(List.of(new Digipeater("TCPIP*")));
+        this.dti = (char) payload[0];
+        this.payload = new InformationField(payload);
+    }
+
+    public static String getBaseCall(String callsign) {
+        int sepIdx = callsign.indexOf('-');
+        if (sepIdx > -1) {
+            return callsign.substring(0, sepIdx);
         } else {
-        	this.digipeaters = digipeaters;
+            return callsign;
         }
-		this.dti = (char)body[0];
-        this.aprsInformation = new InformationField(body);
-    }
-    
-    
-	/** 
-	 * @param callsign
-	 * @return String
-	 */
-	public static final String getBaseCall(String callsign) {
-    	int sepIdx = callsign.indexOf('-');
-    	if ( sepIdx > -1 ) {
-    		return callsign.substring(0,sepIdx);
-    	} else {
-    		return callsign;
-    	}
-    }
-    
-    
-	/** 
-	 * @param callsign
-	 * @return String
-	 */
-	public static final String getSsid(String callsign) {
-    	int sepIdx = callsign.indexOf('-');
-    	if ( sepIdx > -1 ) {
-    		return callsign.substring(sepIdx+1);
-    	} else {
-    		return "0";
-    	}
-    }
-    
-    public String getIgate() {
-    	for ( int i=0; i<digipeaters.size(); i++) {
-    		Digipeater d = digipeaters.get(i);
-    		// I'm not sure I'm treating these correctly (poor understanding of the
-    		// Q-constructs on my part).  For now, I'm saying that call sign AFTER a 
-    		// q-construct is the I-gate.
-    		if ( d.getCallsign().equalsIgnoreCase("qar") && i<digipeaters.size()-1 ) {
-    			return digipeaters.get(i+1).toString();
-    		}
-    		if ( d.getCallsign().equalsIgnoreCase("qas") && i<digipeaters.size()-1 ) {
-    			return digipeaters.get(i+1).toString();
-    		}
-    		if ( d.getCallsign().equalsIgnoreCase("qac") && i<digipeaters.size()-1 ) {
-    			return digipeaters.get(i+1).toString();
-    		}
-    		if ( d.getCallsign().equalsIgnoreCase("qao") && i<digipeaters.size()-1 ) {
-    			return digipeaters.get(i+1).toString();
-    		}
-    	}
-    	return "";
     }
 
-    /**
-     * @return the source
-     */
-    public String getSourceCall() {
-        return sourceCall;
+    public static String getSsid(String callsign) {
+        int sepIdx = callsign.indexOf('-');
+        if (sepIdx > -1) {
+            return callsign.substring(sepIdx + 1);
+        } else {
+            return "0";
+        }
     }
 
-    /**
-     * @return the destination
-     */
-    public String getDestinationCall() {
-        return destinationCall;
-    }
+	public String getIgate() {
+		// I'm not sure if I'm treating these correctly (poor understanding of the
+		// Q-constructs on my part).  For now, I'm saying that call sign AFTER a
+		// q-construct is the I-gate.
+		for (int i = 0; i < digipeaters.size() - 1; i++) {
+            if (Q_CONSTRUCTS.contains(digipeaters.get(i).getCallsign().toLowerCase())) {
+				return digipeaters.get(i + 1).toString();
+			}
+		}
+		return "";
+	}
 
-    /**
-     * @return the digipeaters
-     */
-    public ArrayList<Digipeater> getDigipeaters() {
-        return digipeaters;
-    }
-    
-    public void setDigipeaters(ArrayList<Digipeater> newDigis) {
-	    digipeaters = newDigis;
-    }
-
-    /**
+	/**
      * @return the last digipeater in the path marked as used (with '*') or null.
      */
     public String getLastUsedDigi() {
-        for (int i=digipeaters.size()-1; i>=0; i--) {
-            Digipeater d = digipeaters.get(i);
-	    String call = d.getCallsign();
-            if (d.isUsed() && !call.matches(REGEX_PATH_ALIASES))
-                return call;
-        }
-        return null;
+        return IntStream.range(0, digipeaters.size())
+            .mapToObj(i -> digipeaters.get(digipeaters.size() - 1 - i))
+            .filter(d -> d.isUsed() && !d.getCallsign().matches(REGEX_PATH_ALIASES))
+            .map(Digipeater::getCallsign)
+            .findFirst()
+            .orElse(null);
     }
 
     public String getDigiString() {
-        StringBuilder sb = new StringBuilder();
-		boolean first=true;
-        for ( Digipeater digi : digipeaters ) {
-			if ( first ) {
-            	sb.append(digi.toString());
-				first=false;
-			} else 
-				sb.append(","+digi.toString());
-        }
-        return sb.toString();
+        return digipeaters.stream()
+            .map(Digipeater::toString)
+            .collect(Collectors.joining(","));
     }
 
-    /**
-     * @return the dti
-     */
-    public char getDti() {
-        return dti;
-    }
-
-    /**
-     * @return the aprsInformation
-     */
-    public InformationField getAprsInformation() {
-        return aprsInformation;
-    }
     public boolean isAprs() {
-    	return true;
+        return true;
     }
 
-	/**
-	 * @return the hasFault
-	 */
-	public boolean hasFault() {
-		return ( this.hasFault | aprsInformation.hasFault() );
-	}
+    /**
+     * @return the hasFault
+     */
+    public boolean hasFault() {
+        return (this.hasFault || payload.hasFault());
+    }
 
-	/**
-	 * @param hasFault the hasFault to set
-	 */
-	public void setHasFault(boolean hasFault) {
-		this.hasFault = hasFault;
-	}
+    public final void setComment(String comment) {
+        this.comment = comment;
+    }
 
-	/**
-	 * @return the originalString
-	 */
-	public final String getOriginalString() {
-		return originalString;
-	}
+    public final String getComment() {
+        return this.comment;
+    }
 
-	/**
-	 * @param originalString the originalString to set
-	 */
-	public final void setOriginalString(String originalString) {
-		this.originalString = originalString;
-	}
-
-		public void setInfoField(InformationField infoField) {
-		this.aprsInformation = infoField;
-	}
-
-	public final void setComment(String comment) {
-		this.comment = comment;
-	}
-
-	public final String getComment() {
-		return this.comment;
-	}
-
-	@Override
-	public String toString() {
-		StringBuffer sb = new StringBuffer("-------------------------------\n");
-		sb.append(sourceCall+">"+destinationCall+"\n");
-		sb.append("Via Digis: "+getDigiString()+"\n");
-		sb.append(aprsInformation.toString());
-		return sb.toString();
-	}
+    @Override
+    public @NotNull String toString() {
+        return String.format(
+            "-------------------------------\n%s>%s\nVia Digis: %s\n%s",
+            sourceCall,
+            destinationCall,
+            getDigiString(),
+			payload
+        );
+    }
 
 	public byte[] toAX25Frame() throws IllegalArgumentException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		// write AX.25 header
-		// dest
+		ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+		// Destination address (with * to mark end of first address)
 		byte[] dest = new Digipeater(destinationCall + "*").toAX25();
-		baos.write(dest, 0, dest.length);
-		// src
+		byteArrayOutputStream.write(dest, 0, dest.length);
+		// Source address
 		byte[] src = new Digipeater(sourceCall).toAX25();
-		// last byte of last address is |=1
-		if (digipeaters.size() == 0)
-			src[6] |= 1;
-		baos.write(src, 0, src.length);
-		// digipeater list
-		for (int i = 0; i < digipeaters.size(); i++) {
-			byte[] d = digipeaters.get(i).toAX25();
-			// last byte of last digi is |=1
-			if (i == digipeaters.size() - 1)
-				d[6] |= 1;
-			baos.write(d, 0, 7);
+		if (digipeaters.isEmpty()) {
+			src[6] |= 0x01; // Mark as last address if no digipeaters
 		}
-		// control: UI-frame, poll-bit set
-		baos.write(0x03);
-		// pid: 0xF0 - no layer 3 protocol
-		baos.write(0xF0);
-		// write content
-		byte[] content = aprsInformation.getRawBytes();
-		baos.write(content, 0, content.length);
-		return baos.toByteArray();
-	}
-
-	public Date getRecevedTimestamp() {
-		return this.receivedTimestamp;
+		byteArrayOutputStream.write(src, 0, src.length);
+		// Digipeater path
+		for (int i = 0; i < digipeaters.size(); i++) {
+			byte[] digi = digipeaters.get(i).toAX25();
+			if (i == digipeaters.size() - 1) {
+				digi[6] |= 0x01; // Mark last digipeater
+			}
+			byteArrayOutputStream.write(digi, 0, 7); // AX.25 address is always 7 bytes
+		}
+		// Control (0x03 = UI-frame), PID (0xF0 = no layer 3 protocol)
+		byteArrayOutputStream.write(0x03);
+		byteArrayOutputStream.write(0xF0);
+		// Payload
+		byte[] payload = this.payload.getRawBytes();
+		byteArrayOutputStream.write(payload, 0, payload.length);
+		return byteArrayOutputStream.toByteArray();
 	}
 }
 
