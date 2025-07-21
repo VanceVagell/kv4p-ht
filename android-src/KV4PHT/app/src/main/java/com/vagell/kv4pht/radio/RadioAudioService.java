@@ -693,26 +693,32 @@ public class RadioAudioService extends Service implements PacketHandler {
      */
     public void setRadioType(RadioModuleType radioType) {
         callbacks.setRadioType(radioType);
-        if (!this.radioType.equals(radioType)) {
+        if (!Objects.equals(this.radioType, radioType)) {
             this.radioType = radioType;
-            // Ensure frequencies we're using match the radioType
-            if (radioType.equals(RadioModuleType.VHF)) {
-                setMinRadioFreq(VHF_MIN_FREQ);
-                setMinTxFreq(min2mTxFreq);
-                setMaxTxFreq(max2mTxFreq);
-                setMaxRadioFreq(VHF_MAX_FREQ);
-            } else if (radioType.equals(RadioModuleType.UHF)) {
-                setMinRadioFreq(UHF_MIN_FREQ);
-                setMinTxFreq(min70cmTxFreq);
-                setMaxTxFreq(max70cmTxFreq);
-                setMaxRadioFreq(UHF_MAX_FREQ);
-            }
-            Log.d(TAG, "Radio type set to: " + radioType);
-            Log.d(TAG, "Min radio freq: " + minRadioFreq);
-            Log.d(TAG, "Max radio freq: " + maxRadioFreq);
-            Log.d(TAG, "Min tx freq: " + minTxFreq);
-            Log.d(TAG, "Max tx freq: " + maxTxFreq);
+            updateFrequencyLimitsForBand();
         }
+    }
+
+    public void updateFrequencyLimitsForBand() {
+        // Ensure frequencies we're using match the radioType
+        if (RadioModuleType.VHF.equals(getRadioType())) {
+            setMinRadioFreq(VHF_MIN_FREQ);
+            setMinTxFreq(min2mTxFreq);
+            setMaxTxFreq(max2mTxFreq);
+            setMaxRadioFreq(VHF_MAX_FREQ);
+        } else if (RadioModuleType.UHF.equals(getRadioType())) {
+            setMinRadioFreq(UHF_MIN_FREQ);
+            setMinTxFreq(min70cmTxFreq);
+            setMaxTxFreq(max70cmTxFreq);
+            setMaxRadioFreq(UHF_MAX_FREQ);
+        }
+        Log.d(TAG, "Radio type set to: " + radioType);
+        Log.d(TAG, "Min radio freq: " + minRadioFreq);
+        Log.d(TAG, "Max radio freq: " + maxRadioFreq);
+        Log.d(TAG, "Min tx freq: " + minTxFreq);
+        Log.d(TAG, "Max tx freq: " + maxTxFreq);
+        txAllowed = isTxAllowed(Float.parseFloat(activeFrequencyStr));
+        Log.d(TAG, String.format("Tx allowed: %b (%s)", txAllowed, activeFrequencyStr));
     }
 
     public void setScanning(boolean scanning, boolean goToRxMode) {
