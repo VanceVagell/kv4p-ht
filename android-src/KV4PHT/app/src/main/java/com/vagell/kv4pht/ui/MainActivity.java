@@ -961,6 +961,7 @@ public class MainActivity extends AppCompatActivity {
         if (max2m != null) radioAudioService.setMax2mTxFreq(Integer.parseInt(max2m));
         if (min70 != null) radioAudioService.setMin70cmTxFreq(Integer.parseInt(min70));
         if (max70 != null) radioAudioService.setMax70cmTxFreq(Integer.parseInt(max70));
+        radioAudioService.updateFrequencyLimitsForBand();
     }
 
     private void applyBandwidthAndGain(Map<String, String> settings) {
