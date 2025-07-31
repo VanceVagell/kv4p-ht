@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "protocol.h"
 
 bool txStreamConfigured = false;
-AnalogAudioStream out;
+I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
 OpusAudioDecoder txDec;
 EncodedAudioStream txOut(&out, &txDec); 
@@ -37,10 +37,11 @@ const uint16_t RUNAWAY_TX_SEC = 200;
 void initI2STx() {  
   auto config = out.defaultConfig(TX_MODE);
   config.copyFrom(txInfo);
-  config.adc_pin = hw.pins.pinAudioOut;
-  config.is_blocking_write = true;
+  config.pin_data = hw.pins.pinAudioOut;
+  config.pin_ws = 27;
   config.use_apll = true;
   config.auto_clear = false;
+  config.signal_type = PDM;
   out.begin(config);
   // configure OPUS additinal parameters
   txDec.setAudioInfo(txInfo);
