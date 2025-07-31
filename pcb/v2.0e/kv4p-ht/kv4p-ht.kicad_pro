@@ -582,8 +582,12 @@
       "/GPIO2": [
         "Strapping Pin"
       ],
-      "unconnected-(U3-IO45-Pad26)": "Strapping Pin",
-      "unconnected-(U3-IO46-Pad16)": "Strapping Pin"
+      "unconnected-(U3-IO45-Pad26)": [
+        "Strapping Pin"
+      ],
+      "unconnected-(U3-IO46-Pad16)": [
+        "Strapping Pin"
+      ]
     },
     "netclass_patterns": []
   },
