@@ -809,7 +809,7 @@
 		(path "/9ca979cd-25fb-4faf-8ccd-bd26d066d55e")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -1659,7 +1659,7 @@
 		(path "/641eab41-637f-4f4f-9d49-5dcfc3ec728f")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.4 0.8)
 			(end 0.399245 0.8)
@@ -2292,7 +2292,7 @@
 		(path "/0849ac00-86c2-4885-891a-140d645f03db")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 -0.51)
 			(end 0.14058 -0.51)
@@ -2622,7 +2622,7 @@
 		(path "/31572978-6846-4ed0-99dc-b0fb293de8eb")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -2927,7 +2927,7 @@
 		(path "/bdeddbbb-87e8-447b-9644-351598d2a6c7")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -3907,7 +3907,7 @@
 		(path "/c535ca71-ec31-41da-9ca9-3a301ef3d975")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -4199,7 +4199,7 @@
 		(path "/9edff599-fb7e-45dd-8d11-6cddab40fe11")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.107836 -0.36)
 			(end 0.107836 -0.36)
@@ -4491,7 +4491,7 @@
 		(path "/067d19a4-ffb6-46a3-ac54-48c52c177fde")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.4 -0.8)
 			(end 0.399245 -0.8)
@@ -6690,7 +6690,7 @@
 		(path "/4ab88541-b940-4b3d-bc3c-df53213e30ad")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.237258 -0.5225)
 			(end 0.237258 -0.5225)
@@ -8379,7 +8379,7 @@
 		(path "/236bd988-fb06-4880-a226-1b13b4671cd0")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.107836 -0.36)
 			(end 0.107836 -0.36)
@@ -9057,7 +9057,7 @@
 		(path "/59c2caaf-29ca-41ce-99b8-ad1aef4306ef")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.227064 -0.735)
 			(end 0.227064 -0.735)
@@ -10725,7 +10725,7 @@
 		(path "/44dcef4d-83b7-4c9d-8fb6-a1f659a45b4e")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -11309,7 +11309,7 @@
 		(path "/876253cf-5237-4ecb-b053-81c0e9888869")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 -0.51)
 			(end 0.14058 -0.51)
@@ -11908,7 +11908,7 @@
 		(path "/f9cb4913-2828-4694-8921-8a47ce78ca48")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.237258 0.5225)
 			(end 0.237258 0.5225)
@@ -12267,7 +12267,7 @@
 		(path "/9e774849-1211-49e5-86eb-cce89bb9983c")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start 0.57 0.91)
 			(end 0.91 0.91)
@@ -13619,7 +13619,7 @@
 		(path "/f24b3b13-188e-4226-901a-80646844cad4")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -14482,7 +14482,7 @@
 		(path "/359eb51d-6143-42a3-866e-9b620985c8dd")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -16110,7 +16110,7 @@
 		(path "/72f757e1-7ff1-424e-9e27-00863bce1b58")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -16415,7 +16415,7 @@
 		(path "/d777deb9-2fd7-46d6-a84e-76afa10d56a9")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 -0.51)
 			(end 0.14058 -0.51)
@@ -17024,7 +17024,7 @@
 		(path "/9d0d9c4f-4b6d-475c-8de5-5c011e6320e6")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -17887,7 +17887,7 @@
 		(path "/7ed4d949-598d-47db-91cf-4f949e5c10a2")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 -0.51)
 			(end 0.14058 -0.51)
@@ -18976,7 +18976,7 @@
 		(path "/d97d4d16-9108-4018-8f24-e994069cd667")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.107836 0.36)
 			(end 0.107836 0.36)
@@ -20459,7 +20459,7 @@
 		(path "/327adc83-3839-4405-98a3-d2f31d3ea584")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.4 -0.8)
 			(end 0.399245 -0.8)
@@ -20829,7 +20829,7 @@
 		(path "/13635954-d22a-4885-baf7-8250cf82c203")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.107836 -0.36)
 			(end 0.107836 -0.36)
@@ -21133,7 +21133,7 @@
 		(path "/2b2afeee-3c21-4fcd-ac50-666526bc2036")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.237258 0.5225)
 			(end 0.237258 0.5225)
@@ -21717,7 +21717,7 @@
 		(path "/f86ee2f6-1ee7-496d-bcc6-4608664135d2")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -22328,7 +22328,7 @@
 		(path "/87cd6f9e-2323-4b68-9407-80c9c40f5faa")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 -0.51)
 			(end 0.14058 -0.51)
@@ -23780,7 +23780,7 @@
 		(path "/7e082977-f7df-40e7-a2cc-fdc9fc141531")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.107836 -0.36)
 			(end 0.107836 -0.36)
@@ -24072,7 +24072,7 @@
 		(path "/d490311b-b4f6-4bbb-9717-064b7d6892fb")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.107836 -0.36)
 			(end 0.107836 -0.36)
@@ -26522,7 +26522,7 @@
 		(path "/7b76f6bb-24e2-4f0c-969a-5d1fd4911893")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 -0.51)
 			(end 0.14058 -0.51)
@@ -28873,7 +28873,7 @@
 		(path "/fc861ee1-c0b8-43f0-b65e-01f1c5f2bd17")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.727064 -0.91)
 			(end 0.727064 -0.91)
@@ -29750,7 +29750,7 @@
 		(path "/66429f3b-b6c0-49bc-a7f3-9b326437fb85")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.227064 -0.735)
 			(end 0.227064 -0.735)
@@ -30055,7 +30055,7 @@
 		(path "/69318fd9-acfc-49fb-b77b-2363334e7a15")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.14058 -0.51)
 			(end 0.14058 -0.51)
@@ -30347,7 +30347,7 @@
 		(path "/40c9781a-57ae-460a-875d-463bad84e781")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd)
+		(attr smd dnp)
 		(fp_line
 			(start -0.107836 -0.36)
 			(end 0.107836 -0.36)
@@ -30794,7 +30794,7 @@
 		(path "/db964fb3-585d-4dc1-9911-5266bad13e62")
 		(sheetname "/")
 		(sheetfile "kv4p-ht.kicad_sch")
-		(attr smd dnp)
+		(attr smd)
 		(fp_line
 			(start -0.14058 0.51)
 			(end 0.14058 0.51)
@@ -57327,7 +57327,8 @@
 	)
 	(group ""
 		(uuid "290dd603-0b32-4c86-bc8a-dcecb4160f26")
-		(members "285f32e7-a3ac-4122-93b6-61335d629f72" "577095fb-90ab-4ef8-915d-c583f62e4824"
+		(members "0aed5046-3dfc-46cc-a41f-bd277c017a55" "285f32e7-a3ac-4122-93b6-61335d629f72"
+			"2f9a2f39-c038-463c-a6b3-93c1a32b85ea" "577095fb-90ab-4ef8-915d-c583f62e4824"
 			"8d932c66-4ab9-4490-b8ec-ef4e220f4843" "9977a94e-e185-4063-ad1b-df530f104af8"
 		)
 	)
@@ -57353,7 +57354,8 @@
 	)
 	(group ""
 		(uuid "8d053834-c1b5-4b79-bb1f-781d9ac22289")
-		(members "17a4ff2d-fa80-4583-a323-85aa4aea191b" "394fede4-f4f3-45e5-9a64-11d2da83e71a"
+		(members "17a4ff2d-fa80-4583-a323-85aa4aea191b" "1eb25762-5a6f-4aad-b3f7-6d2783387463"
+			"394fede4-f4f3-45e5-9a64-11d2da83e71a" "4670d263-9efa-44a6-a8db-429f6a03260c"
 			"57972b46-f8bd-4d08-ad70-11eb98fea8e1" "68ef085e-9871-433f-ac04-040bc4081cd0"
 		)
 	)
@@ -57372,12 +57374,15 @@
 	(group ""
 		(uuid "ef065217-3f3f-4897-a547-824519309a85")
 		(members "68131eda-df67-4d0d-baff-fcf6189d8117" "6cae44c6-2af4-4ad1-be3b-42043aa440ab"
-			"9487075d-65d1-40c4-8f53-e010d7f2fdaa" "eb6c2057-91d0-49be-8677-030b62da2fda"
+			"9487075d-65d1-40c4-8f53-e010d7f2fdaa" "99b6480e-26cc-4a7c-9edd-9b5a386bc06f"
+			"a7002753-5975-4aaf-ba09-ca4db1a78740" "eb6c2057-91d0-49be-8677-030b62da2fda"
 		)
 	)
 	(group ""
 		(uuid "f9e86f31-2a75-4645-8d06-9bf0bf62a6d0")
-		(members "6dd50261-89d0-4fb9-bbdb-9af44ed55003" "e1961dfa-477f-454a-a488-0c47d95bb6ce")
+		(members "4f4d5001-9019-409a-8bb9-296411261f91" "5278c834-59cb-4417-9e18-1f8982d5e4b6"
+			"6dd50261-89d0-4fb9-bbdb-9af44ed55003" "e1961dfa-477f-454a-a488-0c47d95bb6ce"
+		)
 	)
 	(embedded_fonts no)
 )
