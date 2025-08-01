@@ -56,6 +56,11 @@ void initI2STx() {
 
 void endI2STx() {
   if (txStreamConfigured) {
+    // Set pin to INPUT before stopping I2S to avoid end-of-TX click.
+    // If left as output, the last PDM bit may hold the line high or low,
+    // causing a DC step across the AC-coupling cap and producing a pop.
+    // Forcing the pin to high-Z prevents this.
+    pinMode(hw.pins.pinAudioOut, INPUT); 
     txOut.end();
     out.end();
   }
