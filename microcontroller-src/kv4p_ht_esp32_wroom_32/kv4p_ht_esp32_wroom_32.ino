@@ -43,6 +43,10 @@ const char RADIO_MODULE_NOT_FOUND = 'x';
 const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
+// RSSI vars
+unsigned long lastRssiRequest = 0;
+bool rssiRequestPending = false;
+
 Debounce squelchDebounce(100);
 
 void setMode(Mode newMode) {
@@ -202,22 +206,31 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
 }
 
 void rssiLoop() {
-  if (mode == MODE_RX) {
-    EVERY_N_MILLISECONDS(RSSI_REPORT_INTERVAL_MS) {
-      // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
-      // return value from the module, and just tells us success/fail.
-      // int rssi = dra->rssi();
-      Serial2.println("RSSI?");
-      String rssiResponse = Serial2.readString();
-      if (rssiResponse.length() > 7) {
-        String rssiStr = rssiResponse.substring(5);
-        int rssiInt    = rssiStr.toInt();
-        if (rssiInt >= 0 && rssiInt <= 255) {
-          sendRssi((uint8_t)rssiInt);
-        }
+  if (mode != MODE_RX) {
+    rssiRequestPending = false;
+    return;
+  }
+
+  unsigned long currentMillis = millis();
+
+  // Start new RSSI request
+  if (!rssiRequestPending && (currentMillis - lastRssiRequest >= RSSI_REPORT_INTERVAL_MS)) {
+    Serial2.println("RSSI?");
+    rssiRequestPending = true;
+    lastRssiRequest = currentMillis;
+  }
+
+  // Check for RSSI response
+  if (rssiRequestPending && Serial2.available()) {
+    String rssiResponse = Serial2.readStringUntil('\n');
+    if (rssiResponse.length() > 5 && rssiResponse.startsWith("RSSI=")) {
+      String rssiStr = rssiResponse.substring(5);
+      int rssiInt = rssiStr.toInt();
+      if (rssiInt >= 0 && rssiInt <= 255) {
+        sendRssi((uint8_t)rssiInt);
       }
     }
-    END_EVERY_N_MILLISECONDS();
+    rssiRequestPending = false;
   }
 }
 
