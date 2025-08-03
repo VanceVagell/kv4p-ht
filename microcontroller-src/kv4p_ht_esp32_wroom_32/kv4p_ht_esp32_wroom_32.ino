@@ -31,7 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 const uint16_t FIRMWARE_VER = 14;
 
-const uint32_t RSSI_REPORT_INTERVAL_MS = 500;
+const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint16_t USB_BUFFER_SIZE = 1024*2;
 
 DRA818 sa818_vhf(&Serial2, SA818_VHF);
@@ -42,6 +42,8 @@ DRA818 &sa818 = sa818_vhf;
 const char RADIO_MODULE_NOT_FOUND = 'x';
 const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
+
+boolean rssiOn = true; // true if RSSI is enabled
 
 Debounce squelchDebounce(100);
 
@@ -197,12 +199,19 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
         }
         esp_task_wdt_reset();
       }
-      break;                                
+      break;     
+    case COMMAND_HOST_RSSI:
+      if (param_len == sizeof(RSSIState)) {
+        RSSIState rssiState;
+        memcpy(&rssiState, params, sizeof(RSSIState));
+        rssiState.on ? rssiOn = true : rssiOn = false;    
+      }   
+      break;                    
   }
 }
 
 void rssiLoop() {
-  if (mode == MODE_RX) {
+  if (rssiOn && mode == MODE_RX) {
     EVERY_N_MILLISECONDS(RSSI_REPORT_INTERVAL_MS) {
       // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
       // return value from the module, and just tells us success/fail.

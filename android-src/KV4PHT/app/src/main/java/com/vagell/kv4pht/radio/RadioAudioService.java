@@ -192,7 +192,12 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Setter
     private boolean hasHighLowPowerSwitch = false;
     @Getter
+    @Setter
+    private boolean hasPhysPttButton = false;
+    @Getter
     private boolean isHighPower = true;
+    @Getter
+    private boolean isRssiOn = true;
     @Getter
     private boolean txAllowed = true;
     @Setter
@@ -1170,6 +1175,27 @@ public class RadioAudioService extends Service implements PacketHandler {
                 hostToEsp32.setHighPower(HlState.builder()
                     .isHighPower(highPower)
                     .build());
+            }
+        }
+    }
+
+    /**
+     * Sets whether radio module should poll RSSI. We need to be able to turn this off
+     * because in v1.x versions of the PCB there's cross-talk between the Serial2 trace and
+     * the audio trace, which breaks APRS decoding (and any other digital mode we might add).
+     * See https://github.com/VanceVagell/kv4p-ht/issues/310 for context.
+     *
+     * This will send the new state to the ESP32 if it is connected.
+     *
+     * @param on true to enable RSSI, false to disable it.
+     */
+    public void setRssi(boolean on) {
+        if (isRssiOn != on) {
+            isRssiOn = on;
+            if (isRadioConnected()) {
+                hostToEsp32.setRssi(Protocol.RSSIState.builder()
+                        .on(isRssiOn)
+                        .build());
             }
         }
     }

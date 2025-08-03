@@ -40,7 +40,8 @@ public final class Protocol {
         COMMAND_HOST_STOP(0x05),     // [COMMAND_HOST_STOP()]
         COMMAND_HOST_CONFIG(0x06),   // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
         COMMAND_HOST_TX_AUDIO(0x07), // [COMMAND_HOST_TX_AUDIO(byte[])]
-        COMMAND_HOST_HL(0x08);       // [COMMAND_HOST_HL(Hl)]
+        COMMAND_HOST_HL(0x08),       // [COMMAND_HOST_HL(Hl)]
+        COMMAND_HOST_RSSI(0x09);     // [COMMAND_HOST_RSSI(ON)]
         private final int value;
         SndCommand(int value) {
             this.value = value;
@@ -152,6 +153,16 @@ public final class Protocol {
         }
     }
 
+    @Data
+    @Builder
+    public static class RSSIState {
+        private final boolean on;
+        public byte[] toBytes() {
+            byte result = on ? (byte) 0x01 : (byte) 0x00;
+            return new byte[]{result};
+        }
+    }
+
     @Getter
     public enum RfModuleType {
         RF_SA818_VHF(0),
@@ -195,6 +206,7 @@ public final class Protocol {
         private final int windowSize; // equivalent to size_t
         private final RfModuleType moduleType;
         private final boolean hasHl;
+        private final boolean hasPhysPtt;
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
                 .filter(p -> len == 12)
@@ -206,6 +218,7 @@ public final class Protocol {
                     .windowSize(b.getInt())
                     .moduleType(RfModuleType.fromValue(b.getInt()))
                     .hasHl((b.get() & 0x01) != 0)
+                    .hasPhysPtt((b.get() & 0x02) != 0)
                     .build());
         }
     }
@@ -317,6 +330,10 @@ public final class Protocol {
 
         public void setHighPower(HlState state) {
             sendCommand(SndCommand.COMMAND_HOST_HL, state.toBytes());
+        }
+
+        public void setRssi(RSSIState state) {
+            sendCommand(SndCommand.COMMAND_HOST_RSSI, state.toBytes());
         }
     }
 

@@ -207,6 +207,7 @@ class ProtocolHandshake {
                 ? RadioAudioService.RadioModuleType.VHF
                 : RadioAudioService.RadioModuleType.UHF);
             radioAudioService.setHasHighLowPowerSwitch(ver.isHasHl());
+            radioAudioService.setHasPhysPttButton(ver.isHasPhysPtt());
             if (Protocol.RadioStatus.RADIO_STATUS_NOT_FOUND.equals(ver.getRadioModuleStatus())) {
                 return HandshakeResult.RADIO_MODULE_NOT_FOUND;
             } else {

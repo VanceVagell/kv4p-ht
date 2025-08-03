@@ -706,11 +706,18 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.textModeContainer).setVisibility(screenType == ScreenType.SCREEN_CHAT ? VISIBLE : GONE);
 
         if (screenType == ScreenType.SCREEN_CHAT) {
-            // Stop scanning when we enter chat mode, we don't want to tx data on an unexpected
-            // frequency. User must set it manually (or select it before coming to chat mode, but
-            // can't be scanning).
             if (radioAudioService != null) {
+                // Stop scanning when we enter chat mode, we don't want to tx data on an unexpected
+                // frequency. User must set it manually (or select it before coming to chat mode, but
+                // can't be scanning).
                 radioAudioService.setScanning(false, true);
+
+                // If this is a v1.x radio, disable RSSI when in APRS chat mode.
+                // See https://github.com/VanceVagell/kv4p-ht/issues/310.
+                if (!radioAudioService.isHasPhysPttButton()) { // Poor proxy for "Is this a v1.x PCB?"
+                    radioAudioService.setRssi(false);
+                    findViewById(R.id.sMeter).setVisibility(View.GONE);
+                }
             }
             setScanningUi(false);
 
@@ -730,12 +737,18 @@ public class MainActivity extends AppCompatActivity {
                 findViewById(R.id.sendButtonOverlay).setVisibility(GONE);
             }
         } else if (screenType == ScreenType.SCREEN_VOICE){
+            radioAudioService.setRssi(true);
             hideKeyboard();
             findViewById(R.id.frequencyContainer).setVisibility(VISIBLE);
             findViewById(R.id.rxAudioCircle).setVisibility(VISIBLE);
 
             if (callsignSnackbar != null) {
                 callsignSnackbar.dismiss();
+            }
+
+            if (radioAudioService != null) {
+                radioAudioService.setRssi(true);
+                findViewById(R.id.sMeter).setVisibility(VISIBLE);
             }
         }
 

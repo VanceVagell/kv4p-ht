@@ -37,6 +37,7 @@ enum RcvCommand {
   COMMAND_HOST_CONFIG    = 0x06, // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
   COMMAND_HOST_TX_AUDIO  = 0x07, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
   COMMAND_HOST_HL        = 0x08, // [COMMAND_HOST_HL(Hl)]
+  COMMAND_HOST_RSSI      = 0x09, // [COMMAND_HOST_RSSI(ON)]
 };
 
 // Outgoing commands (ESP32 -> Android)
@@ -112,6 +113,12 @@ struct [[gnu::packed]] HlState {
   bool isHigh; 
 };
 REQUIRE_TRIVIALLY_COPYABLE(HlState);
+
+// COMMAND_HOST_RSSI parameters
+struct [[gnu::packed]] RSSIState {
+  bool on; // true if RSSI is enabled
+};
+REQUIRE_TRIVIALLY_COPYABLE(RSSIState);
 
 /**
  * Send a command with params
