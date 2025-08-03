@@ -31,7 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 const uint16_t FIRMWARE_VER = 14;
 
-const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
+const uint32_t RSSI_REPORT_INTERVAL_MS = 500;
 const uint16_t USB_BUFFER_SIZE = 1024*2;
 
 DRA818 sa818_vhf(&Serial2, SA818_VHF);
@@ -42,10 +42,6 @@ DRA818 &sa818 = sa818_vhf;
 const char RADIO_MODULE_NOT_FOUND = 'x';
 const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
-
-// RSSI vars
-unsigned long lastRssiRequest = 0;
-bool rssiRequestPending = false;
 
 Debounce squelchDebounce(100);
 
@@ -206,50 +202,23 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
 }
 
 void rssiLoop() {
-    static unsigned long lastRssiTime = 0;
-    static bool waitingForResponse = false;
-    
-    if (mode != MODE_RX) {
-        waitingForResponse = false;
-        return;
-    }
-
-    unsigned long currentTime = millis();
-
-    // Only send RSSI request if enough time has passed
-    if (!waitingForResponse && (currentTime - lastRssiTime >= RSSI_REPORT_INTERVAL_MS)) {
-        // Write the request without a newline first
-        Serial2.write("RSSI?");
-        // Small delay to let audio process
-        delayMicroseconds(100);
-        // Now write the newline
-        Serial2.write("\n");
-        waitingForResponse = true;
-        lastRssiTime = currentTime;
-    }
-
-    // Check for response only if we're waiting for one
-    if (waitingForResponse && Serial2.available()) {
-        // Read one byte at a time to avoid blocking
-        char rssiBuffer[16];
-        int idx = 0;
-        while (Serial2.available() && idx < 15) {
-            rssiBuffer[idx] = Serial2.read();
-            if (rssiBuffer[idx] == '\n') {
-                rssiBuffer[idx] = '\0';
-                break;
-            }
-            idx++;
+  if (mode == MODE_RX) {
+    EVERY_N_MILLISECONDS(RSSI_REPORT_INTERVAL_MS) {
+      // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
+      // return value from the module, and just tells us success/fail.
+      // int rssi = dra->rssi();
+      Serial2.println("RSSI?");
+      String rssiResponse = Serial2.readString();
+      if (rssiResponse.length() > 7) {
+        String rssiStr = rssiResponse.substring(5);
+        int rssiInt    = rssiStr.toInt();
+        if (rssiInt >= 0 && rssiInt <= 255) {
+          sendRssi((uint8_t)rssiInt);
         }
-        
-        if (idx > 5 && strncmp(rssiBuffer, "RSSI=", 5) == 0) {
-            int rssiInt = atoi(rssiBuffer + 5);
-            if (rssiInt >= 0 && rssiInt <= 255) {
-                sendRssi((uint8_t)rssiInt);
-            }
-        }
-        waitingForResponse = false;
+      }
     }
+    END_EVERY_N_MILLISECONDS();
+  }
 }
 
 void loop() {
