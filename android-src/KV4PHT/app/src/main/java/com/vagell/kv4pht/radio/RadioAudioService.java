@@ -564,6 +564,11 @@ public class RadioAudioService extends Service implements PacketHandler {
     }
 
     public void startPtt() {
+        if (hostToEsp32 == null) {
+            Log.e(TAG, "Attempted to start PTT but hostToEsp32 is null. USB connection likely failed.");
+            callbacks.radioMissing(); // Notify UI that connection is problematic
+            return;
+        }
         if (mode == RadioMode.RX && txAllowed) {
             setMode(RadioMode.TX);
             callbacks.sMeterUpdate(0);

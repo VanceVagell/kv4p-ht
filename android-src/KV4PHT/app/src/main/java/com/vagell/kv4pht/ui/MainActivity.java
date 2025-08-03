@@ -1524,6 +1524,17 @@ public class MainActivity extends AppCompatActivity {
             initAudioRecorder();
         }
 
+        // After attempting to initialize, check if it's usable.
+        if (audioRecord == null || audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+            Log.d("DEBUG", "AudioRecord not ready, cannot start recording.");
+            // If it's not null, it's in a bad state. Release it so we can try again next time.
+            if (audioRecord != null) {
+                audioRecord.release();
+                audioRecord = null;
+            }
+            return;
+        }
+
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setBackground(getDrawable(R.drawable.ptt_button_on));
 

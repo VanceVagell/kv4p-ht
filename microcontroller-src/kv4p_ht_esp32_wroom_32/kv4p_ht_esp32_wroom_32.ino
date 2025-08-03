@@ -206,32 +206,50 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
 }
 
 void rssiLoop() {
-  if (mode != MODE_RX) {
-    rssiRequestPending = false;
-    return;
-  }
-
-  unsigned long currentMillis = millis();
-
-  // Start new RSSI request
-  if (!rssiRequestPending && (currentMillis - lastRssiRequest >= RSSI_REPORT_INTERVAL_MS)) {
-    Serial2.println("RSSI?");
-    rssiRequestPending = true;
-    lastRssiRequest = currentMillis;
-  }
-
-  // Check for RSSI response
-  if (rssiRequestPending && Serial2.available()) {
-    String rssiResponse = Serial2.readStringUntil('\n');
-    if (rssiResponse.length() > 5 && rssiResponse.startsWith("RSSI=")) {
-      String rssiStr = rssiResponse.substring(5);
-      int rssiInt = rssiStr.toInt();
-      if (rssiInt >= 0 && rssiInt <= 255) {
-        sendRssi((uint8_t)rssiInt);
-      }
+    static unsigned long lastRssiTime = 0;
+    static bool waitingForResponse = false;
+    
+    if (mode != MODE_RX) {
+        waitingForResponse = false;
+        return;
     }
-    rssiRequestPending = false;
-  }
+
+    unsigned long currentTime = millis();
+
+    // Only send RSSI request if enough time has passed
+    if (!waitingForResponse && (currentTime - lastRssiTime >= RSSI_REPORT_INTERVAL_MS)) {
+        // Write the request without a newline first
+        Serial2.write("RSSI?");
+        // Small delay to let audio process
+        delayMicroseconds(100);
+        // Now write the newline
+        Serial2.write("\n");
+        waitingForResponse = true;
+        lastRssiTime = currentTime;
+    }
+
+    // Check for response only if we're waiting for one
+    if (waitingForResponse && Serial2.available()) {
+        // Read one byte at a time to avoid blocking
+        char rssiBuffer[16];
+        int idx = 0;
+        while (Serial2.available() && idx < 15) {
+            rssiBuffer[idx] = Serial2.read();
+            if (rssiBuffer[idx] == '\n') {
+                rssiBuffer[idx] = '\0';
+                break;
+            }
+            idx++;
+        }
+        
+        if (idx > 5 && strncmp(rssiBuffer, "RSSI=", 5) == 0) {
+            int rssiInt = atoi(rssiBuffer + 5);
+            if (rssiInt >= 0 && rssiInt <= 255) {
+                sendRssi((uint8_t)rssiInt);
+            }
+        }
+        waitingForResponse = false;
+    }
 }
 
 void loop() {
