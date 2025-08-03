@@ -428,6 +428,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             return;
         }
         activeFrequencyStr = frequencyStr;
+        activeMemoryId = -1; // Reset active memory ID since we're tuning to a frequency, not a memory.
         squelch = squelchLevel;
         if (isRadioConnected()) {
             hostToEsp32.group(Group.builder()
