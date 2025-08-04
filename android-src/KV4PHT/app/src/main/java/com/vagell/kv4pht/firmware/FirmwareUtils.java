@@ -36,12 +36,12 @@ public final class FirmwareUtils {
 
     private static final AtomicBoolean isFlashing = new AtomicBoolean(false);
 
-    public static final int PACKAGED_FIRMWARE_VER = 14;
+    public static final int PACKAGED_FIRMWARE_VER = 15;
 
     private static final int ESP32_BOOTLOADER = R.raw.bootloader;
     private static final int ESP32_PARTITION_TABLE = R.raw.partitions;
     private static final int ESP32_BOOT_APP_0 = R.raw.boot_app0;
-    private static final int ESP32_APP = R.raw.firmware_v14;
+    private static final int ESP32_APP = R.raw.firmware_v15;
 
     static {
         LoggerFactory.getLogger(EspFlasherProtocol.class).trace("Init..");
