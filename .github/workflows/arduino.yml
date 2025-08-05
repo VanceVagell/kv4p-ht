@@ -22,10 +22,9 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install PlatformIO
-        run: pip install -U platformio
-
-      - name: Build project
-        run: pio run -v
+      - name: Run PlatformIO
+        uses: platformio/action-gh-python@v2
+        with:
+          args: run -v
         working-directory: microcontroller-src
 
