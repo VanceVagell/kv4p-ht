@@ -1,4 +1,4 @@
-yname: Build with PlatformIO
+name: Build with PlatformIO
 
 on:
   push:
