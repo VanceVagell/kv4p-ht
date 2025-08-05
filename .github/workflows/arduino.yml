@@ -26,5 +26,6 @@ jobs:
         run: pip install -U platformio
 
       - name: Build project
-        run: pio run --directory microcontroller-src/kv4p_ht_esp32_wroom_32
+        run: pio run -v
+        working-directory: microcontroller-src
 
