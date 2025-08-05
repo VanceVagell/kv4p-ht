@@ -20,6 +20,30 @@ android {
                 arguments += ["room.schemaLocation": "$projectDir/schemas".toString()]
             }
         }
+
+        // --- Git metadata injection ---
+        def safeGit = { cmd ->
+            try {
+                return cmd.execute().text.trim()
+            } catch (Exception e) {
+                return "unknown"
+            }
+        }
+
+        def gitCommitId = safeGit('git rev-parse --short HEAD')
+        def gitBranch = safeGit('git rev-parse --abbrev-ref HEAD')
+        def gitTag = safeGit('git describe --tags --abbrev=0')
+        def gitDate = safeGit('git log -1 --format=%cd --date=short')
+        def gitDirty = safeGit('git status --porcelain') ? 'true' : 'false'
+        def buildTime = new Date().format("yyyy-MM-dd HH:mm:ss")
+
+        buildConfigField "String", "GIT_COMMIT_ID", "\"${gitCommitId}\""
+        buildConfigField "String", "GIT_BRANCH", "\"${gitBranch}\""
+        buildConfigField "String", "GIT_TAG", "\"${gitTag}\""
+        buildConfigField "String", "GIT_COMMIT_DATE", "\"${gitDate}\""
+        buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
+        buildConfigField "boolean", "GIT_DIRTY", "${gitDirty}"
+        // -------------------------------
     }
 
     buildTypes {
@@ -35,6 +59,7 @@ android {
     buildFeatures {
         viewBinding true
         dataBinding true
+        buildConfig true
     }
     packagingOptions {
         resources.excludes.add("META-INF/*")
