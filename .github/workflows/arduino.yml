@@ -1,4 +1,4 @@
-name: Build with PlatformIO
+yname: Build with PlatformIO
 
 on:
   push:
@@ -22,9 +22,10 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Run PlatformIO
-        uses: platformio/action-gh-python@v2
-        with:
-          args: run -v
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Build project
+        run: pio run -v
         working-directory: microcontroller-src
 
