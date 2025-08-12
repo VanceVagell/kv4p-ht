@@ -102,7 +102,8 @@ void initI2SRx() {
   auto &encoderConfig = rxEnc.config();
   encoderConfig.application = OPUS_APPLICATION_AUDIO;
   encoderConfig.frame_sizes_ms_x2 = OPUS_FRAMESIZE_40_MS;
-  encoderConfig.vbr = 1;
+  encoderConfig.vbr = 0;
+  encoderConfig.singal = OPUS_SIGNAL_MUSIC;
   encoderConfig.max_bandwidth = OPUS_BANDWIDTH_NARROWBAND;
   rxEnc.begin(encoderConfig);
   // effects
