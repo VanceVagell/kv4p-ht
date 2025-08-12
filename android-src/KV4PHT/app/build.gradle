@@ -72,4 +72,5 @@ dependencies {
     implementation 'io.github.jaredmdobson:concentus:1.0.1'
     implementation 'io.github.dkaukov:esp32-flash-lib:1.1.16'
     implementation 'dev.bright.slf4android:slf4android:0.1.8'
+    implementation 'io.github.dkaukov:afsk-java:1.4'
 }

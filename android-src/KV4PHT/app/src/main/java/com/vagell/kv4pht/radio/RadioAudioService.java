@@ -48,6 +48,8 @@ import androidx.annotation.RequiresPermission;
 import androidx.lifecycle.LiveData;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationToken;
+
+import io.github.dkaukov.afsk.Afsk1200Demodulator;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -70,7 +72,6 @@ import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
-import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
@@ -174,7 +175,7 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     // === AFSK Modem ===
     private final PacketModulator afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
-    private final PacketDemodulator afskDemodulator = new Afsk1200MultiDemodulator(AUDIO_SAMPLE_RATE, this);
+    private final Afsk1200Demodulator afskDemodulator = new  Afsk1200Demodulator(AUDIO_SAMPLE_RATE, this::handlePacket);
 
     // === APRS State ===
     private boolean aprsBeaconPosition = false;
