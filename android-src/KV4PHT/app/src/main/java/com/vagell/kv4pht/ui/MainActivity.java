@@ -564,7 +564,7 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
 
         // If we arrived here from an APRS text chat notification, open text chat.
-        if (intent != null && intent.getAction().equals(INTENT_OPEN_CHAT)) {
+        if (intent != null && intent.getAction() != null && intent.getAction().equals(INTENT_OPEN_CHAT)) {
             showScreen(ScreenType.SCREEN_CHAT);
         }
     }

@@ -127,7 +127,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             AudioTrack.getMinBufferSize(
                     AUDIO_SAMPLE_RATE,
                     RX_AUDIO_CHANNEL_CONFIG,
-                    RX_AUDIO_FORMAT);
+                    RX_AUDIO_FORMAT) * 4;
 
     // === APRS Constants ===
     public static final int APRS_POSITION_EXACT = 0;
@@ -180,6 +180,16 @@ public class RadioAudioService extends Service implements PacketHandler {
         new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
     private final OpusUtils.OpusEncoderWrapper opusEncoder =
         new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
+
+    // Realtime audio executor (for smooth background audio)
+    private final ExecutorService audioExecutor =
+            new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<>(),
+                    r -> {
+                        Thread t = new Thread(r, "audio-out");
+                        t.setPriority(Thread.MAX_PRIORITY);
+                        return t;
+                    });
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -495,6 +505,10 @@ public class RadioAudioService extends Service implements PacketHandler {
         wakeLock = null;
         stopForeground(true);
         stopSelf();
+
+        if (audioExecutor != null) {
+            audioExecutor.shutdownNow();
+        }
     }
 
     private void createNotificationChannels() {
@@ -1036,26 +1050,31 @@ public class RadioAudioService extends Service implements PacketHandler {
      * @param len   The length of the audio data in bytes.
      */
     private void handleRxAudio(final byte[] param, final Integer len) {
+        // First, decode on the USB thread (opusDecoder is not thread safe)
         int decoded = opusDecoder.decode(param, len, pcmFloat);
-        if (getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
-            afskDemodulator.addSamples(pcmFloat, decoded);
-            if (audioTrack != null) {
-                AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-                audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
-                audioManager.requestAudioFocus(audioFocusRequest);
-                ensureAudioPlaying();
-            }
-        }
-        if (getMode() == RadioMode.SCAN) {
-            for (int i = 0; i < decoded; i++) {
-                if (Math.abs(pcmFloat[i]) > 0.001) {
-                    consecutiveSilenceBytes = 0;
-                } else {
-                    consecutiveSilenceBytes++;
-                    checkScanDueToSilence();
+
+        // Then we can use the separate audioExecutor to handle the audio at a high priority
+        audioExecutor.execute(() -> {
+            if (getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
+                afskDemodulator.addSamples(pcmFloat, decoded);
+                if (audioTrack != null) {
+                    AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                    audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
+                    audioManager.requestAudioFocus(audioFocusRequest);
+                    ensureAudioPlaying();
                 }
             }
-        }
+            if (getMode() == RadioMode.SCAN) {
+                for (int i = 0; i < decoded; i++) {
+                    if (Math.abs(pcmFloat[i]) > 0.001) {
+                        consecutiveSilenceBytes = 0;
+                    } else {
+                        consecutiveSilenceBytes++;
+                        checkScanDueToSilence();
+                    }
+                }
+            }
+        });
     }
 
     /**
