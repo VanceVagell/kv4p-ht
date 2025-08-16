@@ -157,15 +157,14 @@ public class MainActivity extends AppCompatActivity {
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
 
-    // Audio visualizers
-    private Visualizer rxAudioVisualizer = null;
-    private static int AUDIO_VISUALIZER_RATE = Visualizer.getMaxCaptureRate();
+    // Tx audio visualizer constants
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
     private static int RECORD_ANIM_FPS = 30;
 
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
+    private boolean radioAudioServiceBound = false;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -295,8 +294,8 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onServiceConnected(ComponentName className,
                                        IBinder service) {
-            RadioAudioService.RadioBinder binder = (RadioAudioService.RadioBinder) service;
-            radioAudioService = binder.getService();
+            radioAudioService = ((RadioAudioService.RadioBinder) service).getService();
+            radioAudioServiceBound = true;
 
             // Give the service other critical things it needs to work properly.
             RadioAudioService.RadioAudioServiceCallbacks callbacks = new RadioAudioService.RadioAudioServiceCallbacks() {
@@ -354,13 +353,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void audioTrackCreated() {
-                    if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        if (radioAudioService.getAudioTrackSessionId() != -1) {
-                            createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId());
-                        }
-                    }
-                }
+                public void audioTrackCreated() { }
 
                 @Override
                 public void packetReceived(APRSPacket aprsPacket) {
@@ -511,6 +504,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
             radioAudioService = null;
+            radioAudioServiceBound = false;
             Log.d("DEBUG", "RadioAudioService disconnected from MainActivity.");
             // TODO if this is unexpected we should probably try to restart the service.
         }
@@ -527,22 +521,23 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
 
         // Binding to the RadioAudioService causes it to start (e.g. play back audio).
+        Intent serviceIntent = new Intent(this, RadioAudioService.class);
+        ContextCompat.startForegroundService(this, serviceIntent); // Make it foreground (persistent)
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        releaseRxAudioVisualizer();
 
         try {
             threadPoolExecutor.shutdownNow();
         } catch (Exception ignored) { }
 
         try {
-            if (radioAudioService != null) {
-                radioAudioService.unbindService(connection);
-                radioAudioService = null;
+            if (radioAudioServiceBound) {
+                unbindService(connection);
+                radioAudioServiceBound = false;
             }
         } catch (Exception e) { }
     }
@@ -857,36 +852,6 @@ public class MainActivity extends AppCompatActivity {
         });
 
         findViewById(R.id.textChatInput).requestFocus();
-    }
-
-    private void releaseRxAudioVisualizer() {
-        if (rxAudioVisualizer != null) {
-            rxAudioVisualizer.setEnabled(false);
-            rxAudioVisualizer.release();
-            rxAudioVisualizer = null;
-        }
-    }
-
-    private void createRxAudioVisualizer(int audioSessionId) {
-        releaseRxAudioVisualizer();
-        rxAudioVisualizer = new Visualizer(audioSessionId);
-        rxAudioVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
-            @Override
-            public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
-                if (disableAnimations) { return; }
-
-                float rxVolume = Math.max(0f, (((float) waveform[0] + 128f) / 256) - 0.4f); // 0 to 1
-                ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
-                ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
-                layoutParams.width = (int) (MAX_AUDIO_VIZ_SIZE * rxVolume);
-                layoutParams.height = (int) (MAX_AUDIO_VIZ_SIZE * rxVolume);
-                rxAudioView.setLayoutParams(layoutParams);
-            }
-
-            @Override
-            public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) { }
-        }, AUDIO_VISUALIZER_RATE, true, false);
-        rxAudioVisualizer.setEnabled(true);
     }
 
     private void updateRecordingVisualization(int waitMs, float txVolume) {
@@ -1476,9 +1441,6 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
-                    if (null != radioAudioService && radioAudioService.getAudioTrackSessionId() != -1) {
-                        createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId()); // Visualizer requires RECORD_AUDIO permission (even if not visualizing the mic input).
-                    }
                     initAudioRecorder();
                 } else {
                     // Permission denied, things will just be broken.
