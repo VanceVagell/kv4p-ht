@@ -207,19 +207,48 @@ public final class Protocol {
         private final RfModuleType moduleType;
         private final boolean hasHl;
         private final boolean hasPhysPtt;
+        private final String gitCommitId;
+        private final String gitBranch;
+        private final String gitCommitDate;
+        private final String gitTag;
+        private final boolean gitDirty;
+        private final String chipModel;
+        private final String buildTime;
+        private final String sketchMd5;
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 12)
+                .filter(p -> len == 126) // exact struct size
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> FirmwareVersion.builder()
                     .ver(b.getShort())
                     .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
-                    .windowSize(b.getInt())
-                    .moduleType(RfModuleType.fromValue(b.getInt()))
-                    .hasHl((b.get() & 0x01) != 0)
-                    .hasPhysPtt((b.get() & 0x02) != 0)
+                    .windowSize(Short.toUnsignedInt(b.getShort()))
+                    .moduleType(RfModuleType.fromValue(Byte.toUnsignedInt(b.get())))
+                    .setFeatures(b.get())
+                    .chipModel(readString(b, 16))
+                    .buildTime(readString(b, 20))
+                    .sketchMd5(readString(b, 33))
+                    .gitCommitId(readString(b, 8))
+                    .gitBranch(readString(b, 16))
+                    .gitCommitDate(readString(b, 11))
+                    .gitTag(readString(b, 16))
+                    .gitDirty(b.get() != 0)
                     .build());
+        }
+        public static class FirmwareVersionBuilder {
+            public FirmwareVersionBuilder setFeatures(byte features) {
+                this.hasHl((features & 0x01) != 0);
+                this.hasPhysPtt((features & 0x02) != 0);
+                return this;
+            }
+        }
+        private static String readString(ByteBuffer b, int length) {
+            byte[] strBytes = new byte[length];
+            b.get(strBytes);
+            int zeroIndex = 0;
+            while (zeroIndex < strBytes.length && strBytes[zeroIndex] != 0) zeroIndex++;
+            return new String(strBytes, 0, zeroIndex).trim();
         }
     }
 
