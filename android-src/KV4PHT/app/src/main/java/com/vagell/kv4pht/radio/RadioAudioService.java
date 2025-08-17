@@ -485,6 +485,25 @@ public class RadioAudioService extends Service implements PacketHandler {
 
         protocolHandshake.onDestroy();
 
+        // Clean up APRS beacon executor
+        if (aprsPositionExecutor != null && !aprsPositionExecutor.isShutdown()) {
+            aprsPositionExecutor.shutdownNow();
+        }
+
+        // Clean up USB resources to prevent race conditions on restart
+        if (usbIoManager != null) {
+            usbIoManager.stop();
+            usbIoManager = null;
+        }
+        if (serialPort != null) {
+            try {
+                serialPort.close();
+            } catch (IOException e) {
+                // Ignore, closing anyways.
+            }
+            serialPort = null;
+        }
+
         if (audioTrack != null) {
             audioTrack.stop();
             audioTrack.release();
@@ -496,6 +515,11 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
         wakeLock = null;
         stopForeground(true);
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
         stopSelf();
     }
 
