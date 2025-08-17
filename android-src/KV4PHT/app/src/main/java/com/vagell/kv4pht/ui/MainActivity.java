@@ -37,7 +37,6 @@ import android.hardware.usb.UsbManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
-import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -877,20 +876,20 @@ public class MainActivity extends AppCompatActivity {
             final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
                 .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
             runOnUiThread(() -> {
-                applyRfPower(settings);
-                applySquelch(settings);
-                applyCallSign(settings);
-                applyGroupAndMemory(settings);
-                applyTxFreqLimits(settings);
-                applyBandwidthAndGain(settings);
-                applyFilters(settings);
-                applyDisableAnimations(settings);
-                applyAprs(settings);
+                applyRfPowerSetting(settings);
+                applySquelchSettings(settings);
+                applyCallSignSetting(settings);
+                applyGroupAndMemorySettings(settings);
+                applyTxFreqLimitsSettings(settings);
+                applyBandwidthAndGainSettings(settings);
+                applyFiltersSettings(settings);
+                applyAccessibilitySettings(settings);
+                applyAprsSettings(settings);
             });
         });
     }
 
-    private void applyRfPower(Map<String, String> settings) {
+    private void applyRfPowerSetting(Map<String, String> settings) {
         List<String> powerOptions = Arrays.asList(getResources().getStringArray(R.array.rf_power_options));
         String power = settings.getOrDefault(AppSetting.SETTING_RF_POWER, powerOptions.get(0));
         if (radioAudioService != null) {
@@ -898,7 +897,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyCallSign(Map<String, String> settings) {
+    private void applyCallSignSetting(Map<String, String> settings) {
         this.callsign = settings.getOrDefault(AppSetting.SETTING_CALLSIGN, "");
         boolean empty = callsign.isEmpty();
         findViewById(R.id.sendButton).setEnabled(!empty);
@@ -908,7 +907,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyGroupAndMemory(Map<String, String> settings) {
+    private void applyGroupAndMemorySettings(Map<String, String> settings) {
         String group = settings.get(AppSetting.SETTING_LAST_GROUP);
         if (group != null && !group.isEmpty()) {
             selectMemoryGroup(group);
@@ -929,7 +928,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyTxFreqLimits(Map<String, String> settings) {
+    private void applyTxFreqLimitsSettings(Map<String, String> settings) {
         if (radioAudioService == null) return;
         String min2m = settings.get(AppSetting.SETTING_MIN_2_M_TX_FREQ);
         String max2m = settings.get(AppSetting.SETTING_MAX_2_M_TX_FREQ);
@@ -942,7 +941,7 @@ public class MainActivity extends AppCompatActivity {
         radioAudioService.updateFrequencyLimitsForBand();
     }
 
-    private void applyBandwidthAndGain(Map<String, String> settings) {
+    private void applyBandwidthAndGainSettings(Map<String, String> settings) {
         if (radioAudioService == null) return;
         String bandwidth = settings.get(AppSetting.SETTING_BANDWIDTH);
         String gain = settings.get(AppSetting.SETTING_MIC_GAIN_BOOST);
@@ -950,7 +949,7 @@ public class MainActivity extends AppCompatActivity {
         if (gain != null) radioAudioService.setMicGainBoost(gain);
     }
 
-    private void applySquelch(Map<String, String> settings) {
+    private void applySquelchSettings(Map<String, String> settings) {
         String squelchStr = settings.get(AppSetting.SETTING_SQUELCH);
         if (squelchStr == null) return;
         squelch = Integer.parseInt(squelchStr);
@@ -959,7 +958,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyFilters(Map<String, String> settings) {
+    private void applyFiltersSettings(Map<String, String> settings) {
         boolean emphasis = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_EMPHASIS, "true"));
         boolean highpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_HIGHPASS, "true"));
         boolean lowpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_LOWPASS, "true"));
@@ -973,7 +972,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyDisableAnimations(Map<String, String> settings) {
+    private void applyAccessibilitySettings(Map<String, String> settings) {
         disableAnimations = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_DISABLE_ANIMATIONS, "false"));
         if (disableAnimations) {
             ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
@@ -983,9 +982,11 @@ public class MainActivity extends AppCompatActivity {
             rxAudioView.setLayoutParams(layoutParams);
             updateRecordingVisualization(100, 0.0f);
         }
+
+        stickyPTT = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_STICKY_PTT, "false"));
     }
 
-    private void applyAprs(Map<String, String> settings) {
+    private void applyAprsSettings(Map<String, String> settings) {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
 
@@ -1002,7 +1003,6 @@ public class MainActivity extends AppCompatActivity {
             if (beaconEnabled) requestPositionPermissions();
         }
     }
-
 
     @SuppressLint("ClickableViewAccessibility")
     private void attachListeners() {
