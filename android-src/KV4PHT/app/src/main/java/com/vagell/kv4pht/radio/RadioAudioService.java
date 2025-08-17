@@ -50,8 +50,11 @@ import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationToken;
 
 import io.github.dkaukov.afsk.Afsk1200Demodulator;
+import io.github.dkaukov.afsk.atoms.SymbolSlicerPll;
 import lombok.Getter;
 import lombok.Setter;
+import pl.brightinventions.slf4android.LogLevel;
+import pl.brightinventions.slf4android.LoggerConfiguration;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -74,7 +77,6 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
 import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
-import com.vagell.kv4pht.javAX25.ax25.PacketDemodulator;
 import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
 import com.vagell.kv4pht.javAX25.ax25.PacketModulator;
 import com.vagell.kv4pht.radio.Protocol.Filters;
@@ -90,6 +92,9 @@ import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
 
+import org.slf4j.LoggerFactory;
+
+
 /**
  * Background service that manages the connection to the ESP32 (to control the radio), and
  * handles playing back any audio received from the radio. This frees up the rest of the
@@ -97,6 +102,13 @@ import java.util.concurrent.*;
  * continues to play even if the phone's screen is off or the user starts another app.
  */
 public class RadioAudioService extends Service implements PacketHandler {
+
+    static {
+        LoggerFactory.getLogger(Afsk1200Demodulator.class).trace("Init..");
+        LoggerFactory.getLogger(SymbolSlicerPll.class).trace("Init..");
+        LoggerConfiguration.configuration().setLogLevel(LoggerFactory.getLogger(Afsk1200Demodulator.class).getName(), LogLevel.DEBUG);
+        LoggerConfiguration.configuration().setLogLevel(LoggerFactory.getLogger(SymbolSlicerPll.class).getName(), LogLevel.DEBUG);
+    }
 
     // === Constants ===
     private static final String TAG = RadioAudioService.class.getSimpleName();
