@@ -73,16 +73,6 @@
                 android:orientation="horizontal">
 
                 <ImageButton
-                    android:id="@+id/settingsButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:padding="16dp"
-                    android:layout_marginRight="8dp"
-                    android:background="@drawable/ic_settings"
-                    android:contentDescription="@string/settings_display"
-                    android:onClick="settingsClicked" />
-
-                <ImageButton
                     android:id="@+id/moreButton"
                     android:layout_width="36dp"
                     android:layout_height="36dp"

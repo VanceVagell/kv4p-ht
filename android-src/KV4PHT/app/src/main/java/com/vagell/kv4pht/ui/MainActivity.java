@@ -45,6 +45,7 @@ import android.os.Vibrator;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
@@ -66,6 +67,7 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.MenuCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
@@ -784,7 +786,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onClick(View view) {
                         callsignSnackbar.dismiss();
-                        settingsClicked(null);
+                        startSettingsActivity();
                     }
                 })
                 .setBackgroundTint(getResources().getColor(R.color.primary))
@@ -812,7 +814,7 @@ public class MainActivity extends AppCompatActivity {
                 .setAction("Settings", new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        settingsClicked(null);
+                        startSettingsActivity();
                     }
                 })
                 .setBackgroundTint(getResources().getColor(R.color.primary))
@@ -1904,7 +1906,7 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, REQUEST_FIND_REPEATERS);
     }
 
-    public void settingsClicked(View view) {
+    public void startSettingsActivity() {
         if (radioAudioService != null) {
             radioAudioService.setScanning(false); // Stop scanning when settings brought up, so we don't get in a bad state after.
             radioAudioService.endPtt(); // Be safe, just in case we are somehow transmitting when settings is tapped.
@@ -1932,6 +1934,8 @@ public class MainActivity extends AppCompatActivity {
                     startFindRepeatersActivity();
                 } else if (item.getItemId() == R.id.flash_firmware) {
                     startFirmwareActivity();
+                } else if (item.getItemId() == R.id.settings) {
+                    startSettingsActivity();
                 }
                 return true;
             }
