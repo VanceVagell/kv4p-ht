@@ -2,4 +2,8 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/import_from_repeaterbook"
         android:title="@string/find_repeaters_menu_item" />
+
+    <item android:id="@+id/flash_firmware"
+        android:title="@string/flash_firmware_menu_item" />
+
 </menu>

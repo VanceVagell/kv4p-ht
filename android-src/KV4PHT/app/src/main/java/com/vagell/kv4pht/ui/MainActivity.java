@@ -1907,10 +1907,10 @@ public class MainActivity extends AppCompatActivity {
         moreMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
-                String findNearbyRepeatersLabel = getString(R.string.find_repeaters_menu_item);
-
-                if (item.getTitle().equals(findNearbyRepeatersLabel)) {
+                if (item.getItemId() == R.id.import_from_repeaterbook) {
                     startFindRepeatersActivity();
+                } else if (item.getItemId() == R.id.flash_firmware) {
+                    startFirmwareActivity();
                 }
                 return true;
             }

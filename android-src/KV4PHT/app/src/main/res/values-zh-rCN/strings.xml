@@ -87,6 +87,7 @@
     <string name="done">完成</string>
     <string name="more_display">更多</string>
     <string name="find_repeaters_menu_item">查找附近的中继台</string>
+    <string name="flash_firmware_menu_item">刷写固件</string>
     <string name="find_repeaters_title">附近中继台</string>
     <string name="find_repeaters_instructions">登录 RepeaterBook，或注册新账户。然后，附近的中继器应该会自动下载。如果没有，请尝试点击下方的“下载”。</string>
     <string name="nearby_repeaters_found">找到附近中继台：&#160;</string>

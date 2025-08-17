@@ -103,6 +103,7 @@
     <string name="done">Done</string>
     <string name="sticky_ptt" translatable="false">Sticky PTT</string>
     <string name="find_repeaters_menu_item">Find nearby repeaters</string>
+    <string name="flash_firmware_menu_item">Flash firmware</string>
     <string name="find_repeaters_title">Find nearby repeaters</string>
     <string name="find_repeaters_instructions">Sign in to RepeaterBook, or create an account if you don’t have one. Then, nearby repeaters should download automatically. If not, try tapping "Download" below.</string>
     <string name="nearby_repeaters_found">Nearby repeaters found:&#160;</string>
