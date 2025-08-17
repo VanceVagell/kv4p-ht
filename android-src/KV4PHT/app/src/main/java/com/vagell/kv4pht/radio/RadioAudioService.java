@@ -113,6 +113,9 @@ public class RadioAudioService extends Service implements PacketHandler {
     private static final int RUNAWAY_TX_TIMEOUT_SEC = 180;
     // Intents this Activity can handle besides the one that starts it in default mode.
     public static final String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
+    public static final String ACTION_STOP_SERVICE = "com.vagell.kv4pht.STOP_RADIO_SERVICE";
+    public static final String ACTION_SERVICE_STOPPING = "com.vagell.kv4pht.SERVICE_STOPPING";
+
 
     // === USB Device Matching ===
     private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
@@ -422,6 +425,15 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && ACTION_STOP_SERVICE.equals(intent.getAction())) {
+            Intent stopIntent = new Intent(ACTION_SERVICE_STOPPING);
+            stopIntent.setPackage(getPackageName());
+            sendBroadcast(stopIntent);
+            stopForeground(true);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
         // Build an ongoing notification
         Notification notification = buildForegroundNotification();
 
@@ -438,11 +450,17 @@ public class RadioAudioService extends Service implements PacketHandler {
         PendingIntent pi = PendingIntent.getActivity(
                 this, 0, openApp, PendingIntent.FLAG_IMMUTABLE);
 
+        // Create an Intent that will be sent when the user swipes the notification away.
+        Intent stopSelf = new Intent(this, RadioAudioService.class);
+        stopSelf.setAction(ACTION_STOP_SERVICE);
+        PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
         return new NotificationCompat.Builder(this, "KV4P_HT_RADIO_AUDIO")
                 .setSmallIcon(R.drawable.ic_radio)
                 .setContentTitle("kv4p HT")
                 .setContentText("Starting up...")
                 .setContentIntent(pi)
+                .setDeleteIntent(pStopSelf)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // visible on lock screen
@@ -450,11 +468,17 @@ public class RadioAudioService extends Service implements PacketHandler {
     }
 
     private void updateForegroundNotification(String text) {
+        // Create an Intent that will be sent when the user swipes the notification away.
+        Intent stopSelf = new Intent(this, RadioAudioService.class);
+        stopSelf.setAction(ACTION_STOP_SERVICE);
+        PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
         Notification notification = new NotificationCompat.Builder(this, "KV4P_HT_RADIO_AUDIO")
                 .setSmallIcon(R.drawable.ic_radio)
                 .setContentTitle("kv4p HT")
                 .setContentText(text)
                 .setContentIntent(buildPendingIntent())
+                .setDeleteIntent(pStopSelf)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // visible on lock screen
@@ -674,7 +698,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build();
-        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(audioAttributes)
             .build();
         audioTrack = new AudioTrack.Builder()

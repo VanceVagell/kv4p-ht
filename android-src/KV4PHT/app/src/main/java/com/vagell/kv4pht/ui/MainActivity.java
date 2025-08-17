@@ -168,6 +168,21 @@ public class MainActivity extends AppCompatActivity {
     // The firmware version of the kv4p HT radio device that's attached, or -1 if unknown.
     private int firmwareVersion = -1;
 
+    // This receiver will listen for a broadcast from the RadioAudioService when it's shutting down
+    // (this is so that when the user swipes-away the kv4p HT notification, the app closes).
+    private final BroadcastReceiver serviceShutdownReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (RadioAudioService.ACTION_SERVICE_STOPPING.equals(intent.getAction())) {
+                if (radioAudioServiceBound) {
+                    unbindService(connection);
+                    radioAudioServiceBound = false;
+                }
+                finish();
+            }
+        }
+    };
+
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -285,6 +300,7 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         registerReceiver(usbReceiver, filter);
+        registerReceiver(serviceShutdownReceiver, new IntentFilter(RadioAudioService.ACTION_SERVICE_STOPPING), ContextCompat.RECEIVER_NOT_EXPORTED);
 
         viewModel.loadDataAsync(this::applySettings);
     }
@@ -536,7 +552,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-
+        unregisterReceiver(serviceShutdownReceiver);
         try {
             threadPoolExecutor.shutdownNow();
         } catch (Exception ignored) { }
@@ -564,6 +580,11 @@ public class MainActivity extends AppCompatActivity {
             // Binding to the RadioAudioService causes it to start (e.g. play back audio).
             bindService(intent, connection, Context.BIND_AUTO_CREATE);
         }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
     }
 
     @Override
