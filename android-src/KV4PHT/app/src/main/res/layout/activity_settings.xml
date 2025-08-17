@@ -500,8 +500,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="32dp">
+                    android:orientation="horizontal">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -536,6 +535,43 @@
                             android:textColor="@color/primary"/>
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginBottom="32dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/jost"
+                        android:text="@string/versions"
+                        android:textColor="@color/primary_deselected"
+                        android:textSize="16dp"
+                        android:layout_marginTop="24dp"/>
+
+                    <TextView
+                        android:id="@+id/settings_app_version"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/jost"
+                        android:text="@string/app_version"
+                        android:textColor="@color/primary"
+                        android:textSize="18dp"
+                        android:layout_gravity="center_vertical" />
+
+                    <TextView
+                        android:id="@+id/settings_firmware_version"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/jost"
+                        android:text="@string/firmware_version"
+                        android:textColor="@color/primary"
+                        android:textSize="18dp"
+                        android:layout_gravity="center_vertical" />
+                </LinearLayout>
+
             </LinearLayout>
         </ScrollView>
 

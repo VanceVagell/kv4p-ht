@@ -61,12 +61,15 @@
     <string name="your_callsign">Your callsign</string>
     <string name="my_position_accuracy">My position accuracy</string>
     <string name="advanced">Advanced</string>
+    <string name="versions">Versions</string>
     <string name="bandwidth">Bandwidth</string>
     <string name="min_2m_tx_frequency">Min 2m TX frequency</string>
     <string name="max_2m_tx_frequency">Max 2m TX frequency</string>
     <string name="min_70cm_tx_frequency">Min 70cm TX frequency</string>
     <string name="max_70cm_tx_frequency">Max 70cm TX frequency</string>
     <string name="mic_gain_boost">Mic gain boost</string>
+    <string name="app_version">App version</string>
+    <string name="firmware_version">Firmware version</string>
     <string name="to" translatable="false">to&#160;</string>
     <string name="kv4p_aprs_message" translatable="false">KV4P</string>
     <string name="message_body_example">The quick brown fox jumped over the lazy dog.</string>

@@ -165,6 +165,9 @@ public class MainActivity extends AppCompatActivity {
     private RadioAudioService radioAudioService = null;
     private boolean radioAudioServiceBound = false;
 
+    // The firmware version of the kv4p HT radio device that's attached, or -1 if unknown.
+    private int firmwareVersion = -1;
+
     @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -286,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
         viewModel.loadDataAsync(this::applySettings);
     }
 
-    final Context context = this;
+    final MainActivity context = this;
 
     /** Defines callbacks for service binding, passed to bindService(). */
     private ServiceConnection connection = new ServiceConnection() {
@@ -367,6 +370,11 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void outdatedFirmware(int firmwareVer) {
                     showVersionSnackbar(firmwareVer);
+                }
+
+                @Override
+                public void firmwareVersionReceived(int firmwareVer) {
+                    context.firmwareVersion = firmwareVer;
                 }
 
                 @Override
@@ -1887,6 +1895,7 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("requestCode", REQUEST_SETTINGS);
         if (radioAudioService != null && radioAudioService.isRadioConnected()) {
             intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
+            intent.putExtra("firmwareVersion", firmwareVersion);
         }
         startActivityForResult(intent, REQUEST_SETTINGS);
     }

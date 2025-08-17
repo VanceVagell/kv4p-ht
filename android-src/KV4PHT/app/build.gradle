@@ -35,6 +35,7 @@ android {
     buildFeatures {
         viewBinding true
         dataBinding true
+        buildConfig true
     }
     packagingOptions {
         resources.excludes.add("META-INF/*")

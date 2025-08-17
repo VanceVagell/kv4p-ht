@@ -269,6 +269,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         default void packetReceived(APRSPacket aprsPacket) {}
         default void scannedToMemory(int memoryId) {}
         default void outdatedFirmware(int firmwareVer) {}
+        default void firmwareVersionReceived(int firmwareVer) {}
         default void missingFirmware() {}
         default void txStarted() {}
         default void txEnded() {}

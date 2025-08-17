@@ -199,6 +199,7 @@ class ProtocolHandshake {
                 return HandshakeResult.INVALID;
             }
             final Protocol.FirmwareVersion ver = firmwareVersion.get();
+            radioAudioService.getCallbacks().firmwareVersionReceived(ver.getVer());
             if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                 radioAudioService.getCallbacks().outdatedFirmware(ver.getVer());
                 return HandshakeResult.TOO_OLD;
