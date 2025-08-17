@@ -230,7 +230,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     private int consecutiveSilenceBytes = 0;
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     @Setter
-    private @NonNull String bandwidth = "Wide";
+    private @NonNull String bandwidth = "25kHz";
 
     // === Android Components ===
     private final IBinder binder = new RadioBinder();
@@ -522,7 +522,7 @@ public class RadioAudioService extends Service implements PacketHandler {
      * @return true if the frequency is within the allowed transmission range, false otherwise.
      */
     private boolean isTxAllowed(float freq) {
-        final float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+        final float halfBandwidth = (bandwidth.equals("25kHz") ? 0.025f : 0.0125f) / 2;
         return  (freq >= (minTxFreq + halfBandwidth)) && (freq <= (maxTxFreq - halfBandwidth));
     }
 
@@ -551,7 +551,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             hostToEsp32.group(Group.builder()
                 .freqTx(freq)
                 .freqRx(freq)
-                .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
+                .bw((bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5))
                 .squelch((byte) squelchLevel)
                 .build());
         }
@@ -603,7 +603,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             hostToEsp32.group(Group.builder()
                 .freqTx(txFreq)
                 .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
-                .bw(bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5)
+                .bw(bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5)
                 .squelch((byte) squelchLevel)
                 .ctcssRx((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)))
                 .ctcssTx((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)))

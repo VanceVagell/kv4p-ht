@@ -89,14 +89,14 @@
     <string name="can_t_tx_outside_ham_band">Can\'t tx outside ham band</string>
     <string name="edit_memory">Edit memory</string>
     <string name="set_now">Set now</string>
-    <string name="exact">exact</string>
-    <string name="approx">approx</string>
+    <string name="exact">Exact</string>
+    <string name="approx">Approx</string>
     <string name="position_beacon_message_1">"Beaconing your "</string>
     <string name="position_beacon_message_2">" position on active frequency"</string>
     <string name="settings">Settings</string>
     <string name="beacon_my_position">Beacon my position</string>
-    <string name="wide" translatable="false">Wide</string>
-    <string name="narrow" translatable="false">Narrow</string>
+    <string name="wide" translatable="false">25kHz</string>
+    <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>
     <string name="sticky_ptt" translatable="false">Sticky PTT</string>
     <string name="find_repeaters_menu_item">Find nearby repeaters</string>
