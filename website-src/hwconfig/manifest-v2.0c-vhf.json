@@ -6,7 +6,7 @@
     {
       "chipFamily": "ESP32",
       "parts": [
-        { "path": "../hwconfig/board-config-v2.0c-vhf.bin", "offset": 24576}
+        { "path": "../hwconfig/board-config-v2.0c-vhf.bin", "offset": 36864}
       ]
     }
   ]
