@@ -50,9 +50,11 @@ import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationToken;
 
 import io.github.dkaukov.afsk.Afsk1200Demodulator;
+import io.github.dkaukov.afsk.Afsk1200Modulator;
 import io.github.dkaukov.afsk.atoms.SymbolSlicerPll;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.SneakyThrows;
 import pl.brightinventions.slf4android.LogLevel;
 import pl.brightinventions.slf4android.LoggerConfiguration;
 
@@ -74,11 +76,6 @@ import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
 import com.vagell.kv4pht.data.ChannelMemory;
-import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
-import com.vagell.kv4pht.javAX25.ax25.Arrays;
-import com.vagell.kv4pht.javAX25.ax25.Packet;
-import com.vagell.kv4pht.javAX25.ax25.PacketHandler;
-import com.vagell.kv4pht.javAX25.ax25.PacketModulator;
 import com.vagell.kv4pht.radio.Protocol.Filters;
 import com.vagell.kv4pht.radio.Protocol.FrameParser;
 import com.vagell.kv4pht.radio.Protocol.Group;
@@ -89,6 +86,7 @@ import com.vagell.kv4pht.ui.ToneHelper;
 
 import java.io.IOException;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -101,7 +99,7 @@ import org.slf4j.LoggerFactory;
  * application to focus primarily on the setup flows and UI, and ensures that the radio audio
  * continues to play even if the phone's screen is off or the user starts another app.
  */
-public class RadioAudioService extends Service implements PacketHandler {
+public class RadioAudioService extends Service {
 
     static {
         LoggerFactory.getLogger(Afsk1200Demodulator.class).trace("Init..");
@@ -186,7 +184,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
 
     // === AFSK Modem ===
-    private final PacketModulator afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
+    private final Afsk1200Modulator afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
     private final Afsk1200Demodulator afskDemodulator = new  Afsk1200Demodulator(AUDIO_SAMPLE_RATE, this::handlePacket);
 
     // === APRS State ===
@@ -987,7 +985,6 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
     }
 
-    @Override
     public void handlePacket(byte[] packet) {
         try {
             APRSPacket aprsPacket = Parser.parseAX25(packet);
@@ -1065,7 +1062,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             final PositionField posField = new PositionField(("=" + myPos.toCompressedString()).getBytes(), "", 1);
             final APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
-            txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
+            txAX25Packet(aprsPacket.toAX25Frame());
             callbacks.sentAprsBeacon(latitude, longitude);
         } catch (Exception e) {
             Log.w(TAG, "Exception while trying to beacon APRS location.", e);
@@ -1081,7 +1078,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     public void sendAckMessage(String to, String remoteMessageNum) {
         MessagePacket msgPacket = new MessagePacket(to, "ack" + remoteMessageNum, remoteMessageNum);
         APRSPacket aprsPacket = new APRSPacket(callsign, to, DEFAULT_DIGIPEATERS, msgPacket.getRawBytes());
-        txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
+        txAX25Packet(aprsPacket.toAX25Frame());
     }
 
     /**
@@ -1106,8 +1103,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
         try {
             APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, DEFAULT_DIGIPEATERS, msgPacket.getRawBytes());
-            Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
-            txAX25Packet(ax25Packet);
+            txAX25Packet(aprsPacket.toAX25Frame());
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Error: sending APRS packet", e);
             callbacks.chatError(e.getMessage());
@@ -1117,58 +1113,24 @@ public class RadioAudioService extends Service implements PacketHandler {
     }
 
     /**
-     * Sends silent frames to the ESP32 for a specified duration.
-     * This is used to ensure that there is silence before and after sending data.
-     *
-     * @param durationMs The duration in milliseconds for which to send silence.
-     */
-    private void sendSilentFrames(int durationMs) {
-        float[] opusFrame = new float[OPUS_FRAME_SIZE];
-        java.util.Arrays.fill(opusFrame, 0.0f);
-        for (int i = 0; i < (durationMs / 40); i++) {
-            sendAudioToESP32(opusFrame, true);
-        }
-    }
-
-    /**
      * Sends an AX.25 packet to the ESP32 for transmission.
      * This method handles the modulation and transmission of the packet.
      *
-     * @param ax25Packet The AX.25 packet to send.
+     * @param ax25Frame The AX.25 frame to send.
      */
-    private void txAX25Packet(Packet ax25Packet) {
+    @SneakyThrows
+    private void txAX25Packet(byte[] ax25Frame) {
         if (!txAllowed) {
             Log.e(TAG, "Tried to send an AX.25 packet when tx is not allowed, did not send.");
             return;
         }
-        Log.d(TAG, "Sending AX25 packet: " + ax25Packet);
+        Log.d(TAG, "Sending AX25 packet: " + Parser.parseAX25(ax25Frame));
         startPtt();
         float[] opusFrame = new float[OPUS_FRAME_SIZE];
-        // Send lead-in silence
-        sendSilentFrames(MS_SILENCE_BEFORE_DATA_MS);
-        // Prepare AFSK modulator
-        int opusFrameIndex = 0;
-        java.util.Arrays.fill(opusFrame, 0.0f);
-        afskModulator.prepareToTransmit(ax25Packet);
-        float[] buffer = afskModulator.getTxSamplesBuffer();
-        // Modulate and send samples
-        int n;
-        while ((n = afskModulator.getSamples()) > 0) {
-            for (int i = 0; i < n; i++) {
-                opusFrame[opusFrameIndex++] = buffer[i];
-                if (opusFrameIndex == OPUS_FRAME_SIZE) {
-                    sendAudioToESP32(opusFrame, true);
-                    java.util.Arrays.fill(opusFrame, 0.0f);
-                    opusFrameIndex = 0;
-                }
-            }
-        }
-        // Send remaining audio if needed
-        sendAudioToESP32(opusFrame, true);
-        // Send tail silence
-        sendSilentFrames(MS_SILENCE_AFTER_DATA_MS);
+        afskModulator.modulateToFixedLengthChunks(ax25Frame, opusFrame, OPUS_FRAME_SIZE, Duration.ofMillis(MS_SILENCE_BEFORE_DATA_MS), Duration.ofMillis(MS_SILENCE_AFTER_DATA_MS),
+            chunk -> sendAudioToESP32(chunk, true));
         endPtt();
-        Log.i(TAG, "Send AX25 packet: " + ax25Packet);
+        Log.i(TAG, "Send AX25 packet: " + Parser.parseAX25(ax25Frame));
     }
 
     public int getAudioTrackSessionId() {
@@ -1196,8 +1158,8 @@ public class RadioAudioService extends Service implements PacketHandler {
      * Sets whether radio module should poll RSSI. We need to be able to turn this off
      * because in v1.x versions of the PCB there's cross-talk between the Serial2 trace and
      * the audio trace, which breaks APRS decoding (and any other digital mode we might add).
-     * See https://github.com/VanceVagell/kv4p-ht/issues/310 for context.
-     *
+     * See <a href="https://github.com/VanceVagell/kv4p-ht/issues/310">...</a> for context.
+     * <p>
      * This will send the new state to the ESP32 if it is connected.
      *
      * @param on true to enable RSSI, false to disable it.
