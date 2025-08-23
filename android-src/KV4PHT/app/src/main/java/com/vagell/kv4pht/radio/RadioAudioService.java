@@ -202,7 +202,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Getter
     @Setter
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
-    private final ScheduledExecutorService aprsPositionExecutor = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledExecutorService beaconScheduler;
     private ScheduledFuture<?> beaconFuture;
     private int messageNumber = 0;
 
@@ -334,14 +334,51 @@ public class RadioAudioService extends Service implements PacketHandler {
         if (this.aprsBeaconPosition != enabled) {
             this.aprsBeaconPosition = enabled;
             if (enabled) {
-                beaconFuture = aprsPositionExecutor.scheduleWithFixedDelay(this::sendPositionBeacon,
-                    0, APRS_BEACON_MINS, TimeUnit.MINUTES);
-                // Tell callback we started (e.g. so it can show a SnackBar letting user know)
-                callbacks.aprsBeaconing(true, aprsPositionAccuracy);
+                startBeaconScheduler();
             } else if (beaconFuture != null) {
-                beaconFuture.cancel(true);
-                beaconFuture = null;
+                stopBeaconScheduler();
             }
+        }
+    }
+
+    private void startBeaconScheduler() {
+        if (beaconScheduler == null || beaconScheduler.isShutdown()) {
+            beaconScheduler = Executors.newSingleThreadScheduledExecutor();
+        }
+        // Cancel any old task
+        if (beaconFuture != null) {
+            beaconFuture.cancel(false);
+        }
+
+        // First run now (or after initial delay), then every 5 minutes
+        beaconFuture = beaconScheduler.scheduleAtFixedRate(() -> {
+            try {
+                // Acquire a short wakelock just for the beacon if you prefer not to keep it held.
+                if (wakeLock != null && !wakeLock.isHeld()) {
+                    // 20 seconds is usually ample for a single beacon
+                    wakeLock.acquire(20_000);
+                }
+                if (aprsBeaconPosition) {
+                    sendPositionBeacon();  // uses FusedLocation + TX
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Beacon task error", t);
+            } finally {
+                if (wakeLock != null && wakeLock.isHeld()) {
+                    try { wakeLock.release(); } catch (Throwable ignored) {}
+                }
+            }
+        }, 0, APRS_BEACON_MINS, TimeUnit.MINUTES);
+    }
+
+    private void stopBeaconScheduler() {
+        if (beaconFuture != null) {
+            beaconFuture.cancel(false);
+            beaconFuture = null;
+        }
+        if (beaconScheduler != null) {
+            beaconScheduler.shutdownNow();
+            beaconScheduler = null;
         }
     }
 
@@ -502,8 +539,8 @@ public class RadioAudioService extends Service implements PacketHandler {
         protocolHandshake.onDestroy();
 
         // Clean up APRS beacon executor
-        if (aprsPositionExecutor != null && !aprsPositionExecutor.isShutdown()) {
-            aprsPositionExecutor.shutdownNow();
+        if (this.beaconScheduler != null && !beaconScheduler.isShutdown()) {
+            beaconScheduler.shutdownNow();
         }
 
         // Clean up USB resources to prevent race conditions on restart
