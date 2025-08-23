@@ -1267,7 +1267,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             final APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
             txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
-            callbacks.sentAprsBeacon(latitude, longitude);
+            callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude());
         } catch (Exception e) {
             Log.w(TAG, "Exception while trying to beacon APRS location.", e);
         }
