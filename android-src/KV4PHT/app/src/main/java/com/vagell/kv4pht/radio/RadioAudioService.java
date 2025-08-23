@@ -432,11 +432,6 @@ public class RadioAudioService extends Service implements PacketHandler {
         // Promote to foreground
         startForeground(SERVICE_ID, notification);
 
-        // Acquire WakeLock if not already held to ensure audio processing continues in background.
-        if (wakeLock != null && !wakeLock.isHeld()) {
-            wakeLock.acquire();
-        }
-
         // Make the service sticky so it is restarted if the process dies
         return START_STICKY;
     }
@@ -732,7 +727,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     public void startPtt() {
         if (hostToEsp32 == null) {
             Log.e(TAG, "Attempted to start PTT but hostToEsp32 is null. USB connection likely failed.");
-            callbacks.radioMissing(); // Notify UI that connection is problematic
+            radioMissing();
             return;
         }
         if (mode == RadioMode.RX && txAllowed) {
@@ -776,7 +771,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             return;
         }
         Log.w(TAG, "No ESP32 detected");
-        callbacks.radioMissing();
+        radioMissing();
     }
 
     private boolean isESP32Device(UsbDevice device) {
@@ -803,7 +798,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
             Log.e(TAG, "Error: no available USB drivers.");
-            callbacks.radioMissing();
+            radioMissing();
             return;
         }
         // Open a connection to the first available driver.
@@ -811,7 +806,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
             Log.e(TAG, "Error: couldn't open USB device.");
-            callbacks.radioMissing();
+            radioMissing();
             return;
         }
         serialPort = driver.getPorts().get(0); // Most devices have just one port (port 0)
@@ -821,7 +816,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.e(TAG, "Error: couldn't open USB serial port.");
-            callbacks.radioMissing();
+            radioMissing();
             return;
         }
         try { // These settings needed for better data transfer on Adafruit QT Py ESP32-S2
@@ -858,6 +853,23 @@ public class RadioAudioService extends Service implements PacketHandler {
         hostToEsp32 = new Protocol.Sender(usbIoManager);
         Log.i(TAG, "Connected to ESP32.");
         protocolHandshake.start();
+    }
+
+    // Callback for ProtocolHandshake
+    public void radioConnected() {
+        // Acquire WakeLock if not already held to ensure audio processing continues in background.
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
+        callbacks.radioConnected();
+    }
+
+    // Called in many situations where radio connection is found to be broken
+    private void radioMissing() {
+        callbacks.radioMissing(); // Notify UI that radio wasn't found
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release(); // Don't keep screen on
+        }
     }
 
     /**
