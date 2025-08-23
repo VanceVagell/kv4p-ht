@@ -1,7 +1,7 @@
 {
   "name": "PCB Manifest v2.0d VHF",
   "version": "v2.0d-vhf",
-  "new_install_prompt_erase": false,
+  "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32",
