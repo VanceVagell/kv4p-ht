@@ -490,6 +490,9 @@ public class MainActivity extends AppCompatActivity {
                         viewModel.getAppDb().aprsMessageDao().insertAll(myBeacon);
                         viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
                     });
+
+                    // Show a quick snackbar letting the user know we beaconed (so they can stop it if this is surprising)
+                    showSimpleSnackbar("Transmitted APRS beacon on this frequency");
                 }
 
                 @Override

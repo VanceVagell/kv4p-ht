@@ -365,19 +365,6 @@ public class RadioAudioService extends Service implements PacketHandler {
             }
         }
 
-        // Manage WakeLock based on mode to prevent CPU throttling during critical operations.
-        if (mode == RadioMode.RX || mode == RadioMode.SCAN) {
-            // Acquire WakeLock if not already held to ensure audio processing continues in background.
-            if (wakeLock != null && !wakeLock.isHeld()) {
-                wakeLock.acquire();
-            }
-        } else {
-            // Release WakeLock for other states to save power, but don't stop the service.
-            if (wakeLock != null && wakeLock.isHeld()) {
-                wakeLock.release();
-            }
-        }
-
         this.mode = mode;
     }
 
@@ -444,6 +431,11 @@ public class RadioAudioService extends Service implements PacketHandler {
 
         // Promote to foreground
         startForeground(SERVICE_ID, notification);
+
+        // Acquire WakeLock if not already held to ensure audio processing continues in background.
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
 
         // Make the service sticky so it is restarted if the process dies
         return START_STICKY;
@@ -1187,7 +1179,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             return;
         }
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-            Log.d(TAG, "Missing Google Play Services — cannot retrieve GPS location.");
+            Log.d(TAG, "Can't get GPS position: missing Google Play Services.");
             callbacks.unknownLocation();
             return;
         }
