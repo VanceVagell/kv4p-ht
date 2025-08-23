@@ -290,8 +290,13 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     @Override
     public IBinder onBind(Intent intent) {
-        // Retrieve necessary parameters from the intent.
         Bundle bundle = intent.getExtras();
+        if (null == bundle) {
+            Log.d(TAG, "Warning: RadioAudioService started without parameters, likely in a bad state.");
+            return binder;
+        }
+
+        // Retrieve necessary parameters from the intent.
         callsign = bundle.getString("callsign");
         squelch = bundle.getInt("squelch");
         activeMemoryId = bundle.getInt("activeMemoryId");
