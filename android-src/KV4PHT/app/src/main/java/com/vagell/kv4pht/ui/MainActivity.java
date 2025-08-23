@@ -736,13 +736,6 @@ public class MainActivity extends AppCompatActivity {
                 // frequency. User must set it manually (or select it before coming to chat mode, but
                 // can't be scanning).
                 radioAudioService.setScanning(false, true);
-
-                // If this is a v1.x radio, disable RSSI when in APRS chat mode.
-                // See https://github.com/VanceVagell/kv4p-ht/issues/310.
-                if (!radioAudioService.isHasPhysPttButton()) { // Poor proxy for "Is this a v1.x PCB?"
-                    radioAudioService.setRssi(false);
-                    findViewById(R.id.sMeter).setVisibility(View.GONE);
-                }
             }
             setScanningUi(false);
 
