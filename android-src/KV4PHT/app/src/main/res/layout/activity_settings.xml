@@ -148,7 +148,8 @@
                     android:textSize="18dp"
                     android:textColor="@color/primary"
                     android:layout_marginTop="8dp"
-                    android:trackTintMode="add"/>
+                    android:trackTintMode="add"
+                    android:checked="false"/>
 
                 <Switch
                     android:id="@+id/highpassSwitch"
@@ -158,7 +159,8 @@
                     android:textSize="18dp"
                     android:textColor="@color/primary"
                     android:layout_marginTop="8dp"
-                    android:trackTintMode="add"/>
+                    android:trackTintMode="add"
+                    android:checked="false"/>
 
                 <Switch
                     android:id="@+id/lowpassSwitch"
@@ -168,7 +170,8 @@
                     android:textSize="18dp"
                     android:textColor="@color/primary"
                     android:layout_marginTop="8dp"
-                    android:trackTintMode="add"/>
+                    android:trackTintMode="add"
+                    android:checked="false"/>
 
                 <TextView
                     android:layout_width="wrap_content"

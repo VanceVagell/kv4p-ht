@@ -983,9 +983,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyFiltersSettings(Map<String, String> settings) {
-        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_EMPHASIS, "true"));
-        boolean highpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_HIGHPASS, "true"));
-        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_LOWPASS, "true"));
+        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_EMPHASIS, "false"));
+        boolean highpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_HIGHPASS, "false"));
+        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_LOWPASS, "false"));
         if (radioAudioService != null && radioAudioService.isRadioConnected()) {
             threadPoolExecutor.execute(() -> {
                 if (radioAudioService.getMode() != RadioMode.STARTUP && radioAudioService.getMode() != RadioMode.SCAN) {
