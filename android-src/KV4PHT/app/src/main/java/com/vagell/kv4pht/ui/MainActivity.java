@@ -294,7 +294,9 @@ public class MainActivity extends AppCompatActivity {
         });
 
         requestAudioPermissions();
-        requestNotificationPermissions(); // TODO store a boolean in our DB so we only ask for this once (in case they say no)
+        requestNotificationPermissions();
+        requestForegroundServiceLocationPermissions();
+        requestFinePositionPermissions();
         attachListeners();
 
         IntentFilter filter = new IntentFilter();
@@ -540,6 +542,34 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+
+        // Check necessary permissions, and if all is well, start RadioAudioService.
+        tryToStartRadioAudioService();
+    }
+
+    private void tryToStartRadioAudioService() {
+        // If it's already started, bail.
+        if (null != radioAudioService && radioAudioServiceBound) {
+            return;
+        }
+
+        // Do we have all the necessary permissions granted?
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestFinePositionPermissions();
+            return;
+        }
+
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestNotificationPermissions();
+            return;
+        }
+
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.FOREGROUND_SERVICE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestForegroundServiceLocationPermissions();
+            return;
+        }
 
         Intent intent = new Intent(this, RadioAudioService.class);
         intent.putExtra(AppSetting.SETTING_CALLSIGN, callsign);
@@ -1425,11 +1455,6 @@ public class MainActivity extends AppCompatActivity {
                         REQUEST_FINE_LOCATION_PERMISSION_CODE);
             }
         }
-
-        // If APRS beaconing is enabled, also request foreground service location permission.
-        if (radioAudioService != null && radioAudioService.getAprsBeaconPosition()) {
-            requestForegroundServiceLocationPermissions();
-        }
     }
 
     protected void requestNotificationPermissions() {
@@ -1517,6 +1542,7 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
+                    tryToStartRadioAudioService();
                 } else {
                     // Permission denied
                     Log.d("DEBUG", "Warning: Need notifications permission to be able to send APRS chat message notifications");
@@ -1527,13 +1553,10 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
-                    // If APRS beaconing is enabled, also request foreground service location permission.
-                    if (radioAudioService != null && radioAudioService.getAprsBeaconPosition()) {
-                        requestForegroundServiceLocationPermissions();
-                    }
+                    tryToStartRadioAudioService();
                 } else {
                     // Permission denied
-                    Log.d("DEBUG", "Warning: Need fine location permission to include in APRS messages (user turned this setting on)");
+                    Log.d("DEBUG", "Warning: Need fine location permission to include location in APRS messages");
                 }
                 return;
             }
@@ -1541,12 +1564,10 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
+                    tryToStartRadioAudioService();
                 } else {
                     // Permission denied
-                    Log.d("DEBUG", "Warning: Need foreground service location permission for APRS beaconing (user turned this setting on)");
-                    if (radioAudioService != null) {
-                        radioAudioService.setAprsBeaconPosition(false); // Hack to prevent crashing, though the setting will still be on.
-                    }
+                    Log.d("DEBUG", "Warning: Need foreground service location permission for APRS beaconing");
                 }
                 return;
             }
