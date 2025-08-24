@@ -341,6 +341,10 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
     }
 
+    public boolean getAprsBeaconPosition() {
+        return this.aprsBeaconPosition;
+    }
+
     private void startBeaconScheduler() {
         if (beaconScheduler == null || beaconScheduler.isShutdown()) {
             beaconScheduler = Executors.newSingleThreadScheduledExecutor();

@@ -45,7 +45,6 @@ import android.os.Vibrator;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
@@ -67,7 +66,6 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.view.MenuCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
@@ -130,7 +128,8 @@ public class MainActivity extends AppCompatActivity {
     // Android permission stuff
     private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
     private static final int REQUEST_NOTIFICATIONS_PERMISSION_CODE = 2;
-    private static final int REQUEST_LOCATION_PERMISSION_CODE = 3;
+    private static final int REQUEST_FINE_LOCATION_PERMISSION_CODE = 3;
+    private static final int REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE = 4;
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
     // Radio params and related settings
@@ -1027,7 +1026,9 @@ public class MainActivity extends AppCompatActivity {
         if (beacon != null && radioAudioService != null) {
             boolean beaconEnabled = Boolean.parseBoolean(beacon);
             threadPoolExecutor.execute(() -> radioAudioService.setAprsBeaconPosition(beaconEnabled));
-            if (beaconEnabled) requestPositionPermissions();
+            if (beaconEnabled) {
+                requestFinePositionPermissions();
+            }
         }
     }
 
@@ -1397,7 +1398,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    protected void requestPositionPermissions() {
+    protected void requestFinePositionPermissions() {
         // Check that the user allows our app to get position, otherwise ask for the permission.
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Should we show an explanation?
@@ -1412,7 +1413,7 @@ public class MainActivity extends AppCompatActivity {
                             public void onClick(DialogInterface dialogInterface, int i) {
                                 ActivityCompat.requestPermissions(MainActivity.this,
                                         new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                        REQUEST_LOCATION_PERMISSION_CODE);
+                                        REQUEST_FINE_LOCATION_PERMISSION_CODE);
                             }
                         })
                         .create()
@@ -1421,8 +1422,13 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                        REQUEST_LOCATION_PERMISSION_CODE);
+                        REQUEST_FINE_LOCATION_PERMISSION_CODE);
             }
+        }
+
+        // If APRS beaconing is enabled, also request foreground service location permission.
+        if (radioAudioService != null && radioAudioService.getAprsBeaconPosition()) {
+            requestForegroundServiceLocationPermissions();
         }
     }
 
@@ -1458,6 +1464,38 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    protected void requestForegroundServiceLocationPermissions() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.FOREGROUND_SERVICE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.FOREGROUND_SERVICE_LOCATION)) {
+
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission needed")
+                        .setMessage("This app needs to know your location for APRS beaconing")
+                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                ActivityCompat.requestPermissions(MainActivity.this,
+                                        new String[]{Manifest.permission.FOREGROUND_SERVICE_LOCATION},
+                                        REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE);
+                            }
+                        })
+                        .create()
+                        .show();
+
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.FOREGROUND_SERVICE_LOCATION},
+                        REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE);
+            }
+        } else {
+            // Permission has already been granted
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -1485,13 +1523,30 @@ public class MainActivity extends AppCompatActivity {
                 }
                 return;
             }
-            case REQUEST_LOCATION_PERMISSION_CODE: {
+            case REQUEST_FINE_LOCATION_PERMISSION_CODE: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted.
+                    // If APRS beaconing is enabled, also request foreground service location permission.
+                    if (radioAudioService != null && radioAudioService.getAprsBeaconPosition()) {
+                        requestForegroundServiceLocationPermissions();
+                    }
+                } else {
+                    // Permission denied
+                    Log.d("DEBUG", "Warning: Need fine location permission to include in APRS messages (user turned this setting on)");
+                }
+                return;
+            }
+            case REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE: {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
                 } else {
                     // Permission denied
-                    Log.d("DEBUG", "Warning: Need fine location permission to include in APRS messages (user turned this setting on)");
+                    Log.d("DEBUG", "Warning: Need foreground service location permission for APRS beaconing (user turned this setting on)");
+                    if (radioAudioService != null) {
+                        radioAudioService.setAprsBeaconPosition(false); // Hack to prevent crashing, though the setting will still be on.
+                    }
                 }
                 return;
             }
@@ -1697,7 +1752,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPositionPermissions();
+            requestFinePositionPermissions();
             return;
         }
 
