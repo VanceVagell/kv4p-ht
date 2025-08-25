@@ -572,7 +572,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         ensurePermissions(foregroundServicePermissions(), allGranted -> {
-            if (allGranted) {
+            if (Boolean.TRUE.equals(allGranted)) {
                 final Intent svc = new Intent(this, RadioAudioService.class)
                     .putExtra(AppSetting.SETTING_CALLSIGN, callsign)
                     .putExtra(AppSetting.SETTING_SQUELCH, squelch)
