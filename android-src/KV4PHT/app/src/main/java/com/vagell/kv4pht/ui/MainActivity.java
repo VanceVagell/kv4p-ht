@@ -521,7 +521,7 @@ public class MainActivity extends AppCompatActivity {
 
             ensurePermissions(List.of(Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS),
                 allGranted -> {
-                    if (allGranted) {
+                    if (Boolean.TRUE.equals(allGranted)) {
                         initAudioRecorder();
                         radioAudioService.setCallbacks(callbacks);
                         applySettings(); // Some settings require radioAudioService to exist to apply.
@@ -1035,7 +1035,7 @@ public class MainActivity extends AppCompatActivity {
             Runnable action = () -> radioAudioService.setAprsBeaconPosition(enabled);
             if (enabled) {
                 ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), allGranted -> {
-                    if (allGranted) {
+                    if (Boolean.TRUE.equals(allGranted)) {
                         threadPoolExecutor.execute(action);
                     }});
             } else {
@@ -1650,7 +1650,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), allGranted -> {
-            if (allGranted) {
+            if (Boolean.TRUE.equals(allGranted)) {
                 radioAudioService.sendPositionBeacon();
             }
         });
