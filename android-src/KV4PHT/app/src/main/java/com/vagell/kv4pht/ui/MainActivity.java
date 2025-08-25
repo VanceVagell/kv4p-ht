@@ -536,8 +536,32 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private List<String> requiredNowPerms() {
-        return List.of(Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS);
+    /**
+     * Returns the set of runtime permissions required before starting
+     * {@link android.app.Service#startForeground(int, android.app.Notification, int)}
+     * with the types used by {@code RadioAudioService}.
+     * <p>
+     * Specifically:
+     * <ul>
+     *   <li>{@link Manifest.permission#RECORD_AUDIO} — required for
+     *       {@code FOREGROUND_SERVICE_TYPE_MICROPHONE} when capturing audio.</li>
+     *   <li>{@link Manifest.permission#ACCESS_FINE_LOCATION} — required for
+     *       {@code FOREGROUND_SERVICE_TYPE_LOCATION} when including GPS data
+     *       in APRS beaconing.</li>
+     *   <li>{@link Manifest.permission#POST_NOTIFICATIONS} (API 33+) — required
+     *       to show the persistent foreground notification that accompanies any
+     *       foreground service.</li>
+     * </ul>
+     * These must be granted <b>before</b> calling
+     * {@link android.content.Context#startForegroundService(Intent)} to avoid
+     * {@link SecurityException} on Android 34+.
+     *
+     * @return immutable list of required runtime permissions
+     */
+    private List<String> foregroundServicePermissions() {
+        return List.of(Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.POST_NOTIFICATIONS);
     }
 
     private void startAndBindRadioAudioService() {
@@ -547,7 +571,7 @@ public class MainActivity extends AppCompatActivity {
         if (!bindingInProgress.compareAndSet(false, true)) {
             return;
         }
-        ensurePermissions(requiredNowPerms(), allGranted -> {
+        ensurePermissions(foregroundServicePermissions(), allGranted -> {
             if (allGranted) {
                 final Intent svc = new Intent(this, RadioAudioService.class)
                     .putExtra(AppSetting.SETTING_CALLSIGN, callsign)
