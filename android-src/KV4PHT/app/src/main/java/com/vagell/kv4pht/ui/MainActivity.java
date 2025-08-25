@@ -26,7 +26,6 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
@@ -37,11 +36,13 @@ import android.hardware.usb.UsbManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Vibrator;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
@@ -59,11 +60,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.appcompat.widget.PopupMenu;
-import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
@@ -73,6 +72,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
@@ -91,12 +91,14 @@ import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
 import com.vagell.kv4pht.radio.RadioMode;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static android.view.View.GONE;
@@ -126,10 +128,10 @@ public class MainActivity extends AppCompatActivity {
     private Snackbar radioModuleNotFoundSnackbar = null;
 
     // Android permission stuff
-    private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
-    private static final int REQUEST_NOTIFICATIONS_PERMISSION_CODE = 2;
-    private static final int REQUEST_FINE_LOCATION_PERMISSION_CODE = 3;
-    private static final int REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE = 4;
+    private static final int REQUEST_ALL_PERMISSIONS = 1001;
+    @Nullable private Consumer<Boolean> pendingGrantCallback = null;
+    @Nullable private List<String> pendingPerms;
+
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
     // Radio params and related settings
@@ -292,19 +294,12 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
         });
-
-        requestAudioPermissions();
-        requestNotificationPermissions();
-        requestForegroundServiceLocationPermissions();
-        requestFinePositionPermissions();
         attachListeners();
-
         IntentFilter filter = new IntentFilter();
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         registerReceiver(usbReceiver, filter);
         registerReceiver(serviceShutdownReceiver, new IntentFilter(RadioAudioService.ACTION_SERVICE_STOPPING), ContextCompat.RECEIVER_NOT_EXPORTED);
-
         viewModel.loadDataAsync(this::applySettings);
     }
 
@@ -524,10 +519,19 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
 
-            radioAudioService.setCallbacks(callbacks);
-            applySettings(); // Some settings require radioAudioService to exist to apply.
-            radioAudioService.setChannelMemories(viewModel.getChannelMemories());
-            runOnUiThread(() -> radioAudioService.start());
+            ensurePermissions(List.of(Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS),
+                allGranted -> {
+                    if (allGranted) {
+                        initAudioRecorder();
+                        radioAudioService.setCallbacks(callbacks);
+                        applySettings(); // Some settings require radioAudioService to exist to apply.
+                        radioAudioService.setChannelMemories(viewModel.getChannelMemories());
+                        runOnUiThread(() -> radioAudioService.start());
+                        tryToStartRadioAudioService();
+                    } else {
+                        showSimpleSnackbar("App can't work without required permissions");
+                    }
+                });
         }
 
         @Override
@@ -542,9 +546,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-
-        // Check necessary permissions, and if all is well, start RadioAudioService.
-        tryToStartRadioAudioService();
     }
 
     private void tryToStartRadioAudioService() {
@@ -552,25 +553,6 @@ public class MainActivity extends AppCompatActivity {
         if (null != radioAudioService && radioAudioServiceBound) {
             return;
         }
-
-        // Do we have all the necessary permissions granted?
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestFinePositionPermissions();
-            return;
-        }
-
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestNotificationPermissions();
-            return;
-        }
-
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.FOREGROUND_SERVICE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestForegroundServiceLocationPermissions();
-            return;
-        }
-
         Intent intent = new Intent(this, RadioAudioService.class);
         intent.putExtra(AppSetting.SETTING_CALLSIGN, callsign);
         intent.putExtra(AppSetting.SETTING_SQUELCH, squelch);
@@ -1053,11 +1035,16 @@ public class MainActivity extends AppCompatActivity {
                     RadioAudioService.APRS_POSITION_APPROX));
         }
 
-        if (beacon != null && radioAudioService != null) {
-            boolean beaconEnabled = Boolean.parseBoolean(beacon);
-            threadPoolExecutor.execute(() -> radioAudioService.setAprsBeaconPosition(beaconEnabled));
-            if (beaconEnabled) {
-                requestFinePositionPermissions();
+        if (radioAudioService != null && beacon != null) {
+            boolean enabled = Boolean.parseBoolean(beacon);
+            Runnable action = () -> radioAudioService.setAprsBeaconPosition(enabled);
+            if (enabled) {
+                ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), (allGranted) -> {
+                    if (allGranted) {
+                        threadPoolExecutor.execute(action);
+                    }});
+            } else {
+                threadPoolExecutor.execute(action);
             }
         }
     }
@@ -1396,202 +1383,90 @@ public class MainActivity extends AppCompatActivity {
         stopRecording();
     }
 
-    protected void requestAudioPermissions() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.RECORD_AUDIO)) {
-
-                new AlertDialog.Builder(this)
-                        .setTitle("Permission needed")
-                        .setMessage("This app needs the audio recording permission")
-                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                ActivityCompat.requestPermissions(MainActivity.this,
-                                        new String[]{Manifest.permission.RECORD_AUDIO},
-                                        REQUEST_AUDIO_PERMISSION_CODE);
-                            }
-                        })
-                        .create()
-                        .show();
-
-            } else {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.RECORD_AUDIO},
-                        REQUEST_AUDIO_PERMISSION_CODE);
-            }
+    public void ensurePermissions(List<String> requestedPerms, Consumer<Boolean> callback) {
+        // Filter: drop POST_NOTIFICATIONS on < 33
+        List<String> needed = requestedPerms.stream()
+            .filter(p -> !(Manifest.permission.POST_NOTIFICATIONS.equals(p) && Build.VERSION.SDK_INT < 33))
+            .filter(p -> checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED)
+            .collect(Collectors.toList());
+        if (needed.isEmpty()) {
+            callback.accept(true);
+            return;
+        }
+        pendingGrantCallback = callback;
+        pendingPerms = needed;
+        // If any missing permission suggests showing a rationale, show ONE dialog
+        boolean showRationale = pendingPerms.stream()
+            .anyMatch(this::shouldShowRequestPermissionRationale);
+        if (showRationale) {
+            new MaterialAlertDialogBuilder(this)
+                .setTitle("Permissions needed")
+                .setMessage(buildRationaleMessage(pendingPerms.toArray(new String[0])))
+                .setPositiveButton("Continue", (d, i) ->
+                    requestPermissions(pendingPerms.toArray(new String[0]), REQUEST_ALL_PERMISSIONS))
+                .setNegativeButton("Cancel", (d, i) -> {
+                    // user cancelled; clear state
+                    pendingGrantCallback = null;
+                    pendingPerms = null;
+                    callback.accept(false);
+                })
+                .show();
         } else {
-            // Permission has already been granted
+            requestPermissions(pendingPerms.toArray(new String[0]), REQUEST_ALL_PERMISSIONS);
         }
     }
 
-    protected void requestFinePositionPermissions() {
-        // Check that the user allows our app to get position, otherwise ask for the permission.
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION)) {
-
-                new AlertDialog.Builder(this)
-                        .setTitle("Permission needed")
-                        .setMessage("This app needs the fine location permission")
-                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                ActivityCompat.requestPermissions(MainActivity.this,
-                                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                        REQUEST_FINE_LOCATION_PERMISSION_CODE);
-                            }
-                        })
-                        .create()
-                        .show();
-
-            } else {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                        REQUEST_FINE_LOCATION_PERMISSION_CODE);
+    private String buildRationaleMessage(String[] perms) {
+        List<String> reasons = new ArrayList<>();
+        for (String p : perms) {
+            if (Manifest.permission.RECORD_AUDIO.equals(p)) {
+                reasons.add("• Microphone — to capture audio for radio/voice features");
+            } else if (Manifest.permission.ACCESS_FINE_LOCATION.equals(p)) {
+                reasons.add("• Precise location — to include GPS in APRS/beacons");
+            } else if (Manifest.permission.POST_NOTIFICATIONS.equals(p) && Build.VERSION.SDK_INT >= 33) {
+                reasons.add("• Notifications — to alert you about APRS messages and status");
+            } else if (Manifest.permission.ACCESS_BACKGROUND_LOCATION.equals(p)) {
+                reasons.add("• Background location — to send beacons with the screen off");
             }
         }
-    }
-
-    protected void requestNotificationPermissions() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.POST_NOTIFICATIONS)) {
-
-                new AlertDialog.Builder(this)
-                        .setTitle("Permission needed")
-                        .setMessage("This app needs to be able to send notifications")
-                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                ActivityCompat.requestPermissions(MainActivity.this,
-                                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                                        REQUEST_NOTIFICATIONS_PERMISSION_CODE);
-                            }
-                        })
-                        .create()
-                        .show();
-
-            } else {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                        REQUEST_NOTIFICATIONS_PERMISSION_CODE);
-            }
-        } else {
-            // Permission has already been granted
-        }
-    }
-
-    protected void requestForegroundServiceLocationPermissions() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.FOREGROUND_SERVICE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.FOREGROUND_SERVICE_LOCATION)) {
-
-                new AlertDialog.Builder(this)
-                        .setTitle("Permission needed")
-                        .setMessage("This app needs to know your location for APRS beaconing")
-                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                ActivityCompat.requestPermissions(MainActivity.this,
-                                        new String[]{Manifest.permission.FOREGROUND_SERVICE_LOCATION},
-                                        REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE);
-                            }
-                        })
-                        .create()
-                        .show();
-
-            } else {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.FOREGROUND_SERVICE_LOCATION},
-                        REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE);
-            }
-        } else {
-            // Permission has already been granted
-        }
+        return "We need these permissions for core functionality:\n\n" + TextUtils.join("\n", reasons);
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        switch (requestCode) {
-            case REQUEST_AUDIO_PERMISSION_CODE: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Permission granted.
-                    initAudioRecorder();
-                } else {
-                    // Permission denied, things will just be broken.
-                    Log.d("DEBUG", "Error: Need audio permission");
-                }
-                return;
+        if (requestCode != REQUEST_ALL_PERMISSIONS) {
+            return;
+        }
+        boolean allGranted = true;
+        for (int r : grantResults) {
+            if (r != PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+                break;
             }
-            case REQUEST_NOTIFICATIONS_PERMISSION_CODE: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Permission granted.
-                    tryToStartRadioAudioService();
-                } else {
-                    // Permission denied
-                    Log.d("DEBUG", "Warning: Need notifications permission to be able to send APRS chat message notifications");
-                }
-                return;
-            }
-            case REQUEST_FINE_LOCATION_PERMISSION_CODE: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Permission granted.
-                    tryToStartRadioAudioService();
-                } else {
-                    // Permission denied
-                    Log.d("DEBUG", "Warning: Need fine location permission to include location in APRS messages");
-                }
-                return;
-            }
-            case REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Permission granted.
-                    tryToStartRadioAudioService();
-                } else {
-                    // Permission denied
-                    Log.d("DEBUG", "Warning: Need foreground service location permission for APRS beaconing");
-                }
-                return;
-            }
+        }
+        Consumer<Boolean> done = pendingGrantCallback;
+        pendingGrantCallback = null;
+        pendingPerms = null;
+        if (done != null) {
+            done.accept(allGranted);
         }
     }
 
     private void initAudioRecorder() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestAudioPermissions();
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-
         if (null != audioRecord) {
             audioRecord.stop();
             audioRecord.release();
             audioRecord = null;
         }
-
         audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC,
                 RadioAudioService.AUDIO_SAMPLE_RATE,
                 channelConfig,
                 audioFormat,
                 minBufferSize);
-
         if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.d("DEBUG", "Audio init error");
         }
@@ -1766,25 +1641,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressLint("MissingPermission")
     public void singleBeaconButtonClicked(View view) {
         if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
             showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
             return;
         }
-
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestFinePositionPermissions();
+        if (null == callsign || callsign.trim().isEmpty()) {
+            showCallsignSnackbar(getString(R.string.set_your_callsign_to_beacon_your_position));
             return;
         }
-
-        if (null != radioAudioService) {
-            if (null == callsign || callsign.trim().length() == 0) {
-                showCallsignSnackbar(getString(R.string.set_your_callsign_to_beacon_your_position));
-                return;
-            }
-
-            radioAudioService.sendPositionBeacon();
+        if (radioAudioService != null) {
+            return;
         }
+        ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), allGranted -> {
+            if (allGranted) {
+                radioAudioService.sendPositionBeacon();
+            }
+        });
     }
 
     /**
