@@ -105,7 +105,7 @@ class ProtocolHandshake {
                 radioAudioService.setMode(RadioMode.RX);
                 // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
                 radioAudioService.setScanning(false);
-                radioAudioService.getCallbacks().radioConnected();
+                radioAudioService.radioConnected();
         }
     }
 
@@ -199,6 +199,7 @@ class ProtocolHandshake {
                 return HandshakeResult.INVALID;
             }
             final Protocol.FirmwareVersion ver = firmwareVersion.get();
+            radioAudioService.getCallbacks().firmwareVersionReceived(ver.getVer());
             if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                 radioAudioService.getCallbacks().outdatedFirmware(ver.getVer());
                 return HandshakeResult.TOO_OLD;

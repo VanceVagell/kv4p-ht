@@ -37,7 +37,6 @@ import android.hardware.usb.UsbManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
-import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -129,7 +128,8 @@ public class MainActivity extends AppCompatActivity {
     // Android permission stuff
     private static final int REQUEST_AUDIO_PERMISSION_CODE = 1;
     private static final int REQUEST_NOTIFICATIONS_PERMISSION_CODE = 2;
-    private static final int REQUEST_LOCATION_PERMISSION_CODE = 3;
+    private static final int REQUEST_FINE_LOCATION_PERMISSION_CODE = 3;
+    private static final int REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE = 4;
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
 
     // Radio params and related settings
@@ -157,15 +157,32 @@ public class MainActivity extends AppCompatActivity {
     private String selectedMemoryGroup = null; // null means unfiltered, no group selected
     private int activeMemoryId = -1; // -1 means we're in simplex mode
 
-    // Audio visualizers
-    private Visualizer rxAudioVisualizer = null;
-    private static int AUDIO_VISUALIZER_RATE = Visualizer.getMaxCaptureRate();
+    // Tx audio visualizer constants
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
     private static int RECORD_ANIM_FPS = 30;
 
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
+    private boolean radioAudioServiceBound = false;
+
+    // The firmware version of the kv4p HT radio device that's attached, or -1 if unknown.
+    private int firmwareVersion = -1;
+
+    // This receiver will listen for a broadcast from the RadioAudioService when it's shutting down
+    // (this is so that when the user swipes-away the kv4p HT notification, the app closes).
+    private final BroadcastReceiver serviceShutdownReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (RadioAudioService.ACTION_SERVICE_STOPPING.equals(intent.getAction())) {
+                if (radioAudioServiceBound) {
+                    unbindService(connection);
+                    radioAudioServiceBound = false;
+                }
+                finish();
+            }
+        }
+    };
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -277,26 +294,29 @@ public class MainActivity extends AppCompatActivity {
         });
 
         requestAudioPermissions();
-        requestNotificationPermissions(); // TODO store a boolean in our DB so we only ask for this once (in case they say no)
+        requestNotificationPermissions();
+        requestForegroundServiceLocationPermissions();
+        requestFinePositionPermissions();
         attachListeners();
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         registerReceiver(usbReceiver, filter);
+        registerReceiver(serviceShutdownReceiver, new IntentFilter(RadioAudioService.ACTION_SERVICE_STOPPING), ContextCompat.RECEIVER_NOT_EXPORTED);
 
         viewModel.loadDataAsync(this::applySettings);
     }
 
-    final Context context = this;
+    final MainActivity context = this;
 
     /** Defines callbacks for service binding, passed to bindService(). */
     private ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName className,
                                        IBinder service) {
-            RadioAudioService.RadioBinder binder = (RadioAudioService.RadioBinder) service;
-            radioAudioService = binder.getService();
+            radioAudioService = ((RadioAudioService.RadioBinder) service).getService();
+            radioAudioServiceBound = true;
 
             // Give the service other critical things it needs to work properly.
             RadioAudioService.RadioAudioServiceCallbacks callbacks = new RadioAudioService.RadioAudioServiceCallbacks() {
@@ -354,13 +374,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void audioTrackCreated() {
-                    if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        if (radioAudioService.getAudioTrackSessionId() != -1) {
-                            createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId());
-                        }
-                    }
-                }
+                public void audioTrackCreated() { }
 
                 @Override
                 public void packetReceived(APRSPacket aprsPacket) {
@@ -375,6 +389,11 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void outdatedFirmware(int firmwareVer) {
                     showVersionSnackbar(firmwareVer);
+                }
+
+                @Override
+                public void firmwareVersionReceived(int firmwareVer) {
+                    context.firmwareVersion = firmwareVer;
                 }
 
                 @Override
@@ -472,6 +491,9 @@ public class MainActivity extends AppCompatActivity {
                         viewModel.getAppDb().aprsMessageDao().insertAll(myBeacon);
                         viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
                     });
+
+                    // Show a quick snackbar letting the user know we beaconed (so they can stop it if this is surprising)
+                    showSimpleSnackbar("Transmitted APRS beacon on this frequency");
                 }
 
                 @Override
@@ -511,6 +533,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
             radioAudioService = null;
+            radioAudioServiceBound = false;
             Log.d("DEBUG", "RadioAudioService disconnected from MainActivity.");
             // TODO if this is unexpected we should probably try to restart the service.
         }
@@ -520,6 +543,34 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
 
+        // Check necessary permissions, and if all is well, start RadioAudioService.
+        tryToStartRadioAudioService();
+    }
+
+    private void tryToStartRadioAudioService() {
+        // If it's already started, bail.
+        if (null != radioAudioService && radioAudioServiceBound) {
+            return;
+        }
+
+        // Do we have all the necessary permissions granted?
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestFinePositionPermissions();
+            return;
+        }
+
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestNotificationPermissions();
+            return;
+        }
+
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.FOREGROUND_SERVICE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestForegroundServiceLocationPermissions();
+            return;
+        }
+
         Intent intent = new Intent(this, RadioAudioService.class);
         intent.putExtra(AppSetting.SETTING_CALLSIGN, callsign);
         intent.putExtra(AppSetting.SETTING_SQUELCH, squelch);
@@ -527,22 +578,23 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
 
         // Binding to the RadioAudioService causes it to start (e.g. play back audio).
+        Intent serviceIntent = new Intent(this, RadioAudioService.class);
+        ContextCompat.startForegroundService(this, serviceIntent); // Make it foreground (persistent)
         bindService(intent, connection, Context.BIND_AUTO_CREATE);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        releaseRxAudioVisualizer();
-
+        unregisterReceiver(serviceShutdownReceiver);
         try {
             threadPoolExecutor.shutdownNow();
         } catch (Exception ignored) { }
 
         try {
-            if (radioAudioService != null) {
-                radioAudioService.unbindService(connection);
-                radioAudioService = null;
+            if (radioAudioServiceBound) {
+                unbindService(connection);
+                radioAudioServiceBound = false;
             }
         } catch (Exception e) { }
     }
@@ -565,11 +617,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
 
         // If we arrived here from an APRS text chat notification, open text chat.
-        if (intent != null && intent.getAction().equals(INTENT_OPEN_CHAT)) {
+        if (intent != null && intent.getAction() != null && intent.getAction().equals(INTENT_OPEN_CHAT)) {
             showScreen(ScreenType.SCREEN_CHAT);
         }
     }
@@ -711,13 +768,6 @@ public class MainActivity extends AppCompatActivity {
                 // frequency. User must set it manually (or select it before coming to chat mode, but
                 // can't be scanning).
                 radioAudioService.setScanning(false, true);
-
-                // If this is a v1.x radio, disable RSSI when in APRS chat mode.
-                // See https://github.com/VanceVagell/kv4p-ht/issues/310.
-                if (!radioAudioService.isHasPhysPttButton()) { // Poor proxy for "Is this a v1.x PCB?"
-                    radioAudioService.setRssi(false);
-                    findViewById(R.id.sMeter).setVisibility(View.GONE);
-                }
             }
             setScanningUi(false);
 
@@ -761,7 +811,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onClick(View view) {
                         callsignSnackbar.dismiss();
-                        settingsClicked(null);
+                        startSettingsActivity();
                     }
                 })
                 .setBackgroundTint(getResources().getColor(R.color.primary))
@@ -789,7 +839,7 @@ public class MainActivity extends AppCompatActivity {
                 .setAction("Settings", new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        settingsClicked(null);
+                        startSettingsActivity();
                     }
                 })
                 .setBackgroundTint(getResources().getColor(R.color.primary))
@@ -859,36 +909,6 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.textChatInput).requestFocus();
     }
 
-    private void releaseRxAudioVisualizer() {
-        if (rxAudioVisualizer != null) {
-            rxAudioVisualizer.setEnabled(false);
-            rxAudioVisualizer.release();
-            rxAudioVisualizer = null;
-        }
-    }
-
-    private void createRxAudioVisualizer(int audioSessionId) {
-        releaseRxAudioVisualizer();
-        rxAudioVisualizer = new Visualizer(audioSessionId);
-        rxAudioVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
-            @Override
-            public void onWaveFormDataCapture(Visualizer visualizer, byte[] waveform, int samplingRate) {
-                if (disableAnimations) { return; }
-
-                float rxVolume = Math.max(0f, (((float) waveform[0] + 128f) / 256) - 0.4f); // 0 to 1
-                ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
-                ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
-                layoutParams.width = (int) (MAX_AUDIO_VIZ_SIZE * rxVolume);
-                layoutParams.height = (int) (MAX_AUDIO_VIZ_SIZE * rxVolume);
-                rxAudioView.setLayoutParams(layoutParams);
-            }
-
-            @Override
-            public void onFftDataCapture(Visualizer visualizer, byte[] fft, int samplingRate) { }
-        }, AUDIO_VISUALIZER_RATE, true, false);
-        rxAudioVisualizer.setEnabled(true);
-    }
-
     private void updateRecordingVisualization(int waitMs, float txVolume) {
         if (disableAnimations) { return; }
         final Handler handler = new Handler(Looper.getMainLooper());
@@ -912,20 +932,20 @@ public class MainActivity extends AppCompatActivity {
             final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
                 .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
             runOnUiThread(() -> {
-                applyRfPower(settings);
-                applySquelch(settings);
-                applyCallSign(settings);
-                applyGroupAndMemory(settings);
-                applyTxFreqLimits(settings);
-                applyBandwidthAndGain(settings);
-                applyFilters(settings);
-                applyDisableAnimations(settings);
-                applyAprs(settings);
+                applyRfPowerSetting(settings);
+                applySquelchSettings(settings);
+                applyCallSignSetting(settings);
+                applyGroupAndMemorySettings(settings);
+                applyTxFreqLimitsSettings(settings);
+                applyBandwidthAndGainSettings(settings);
+                applyFiltersSettings(settings);
+                applyAccessibilitySettings(settings);
+                applyAprsSettings(settings);
             });
         });
     }
 
-    private void applyRfPower(Map<String, String> settings) {
+    private void applyRfPowerSetting(Map<String, String> settings) {
         List<String> powerOptions = Arrays.asList(getResources().getStringArray(R.array.rf_power_options));
         String power = settings.getOrDefault(AppSetting.SETTING_RF_POWER, powerOptions.get(0));
         if (radioAudioService != null) {
@@ -933,7 +953,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyCallSign(Map<String, String> settings) {
+    private void applyCallSignSetting(Map<String, String> settings) {
         this.callsign = settings.getOrDefault(AppSetting.SETTING_CALLSIGN, "");
         boolean empty = callsign.isEmpty();
         findViewById(R.id.sendButton).setEnabled(!empty);
@@ -943,7 +963,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyGroupAndMemory(Map<String, String> settings) {
+    private void applyGroupAndMemorySettings(Map<String, String> settings) {
         String group = settings.get(AppSetting.SETTING_LAST_GROUP);
         if (group != null && !group.isEmpty()) {
             selectMemoryGroup(group);
@@ -964,7 +984,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyTxFreqLimits(Map<String, String> settings) {
+    private void applyTxFreqLimitsSettings(Map<String, String> settings) {
         if (radioAudioService == null) return;
         String min2m = settings.get(AppSetting.SETTING_MIN_2_M_TX_FREQ);
         String max2m = settings.get(AppSetting.SETTING_MAX_2_M_TX_FREQ);
@@ -977,7 +997,7 @@ public class MainActivity extends AppCompatActivity {
         radioAudioService.updateFrequencyLimitsForBand();
     }
 
-    private void applyBandwidthAndGain(Map<String, String> settings) {
+    private void applyBandwidthAndGainSettings(Map<String, String> settings) {
         if (radioAudioService == null) return;
         String bandwidth = settings.get(AppSetting.SETTING_BANDWIDTH);
         String gain = settings.get(AppSetting.SETTING_MIC_GAIN_BOOST);
@@ -985,7 +1005,7 @@ public class MainActivity extends AppCompatActivity {
         if (gain != null) radioAudioService.setMicGainBoost(gain);
     }
 
-    private void applySquelch(Map<String, String> settings) {
+    private void applySquelchSettings(Map<String, String> settings) {
         String squelchStr = settings.get(AppSetting.SETTING_SQUELCH);
         if (squelchStr == null) return;
         squelch = Integer.parseInt(squelchStr);
@@ -994,10 +1014,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyFilters(Map<String, String> settings) {
-        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_EMPHASIS, "true"));
-        boolean highpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_HIGHPASS, "true"));
-        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_LOWPASS, "true"));
+    private void applyFiltersSettings(Map<String, String> settings) {
+        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_EMPHASIS, "false"));
+        boolean highpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_HIGHPASS, "false"));
+        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_LOWPASS, "false"));
         if (radioAudioService != null && radioAudioService.isRadioConnected()) {
             threadPoolExecutor.execute(() -> {
                 if (radioAudioService.getMode() != RadioMode.STARTUP && radioAudioService.getMode() != RadioMode.SCAN) {
@@ -1008,7 +1028,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyDisableAnimations(Map<String, String> settings) {
+    private void applyAccessibilitySettings(Map<String, String> settings) {
         disableAnimations = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_DISABLE_ANIMATIONS, "false"));
         if (disableAnimations) {
             ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
@@ -1018,9 +1038,11 @@ public class MainActivity extends AppCompatActivity {
             rxAudioView.setLayoutParams(layoutParams);
             updateRecordingVisualization(100, 0.0f);
         }
+
+        stickyPTT = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_STICKY_PTT, "false"));
     }
 
-    private void applyAprs(Map<String, String> settings) {
+    private void applyAprsSettings(Map<String, String> settings) {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
 
@@ -1034,10 +1056,11 @@ public class MainActivity extends AppCompatActivity {
         if (beacon != null && radioAudioService != null) {
             boolean beaconEnabled = Boolean.parseBoolean(beacon);
             threadPoolExecutor.execute(() -> radioAudioService.setAprsBeaconPosition(beaconEnabled));
-            if (beaconEnabled) requestPositionPermissions();
+            if (beaconEnabled) {
+                requestFinePositionPermissions();
+            }
         }
     }
-
 
     @SuppressLint("ClickableViewAccessibility")
     private void attachListeners() {
@@ -1405,7 +1428,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    protected void requestPositionPermissions() {
+    protected void requestFinePositionPermissions() {
         // Check that the user allows our app to get position, otherwise ask for the permission.
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Should we show an explanation?
@@ -1420,7 +1443,7 @@ public class MainActivity extends AppCompatActivity {
                             public void onClick(DialogInterface dialogInterface, int i) {
                                 ActivityCompat.requestPermissions(MainActivity.this,
                                         new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                        REQUEST_LOCATION_PERMISSION_CODE);
+                                        REQUEST_FINE_LOCATION_PERMISSION_CODE);
                             }
                         })
                         .create()
@@ -1429,7 +1452,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                        REQUEST_LOCATION_PERMISSION_CODE);
+                        REQUEST_FINE_LOCATION_PERMISSION_CODE);
             }
         }
     }
@@ -1466,6 +1489,38 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    protected void requestForegroundServiceLocationPermissions() {
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.FOREGROUND_SERVICE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.FOREGROUND_SERVICE_LOCATION)) {
+
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission needed")
+                        .setMessage("This app needs to know your location for APRS beaconing")
+                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                ActivityCompat.requestPermissions(MainActivity.this,
+                                        new String[]{Manifest.permission.FOREGROUND_SERVICE_LOCATION},
+                                        REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE);
+                            }
+                        })
+                        .create()
+                        .show();
+
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.FOREGROUND_SERVICE_LOCATION},
+                        REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE);
+            }
+        } else {
+            // Permission has already been granted
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -1476,9 +1531,6 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
-                    if (null != radioAudioService && radioAudioService.getAudioTrackSessionId() != -1) {
-                        createRxAudioVisualizer(radioAudioService.getAudioTrackSessionId()); // Visualizer requires RECORD_AUDIO permission (even if not visualizing the mic input).
-                    }
                     initAudioRecorder();
                 } else {
                     // Permission denied, things will just be broken.
@@ -1490,19 +1542,32 @@ public class MainActivity extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
+                    tryToStartRadioAudioService();
                 } else {
                     // Permission denied
                     Log.d("DEBUG", "Warning: Need notifications permission to be able to send APRS chat message notifications");
                 }
                 return;
             }
-            case REQUEST_LOCATION_PERMISSION_CODE: {
+            case REQUEST_FINE_LOCATION_PERMISSION_CODE: {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
+                    tryToStartRadioAudioService();
                 } else {
                     // Permission denied
-                    Log.d("DEBUG", "Warning: Need fine location permission to include in APRS messages (user turned this setting on)");
+                    Log.d("DEBUG", "Warning: Need fine location permission to include location in APRS messages");
+                }
+                return;
+            }
+            case REQUEST_FOREGROUND_SERVICE_LOCATION_PERMISSION_CODE: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted.
+                    tryToStartRadioAudioService();
+                } else {
+                    // Permission denied
+                    Log.d("DEBUG", "Warning: Need foreground service location permission for APRS beaconing");
                 }
                 return;
             }
@@ -1708,7 +1773,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPositionPermissions();
+            requestFinePositionPermissions();
             return;
         }
 
@@ -1913,7 +1978,7 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, REQUEST_FIND_REPEATERS);
     }
 
-    public void settingsClicked(View view) {
+    public void startSettingsActivity() {
         if (radioAudioService != null) {
             radioAudioService.setScanning(false); // Stop scanning when settings brought up, so we don't get in a bad state after.
             radioAudioService.endPtt(); // Be safe, just in case we are somehow transmitting when settings is tapped.
@@ -1925,6 +1990,7 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("requestCode", REQUEST_SETTINGS);
         if (radioAudioService != null && radioAudioService.isRadioConnected()) {
             intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
+            intent.putExtra("firmwareVersion", firmwareVersion);
         }
         startActivityForResult(intent, REQUEST_SETTINGS);
     }
@@ -1936,10 +2002,12 @@ public class MainActivity extends AppCompatActivity {
         moreMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
-                String findNearbyRepeatersLabel = getString(R.string.find_repeaters_menu_item);
-
-                if (item.getTitle().equals(findNearbyRepeatersLabel)) {
+                if (item.getItemId() == R.id.import_from_repeaterbook) {
                     startFindRepeatersActivity();
+                } else if (item.getItemId() == R.id.flash_firmware) {
+                    startFirmwareActivity();
+                } else if (item.getItemId() == R.id.settings) {
+                    startSettingsActivity();
                 }
                 return true;
             }

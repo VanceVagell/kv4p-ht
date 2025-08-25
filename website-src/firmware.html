@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Firmware - kv4p HT</title>
+  <link rel="icon" type="image/x-icon" href="img/favicon-16x16.png">
+  
+    <!-- kv4p HT is an open source project, I'm not selling anything or showing ads. I use Google Analytics only to understand how people are using the website. - KV4P -->
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-485V3MK16Y"></script>
+	<script>
+	  window.dataLayer = window.dataLayer || [];
+	  function gtag(){dataLayer.push(arguments);}
+	  gtag('js', new Date());
+
+	  gtag('config', 'G-485V3MK16Y');
+	</script>
+  
+  <script type="module" src="https://kv4p.com/esp-web-tools/dist/esp-web-tools.min.js?module"></script>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="firmware.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <a href="index.html">
+        <img src="img/icon-lg-dark.png" alt="App icon for kv4p HT, a white handheld radio on a black background">
+      </a>
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="quick_start.html">Quickstart</a></li>
+        <li><a href="firmware.html" class="selected">Firmware</a></li>
+        <li><a href="contribute.html">Contribute</a></li>
+        <li><a href="updates.html">Release notes</a></li>
+        <li><a href="feedback.html">Feedback</a></li>
+        <li><a href="testing.html">Testing</a></li>
+        <li><a href="donate.html">Donate</a></li>
+      </ul>
+      <p class="copyright">
+        &copy; 2024 <a href="https://www.qrz.com/db/kv4p" target="_new">Vance Vagell</a>
+      </p>
+    </nav>
+
+    <main class="main-content-area">
+		<h1>Firmware flasher</h1>
+		<p>If for some reason the Android app can't flash your kv4p HT firmware, you can use this web-based flasher. It's not usually necessary.</p>
+		<ul>
+			<li>Plug USB C cable from kv4p HT to your computer (your phone's browser won't work)</li>
+			<li>Use this online flash tool to install the latest firmware, which requires Chrome, Chromium, or Edge.</li>
+			<ul>
+				<li><b>If you don't see a red button below, your browser doesn't support flashing.</b></li>
+			</ul>
+			<li><b>Select the device "CP2102 USB to UART Bridge Controller"</b>: 
+			<esp-web-install-button manifest="https://kv4p.com/esp-web-tools/manifest-v14.json"><button slot="activate">Flash firmware v14</button></esp-web-install-button></li>
+			<esp-web-install-button manifest="https://kv4p.com/esp-web-tools/manifest-v15.json"><button slot="activate" class="deemphasize">Flash firmware v15 (beta users only)</button></esp-web-install-button></li>
+			<li>Device not showing up? You might need to install the <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads" target="_new">CP210x device driver</a>.</li>
+		</ul>
+		
+	    <h1>Non-volatile storage (NVS) flasher</h1>
+	    <p><b>If you bought a kit, you probably don't need to use this</b>, because the kit vendor would have flashed NVS for you. This permanently stores the PCB version you have in the microcontroller, so it understands the features that are available (such as VHF vs. UHF).</p>
+		  <esp-web-install-button manifest="https://kv4p.com/hwconfig/manifest-v1x-vhf.json"><button slot="activate" class="deemphasize">Flash NVS for PCB v1.x with VHF</button></esp-web-install-button>
+		  <esp-web-install-button manifest="https://kv4p.com/hwconfig/manifest-v1x-uhf.json"><button slot="activate" class="deemphasize">Flash NVS for PCB v1.x with UHF</button></esp-web-install-button>
+		  <esp-web-install-button manifest="https://kv4p.com/hwconfig/manifest-v2.0c-vhf.json"><button slot="activate" class="deemphasize">Flash NVS for PCB v2.0c with VHF</button></esp-web-install-button>
+		  <esp-web-install-button manifest="https://kv4p.com/hwconfig/manifest-v2.0d-vhf.json"><button slot="activate" class="deemphasize">Flash NVS for PCB v2.0d with VHF</button></esp-web-install-button>
+    </main>
+  </div>
+</body>
+</html>

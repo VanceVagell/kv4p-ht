@@ -1,0 +1,60 @@
+esp-web-install-button button {
+	display: block;
+	padding: 8px 32px;
+	font-size: 16px;
+	font-weight: 500;
+	color: #FFF;
+	background-color: #AD5642;
+	border: none;
+	border-radius: 8px;
+	text-decoration: none;
+	box-shadow: 0 0 3px 0 #999;
+	margin: 8px 0;
+	cursor: pointer;
+}
+
+.main-content-area {
+	padding: 0 32px;
+	max-width: 1280px;
+	line-height: 1.4em;
+}
+
+p {
+	margin-bottom: 1em;
+}
+
+iframe {
+	margin: 24px auto 48px auto;
+	display: block;
+}
+
+h3 {
+    top: 32px;
+    position: absolute;
+    margin-left: 16px;
+    font-size: 28px;
+    display: inline-block;
+}
+
+h2 {
+	font-size: 24px;
+	margin: 8px 0 16px 0;
+	display: block;
+}
+
+h1 {
+	margin-top: 48px;
+}
+
+#loose {
+	flex: 1 1 auto;
+	min-width: 0; /* helps prevent awkward overflow in some cases */
+	list-style: decimal outside none;
+}
+
+button.deemphasize {
+	background: #eee;
+	box-shadow: 0 0 3px 0 #ccc;
+	color: #1F1E1A;
+}
+

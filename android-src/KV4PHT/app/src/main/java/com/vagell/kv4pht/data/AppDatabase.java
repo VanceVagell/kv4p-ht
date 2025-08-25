@@ -25,16 +25,13 @@ import androidx.room.Room;
 import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 
-import com.vagell.kv4pht.data.migrations.MigrationFrom1To2;
-import com.vagell.kv4pht.data.migrations.MigrationFrom2To3;
-import com.vagell.kv4pht.data.migrations.MigrationFrom3To4;
-import com.vagell.kv4pht.data.migrations.MigrationFrom4To5;
+import com.vagell.kv4pht.data.migrations.*;
 
 /**
  * Singleton Room database for kv4p HT application.
  */
 @Database(
-    version = 5,
+    version = 6,
     entities = {AppSetting.class, ChannelMemory.class, APRSMessage.class}
 )
 @SuppressWarnings("java:S6548")
@@ -49,6 +46,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final Migration MIGRATION_2_3 = new MigrationFrom2To3();
     public static final Migration MIGRATION_3_4 = new MigrationFrom3To4();
     public static final Migration MIGRATION_4_5 = new MigrationFrom4To5();
+    public static final Migration MIGRATION_5_6 = new MigrationFrom5To6();
 
     @SuppressWarnings({"java:S3077", "java:S3008"})
     private static volatile AppDatabase INSTANCE;
@@ -78,7 +76,8 @@ public abstract class AppDatabase extends RoomDatabase {
                 MIGRATION_1_2,
                 MIGRATION_2_3,
                 MIGRATION_3_4,
-                MIGRATION_4_5
+                MIGRATION_4_5,
+                MIGRATION_5_6
             )
             // WARNING: This will delete all user data if migration is missing.
             // Remove or guard this call in production.

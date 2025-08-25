@@ -10,8 +10,8 @@ android {
         applicationId "com.vagell.kv4pht"
         minSdk 26
         targetSdk 35
-        versionCode 44
-        versionName "1.9.4"
+        versionCode 47
+        versionName "1.9.7"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -35,6 +35,7 @@ android {
     buildFeatures {
         viewBinding true
         dataBinding true
+        buildConfig true
     }
     packagingOptions {
         resources.excludes.add("META-INF/*")

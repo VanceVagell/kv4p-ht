@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:id="@+id/import_from_repeaterbook"
-        android:title="@string/find_repeaters_menu_item" />
+    <group>
+        <item android:id="@+id/import_from_repeaterbook"
+            android:title="@string/find_repeaters_menu_item" />
+
+        <item android:id="@+id/flash_firmware"
+            android:title="@string/flash_firmware_menu_item" />
+    </group>
+
+    <group>
+        <item android:id="@+id/settings"
+            android:title="@string/settings" />
+    </group>
 </menu>

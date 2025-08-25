@@ -50,6 +50,7 @@
     <string name="your_callsign">您的呼号</string>
     <string name="my_position_accuracy">本机位置精确度</string>
     <string name="advanced">高级</string>
+    <string name="versions">版本信息</string>
     <string name="bandwidth">带宽</string>
     <string name="min_2m_tx_frequency">2m波段最小发射频率</string>
     <string name="max_2m_tx_frequency">2m波段最大发射频率</string>
@@ -86,6 +87,7 @@
     <string name="done">完成</string>
     <string name="more_display">更多</string>
     <string name="find_repeaters_menu_item">查找附近的中继台</string>
+    <string name="flash_firmware_menu_item">刷写固件</string>
     <string name="find_repeaters_title">附近中继台</string>
     <string name="find_repeaters_instructions">登录 RepeaterBook，或注册新账户。然后，附近的中继器应该会自动下载。如果没有，请尝试点击下方的“下载”。</string>
     <string name="nearby_repeaters_found">找到附近中继台：&#160;</string>
@@ -96,4 +98,6 @@
         <item>Low</item>
     </string-array>
     <string name="mhz">MHz</string>
+    <string name="app_version">应用版本</string>
+    <string name="firmware_version">固件版本</string>
 </resources>

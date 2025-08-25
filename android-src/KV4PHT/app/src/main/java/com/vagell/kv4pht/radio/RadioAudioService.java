@@ -22,8 +22,10 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 
 import android.Manifest;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
@@ -37,14 +39,20 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.provider.MediaStore;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.annotation.RequiresPermission;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationToken;
@@ -67,6 +75,7 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
+import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.APRSTypes;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
@@ -82,6 +91,7 @@ import com.vagell.kv4pht.radio.Protocol.Group;
 import com.vagell.kv4pht.radio.Protocol.HlState;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
+import com.vagell.kv4pht.ui.MainActivity;
 import com.vagell.kv4pht.ui.ToneHelper;
 
 import java.io.IOException;
@@ -114,6 +124,9 @@ public class RadioAudioService extends Service {
     private static final int RUNAWAY_TX_TIMEOUT_SEC = 180;
     // Intents this Activity can handle besides the one that starts it in default mode.
     public static final String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
+    public static final String ACTION_STOP_SERVICE = "com.vagell.kv4pht.STOP_RADIO_SERVICE";
+    public static final String ACTION_SERVICE_STOPPING = "com.vagell.kv4pht.SERVICE_STOPPING";
+
 
     // === USB Device Matching ===
     private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
@@ -121,10 +134,14 @@ public class RadioAudioService extends Service {
 
     // === Audio Constants ===
     public static final int AUDIO_SAMPLE_RATE = 48000;
-    private static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
+    private static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO;
     private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
     public static final int OPUS_FRAME_SIZE = 1920; // 40ms at 48kHz
-    private static final int RX_AUDIO_MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, RX_AUDIO_CHANNEL_CONFIG, RX_AUDIO_FORMAT) * 2;
+    private static final int RX_AUDIO_MIN_BUFFER_SIZE =
+            AudioTrack.getMinBufferSize(
+                    AUDIO_SAMPLE_RATE,
+                    RX_AUDIO_CHANNEL_CONFIG,
+                    RX_AUDIO_FORMAT);
 
     // === APRS Constants ===
     public static final int APRS_POSITION_EXACT = 0;
@@ -142,6 +159,10 @@ public class RadioAudioService extends Service {
     private static final float VHF_MAX_FREQ = 174.0f;
     private static final float UHF_MIN_FREQ = 400.0f;
     private static final float UHF_MAX_FREQ = 480.0f;
+
+    // === Used for the persistent notification ===
+    private PowerManager.WakeLock wakeLock;
+    private static final int SERVICE_ID = 1;
 
     // These will be overwritten by user settings
     @Setter
@@ -192,7 +213,7 @@ public class RadioAudioService extends Service {
     @Getter
     @Setter
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
-    private final ScheduledExecutorService aprsPositionExecutor = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledExecutorService beaconScheduler;
     private ScheduledFuture<?> beaconFuture;
     private int messageNumber = 0;
 
@@ -223,7 +244,7 @@ public class RadioAudioService extends Service {
     private int consecutiveSilenceBytes = 0;
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     @Setter
-    private @NonNull String bandwidth = "Wide";
+    private @NonNull String bandwidth = "25kHz";
 
     // === Android Components ===
     private final IBinder binder = new RadioBinder();
@@ -262,6 +283,7 @@ public class RadioAudioService extends Service {
         default void packetReceived(APRSPacket aprsPacket) {}
         default void scannedToMemory(int memoryId) {}
         default void outdatedFirmware(int firmwareVer) {}
+        default void firmwareVersionReceived(int firmwareVer) {}
         default void missingFirmware() {}
         default void txStarted() {}
         default void txEnded() {}
@@ -279,8 +301,13 @@ public class RadioAudioService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        // Retrieve necessary parameters from the intent.
         Bundle bundle = intent.getExtras();
+        if (null == bundle) {
+            Log.d(TAG, "Warning: RadioAudioService started without parameters, likely in a bad state.");
+            return binder;
+        }
+
+        // Retrieve necessary parameters from the intent.
         callsign = bundle.getString("callsign");
         squelch = bundle.getInt("squelch");
         activeMemoryId = bundle.getInt("activeMemoryId");
@@ -318,14 +345,55 @@ public class RadioAudioService extends Service {
         if (this.aprsBeaconPosition != enabled) {
             this.aprsBeaconPosition = enabled;
             if (enabled) {
-                beaconFuture = aprsPositionExecutor.scheduleWithFixedDelay(this::sendPositionBeacon,
-                    0, APRS_BEACON_MINS, TimeUnit.MINUTES);
-                // Tell callback we started (e.g. so it can show a SnackBar letting user know)
-                callbacks.aprsBeaconing(true, aprsPositionAccuracy);
+                startBeaconScheduler();
             } else if (beaconFuture != null) {
-                beaconFuture.cancel(true);
-                beaconFuture = null;
+                stopBeaconScheduler();
             }
+        }
+    }
+
+    public boolean getAprsBeaconPosition() {
+        return this.aprsBeaconPosition;
+    }
+
+    private void startBeaconScheduler() {
+        if (beaconScheduler == null || beaconScheduler.isShutdown()) {
+            beaconScheduler = Executors.newSingleThreadScheduledExecutor();
+        }
+        // Cancel any old task
+        if (beaconFuture != null) {
+            beaconFuture.cancel(false);
+        }
+
+        // First run now (or after initial delay), then every 5 minutes
+        beaconFuture = beaconScheduler.scheduleAtFixedRate(() -> {
+            try {
+                // Acquire a short wakelock just for the beacon if you prefer not to keep it held.
+                if (wakeLock != null && !wakeLock.isHeld()) {
+                    // 20 seconds is usually ample for a single beacon
+                    wakeLock.acquire(20_000);
+                }
+                if (aprsBeaconPosition) {
+                    sendPositionBeacon();  // uses FusedLocation + TX
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Beacon task error", t);
+            } finally {
+                if (wakeLock != null && wakeLock.isHeld()) {
+                    try { wakeLock.release(); } catch (Throwable ignored) {}
+                }
+            }
+        }, 0, APRS_BEACON_MINS, TimeUnit.MINUTES);
+    }
+
+    private void stopBeaconScheduler() {
+        if (beaconFuture != null) {
+            beaconFuture.cancel(false);
+            beaconFuture = null;
+        }
+        if (beaconScheduler != null) {
+            beaconScheduler.shutdownNow();
+            beaconScheduler = null;
         }
     }
 
@@ -348,6 +416,7 @@ public class RadioAudioService extends Service {
                 Log.e(TAG, "Error while restart ESP32.", e);
             }
         }
+
         this.mode = mode;
     }
 
@@ -363,6 +432,26 @@ public class RadioAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // Keep CPU on while service is running so we can play and process audio
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                "RadioAudioService::Playback");
+        wakeLock.setReferenceCounted(false);
+
+        // Create channel for the persistent notification user can interact with
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel chan = new NotificationChannel(
+                    "KV4P_HT_RADIO_AUDIO",
+                    "kv4p HT audio",
+                    NotificationManager.IMPORTANCE_DEFAULT);
+            chan.setSound(null, null); // no sound for the notification itself
+            chan.setShowBadge(false);
+
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            nm.createNotificationChannel(chan);
+        }
+
         SecureRandom random = new SecureRandom();
         messageNumber = random.nextInt(APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
@@ -378,6 +467,77 @@ public class RadioAudioService extends Service {
         handler.postDelayed(this::findESP32Device, 10);
     }
 
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && ACTION_STOP_SERVICE.equals(intent.getAction())) {
+            Intent stopIntent = new Intent(ACTION_SERVICE_STOPPING);
+            stopIntent.setPackage(getPackageName());
+            sendBroadcast(stopIntent);
+            stopForeground(true);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
+        // Build an ongoing notification
+        Notification notification = buildForegroundNotification();
+
+        // Promote to foreground
+        startForeground(SERVICE_ID, notification);
+
+        // Make the service sticky so it is restarted if the process dies
+        return START_STICKY;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private Notification buildForegroundNotification() {
+        Intent openApp = new Intent(this, MainActivity.class);
+        PendingIntent pi = PendingIntent.getActivity(
+                this, 0, openApp, PendingIntent.FLAG_IMMUTABLE);
+
+        // Create an Intent that will be sent when the user swipes the notification away.
+        Intent stopSelf = new Intent(this, RadioAudioService.class);
+        stopSelf.setAction(ACTION_STOP_SERVICE);
+        PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        return new NotificationCompat.Builder(this, "KV4P_HT_RADIO_AUDIO")
+                .setSmallIcon(R.drawable.ic_radio)
+                .setContentTitle("kv4p HT")
+                .setContentText("Starting up...")
+                .setContentIntent(pi)
+                .setDeleteIntent(pStopSelf)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // visible on lock screen
+                .build();
+    }
+
+    private void updateForegroundNotification(String text) {
+        // Create an Intent that will be sent when the user swipes the notification away.
+        Intent stopSelf = new Intent(this, RadioAudioService.class);
+        stopSelf.setAction(ACTION_STOP_SERVICE);
+        PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Notification notification = new NotificationCompat.Builder(this, "KV4P_HT_RADIO_AUDIO")
+                .setSmallIcon(R.drawable.ic_radio)
+                .setContentTitle("kv4p HT")
+                .setContentText(text)
+                .setContentIntent(buildPendingIntent())
+                .setDeleteIntent(pStopSelf)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // visible on lock screen
+                .build();
+
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        nm.notify(SERVICE_ID, notification);
+    }
+
+    private PendingIntent buildPendingIntent() {
+        Intent open = new Intent(this, MainActivity.class);
+        return PendingIntent.getActivity(this, 0, open,
+                PendingIntent.FLAG_IMMUTABLE);
+    }
+
     /**
      * This must be set before any method that requires channels (like scanning or tuning to a memory) is access, or
      * they will just report an error. And it should also be called whenever the active memories have changed (e.g.
@@ -390,12 +550,45 @@ public class RadioAudioService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+
         protocolHandshake.onDestroy();
+
+        // Clean up APRS beacon executor
+        if (this.beaconScheduler != null && !beaconScheduler.isShutdown()) {
+            beaconScheduler.shutdownNow();
+        }
+
+        // Clean up USB resources to prevent race conditions on restart
+        if (usbIoManager != null) {
+            usbIoManager.stop();
+            usbIoManager = null;
+        }
+        if (serialPort != null) {
+            try {
+                serialPort.close();
+            } catch (IOException e) {
+                // Ignore, closing anyways.
+            }
+            serialPort = null;
+        }
+
         if (audioTrack != null) {
             audioTrack.stop();
             audioTrack.release();
             audioTrack = null;
         }
+
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+        }
+        wakeLock = null;
+        stopForeground(true);
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        stopSelf();
     }
 
     private void createNotificationChannels() {
@@ -422,7 +615,7 @@ public class RadioAudioService extends Service {
      * @return true if the frequency is within the allowed transmission range, false otherwise.
      */
     private boolean isTxAllowed(float freq) {
-        final float halfBandwidth = (bandwidth.equals("Wide") ? 0.025f : 0.0125f) / 2;
+        final float halfBandwidth = (bandwidth.equals("25kHz") ? 0.025f : 0.0125f) / 2;
         return  (freq >= (minTxFreq + halfBandwidth)) && (freq <= (maxTxFreq - halfBandwidth));
     }
 
@@ -439,6 +632,7 @@ public class RadioAudioService extends Service {
         float freq;
         try {
             freq = Float.parseFloat(makeSafeHamFreq(frequencyStr));
+            updateForegroundNotification("Simplex " + frequencyStr + " MHz");
         } catch (NumberFormatException e) {
             Log.w(TAG, "Invalid frequency string: " + frequencyStr, e);
             return;
@@ -450,7 +644,7 @@ public class RadioAudioService extends Service {
             hostToEsp32.group(Group.builder()
                 .freqTx(freq)
                 .freqRx(freq)
-                .bw((bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5))
+                .bw((bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5))
                 .squelch((byte) squelchLevel)
                 .build());
         }
@@ -502,13 +696,15 @@ public class RadioAudioService extends Service {
             hostToEsp32.group(Group.builder()
                 .freqTx(txFreq)
                 .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
-                .bw(bandwidth.equals("Wide") ? DRA818_25K : DRA818_12K5)
+                .bw(bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5)
                 .squelch((byte) squelchLevel)
                 .ctcssRx((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)))
                 .ctcssTx((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)))
                 .build());
         }
         txAllowed = isTxAllowed(txFreq);
+
+        updateForegroundNotification(memory.name + " (" + memory.frequency + " MHz)");
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
@@ -543,10 +739,10 @@ public class RadioAudioService extends Service {
             audioTrack = null;
         }
         AudioAttributes audioAttributes = new AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ASSISTANT)
+            .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build();
-        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(audioAttributes)
             .build();
         audioTrack = new AudioTrack.Builder()
@@ -558,6 +754,7 @@ public class RadioAudioService extends Service {
                 .build())
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setBufferSizeInBytes(RX_AUDIO_MIN_BUFFER_SIZE)
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .build();
         audioTrack.setVolume(0.0f);
         audioTrackVolume = 0.0f;
@@ -582,7 +779,7 @@ public class RadioAudioService extends Service {
     public void startPtt() {
         if (hostToEsp32 == null) {
             Log.e(TAG, "Attempted to start PTT but hostToEsp32 is null. USB connection likely failed.");
-            callbacks.radioMissing(); // Notify UI that connection is problematic
+            radioMissing();
             return;
         }
         if (mode == RadioMode.RX && txAllowed) {
@@ -626,7 +823,7 @@ public class RadioAudioService extends Service {
             return;
         }
         Log.w(TAG, "No ESP32 detected");
-        callbacks.radioMissing();
+        radioMissing();
     }
 
     private boolean isESP32Device(UsbDevice device) {
@@ -653,7 +850,7 @@ public class RadioAudioService extends Service {
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
             Log.e(TAG, "Error: no available USB drivers.");
-            callbacks.radioMissing();
+            radioMissing();
             return;
         }
         // Open a connection to the first available driver.
@@ -661,7 +858,7 @@ public class RadioAudioService extends Service {
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
             Log.e(TAG, "Error: couldn't open USB device.");
-            callbacks.radioMissing();
+            radioMissing();
             return;
         }
         serialPort = driver.getPorts().get(0); // Most devices have just one port (port 0)
@@ -671,7 +868,7 @@ public class RadioAudioService extends Service {
             serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.e(TAG, "Error: couldn't open USB serial port.");
-            callbacks.radioMissing();
+            radioMissing();
             return;
         }
         try { // These settings needed for better data transfer on Adafruit QT Py ESP32-S2
@@ -708,6 +905,23 @@ public class RadioAudioService extends Service {
         hostToEsp32 = new Protocol.Sender(usbIoManager);
         Log.i(TAG, "Connected to ESP32.");
         protocolHandshake.start();
+    }
+
+    // Callback for ProtocolHandshake
+    public void radioConnected() {
+        // Acquire WakeLock if not already held to ensure audio processing continues in background.
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
+        callbacks.radioConnected();
+    }
+
+    // Called in many situations where radio connection is found to be broken
+    private void radioMissing() {
+        callbacks.radioMissing(); // Notify UI that radio wasn't found
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release(); // Don't keep screen on
+        }
     }
 
     /**
@@ -829,6 +1043,9 @@ public class RadioAudioService extends Service {
     }
 
     public void sendAudioToESP32(float[] samples, boolean dataMode) {
+        if (hostToEsp32 == null) {
+            return; // If connection is lost, just drop the audio frame.
+        }
         if (!dataMode) {
             samples = applyMicGain(samples);
         }
@@ -934,6 +1151,7 @@ public class RadioAudioService extends Service {
      */
     private void handleRxAudio(final byte[] param, final Integer len) {
         int decoded = opusDecoder.decode(param, len, pcmFloat);
+
         if (getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
             afskDemodulator.addSamples(pcmFloat, decoded);
             if (audioTrack != null) {
@@ -1024,7 +1242,7 @@ public class RadioAudioService extends Service {
             return;
         }
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-            Log.d(TAG, "Missing Google Play Services — cannot retrieve GPS location.");
+            Log.d(TAG, "Can't get GPS position: missing Google Play Services.");
             callbacks.unknownLocation();
             return;
         }
@@ -1063,7 +1281,7 @@ public class RadioAudioService extends Service {
             final APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
             txAX25Packet(aprsPacket.toAX25Frame());
-            callbacks.sentAprsBeacon(latitude, longitude);
+            callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude());
         } catch (Exception e) {
             Log.w(TAG, "Exception while trying to beacon APRS location.", e);
         }

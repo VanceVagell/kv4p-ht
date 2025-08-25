@@ -61,12 +61,15 @@
     <string name="your_callsign">Your callsign</string>
     <string name="my_position_accuracy">My position accuracy</string>
     <string name="advanced">Advanced</string>
+    <string name="versions">Versions</string>
     <string name="bandwidth">Bandwidth</string>
     <string name="min_2m_tx_frequency">Min 2m TX frequency</string>
     <string name="max_2m_tx_frequency">Max 2m TX frequency</string>
     <string name="min_70cm_tx_frequency">Min 70cm TX frequency</string>
     <string name="max_70cm_tx_frequency">Max 70cm TX frequency</string>
     <string name="mic_gain_boost">Mic gain boost</string>
+    <string name="app_version">App version</string>
+    <string name="firmware_version">Firmware version</string>
     <string name="to" translatable="false">to&#160;</string>
     <string name="kv4p_aprs_message" translatable="false">KV4P</string>
     <string name="message_body_example">The quick brown fox jumped over the lazy dog.</string>
@@ -89,17 +92,18 @@
     <string name="can_t_tx_outside_ham_band">Can\'t tx outside ham band</string>
     <string name="edit_memory">Edit memory</string>
     <string name="set_now">Set now</string>
-    <string name="exact">exact</string>
-    <string name="approx">approx</string>
+    <string name="exact">Exact</string>
+    <string name="approx">Approx</string>
     <string name="position_beacon_message_1">"Beaconing your "</string>
     <string name="position_beacon_message_2">" position on active frequency"</string>
     <string name="settings">Settings</string>
     <string name="beacon_my_position">Beacon my position</string>
-    <string name="wide" translatable="false">Wide</string>
-    <string name="narrow" translatable="false">Narrow</string>
+    <string name="wide" translatable="false">25kHz</string>
+    <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>
     <string name="sticky_ptt" translatable="false">Sticky PTT</string>
     <string name="find_repeaters_menu_item">Find nearby repeaters</string>
+    <string name="flash_firmware_menu_item">Flash firmware</string>
     <string name="find_repeaters_title">Find nearby repeaters</string>
     <string name="find_repeaters_instructions">Sign in to RepeaterBook, or create an account if you don’t have one. Then, nearby repeaters should download automatically. If not, try tapping "Download" below.</string>
     <string name="nearby_repeaters_found">Nearby repeaters found:&#160;</string>

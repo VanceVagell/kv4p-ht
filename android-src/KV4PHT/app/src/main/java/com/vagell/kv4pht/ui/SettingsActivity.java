@@ -35,6 +35,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
+import com.vagell.kv4pht.BuildConfig;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AppSetting;
 
@@ -52,12 +53,14 @@ public class SettingsActivity extends AppCompatActivity {
     private final ExecutorService threadPoolExecutor = Executors.newSingleThreadExecutor();
     private MainViewModel viewModel = null;
     private boolean hasHighLowPowerSwitch = false;
+    private int firmwareVersion = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
         hasHighLowPowerSwitch = getIntent().getBooleanExtra("hasHighLowPowerSwitch", false);
+        firmwareVersion = getIntent().getIntExtra("firmwareVersion", -1);
         setContentView(R.layout.activity_settings);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         populateOriginalValues(this::attachListeners);
@@ -67,6 +70,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateMicGainOptions();
         populateAprsOptions();
         populateRadioOptions();
+        populateVersions();
     }
 
     @Override
@@ -118,6 +122,15 @@ public class SettingsActivity extends AppCompatActivity {
             // Set default text to first item
             rfPowerTextView.setText(getResources().getStringArray(R.array.rf_power_options)[0], false);
         }
+    }
+
+    private void populateVersions() {
+        TextView appVersionTextView = findViewById(R.id.settings_app_version);
+        appVersionTextView.setText(appVersionTextView.getText() + " " + BuildConfig.VERSION_NAME);
+
+        TextView firmwareVersionTextView = findViewById(R.id.settings_firmware_version);
+        firmwareVersionTextView.setText(firmwareVersionTextView.getText() + " " +
+                (firmwareVersion == -1 ? "unknown" : Integer.toString(firmwareVersion)));
     }
 
     private void setTextIfPresent(Map<String, String> settings, String key, int viewId) {
