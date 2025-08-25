@@ -543,11 +543,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-    }
-
     private void tryToStartRadioAudioService() {
         // If it's already started, bail.
         if (null != radioAudioService && radioAudioServiceBound) {
@@ -1039,7 +1034,7 @@ public class MainActivity extends AppCompatActivity {
             boolean enabled = Boolean.parseBoolean(beacon);
             Runnable action = () -> radioAudioService.setAprsBeaconPosition(enabled);
             if (enabled) {
-                ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), (allGranted) -> {
+                ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), allGranted -> {
                     if (allGranted) {
                         threadPoolExecutor.execute(action);
                     }});
