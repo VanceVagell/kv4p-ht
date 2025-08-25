@@ -98,6 +98,7 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -167,6 +168,7 @@ public class MainActivity extends AppCompatActivity {
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
     private boolean radioAudioServiceBound = false;
+    private final AtomicBoolean bindingInProgress = new AtomicBoolean(false);
 
     // The firmware version of the kv4p HT radio device that's attached, or -1 if unknown.
     private int firmwareVersion = -1;
@@ -518,20 +520,11 @@ public class MainActivity extends AppCompatActivity {
                     doShowNotification(notificationChannelId, notificationTypeId, title, message, tapIntentName);
                 }
             };
-
-            ensurePermissions(List.of(Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS),
-                allGranted -> {
-                    if (Boolean.TRUE.equals(allGranted)) {
-                        initAudioRecorder();
-                        radioAudioService.setCallbacks(callbacks);
-                        applySettings(); // Some settings require radioAudioService to exist to apply.
-                        radioAudioService.setChannelMemories(viewModel.getChannelMemories());
-                        runOnUiThread(() -> radioAudioService.start());
-                        tryToStartRadioAudioService();
-                    } else {
-                        showSimpleSnackbar("App can't work without required permissions");
-                    }
-                });
+            initAudioRecorder();
+            radioAudioService.setCallbacks(callbacks);
+            applySettings(); // Some settings require radioAudioService to exist to apply.
+            radioAudioService.setChannelMemories(viewModel.getChannelMemories());
+            runOnUiThread(() -> radioAudioService.start());
         }
 
         @Override
@@ -543,21 +536,37 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private void tryToStartRadioAudioService() {
-        // If it's already started, bail.
-        if (null != radioAudioService && radioAudioServiceBound) {
+    private List<String> requiredNowPerms() {
+        return List.of(Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.POST_NOTIFICATIONS);
+    }
+
+    private void startAndBindRadioAudioService() {
+        if (radioAudioServiceBound && radioAudioService != null) {
             return;
         }
-        Intent intent = new Intent(this, RadioAudioService.class);
-        intent.putExtra(AppSetting.SETTING_CALLSIGN, callsign);
-        intent.putExtra(AppSetting.SETTING_SQUELCH, squelch);
-        intent.putExtra("activeMemoryId", activeMemoryId);
-        intent.putExtra("activeFrequencyStr", activeFrequencyStr);
+        if (!bindingInProgress.compareAndSet(false, true)) {
+            return;
+        }
+        ensurePermissions(requiredNowPerms(), allGranted -> {
+            if (allGranted) {
+                final Intent svc = new Intent(this, RadioAudioService.class)
+                    .putExtra(AppSetting.SETTING_CALLSIGN, callsign)
+                    .putExtra(AppSetting.SETTING_SQUELCH, squelch)
+                    .putExtra("activeMemoryId", activeMemoryId)
+                    .putExtra("activeFrequencyStr", activeFrequencyStr);
+                startForegroundService(svc);
+                bindService(svc, connection, Context.BIND_AUTO_CREATE);
+                bindingInProgress.set(false);
+            } else {
+                showSimpleSnackbar("App can't work without required permissions");
+            }
+        });
+    }
 
-        // Binding to the RadioAudioService causes it to start (e.g. play back audio).
-        Intent serviceIntent = new Intent(this, RadioAudioService.class);
-        ContextCompat.startForegroundService(this, serviceIntent); // Make it foreground (persistent)
-        bindService(intent, connection, Context.BIND_AUTO_CREATE);
+    @Override
+    protected void onStart() {
+        super.onStart();
+        startAndBindRadioAudioService();
     }
 
     @Override
@@ -580,17 +589,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         viewModel.loadDataAsync(this::applySettings);
-        // If we lost reference to the radioAudioService, re-establish it
-        if (null == radioAudioService) {
-            Intent intent = new Intent(this, RadioAudioService.class);
-            intent.putExtra(AppSetting.SETTING_CALLSIGN, callsign);
-            intent.putExtra(AppSetting.SETTING_SQUELCH, squelch);
-            intent.putExtra("activeMemoryId", activeMemoryId);
-            intent.putExtra("activeFrequencyStr", activeFrequencyStr);
-
-            // Binding to the RadioAudioService causes it to start (e.g. play back audio).
-            bindService(intent, connection, Context.BIND_AUTO_CREATE);
-        }
+        // If we lost reference to the radioAudioService, startAndBindRadioAudioService();
+        startAndBindRadioAudioService();
     }
 
     @Override
