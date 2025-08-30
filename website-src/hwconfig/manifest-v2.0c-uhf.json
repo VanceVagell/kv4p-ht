@@ -1,0 +1,13 @@
+{
+  "name": "PCB Manifest v2.0c UHF",
+  "version": "v2.0c-uhf",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        { "path": "../hwconfig/board-config-v2.0c-uhf.bin", "offset": 36864}
+      ]
+    }
+  ]
+}
