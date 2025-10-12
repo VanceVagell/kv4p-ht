@@ -204,9 +204,26 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     }
 
+    private String[] getDownloadRepeatersUrls() {
+        if (radioAudioService.getRadioType() == RadioAudioService.RadioModuleType.VHF) {
+            String usVhfURL = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
+                    latitude + "&long=" + longitude + "&distance=25&Dunit=m&band=4&call=&use=OPEN&status_id=1";
+            String internationalVhfURL = "https://www.repeaterbook.com/row_repeaters/downloads/csv/index.php?func=prox2&city=&lat=" +
+                    latitude + "&long=" + longitude + "&distance=40&Dunit=k&band=4&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
+                    latitude + "&long=" + longitude; // Unknown why RepeaterBook requires lat/long twice for int'l, but it fails without this second one (empty list returned).
+            return new String[]{usVhfURL, internationalVhfURL};
+        } else { // UHF
+            String usUhfURL = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
+                    latitude + "&long=" + longitude + "&distance=25&Dunit=m&band=16&band2=&call=&use=OPEN&status_id=1";
+            String internationalUhfURL = "https://www.repeaterbook.com/row_repeaters/downloads/csv/index.php?func=prox2&city=&lat=" +
+                    latitude + "&long=" + longitude + "&distance=40&Dunit=k&band=16&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
+                    latitude + "&long=" + longitude; // Unknown why RepeaterBook requires lat/long twice for int'l, but it fails without this second one (empty list returned).
+            return new String[]{usUhfURL, internationalUhfURL};
+        }
+    }
+
     private void startCSVDownload() {
-        String downloadRepeatersUrlStr = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
-                latitude + "&long=" + longitude + "&distance=25&Dunit=m&band1=14&band2=&call=&use=OPEN&status_id=1";
+        String[] downloadUrls = getDownloadRepeatersUrls();
 
         // Initialize the WebView
         WebView webView = findViewById(R.id.repeaterBookWebView);
@@ -223,6 +240,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 // so we can download a list of nearby repeaters.
                 if (url.startsWith("https://www.repeaterbook.com/index.php/") && url.endsWith("/user-profile?layout=edit")) {
                     Log.d("DEBUG", "Signed in to RepeaterBook, downloading nearby repeaters.");
+
+                    // TODO try downloading from next URL in the array, see if there is >1 repeater in the result, and if not move on to the next. If run out of URLs, error to user no repeaters found nearby.
                     webView.loadUrl(downloadRepeatersUrlStr);
                 } else {
                     Log.d("DEBUG", "Navigating to: " + url);
