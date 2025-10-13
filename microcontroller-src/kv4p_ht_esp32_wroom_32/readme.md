@@ -12,7 +12,7 @@ The KV4P-HT protocol defines the communication interface between the microcontro
   * COMMAND_HOST_CONFIG params are bool isHigh (not radioType).
   * COMMAND_VERSION payload includes windowSize, rfModuleType, and features (not hw_ver_t).
  
-* **Current Version:** 2.1
+* 2.1
 * **Changelog:**
   * Initial version with core command set.
   * Parameter length field upgraded from 1 byte to 2 bytes (`uint16_t`).
