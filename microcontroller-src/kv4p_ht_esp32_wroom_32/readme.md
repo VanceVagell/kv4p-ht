@@ -8,16 +8,18 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 * **Current Version:** 2.2
 * **Changelog:**
+  * Incoming command set now includes COMMAND_HOST_HL (0x08) and COMMAND_HOST_RSSI (0x09).
+  * COMMAND_HOST_CONFIG params are bool isHigh (not radioType).
+  * COMMAND_VERSION payload includes windowSize, rfModuleType, and features (not hw_ver_t).
+ 
+* **Current Version:** 2.1
+* **Changelog:**
   * Initial version with core command set.
   * Parameter length field upgraded from 1 byte to 2 bytes (`uint16_t`).
   * Added `COMMAND_WINDOW_UPDATE` **(ESP32 → Android)**.
   * `COMMAND_VERSION` payload now includes `windowSize`, **`rfModuleType`**, and **`features`**.
   * Audio streams are now OPUS encoded.
   * Window-based flow control implemented for all incoming commands, inspired by HTTP/2.
-  * Command delimiter now 4 byte `0xDEADBEEF`
-  * Incoming command set now includes COMMAND_HOST_HL (0x08) and COMMAND_HOST_RSSI (0x09).
-  * COMMAND_HOST_CONFIG params are bool isHigh (not radioType).
-  * COMMAND_VERSION payload includes windowSize, rfModuleType, and features (not hw_ver_t).
 
 ## Packet Structure
 
