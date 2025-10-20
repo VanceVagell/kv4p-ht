@@ -63,7 +63,15 @@ struct [[gnu::packed]] Version {
   char         radioModuleStatus;
   size_t       windowSize;
   RfModuleType rfModuleType;
-  uint8_t      features; 
+  uint8_t      features;
+  char         chipModel[16];          // e.g., "ESP32" or "ESP32-S3"
+  char         buildTime[20];          // e.g., "Aug 05 2025 14:00:00"
+  char         sketchMd5[33];          // 32-char MD5 + null  
+  char         gitCommitId[8];         // short SHA (7 chars + null)
+  char         gitBranch[16];          // branch name
+  char         gitCommitDate[11];      // YYYY-MM-DD (10 chars + null)
+  char         gitTag[16];             // latest tag
+  bool         gitDirty;               // 0 or 1 
 };
 REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define FEATURE_HAS_HL      (1 << 0)
@@ -164,7 +172,15 @@ void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize,
     .windowSize = windowSize,
     .rfModuleType = rfModuleType,
     .features = features,
+    .gitDirty = GIT_DIRTY
   };
+  strncpy(params.gitCommitId, GIT_COMMIT_ID, sizeof(params.gitCommitId));
+  strncpy(params.gitBranch, GIT_BRANCH, sizeof(params.gitBranch));
+  strncpy(params.gitCommitDate, GIT_COMMIT_DATE, sizeof(params.gitCommitDate));
+  strncpy(params.gitTag, GIT_TAG, sizeof(params.gitTag));
+  strncpy(params.chipModel, ESP.getChipModel(), sizeof(params.chipModel));
+  strncpy(params.buildTime, __DATE__ " " __TIME__, sizeof(params.buildTime));
+  strncpy(params.sketchMd5, ESP.getSketchMD5().c_str(), sizeof(params.sketchMd5));
   __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
 }
 
