@@ -92,6 +92,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
     private double latitude = 0, longitude = 0;
     private String[] downloadUrls = null;
     private int downloadUrlIndex = 0;
+    private WebView downloadWebView;
+    private WebView webViewForDownloads;
+    private boolean isManualDownloadAttempt = false;
 
     // Android permission stuff
     private static final int REQUEST_LOCATION_PERMISSION_CODE = 1;
@@ -224,16 +227,20 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     }
 
-    private void attemptNextDownload(WebView webView) {
+    private void attemptNextDownload() {
         if (downloadUrls == null) {
             downloadUrls = getDownloadRepeatersUrls();
         }
         if (downloadUrlIndex < downloadUrls.length) {
             String url = downloadUrls[downloadUrlIndex];
             Log.d("DEBUG", "Attempting download from URL #" + downloadUrlIndex + ": " + url);
-            webView.loadUrl(url);
+            webViewForDownloads.loadUrl(url);
         } else {
-            showErrorSnackbar("No nearby repeaters found.");
+            if (isManualDownloadAttempt) {
+                showErrorSnackbar("No nearby repeaters found.");
+            } else {
+                Log.d("DEBUG", "Silent download attempt failed, user may not be logged in yet.");
+            }
         }
     }
 
@@ -272,25 +279,31 @@ public class FindRepeatersActivity extends AppCompatActivity {
         // Initialize the WebView
         WebView webView = findViewById(R.id.repeaterBookWebView);
 
+        // For silent downloads
+        downloadWebView = new WebView(this);
+        downloadWebView.setDownloadListener(createDownloadListener());
+
         // Enable JavaScript if your webpage needs it
         webView.getSettings().setJavaScriptEnabled(true);
 
         // Set a WebViewClient to handle page loading inside the app
         webView.setWebViewClient(new WebViewClient() {
-            // Optionally detect URL changes:
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                // After the user signs in, RepeaterBook redirects to the main site, detect that
-                // so we can download a list of nearby repeaters.
-                if (url.startsWith("https://www.repeaterbook.com/index.php/") && url.endsWith("/user-profile?layout=edit")) {
-                    Log.d("DEBUG", "Signed in to RepeaterBook, downloading nearby repeaters.");
-                    attemptNextDownload(view);
-                } else {
-                    Log.d("DEBUG", "Navigating to: " + url);
-                    view.loadUrl(url); // Continue loading inside the WebView
-                }
-
+                Log.d("DEBUG", "Navigating to: " + url);
+                view.loadUrl(url); // Continue loading inside the WebView
                 return true;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (nearbyRepeaters == null) {
+                    Log.d("DEBUG", "Page finished loading: " + url + ". Attempting silent download.");
+                    isManualDownloadAttempt = false;
+                    webViewForDownloads = downloadWebView;
+                    downloadUrlIndex = 0;
+                    attemptNextDownload();
+                }
             }
         });
 
@@ -302,16 +315,10 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     /** Alternative method for people who's webview doesn't let us track when login is complete. */
     public void findRepeatersDownloadButtonClicked(View view) {
-        // Initialize the WebView
-        WebView webView = findViewById(R.id.repeaterBookWebView);
-
-        // Enable JavaScript if your webpage needs it
-        webView.getSettings().setJavaScriptEnabled(true);
-
-        webView.setDownloadListener(createDownloadListener());
-
+        isManualDownloadAttempt = true;
+        webViewForDownloads = findViewById(R.id.repeaterBookWebView);
         downloadUrlIndex = 0;
-        attemptNextDownload(webView);
+        attemptNextDownload();
     }
 
     @Override
@@ -381,8 +388,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                     Log.d("DEBUG", "Num repeaters found: " + nearbyRepeaters.size());
                     if (null == nearbyRepeaters || nearbyRepeaters.size() == 0) {
                         downloadUrlIndex++;
-                        WebView webView = findViewById(R.id.repeaterBookWebView);
-                        attemptNextDownload(webView);
+                        attemptNextDownload();
                     } else {
                         // Ask the user what memory group to dump these repeaters in.
                         promptUserForMemoryGroup();
@@ -390,8 +396,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 } catch (Exception e) {
                     Log.d("DEBUG", "Error while trying to parse repeater CSV file.", e);
                     downloadUrlIndex++;
-                    WebView webView = findViewById(R.id.repeaterBookWebView);
-                    attemptNextDownload(webView);
+                    attemptNextDownload();
                 }
             }
         }
