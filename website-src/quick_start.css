@@ -1,18 +1,3 @@
-esp-web-install-button button {
-	display: block;
-	padding: 8px 32px;
-	font-size: 16px;
-	font-weight: 500;
-	color: #FFF;
-	background-color: #AD5642;
-	border: none;
-	border-radius: 8px;
-	text-decoration: none;
-	box-shadow: 0 0 3px 0 #999;
-	margin: 24px 0;
-	cursor: pointer;
-}
-
 .main-content-area {
 	padding: 0 32px;
 	max-width: 1280px;
@@ -30,7 +15,7 @@ iframe {
 .main-content-area ol>li {
 	padding: 16px 24px;
 	border-radius: 32px;
-	box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+	box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
 }
 
 h3 {
@@ -51,6 +36,7 @@ li h3+ul {
 	margin-top: 16px;
 	padding-inline-start: 52px;
 	padding-bottom: 24px;
+	padding-bottom: 24px;
 }
 
 ol {
@@ -70,48 +56,30 @@ ol>li::marker {
 	font-weight: 500;
 }
 
+ul>li {
+	list-style-position: outside;	
+	margin-bottom: 0.5em !important;
+}
+
 h1 {
 	margin-top: 48px;
 }
 
-#parts-columns {
-	display: flex;	
-}
-
-.parts-column {
-	vertical-align: top;
-	padding: 0 120px 0 0;
-}
-
-#kits {
-	width: 326px;
-	flex: 0 0 auto; /* prevents flex from shrinking it */
-    background-color: #eee;
-    padding: 8px 16px;
-    margin-right: 16px;
-}
-
-#loose {
-	flex: 1 1 auto;
-	min-width: 0; /* helps prevent awkward overflow in some cases */
-	list-style: decimal outside none;
-}
-
 #kit-vendors {
-	text-align: center;
+	padding-left: 64px;
 } 
 
 .kit-vendor {
-	border: 1px #fefefe;
 	border-radius: 16px;	
 	padding: 24px 32px;
 	background: #fff;
 	display: inline-block;
 	text-decoration: none;
-	margin: 0 0 24px 0;
+	margin: 0 24px 24px 0;
 	vertical-align: top;
 	width: 256px;
 	text-align: center;
+	box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
 }
 
 .kit-vendor * {
@@ -127,5 +95,9 @@ h1 {
 	font-weight: 500;
 	color: #1F1E1A;
 	font-size: 24px;
+}
+
+#qr-code {
+	box-shadow: 0 0 6px rgba(0, 0, 0, 0.1);
 }
 

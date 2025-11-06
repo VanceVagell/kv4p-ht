@@ -45,8 +45,8 @@
 				<iframe width="800" height="450" src="https://www.youtube.com/embed/TTboBthcY18?si=1QlrYJJHVByPtxnj" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 				<ol>
 				<li><h3>Order the parts</h3>
-					<div id="parts-columns">
-						<div id="kits" class="parts-column">
+					<div id="parts-rows">
+						<div id="kits" class="parts-row">
 							<h2>Buy a kit</h2>
 							<p>kv4p HT makes no money from these sites, but they provide convenient kits:</p>
 							<br>
@@ -59,112 +59,29 @@
 									<span class="vendor-name">Chelegance</span>
 									<img src="img/cropped-WHITE_CHELEGANCE_V2.0-300x100.png" alt="Logo that says Chelegance JNCRadio">
 								</a>								
-								<a href="https://newdiytech.com/products/kv4p-ht-homebrew-vhf-radio-android-phone-into-ham-radio-transceiver-pcb-v1-7-sa818-v-sa818s-radio-module" target="_new" class="kit-vendor">
+								<a href="https://newdiytech.com/products/kv4p-ht-homebrew-vhf-radio-android-phone-into-ham-radio-transceiver-pcb-v1-7-sa818-v-sa818s-radio-module?variant=46742237184167" target="_new" class="kit-vendor">
 									<span class="vendor-name">New DIY</span>
 									<img src="img/newdiy-logo.avif" alt="Logo that is a red circle with the words New DIY inside it">
 								</a>
 							</div>
 						</div>
 						
-						<div id="loose" class="parts-column">
+						<div id="loose" class="parts-row">
 							<h2>Or loose parts</h2>
 							<ul>
-								<li><a href="https://www.aliexpress.com/i/2251832119661277.html" target="_new">SA818-V radio module</a> (DRA818V may be substituted)</li>
-								<li>SMA male antenna of your choice. e.g. <a href="https://a.co/d/7bbVemg" target="_new">pocket-size antenna</a> or <a href="https://signalstuff.com/products/st-sma-m/?band=2m70cm-dual-band" target="_new">1/4 wave Signal Stick</a></li>
-								<li>Choose one of these 2 connectors (either works, they have the 5.1k ohm pull-down resistors needed to make problem ESP32s work):</li>
-								<ul>
-									<li>Option 1 (Recommended): <a href="https://www.amazon.com/dp/B0744BKDRD" target="_new">this short cable</a> and  <a href="https://www.amazon.com/dp/B0B8PGDFFV" target="_new">this adapter</a> from Amazon</a>. This option may have better audio quality.</li>
-									<li>Option 2: <a href="https://www.aliexpress.us/item/3256806668421477.html" target="_new">this small connector from AliExpress</a> (<b>choose "Color: C female-C-C"</b>, be careful because they have similar names!)</li>
-								</ul>
-								<li><a href="https://a.co/d/cDwCeES" target="_new">SMA female 90 degree connector</a></li>
-								<li><a href="https://www.amazon.com/dp/B07PFW5SXB" target="_new">Sticky gel pads</a></li>
-								<li>PCB and matching ESP32 dev board</li>
-								<ul>
-									<li>NOTE: All three 1.8x PCBs have the same functionality. The only difference is the ESP32 dev board footprint.</li>
-								</ul>
-								<br>
-								<table>
-								  <thead>
-									<tr>
-									  <th>Version&nbsp;&nbsp;&nbsp;&nbsp;</th>
-									  <th>ESP32 dev board</th>
-									  <th>PCBWay link</th>
-									  <th>JLCPCB files</th>
-									</tr>
-								  </thead>
-								  <tbody>
-									<tr>
-									  <td>v1.8a</td>
-									  <td>
-										1" wide 38-pin ESP32<br>
-										(example on 
-										<a href="https://www.aliexpress.us/item/3256807630806447.html" target="_blank">
-										  AliExpress
-										</a>, choose 38-pin USB C)
-									  </td>
-									  <td>
-										<a href="https://www.pcbway.com/project/shareproject/kv4p_HT_v1_8a_011e3d77.html" target="_blank">
-										  PCBWay (choose PCB+Assembly)
-										</a>
-									  </td>
-									  <td>
-										<a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb/v1.8a%20(original%2038pin)" target="_blank">
-										  JLCPCB files (GitHub)
-										</a>
-									  </td>
-									</tr>
-									<tr>
-									  <td>v1.8b</td>
-									  <td>
-										0.9" narrow 38-pin ESP32<br>
-										(example on 
-										<a href="https://www.amazon.com/gp/product/B0CNYK7WT2" target="_blank">
-										  Amazon
-										</a>)
-									  </td>
-									  <td>
-										<a href="https://www.pcbway.com/project/shareproject/kv4p_HT_v1_8b_0fbd6b21.html" target="_blank">
-										  PCBWay (choose PCB+Assembly)
-										</a>
-									  </td>
-									  <td>
-										<a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb/v1.8b%20(narrow%2038pin)" target="_blank">
-										  JLCPCB files (GitHub)
-										</a>
-									  </td>
-									</tr>
-									<tr>
-									  <td>v1.8c</td>
-									  <td>
-										30-pin ESP32<br>
-										(example on 
-										<a href="https://www.amazon.com/gp/product/B0CR5Y2JVD" target="_blank">
-										  Amazon
-										</a>)
-									  </td>
-									  <td>
-										<a href="https://www.pcbway.com/project/shareproject/kv4p_HT_v1_8b_30_pin_ESP32_31ae7ea9.html" target="_blank">
-										  PCBWay (choose PCB+Assembly)
-										</a>
-									  </td>
-									  <td>
-										<a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb/v1.8c%20(30pin)" target="_blank">
-										  JLCPCB files (GitHub)
-										</a>
-									  </td>
-									</tr>
-								  </tbody>
-								</table>
-								<br>
-								<li><b>NOTE: v2.0x is also available</b> as a kit from <a href="https://electronics.halibut.com/product/kv4p-ht-v2/" target="_new">Halibut Electronics</a> or <a href="https://chelegance.com/products/kv4p-ht-plugplay-vhf-radio1-7b/" target="_new">Chelegance</a>, or you can order your own PCBs from our <a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb/KiCAD/kv4p-ht/production" target="_new">files in GitHub</a>. v2.0x is a substantial improvement over the v1.x line, <b>it does not require an ESP32 dev board</b>, and it was properly engineered by a professional.</li>
+								<li>If you don't want a kit, you can order a custom PCB from a service such as PCBWay or JLCPCB (<a href="https://github.com/VanceVagell/kv4p-ht/tree/main/pcb" target="_new">PCB designs are here</a>)</li>
+								<li>Buy a SA818-V or SA818-U radio module (DRA818V or DRA818U may be substituted)</li>
+								<li>Buy a SMA male antenna of your choice. e.g. <a href="https://a.co/d/7bbVemg" target="_new">pocket-size antenna</a> or <a href="https://signalstuff.com/products/st-sma-m/?band=2m70cm-dual-band" target="_new">1/4 wave Signal Stick</a></li>
+								<li>You can use a USB C cable of your choosing, or buy a U-shaped adapter like <a href="https://www.aliexpress.us/item/3256806668421477.html" target="_new">this small connector from AliExpress</a> (<b>choose "Color: C female-C-C"</b>, be careful because they have similar names!)</li>
+								<li>Buy <a href="https://www.amazon.com/dp/B07PFW5SXB" target="_new">sticky gel pads</a> to connect it to your phone securely with no residue</li>
 							</ul>
 						</div>
 					</div>
 				</li>
 				<li><h3>Solder the parts</h3>
 					<ul>
-					<li>Solder the SA818-V, ESP32, and SMA connector to the PCB.</li>
-					<li>Then, trim all of the ESP32's legs as short as possible (so they don't contact your phone).</li>
+					<li>Solder the radio module and any other parts you didn't have pre-installed in the custom PCB you ordered.</li>
+					<li>Then, trim any through-hole component legs (just the SMA connector on newer PCB designs) so they don't contact your phone.</li>
 					</ul>
 				<li><h3>3D print the case</h3>
 					<ul>
@@ -179,14 +96,20 @@
 					<li>Screw on the antenna</li>
 					</ul>
 				</li>
+				<li><h3>Optional: Flash non-volatile storage (NVS)</h3>
+					<ul>
+					<li>If you bought a kit, you can probably skip this step as the vendor should have done this for you!</li>
+					<li>Otherwise, flash the NVS that matches your PCB version and radio module type from the bottom of the <a href="firmware.html">Firmware page</a>.</li>
+					</ul>
+				</li>
 				<li><h3>Install the Android app</h3>
 					<ul>
 						<li>The app requires Android 8 or higher, which came out in 2017 and pretty much all phones with a USB C connector will have.</li>
 						<li>You can search the Play store for "kv4p HT", use this link to the <a href="https://play.google.com/store/apps/details?id=com.vagell.kv4pht" target="_new">kv4p HT app</a>, or scan this QR code:</li>
-						<li>NOTE: The first time you run the Android app, it will flash the firmware onto your kv4p HT. It takes about 5-10 minutes.</li>
 						<br>
-						<p><img width="128px" height="128px" src="img/install-app-qr-code.png" alt="QR code for the kv4p HT app on the Google Play store."></p>
-
+						<p><img id="qr-code" width="128px" height="128px" src="img/install-app-qr-code.png" alt="QR code for the kv4p HT app on the Google Play store."></p>
+						<br>
+						<li>NOTE: The first time you run the Android app, it will flash the firmware onto your kv4p HT. It takes about 5-10 minutes.</li>
 					</ul>
 				</li>
 				</ol>
