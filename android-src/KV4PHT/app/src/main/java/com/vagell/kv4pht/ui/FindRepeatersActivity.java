@@ -70,6 +70,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.util.ArrayList;
@@ -82,7 +83,6 @@ import java.util.concurrent.TimeUnit;
 public class FindRepeatersActivity extends AppCompatActivity {
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private Snackbar errorSnackbar = null;
-    private String filename = null; // Name of CSV file that was downloaded
     private long downloadId = 0; // So we can tell when the download is done
     private List<RepeaterInfo> nearbyRepeaters = null;
     private String locality = null;
@@ -90,6 +90,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
     private RadioServiceConnector serviceConnector;
     private RadioAudioService radioAudioService;
     private double latitude = 0, longitude = 0;
+    private String[] downloadUrls = null;
+    private int downloadUrlIndex = 0;
 
     // Android permission stuff
     private static final int REQUEST_LOCATION_PERMISSION_CODE = 1;
@@ -222,8 +224,50 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     }
 
+    private void attemptNextDownload(WebView webView) {
+        if (downloadUrls == null) {
+            downloadUrls = getDownloadRepeatersUrls();
+        }
+        if (downloadUrlIndex < downloadUrls.length) {
+            String url = downloadUrls[downloadUrlIndex];
+            Log.d("DEBUG", "Attempting download from URL #" + downloadUrlIndex + ": " + url);
+            webView.loadUrl(url);
+        } else {
+            showErrorSnackbar("No nearby repeaters found.");
+        }
+    }
+
+    private DownloadListener createDownloadListener() {
+        return new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent,
+                                        String contentDisposition, String mimeType,
+                                        long contentLength) {
+                Log.d("DEBUG", "RepeaterBook CSV download started.");
+
+                // Fetch cookies to maintain session
+                String cookies = CookieManager.getInstance().getCookie(url);
+
+                // Now download the file using Android's DownloadManager
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                request.addRequestHeader("Cookie", cookies);
+                request.addRequestHeader("User-Agent", userAgent);
+                request.setMimeType(mimeType);
+                request.setDescription("Downloading repeater CSV...");
+                String filename = URLUtil.guessFileName(url, contentDisposition, mimeType);
+                request.setTitle(filename);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename);
+
+                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                downloadId = dm.enqueue(request);
+            }
+        };
+    }
+
     private void startCSVDownload() {
-        String[] downloadUrls = getDownloadRepeatersUrls();
+        downloadUrls = getDownloadRepeatersUrls();
+        downloadUrlIndex = 0;
 
         // Initialize the WebView
         WebView webView = findViewById(R.id.repeaterBookWebView);
@@ -240,9 +284,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 // so we can download a list of nearby repeaters.
                 if (url.startsWith("https://www.repeaterbook.com/index.php/") && url.endsWith("/user-profile?layout=edit")) {
                     Log.d("DEBUG", "Signed in to RepeaterBook, downloading nearby repeaters.");
-
-                    // TODO try downloading from next URL in the array, see if there is >1 repeater in the result, and if not move on to the next. If run out of URLs, error to user no repeaters found nearby.
-                    webView.loadUrl(downloadRepeatersUrlStr);
+                    attemptNextDownload(view);
                 } else {
                     Log.d("DEBUG", "Navigating to: " + url);
                     view.loadUrl(url); // Continue loading inside the WebView
@@ -252,31 +294,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             }
         });
 
-        webView.setDownloadListener(new DownloadListener() {
-            @Override
-            public void onDownloadStart(String url, String userAgent,
-                                        String contentDisposition, String mimeType,
-                                        long contentLength) {
-                Log.d("DEBUG", "RepeaterBook CSV download started.");
-
-                // Fetch cookies to maintain session
-                String cookies = CookieManager.getInstance().getCookie(url);
-
-                // Now download the file using Android's DownloadManager
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                request.addRequestHeader("Cookie", cookies);
-                request.addRequestHeader("User-Agent", userAgent);
-                request.setMimeType(mimeType);
-                request.setDescription("Downloading repeater CSV...");
-                filename = URLUtil.guessFileName(url, contentDisposition, mimeType);
-                request.setTitle(filename);
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimeType));
-
-                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                downloadId = dm.enqueue(request);
-            }
-        });
+        webView.setDownloadListener(createDownloadListener());
 
         // Load your initial URL
         webView.loadUrl("https://www.repeaterbook.com");
@@ -284,43 +302,16 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     /** Alternative method for people who's webview doesn't let us track when login is complete. */
     public void findRepeatersDownloadButtonClicked(View view) {
-        String downloadRepeatersUrlStr = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
-                latitude + "&long=" + longitude + "&distance=25&Dunit=m&band1=14&band2=&call=&use=OPEN&status_id=1";
-
         // Initialize the WebView
         WebView webView = findViewById(R.id.repeaterBookWebView);
 
         // Enable JavaScript if your webpage needs it
         webView.getSettings().setJavaScriptEnabled(true);
 
-        webView.setDownloadListener(new DownloadListener() {
-            @Override
-            public void onDownloadStart(String url, String userAgent,
-                                        String contentDisposition, String mimeType,
-                                        long contentLength) {
-                Log.d("DEBUG", "RepeaterBook CSV download started.");
+        webView.setDownloadListener(createDownloadListener());
 
-                // Fetch cookies to maintain session
-                String cookies = CookieManager.getInstance().getCookie(url);
-
-                // Now download the file using Android's DownloadManager
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                request.addRequestHeader("Cookie", cookies);
-                request.addRequestHeader("User-Agent", userAgent);
-                request.setMimeType(mimeType);
-                request.setDescription("Downloading repeater CSV...");
-                filename = URLUtil.guessFileName(url, contentDisposition, mimeType);
-                request.setTitle(filename);
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimeType));
-
-                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                downloadId = dm.enqueue(request);
-            }
-        });
-
-        // Load your initial URL
-        webView.loadUrl(downloadRepeatersUrlStr);
+        downloadUrlIndex = 0;
+        attemptNextDownload(webView);
     }
 
     @Override
@@ -380,46 +371,47 @@ public class FindRepeatersActivity extends AppCompatActivity {
             long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
 
             if (id == downloadId) {
-                Log.d("DEBUG", "Download complete!");
-
-                // Now it's safe to read and parse the file
+                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                Uri uri = dm.getUriForDownloadedFile(downloadId);
+                Log.d("DEBUG", "Download complete for URL #" + downloadUrlIndex);
                 try {
-                    String csvData = readDownloadedCsvFile();
+                    String csvData = readDownloadedCsvFile(uri);
                     Log.d("DEBUG", "CSV Contents:\n" + csvData);
                     nearbyRepeaters = parseRepeaterList(csvData);
                     Log.d("DEBUG", "Num repeaters found: " + nearbyRepeaters.size());
                     if (null == nearbyRepeaters || nearbyRepeaters.size() == 0) {
-                        showErrorSnackbar("No nearby repeaters found.");
-                        return;
+                        downloadUrlIndex++;
+                        WebView webView = findViewById(R.id.repeaterBookWebView);
+                        attemptNextDownload(webView);
                     } else {
                         // Ask the user what memory group to dump these repeaters in.
                         promptUserForMemoryGroup();
                     }
                 } catch (Exception e) {
-                    Log.d("DEBUG", "Error while trying to parse repeater CSV file.");
-                    e.printStackTrace();
-                    showErrorSnackbar("Couldn't parse repeater list file.");
+                    Log.d("DEBUG", "Error while trying to parse repeater CSV file.", e);
+                    downloadUrlIndex++;
+                    WebView webView = findViewById(R.id.repeaterBookWebView);
+                    attemptNextDownload(webView);
                 }
             }
         }
     };
 
-    private String readDownloadedCsvFile() throws Exception {
-        // Get the full path to the file
-        File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-        File csvFile = new File(downloadsDir, filename);
-
-        if (!csvFile.exists()) {
-            throw new Exception("Downloaded CSV file does not exist: " + csvFile.getAbsolutePath());
+    private String readDownloadedCsvFile(Uri fileUri) throws Exception {
+        if (fileUri == null) {
+            throw new Exception("Downloaded CSV file URI is null.");
+        }
+        InputStream inputStream = getContentResolver().openInputStream(fileUri);
+        if (inputStream == null) {
+            throw new Exception("Could not open input stream for downloaded CSV file.");
         }
 
         // Read file into a String
-        FileInputStream fis = new FileInputStream(csvFile);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
         StringBuilder sb = new StringBuilder();
         String line;
         while ((line = reader.readLine()) != null) {
-            sb.append(line).append("\n");
+            sb.append(line).append('\n');
         }
         reader.close();
         return sb.toString();
@@ -447,32 +439,57 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     public List<RepeaterInfo> parseRepeaterList(String csvData) throws IOException {
         List<RepeaterInfo> repeaters = new ArrayList<>();
-        BufferedReader reader = new BufferedReader(new StringReader(csvData));
-        // 1) skip header
-        String header = reader.readLine();
+        List<String> records = splitCsvRecords(csvData);
+        if (records.isEmpty()) {
+            return repeaters;
+        }
 
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (line.trim().isEmpty()) continue;
+        // 1) skip header
+        String header = records.get(0);
+        boolean isUsFormat = header.startsWith("Freq,Input,Offset,Tone,Location");
+        boolean isIntlFormat = header.startsWith("Output Freq,Input Freq,Offset,Uplink Tone");
+
+        if (!isUsFormat && !isIntlFormat) {
+            return repeaters; // Unknown format
+        }
+
+        for (int i = 1; i < records.size(); i++) {
+            String record = records.get(i);
+            if (record.trim().isEmpty()) continue;
 
             // 2) split into columns, respecting quotes
-            String[] cols = splitCSVLine(line);
-            if (cols.length < 12) continue;
+            String[] cols = splitCSVLine(record);
 
             // 3) map to a RepeaterInfo
             RepeaterInfo r = new RepeaterInfo();
-            r.freq     = tryParseDouble(cols[0]);
-            r.input    = tryParseDouble(cols[1]);
-            r.offset   = tryParseDouble(cols[2]);
-            r.tone     = ToneHelper.normalizeTone(cols[3].trim());
-            r.location = cols[4];
-            r.state    = cols[5];
-            r.county   = cols[6];
-            r.call     = cols[7];
-            r.use      = cols[8];
-            r.miles    = tryParseDouble(cols[9]);
-            r.bearing  = cols[10];
-            r.degrees  = tryParseDouble(cols[11]);
+            if (isUsFormat) {
+                if (cols.length < 12) continue;
+                r.freq     = tryParseDouble(cols[0]);
+                r.input    = tryParseDouble(cols[1]);
+                r.offset   = tryParseDouble(cols[2]);
+                r.tone     = ToneHelper.normalizeTone(cols[3].trim());
+                r.location = cols[4].replace("\n", " ").replace("\r", "");
+                r.state    = cols[5];
+                r.county   = cols[6];
+                r.call     = cols[7];
+                r.use      = cols[8];
+                r.miles    = tryParseDouble(cols[9]);
+                r.bearing  = cols[10];
+                r.degrees  = tryParseDouble(cols[11]);
+            } else { // Intl format
+                if (cols.length < 11) continue;
+                r.freq     = tryParseDouble(cols[0]);
+                r.input    = tryParseDouble(cols[1]);
+                r.offset   = tryParseDouble(cols[2]);
+                r.tone     = ToneHelper.normalizeTone(cols[3].trim());
+                // cols[4] is Downlink Tone, skipping.
+                r.call     = cols[5];
+                r.location = cols[6].replace("\n", " ").replace("\r", "");
+                r.county   = cols[7];
+                r.state    = cols[8];
+                // cols[9] is Status.
+                // cols[10] is Modes.
+            }
 
             // If this repeater is below or above the frequencies this radio is capable of, skip it.
             if (radioAudioService == null || r.freq < radioAudioService.getMinRadioFreq() || r.freq > radioAudioService.getMaxRadioFreq()) {
@@ -481,8 +498,31 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
             repeaters.add(r);
         }
-        reader.close();
         return repeaters;
+    }
+
+    private List<String> splitCsvRecords(String csvData) {
+        List<String> records = new ArrayList<>();
+        boolean inQuotes = false;
+        StringBuilder record = new StringBuilder();
+
+        for (int i = 0; i < csvData.length(); i++) {
+            char c = csvData.charAt(i);
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            }
+
+            if (c == '\n' && !inQuotes) {
+                records.add(record.toString());
+                record.setLength(0);
+            } else {
+                record.append(c);
+            }
+        }
+        if (record.length() > 0) {
+            records.add(record.toString());
+        }
+        return records;
     }
 
     /**
