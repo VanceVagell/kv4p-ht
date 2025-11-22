@@ -5,7 +5,7 @@
             android:title="@string/find_repeaters_menu_item" />
 
         <item android:id="@+id/flash_firmware"
-            android:title="@string/flash_firmware_menu_item" />
+            android:title="@string/flash_firmware_menu_item" android:enabled="false" />
     </group>
 
     <group>

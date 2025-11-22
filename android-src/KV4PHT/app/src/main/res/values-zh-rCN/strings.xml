@@ -100,4 +100,7 @@
     <string name="mhz">MHz</string>
     <string name="app_version">应用版本</string>
     <string name="firmware_version">固件版本</string>
+    <string name="flash_firmware_title">刷写固件？</string>
+    <string name="flash_firmware_message">这将替换您 kv4p HT 上的固件。</string>
+    <string name="flash_firmware_button">刷写</string>
 </resources>

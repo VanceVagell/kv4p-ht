@@ -114,4 +114,7 @@
         <item>Low</item>
     </string-array>
     <string name="mhz">MHz</string>
+    <string name="flash_firmware_title">Flash firmware?</string>
+    <string name="flash_firmware_message">This will replace the firmware on your kv4p HT.</string>
+    <string name="flash_firmware_button">Flash</string>
 </resources>

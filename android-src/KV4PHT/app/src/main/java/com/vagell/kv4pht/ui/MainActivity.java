@@ -1892,19 +1892,30 @@ public class MainActivity extends AppCompatActivity {
         Context themedContext = new ContextThemeWrapper(this, R.style.Custom_PopupMenu);
         PopupMenu moreMenu = new PopupMenu(themedContext, view);
         moreMenu.inflate(R.menu.more_menu);
+        MainActivity activity = this;
         moreMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
                 if (item.getItemId() == R.id.import_from_repeaterbook) {
                     startFindRepeatersActivity();
                 } else if (item.getItemId() == R.id.flash_firmware) {
-                    startFirmwareActivity();
+                    new MaterialAlertDialogBuilder(activity)
+                            .setTitle(getString(R.string.flash_firmware_title))
+                            .setMessage(getString(R.string.flash_firmware_message))
+                            .setPositiveButton(getString(R.string.flash_firmware_button), (d, i) -> {
+                                startFirmwareActivity();
+                            })
+                            .setNegativeButton(getString(R.string.cancel_display), (d, i) -> {
+                                // Do nothing.
+                            })
+                            .show();
                 } else if (item.getItemId() == R.id.settings) {
                     startSettingsActivity();
                 }
                 return true;
             }
         });
+        moreMenu.getMenu().findItem(R.id.flash_firmware).setEnabled(radioAudioService.isRadioConnected());
         moreMenu.show();
     }
 

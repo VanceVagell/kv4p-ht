@@ -907,6 +907,7 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     // Called in many situations where radio connection is found to be broken
     private void radioMissing() {
+        hostToEsp32 = null;
         callbacks.radioMissing(); // Notify UI that radio wasn't found
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release(); // Don't keep screen on
