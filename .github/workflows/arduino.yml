@@ -1,4 +1,4 @@
-name: Compile Sketches
+name: Build with PlatformIO
 
 on:
   push:
@@ -10,30 +10,22 @@ on:
     types: [created]
 
 jobs:
-  compile-sketches:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      # See: https://github.com/arduino/compile-sketches#readme
-      - name: Compile sketches
-        uses: arduino/compile-sketches@v1.1.2
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          fqbn: esp32:esp32:esp32:EventsCore=0
-          platforms: |
-            - name: "esp32:esp32"
-              version: "2.0.17"
-          sketch-paths: |
-            - microcontroller-src/kv4p_ht_esp32_wroom_32
-          libraries: |
-            - name: EspSoftwareSerial
-              version: 8.1.0
-            - source-url: https://github.com/fatpat/arduino-dra818.git
-              version: 89582e3ef7bf3f31f1af149e32cec16c4b9e4cf2
-            - source-url: https://github.com/pschatzmann/arduino-audio-tools/archive/refs/tags/v1.0.1.zip
-              name: arduino-audio-tools
-            - source-url: https://github.com/pschatzmann/arduino-libopus/archive/refs/tags/a1.1.0.zip
-              name: arduino-libopus
-          verbose: true
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Build project
+        run: pio run -v
+        working-directory: microcontroller-src
+
