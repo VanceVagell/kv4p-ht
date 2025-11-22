@@ -42,7 +42,7 @@ class ProtocolHandshake {
     private static final int FIRMWARE_VERSION_TIMEOUT_MS = 60000;
     private enum HandshakeResult {INVALID, TOO_OLD, OK, RADIO_MODULE_NOT_FOUND}
     private final RadioAudioService radioAudioService;
-    private final ScheduledExecutorService protocolScheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledExecutorService protocolScheduler = Executors.newSingleThreadScheduledExecutor();
 
     /**
      * Future completed when HELLO is received or timeout occurs.
@@ -62,6 +62,9 @@ class ProtocolHandshake {
      * Starts the full handshake process.
      */
     public void start() {
+        if (protocolScheduler.isShutdown()) {
+            protocolScheduler = Executors.newSingleThreadScheduledExecutor();
+        }
         Log.i(TAG, "Starting protocol handshake with ESP32.");
         startFor(waitForHello()
             .thenCompose(this::sendConfigStep));
