@@ -67,12 +67,9 @@ import com.vagell.kv4pht.radio.RadioAudioService;
 import com.vagell.kv4pht.radio.RadioServiceConnector;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -98,6 +95,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     // Android permission stuff
     private static final int REQUEST_LOCATION_PERMISSION_CODE = 1;
+    private static final int REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE = 2;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,7 +109,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         registerReceiver(onDownloadComplete, filter, Context.RECEIVER_EXPORTED);
 
         populateMemoryGroups();
-        requestPositionPermissions();
+        requestPermissions();
     }
 
     private void getGpsLocation() {
@@ -127,7 +125,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPositionPermissions();
+            requestPermissions();
             return;
         }
 
@@ -157,8 +155,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 });
     }
 
-    protected void requestPositionPermissions() {
-        // Check that the user allows our app to get position, otherwise ask for the permission.
+    protected void requestPermissions() {
+        // Location permission...
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Should we show an explanation?
             if (ActivityCompat.shouldShowRequestPermissionRationale(this,
@@ -184,7 +182,32 @@ public class FindRepeatersActivity extends AppCompatActivity {
                         REQUEST_LOCATION_PERMISSION_CODE);
             }
         } else {
-            getGpsLocation(); // Already have the permissions
+            // Once it's confirmed we have location permission, get GPS position.
+            // TODO: This is a side effect, find a better way to do this in the flow of this Activity.
+            getGpsLocation();
+        }
+
+        // External storage permission...
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission needed")
+                        .setMessage("This app needs to write to external storage to find nearby repeaters")
+                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialogInterface, int i) {
+                                ActivityCompat.requestPermissions(FindRepeatersActivity.this,
+                                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                                        REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE);
+                            }
+                        })
+                        .create()
+                        .show();
+
+            }
         }
     }
 
@@ -203,6 +226,18 @@ public class FindRepeatersActivity extends AppCompatActivity {
                     // Permission denied
                     Log.d("DEBUG", "Warning: Need fine location permission to find nearby repeaters, but user denied it.");
                     showErrorSnackbar("Can't get your GPS location because the permission was denied.");
+                }
+                return;
+            }
+            case REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted.
+                } else {
+                    // Permission denied
+                    Log.d("DEBUG", "Warning: Need to write to external storage to find nearby repeaters, but user denied it.");
+                    showErrorSnackbar("Can't find nearby repeaters because storage permission was denied.");
+                    finishActivity(Activity.RESULT_CANCELED);
                 }
                 return;
             }
