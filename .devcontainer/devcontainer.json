@@ -11,7 +11,13 @@
 			"installMaven": "false",
 			"installGradle": "true"
 		},
-		"ghcr.io/nordcominc/devcontainer-features/android-sdk:1": {}
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "20"
+		},
+		"ghcr.io/nordcominc/devcontainer-features/android-sdk:1": {
+			"packages": "platform-tools platforms;android-35 build-tools;35.0.0",
+			"cmdLineToolsVersion": "latest"
+		}
 	},
 	"customizations": {
 		"vscode": {
