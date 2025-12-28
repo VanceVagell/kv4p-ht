@@ -35,17 +35,3 @@ The devcontainer provides:
 cd android-src/KV4PHT
 ./gradlew assembleDebug
 ```
-
-### Manual QA Testing
-
-1. **Enable USB debugging** on your Android device (Settings → Developer Options)
-2. **Connect device** via USB to your host machine
-3. **Verify connection**: `adb devices`
-4. **Install APK**: `adb install app/build/outputs/apk/debug/app-debug.apk`
-5. **Monitor logs**: `adb logcat | grep kv4pht`
-
-### Troubleshooting
-
-**Gradle daemon issues**: Run `./gradlew --stop` to stop all Gradle processes
-
-**USB device not detected**: Ensure USB debugging is enabled and the device is authorized on the host machine
