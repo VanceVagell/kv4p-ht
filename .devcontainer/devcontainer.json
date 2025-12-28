@@ -2,21 +2,10 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/java
 {
 	"name": "Java",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/java:1-17-bookworm",
-
-	"features": {
-		"ghcr.io/devcontainers/features/java:1": {
-			"version": "none",
-			"installMaven": "false",
-			"installGradle": "true"
-		},
-		"ghcr.io/devcontainers/features/node:1": {
-			"version": "20"
-		},
-		"ghcr.io/nordcominc/devcontainer-features/android-sdk:1": {
-			"packages": "platform-tools platforms;android-35 build-tools;35.0.0",
-			"cmdLineToolsVersion": "latest"
+	"build": {
+		"dockerfile": "Dockerfile",
+		"args": {
+			"BUILDPLATFORM": "linux/amd64"
 		}
 	},
 	"customizations": {
