@@ -202,6 +202,15 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Getter
     @Setter
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
+    @Getter
+    @Setter
+    private String locationMode = "gps"; // "gps" or "manual"
+    @Getter
+    @Setter
+    private Double manualLatitude = null;
+    @Getter
+    @Setter
+    private Double manualLongitude = null;
     private ScheduledExecutorService beaconScheduler;
     private ScheduledFuture<?> beaconFuture;
     private int messageNumber = 0;
@@ -1224,7 +1233,9 @@ public class RadioAudioService extends Service implements PacketHandler {
     /**
      * Sends a position beacon via APRS.
      * This method can only be called when the radio is in RX mode.
-     * If Google Play Services are not available, it will call unknownLocation() on the callbacks.
+     * If location mode is set to "manual", it will use the manual coordinates.
+     * If location mode is "gps", it will try GPS first, then fall back to manual coordinates.
+     * If no location is available, it will call unknownLocation() on the callbacks.
      */
     @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
     public void sendPositionBeacon() {
@@ -1232,9 +1243,21 @@ public class RadioAudioService extends Service implements PacketHandler {
             Log.d(TAG, "Skipping position beacon: tx not allowed or not in RX mode.");
             return;
         }
+        // If manual mode is set and we have valid manual coordinates, use them directly
+        if ("manual".equals(locationMode) && hasValidManualLocation()) {
+            Log.d(TAG, "Using manual location for beacon.");
+            sendPositionBeacon(manualLatitude, manualLongitude);
+            return;
+        }
+        // Otherwise try GPS, with fallback to manual if available
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
             Log.d(TAG, "Can't get GPS position: missing Google Play Services.");
-            callbacks.unknownLocation();
+            if (hasValidManualLocation()) {
+                Log.d(TAG, "Falling back to manual location.");
+                sendPositionBeacon(manualLatitude, manualLongitude);
+            } else {
+                callbacks.unknownLocation();
+            }
             return;
         }
         FusedLocationProviderClient locationClient = LocationServices.getFusedLocationProviderClient(this);
@@ -1243,10 +1266,29 @@ public class RadioAudioService extends Service implements PacketHandler {
             .addOnSuccessListener(location -> {
                 if (location != null) {
                     sendPositionBeacon(location.getLatitude(), location.getLongitude());
+                } else if (hasValidManualLocation()) {
+                    Log.d(TAG, "GPS returned null, falling back to manual location.");
+                    sendPositionBeacon(manualLatitude, manualLongitude);
                 } else {
                     callbacks.unknownLocation();
                 }
-            }).addOnFailureListener(e -> callbacks.unknownLocation());
+            }).addOnFailureListener(e -> {
+                if (hasValidManualLocation()) {
+                    Log.d(TAG, "GPS failed, falling back to manual location.");
+                    sendPositionBeacon(manualLatitude, manualLongitude);
+                } else {
+                    callbacks.unknownLocation();
+                }
+            });
+    }
+
+    /**
+     * Checks if valid manual location coordinates are set.
+     */
+    private boolean hasValidManualLocation() {
+        return manualLatitude != null && manualLongitude != null
+            && manualLatitude >= -90 && manualLatitude <= 90
+            && manualLongitude >= -180 && manualLongitude <= 180;
     }
 
     /**

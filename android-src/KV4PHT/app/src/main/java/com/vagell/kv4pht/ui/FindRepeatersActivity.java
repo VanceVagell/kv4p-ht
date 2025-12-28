@@ -62,6 +62,7 @@ import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.radio.RadioAudioService;
 import com.vagell.kv4pht.radio.RadioServiceConnector;
@@ -73,9 +74,11 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class FindRepeatersActivity extends AppCompatActivity {
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
@@ -113,11 +116,66 @@ public class FindRepeatersActivity extends AppCompatActivity {
     }
 
     private void getGpsLocation() {
-        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        // First check if manual location mode is set
+        threadPoolExecutor.execute(() -> {
+            Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
+                .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
+            String locationMode = settings.getOrDefault(AppSetting.SETTING_LOCATION_MODE, AppSetting.LOCATION_MODE_GPS);
+            String manualLatStr = settings.get(AppSetting.SETTING_MANUAL_LATITUDE);
+            String manualLonStr = settings.get(AppSetting.SETTING_MANUAL_LONGITUDE);
+            
+            // If manual mode is set and we have valid coordinates, use them directly
+            if (AppSetting.LOCATION_MODE_MANUAL.equals(locationMode) && hasValidManualLocation(manualLatStr, manualLonStr)) {
+                runOnUiThread(() -> {
+                    try {
+                        latitude = Double.parseDouble(manualLatStr);
+                        longitude = Double.parseDouble(manualLonStr);
+                        findLocalityAsync(latitude, longitude);
+                        startCSVDownload();
+                    } catch (NumberFormatException e) {
+                        showErrorSnackbar(getString(R.string.no_location_available));
+                    }
+                });
+                return;
+            }
+            
+            // Otherwise try GPS with fallback to manual
+            runOnUiThread(() -> getGpsLocationWithFallback(manualLatStr, manualLonStr));
+        });
+    }
 
+    private boolean hasValidManualLocation(String latStr, String lonStr) {
+        if (latStr == null || lonStr == null || latStr.isEmpty() || lonStr.isEmpty()) {
+            return false;
+        }
+        try {
+            double lat = Double.parseDouble(latStr);
+            double lon = Double.parseDouble(lonStr);
+            return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private void useManualLocationFallback(String manualLatStr, String manualLonStr) {
+        if (hasValidManualLocation(manualLatStr, manualLonStr)) {
+            try {
+                latitude = Double.parseDouble(manualLatStr);
+                longitude = Double.parseDouble(manualLonStr);
+                findLocalityAsync(latitude, longitude);
+                startCSVDownload();
+            } catch (NumberFormatException e) {
+                showErrorSnackbar(getString(R.string.no_location_available));
+            }
+        } else {
+            showErrorSnackbar(getString(R.string.no_location_available));
+        }
+    }
+
+    private void getGpsLocationWithFallback(String manualLatStr, String manualLonStr) {
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-            Log.d("DEBUG", "Unable to get nearby repeaters because Android device is missing Google Play Services, needed to get GPS location.");
-            showErrorSnackbar("Google Play Services is missing, it's needed for GPS location.");
+            Log.d("DEBUG", "Google Play Services missing, trying manual location fallback.");
+            useManualLocationFallback(manualLatStr, manualLonStr);
             return;
         }
 
@@ -136,21 +194,20 @@ public class FindRepeatersActivity extends AppCompatActivity {
                     public void onSuccess(Location location) {
                         if (location != null) {
                             // Use the location
-                            double latitude = location.getLatitude();
-                            double longitude = location.getLongitude();
-                            findLocalityAsync(latitude, longitude);
-                            ctx.latitude = latitude;
-                            ctx.longitude = longitude;
+                            findLocalityAsync(location.getLatitude(), location.getLongitude());
+                            ctx.latitude = location.getLatitude();
+                            ctx.longitude = location.getLongitude();
                             startCSVDownload();
                         } else {
-                            showErrorSnackbar("Failed to find your GPS location (it came back null).");
-                            return;
+                            Log.d("DEBUG", "GPS returned null, trying manual location fallback.");
+                            useManualLocationFallback(manualLatStr, manualLonStr);
                         }
                     }
                 }).addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                        showErrorSnackbar("Failed to find your GPS location.");
+                        Log.d("DEBUG", "GPS failed, trying manual location fallback.");
+                        useManualLocationFallback(manualLatStr, manualLonStr);
                     }
                 });
     }

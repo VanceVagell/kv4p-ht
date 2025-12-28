@@ -45,6 +45,13 @@ public class AppSetting {
     public static final String SETTING_APRS_BEACON_POSITION = "aprsBeaconPosition";
     public static final String SETTING_CALLSIGN = "callsign";
     public static final String SETTING_STICKY_PTT = "stickyPTT";
+    public static final String SETTING_LOCATION_MODE = "locationMode";
+    public static final String SETTING_MANUAL_LATITUDE = "manualLatitude";
+    public static final String SETTING_MANUAL_LONGITUDE = "manualLongitude";
+
+    // Location mode values
+    public static final String LOCATION_MODE_GPS = "gps";
+    public static final String LOCATION_MODE_MANUAL = "manual";
 
     public AppSetting(@NonNull String name, String value) {
         this.name = name;

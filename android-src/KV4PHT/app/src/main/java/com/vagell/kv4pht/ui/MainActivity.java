@@ -1046,12 +1046,36 @@ public class MainActivity extends AppCompatActivity {
     private void applyAprsSettings(Map<String, String> settings) {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
+        String locationMode = settings.getOrDefault(AppSetting.SETTING_LOCATION_MODE, AppSetting.LOCATION_MODE_GPS);
+        String manualLatStr = settings.get(AppSetting.SETTING_MANUAL_LATITUDE);
+        String manualLonStr = settings.get(AppSetting.SETTING_MANUAL_LONGITUDE);
 
         if (accuracy != null && radioAudioService != null) {
             threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
                 accuracy.equals(getString(R.string.exact)) ?
                     RadioAudioService.APRS_POSITION_EXACT :
                     RadioAudioService.APRS_POSITION_APPROX));
+        }
+
+        // Apply location mode and manual coordinates
+        if (radioAudioService != null) {
+            threadPoolExecutor.execute(() -> {
+                radioAudioService.setLocationMode(locationMode);
+                if (manualLatStr != null && !manualLatStr.isEmpty()) {
+                    try {
+                        radioAudioService.setManualLatitude(Double.parseDouble(manualLatStr));
+                    } catch (NumberFormatException e) {
+                        radioAudioService.setManualLatitude(null);
+                    }
+                }
+                if (manualLonStr != null && !manualLonStr.isEmpty()) {
+                    try {
+                        radioAudioService.setManualLongitude(Double.parseDouble(manualLonStr));
+                    } catch (NumberFormatException e) {
+                        radioAudioService.setManualLongitude(null);
+                    }
+                }
+            });
         }
 
         if (radioAudioService != null && beacon != null) {

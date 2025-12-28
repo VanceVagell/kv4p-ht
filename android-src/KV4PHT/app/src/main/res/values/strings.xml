@@ -117,4 +117,16 @@
     <string name="flash_firmware_title">Flash firmware?</string>
     <string name="flash_firmware_message">This will replace the firmware on your kv4p HT.</string>
     <string name="flash_firmware_button">Flash</string>
+    <string name="location">Location</string>
+    <string name="location_source">Location source</string>
+    <string name="gps_automatic">GPS (automatic)</string>
+    <string name="manual">Manual</string>
+    <string name="latitude">Latitude</string>
+    <string name="longitude">Longitude</string>
+    <string name="use_current_gps">Use current GPS</string>
+    <string name="invalid_latitude">Latitude must be between -90 and 90</string>
+    <string name="invalid_longitude">Longitude must be between -180 and 180</string>
+    <string name="gps_location_fetched">GPS location fetched</string>
+    <string name="gps_location_failed">Could not get GPS location</string>
+    <string name="no_location_available">No location available. Set a manual location in Settings, or enable GPS.</string>
 </resources>
