@@ -119,7 +119,7 @@
     <string name="flash_firmware_button">Flash</string>
     <string name="location">Location</string>
     <string name="location_source">Location source</string>
-    <string name="gps_automatic">GPS (automatic)</string>
+    <string name="gps_automatic">Automatic</string>
     <string name="manual">Manual</string>
     <string name="latitude">Latitude</string>
     <string name="longitude">Longitude</string>
