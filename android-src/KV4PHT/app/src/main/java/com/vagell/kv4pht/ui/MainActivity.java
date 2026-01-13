@@ -1915,6 +1915,8 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
         });
+        //Changes
+        moreMenu.getMenu().findItem(R.id.import_from_repeaterbook).setEnabled(radioAudioService.isRadioConnected());
         moreMenu.getMenu().findItem(R.id.flash_firmware).setEnabled(radioAudioService.isRadioConnected());
         moreMenu.show();
     }
