@@ -112,6 +112,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     // === Constants ===
     private static final String TAG = RadioAudioService.class.getSimpleName();
     private static final String FIRMWARE_TAG = "firmware";
+    private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
     private static final int RUNAWAY_TX_TIMEOUT_SEC = 180;
     // Intents this Activity can handle besides the one that starts it in default mode.
     public static final String INTENT_OPEN_CHAT = "com.vagell.kv4pht.OPEN_CHAT_ACTION";
@@ -872,6 +873,18 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
         // Open a connection to the first available driver.
         UsbSerialDriver driver = availableDrivers.get(0);
+        if (!manager.hasPermission(driver.getDevice())) {
+            Log.w(TAG, "No USB permission yet; requesting permission.");
+            PendingIntent permissionIntent = PendingIntent.getBroadcast(
+                this,
+                0,
+                new Intent(ACTION_USB_PERMISSION),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+            manager.requestPermission(driver.getDevice(), permissionIntent);
+            radioMissing();
+            return;
+        }
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
             Log.e(TAG, "Error: couldn't open USB device.");

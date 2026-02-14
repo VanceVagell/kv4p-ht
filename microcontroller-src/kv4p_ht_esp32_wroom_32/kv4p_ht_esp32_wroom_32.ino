@@ -212,6 +212,8 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
     case COMMAND_HOST_TX_AX25:
       if (param_len > 0 && param_len <= PROTO_MTU) {
         setMode(MODE_TX);
+        digitalWrite(hw.pins.pinLed, HIGH);
+        neopixelColor(COLOR_TX);
         processTxAx25(params, param_len);
         setMode(MODE_RX);
         esp_task_wdt_reset();
