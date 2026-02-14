@@ -45,6 +45,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
@@ -142,6 +143,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
+    private static final long PACKET_SIDE_EFFECT_DEDUP_MS = 15000L;
     public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
 
     // === Frequency Ranges ===
@@ -236,6 +238,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Setter
     private @NonNull String bandwidth = "25kHz";
     private @NonNull AprsTxEncoder aprsTxEncoder = AprsTxEncoder.ANDROID;
+    private final Map<String, Long> packetSideEffectSeenMs = new ConcurrentHashMap<>();
 
     // === Android Components ===
     private final IBinder binder = new RadioBinder();
@@ -1149,10 +1152,8 @@ public class RadioAudioService extends Service implements PacketHandler {
         if (param == null || len == null || len < 2) {
             return;
         }
-        int decoderId = param[0] & 0xFF;
         byte[] packet = java.util.Arrays.copyOfRange(param, 1, len);
-        int source = decoderId == 0 ? DECODER_SOURCE_ESP32 : DECODER_SOURCE_ESP32;
-        handleAx25Packet(packet, source);
+        handleAx25Packet(packet, DECODER_SOURCE_ESP32);
     }
 
     private void handlePhysicalPttUp() {
@@ -1238,14 +1239,16 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     private void handleAx25Packet(byte[] packet, int decoderSource) {
         try {
+            String hash = packetHash(packet);
             APRSPacket aprsPacket = Parser.parseAX25(packet);
             InformationField info = aprsPacket.getPayload();
+            boolean shouldEmitSideEffects = shouldEmitPacketSideEffects(hash);
             // Check if the packet is an APRS message type
             if (info.getDataTypeIdentifier() == ':') {
                 MessagePacket msg = new MessagePacket(info.getRawBytes(), aprsPacket.getDestinationCall());
                 String target = msg.getTargetCallsign().trim().toUpperCase();
                 // Handle messages addressed to the current callsign
-                if (!msg.isAck() && target.equals(callsign.toUpperCase())) {
+                if (shouldEmitSideEffects && !msg.isAck() && target.equals(callsign.toUpperCase())) {
                     callbacks.showNotification(
                         MESSAGE_NOTIFICATION_CHANNEL_ID,
                         MESSAGE_NOTIFICATION_TO_YOU_ID,
@@ -1257,10 +1260,24 @@ public class RadioAudioService extends Service implements PacketHandler {
                 }
             }
             // Notify callbacks about the received packet
-            callbacks.packetReceived(aprsPacket, decoderSource, packetHash(packet));
+            callbacks.packetReceived(aprsPacket, decoderSource, hash);
         } catch (Exception e) {
             Log.d(TAG, "Unable to parse an APRS packet, skipping.");
         }
+    }
+
+    private boolean shouldEmitPacketSideEffects(@NonNull String packetHash) {
+        long nowMs = SystemClock.elapsedRealtime();
+        Long seenAt = packetSideEffectSeenMs.get(packetHash);
+        if (seenAt != null && (nowMs - seenAt) < PACKET_SIDE_EFFECT_DEDUP_MS) {
+            return false;
+        }
+        packetSideEffectSeenMs.put(packetHash, nowMs);
+        // Bound memory in long-running service.
+        if (packetSideEffectSeenMs.size() > 2048) {
+            packetSideEffectSeenMs.entrySet().removeIf(e -> (nowMs - e.getValue()) > PACKET_SIDE_EFFECT_DEDUP_MS);
+        }
+        return true;
     }
 
     private String packetHash(byte[] packet) {
