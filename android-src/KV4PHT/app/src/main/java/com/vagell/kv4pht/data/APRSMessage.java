@@ -58,6 +58,12 @@ public class APRSMessage {
     @ColumnInfo(name = "comment")
     public String comment;
 
+    @ColumnInfo(name = "decoder_source", defaultValue = "0")
+    public int decoderSource;
+
+    @ColumnInfo(name = "packet_hash", defaultValue = "")
+    public String packetHash;
+
     /*
      * Fields for APRS objects only.
      */

@@ -98,6 +98,7 @@
     <string name="position_beacon_message_2">" position on active frequency"</string>
     <string name="settings">Settings</string>
     <string name="beacon_my_position">Beacon my position</string>
+    <string name="aprs_tx_encoder">APRS TX encoder</string>
     <string name="wide" translatable="false">25kHz</string>
     <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>

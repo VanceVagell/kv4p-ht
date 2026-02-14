@@ -374,8 +374,8 @@ public class MainActivity extends AppCompatActivity {
                 public void audioTrackCreated() { }
 
                 @Override
-                public void packetReceived(APRSPacket aprsPacket) {
-                    handleChatPacket(aprsPacket);
+                public void packetReceived(APRSPacket aprsPacket, int decoderSource, String packetHash) {
+                    handleChatPacket(aprsPacket, decoderSource, packetHash);
                 }
 
                 @Override
@@ -632,7 +632,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void handleChatPacket(APRSPacket aprsPacket) {
+    private void handleChatPacket(APRSPacket aprsPacket, int decoderSource, String packetHash) {
         // We use duck-typing for APRS messages since the spec is pretty loose with all the ways
         // you can define different fields and values. Once we know the type, we set aprsMessage.type.
 
@@ -642,6 +642,8 @@ public class MainActivity extends AppCompatActivity {
         PositionField positionField = (PositionField) infoField.getAprsData(APRSTypes.T_POSITION);
         ObjectField objectField = (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT);
         aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
+        aprsMessage.decoderSource = decoderSource;
+        aprsMessage.packetHash = packetHash == null ? "" : packetHash;
 
         // Get the fromCallsign (all APRS messages must have this)
         aprsMessage.fromCallsign = aprsPacket.getSourceCall();
@@ -738,8 +740,17 @@ public class MainActivity extends AppCompatActivity {
                         viewModel.getAppDb().aprsMessageDao().update(oldAPRSMessage);
                     }
                 } else {
-                    // Not an ack, add a message
-                    viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
+                    // Not an ack, add a message or merge decoder source when packet was decoded by both paths.
+                    APRSMessage existing = viewModel.getAppDb().aprsMessageDao().getLatestByPacketHash(aprsMessage.packetHash);
+                    if (existing != null && aprsMessage.packetHash != null && !aprsMessage.packetHash.isEmpty()) {
+                        int mergedSource = existing.decoderSource | aprsMessage.decoderSource;
+                        if (mergedSource != existing.decoderSource) {
+                            existing.decoderSource = mergedSource;
+                            viewModel.getAppDb().aprsMessageDao().update(existing);
+                        }
+                    } else {
+                        viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
+                    }
                 }
 
                 viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
@@ -897,6 +908,10 @@ public class MainActivity extends AppCompatActivity {
         aprsMessage.msgBody = outText.trim();
         aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
         aprsMessage.msgNum = msgNum;
+        aprsMessage.decoderSource = (radioAudioService == null)
+                ? RadioAudioService.DECODER_SOURCE_UNKNOWN
+                : radioAudioService.getOutgoingAprsSourceIndicator();
+        aprsMessage.packetHash = "";
 
         threadPoolExecutor.execute(new Runnable() {
             @Override
@@ -1045,6 +1060,7 @@ public class MainActivity extends AppCompatActivity {
     private void applyAprsSettings(Map<String, String> settings) {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
+        String txEncoder = settings.getOrDefault(AppSetting.SETTING_APRS_TX_ENCODER, "Android");
 
         if (accuracy != null && radioAudioService != null) {
             threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
@@ -1064,6 +1080,9 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 threadPoolExecutor.execute(action);
             }
+        }
+        if (radioAudioService != null) {
+            radioAudioService.setAprsTxEncoder(txEncoder);
         }
     }
 
