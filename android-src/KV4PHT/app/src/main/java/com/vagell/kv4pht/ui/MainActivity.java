@@ -600,7 +600,9 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         try {
             unregisterReceiver(usbReceiver);
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+            // Receiver can be unregistered already on some lifecycle/error paths.
+        }
         unregisterReceiver(serviceShutdownReceiver);
         try {
             threadPoolExecutor.shutdownNow();
