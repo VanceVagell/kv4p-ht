@@ -91,6 +91,7 @@ import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
 import com.vagell.kv4pht.radio.RadioMode;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -637,129 +638,185 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleChatPacket(APRSPacket aprsPacket, int decoderSource, String packetHash) {
-        // We use duck-typing for APRS messages since the spec is pretty loose with all the ways
-        // you can define different fields and values. Once we know the type, we set aprsMessage.type.
+        PacketFields fields = extractPacketFields(aprsPacket);
+        APRSMessage aprsMessage = createBaseMessage(aprsPacket, decoderSource, packetHash, fields.positionField);
+        String comment = findComment(aprsPacket, fields);
+        assignCommentIfPresent(aprsMessage, comment);
+        if (!applyTypeSpecificFields(aprsPacket, aprsMessage, fields)) {
+            return;
+        }
+        applyRawCommentFallback(aprsPacket, aprsMessage, fields.infoField, comment);
+        persistChatPacketAsync(aprsMessage);
+    }
 
-        APRSMessage aprsMessage = new APRSMessage();
+    private PacketFields extractPacketFields(APRSPacket aprsPacket) {
         InformationField infoField = aprsPacket.getPayload();
-        WeatherField weatherField = (WeatherField) infoField.getAprsData(APRSTypes.T_WX);
-        PositionField positionField = (PositionField) infoField.getAprsData(APRSTypes.T_POSITION);
-        ObjectField objectField = (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT);
+        return new PacketFields(
+            infoField,
+            (WeatherField) infoField.getAprsData(APRSTypes.T_WX),
+            (PositionField) infoField.getAprsData(APRSTypes.T_POSITION),
+            (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT)
+        );
+    }
+
+    private APRSMessage createBaseMessage(APRSPacket aprsPacket, int decoderSource, String packetHash, PositionField positionField) {
+        APRSMessage aprsMessage = new APRSMessage();
         aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
         aprsMessage.decoderSource = decoderSource;
         aprsMessage.packetHash = packetHash == null ? "" : packetHash;
-
-        // Get the fromCallsign (all APRS messages must have this)
         aprsMessage.fromCallsign = aprsPacket.getSourceCall();
-
-        // Get the position, if included.
-        if (null != positionField) {
-            aprsMessage.type = APRSMessage.POSITION_TYPE; // Anything with a position is POSITION_TYPE unless we determine more specific type later.
+        if (positionField != null) {
+            aprsMessage.type = APRSMessage.POSITION_TYPE;
             aprsMessage.positionLat = positionField.getPosition().getLatitude();
             aprsMessage.positionLong = positionField.getPosition().getLongitude();
         }
+        return aprsMessage;
+    }
 
-        // Try to find a comment (could be at multiple levels in the packet).
-        String comment = aprsPacket.getComment();
-        if (null != infoField && (null == comment || comment.trim().length() == 0)) {
-            comment = infoField.getComment();
+    private String findComment(APRSPacket aprsPacket, PacketFields fields) {
+        if (hasText(aprsPacket.getComment())) {
+            return aprsPacket.getComment();
         }
-        if (null != positionField && (null == comment || comment.trim().length() == 0)) {
-            comment = positionField.getComment();
+        if (hasText(fields.infoField.getComment())) {
+            return fields.infoField.getComment();
         }
-        if (null != objectField && (null == comment || comment.trim().length() == 0)) {
-            comment = objectField.getComment();
+        if (fields.positionField != null && hasText(fields.positionField.getComment())) {
+            return fields.positionField.getComment();
         }
-        if (null != weatherField && (null == comment || comment.trim().length() == 0)) {
-            comment = weatherField.getComment();
+        if (fields.objectField != null && hasText(fields.objectField.getComment())) {
+            return fields.objectField.getComment();
         }
-        if (null != comment && comment.trim().length() > 0) {
+        if (fields.weatherField != null && hasText(fields.weatherField.getComment())) {
+            return fields.weatherField.getComment();
+        }
+        return null;
+    }
+
+    private void assignCommentIfPresent(APRSMessage aprsMessage, String comment) {
+        if (hasText(comment)) {
             aprsMessage.comment = comment;
         }
+    }
 
-        if (null != weatherField) { // APRS "weather" (i.e. any message with weather data attached)
-            aprsMessage.type = APRSMessage.WEATHER_TYPE;
-            aprsMessage.temperature = (null == weatherField.getTemp()) ? 0 : weatherField.getTemp();
-            aprsMessage.humidity = (null == weatherField.getHumidity()) ? 0 : weatherField.getHumidity();
-            aprsMessage.pressure = (null == weatherField.getPressure()) ? 0 : weatherField.getPressure();
-            aprsMessage.rain = (null == weatherField.getRainLast24Hours()) ? 0 : weatherField.getRainLast24Hours(); // TODO don't ignore other rain measurements
-            aprsMessage.snow = (null == weatherField.getSnowfallLast24Hours()) ? 0 : weatherField.getSnowfallLast24Hours();
-            aprsMessage.windForce = (null == weatherField.getWindSpeed()) ? 0 : weatherField.getWindSpeed();
-            aprsMessage.windDir = (null == weatherField.getWindDirection()) ? "" : Utilities.degressToCardinal(weatherField.getWindDirection());
-
-            // Log.d("DEBUG", "Weather packet received");
-        } else if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
-            aprsMessage.type = APRSMessage.MESSAGE_TYPE;
-            MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
-            aprsMessage.toCallsign = messagePacket.getTargetCallsign();
-
-            if (messagePacket.isAck()) {
-                aprsMessage.wasAcknowledged = true;
-                try {
-                    String msgNumStr = messagePacket.getMessageNumber();
-                    if (msgNumStr != null) {
-                        aprsMessage.msgNum = Integer.parseInt(msgNumStr.trim());
-                    }
-                } catch (Exception e) {
-                    Log.d("DEBUG", "Warning: Bad message number in APRS ack, ignoring: '" + messagePacket.getMessageNumber() + "'");
-                    e.printStackTrace();
-                    return;
-                }
-                // Log.d("DEBUG", "Message ack received");
-            } else {
-                aprsMessage.msgBody = messagePacket.getMessageBody();
-                // Log.d("DEBUG", "Message packet received");
-            }
-        } else if (infoField.getDataTypeIdentifier() == ';') { // APRS "object"
+    private boolean applyTypeSpecificFields(APRSPacket aprsPacket, APRSMessage aprsMessage, PacketFields fields) {
+        if (fields.weatherField != null) {
+            applyWeatherFields(aprsMessage, fields.weatherField);
+            return true;
+        }
+        if (fields.infoField.getDataTypeIdentifier() == ':') {
+            return applyMessageFields(aprsPacket, aprsMessage, fields.infoField);
+        }
+        if (fields.infoField.getDataTypeIdentifier() == ';') {
             aprsMessage.type = APRSMessage.OBJECT_TYPE;
-            if (null != objectField) {
-                aprsMessage.objName = objectField.getObjectName();
-                // Log.d("DEBUG", "Object packet received");
+            if (fields.objectField != null) {
+                aprsMessage.objName = fields.objectField.getObjectName();
             }
         }
+        return true;
+    }
 
-        // If there is a fault in the packet, or the message type is unknown, we at least display the raw contents as a comment.
-        if (aprsPacket.hasFault() || aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0)) {
-            if (null != infoField) {
-                try {
-                    comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
-                    aprsMessage.comment = comment;
-                } catch (Exception e) { }
-            }
+    private void applyWeatherFields(APRSMessage aprsMessage, WeatherField weatherField) {
+        aprsMessage.type = APRSMessage.WEATHER_TYPE;
+        aprsMessage.temperature = weatherField.getTemp() == null ? 0 : weatherField.getTemp();
+        aprsMessage.humidity = weatherField.getHumidity() == null ? 0 : weatherField.getHumidity();
+        aprsMessage.pressure = weatherField.getPressure() == null ? 0 : weatherField.getPressure();
+        aprsMessage.rain = weatherField.getRainLast24Hours() == null ? 0 : weatherField.getRainLast24Hours();
+        aprsMessage.snow = weatherField.getSnowfallLast24Hours() == null ? 0 : weatherField.getSnowfallLast24Hours();
+        aprsMessage.windForce = weatherField.getWindSpeed() == null ? 0 : weatherField.getWindSpeed();
+        aprsMessage.windDir = weatherField.getWindDirection() == null ? "" : Utilities.degressToCardinal(weatherField.getWindDirection());
+    }
+
+    private boolean applyMessageFields(APRSPacket aprsPacket, APRSMessage aprsMessage, InformationField infoField) {
+        aprsMessage.type = APRSMessage.MESSAGE_TYPE;
+        MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
+        aprsMessage.toCallsign = messagePacket.getTargetCallsign();
+        if (!messagePacket.isAck()) {
+            aprsMessage.msgBody = messagePacket.getMessageBody();
+            return true;
         }
+        Integer msgNum = parseAckMessageNumber(messagePacket.getMessageNumber());
+        if (msgNum == null) {
+            Log.d("DEBUG", "Warning: Bad message number in APRS ack, ignoring: '" + messagePacket.getMessageNumber() + "'");
+            return false;
+        }
+        aprsMessage.wasAcknowledged = true;
+        aprsMessage.msgNum = msgNum;
+        return true;
+    }
 
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                APRSMessage oldAPRSMessage = null;
-                if (aprsMessage.wasAcknowledged) {
-                    // When this is an ack, we don't insert anything in the DB, we try to find that old message to ack it.
-                    oldAPRSMessage = viewModel.getAppDb().aprsMessageDao().getMsgToAck(aprsMessage.toCallsign, aprsMessage.msgNum);
-                    if (null == oldAPRSMessage) {
-                        Log.d("DEBUG", "Can't ack unknown APRS message from: " + aprsMessage.toCallsign + " with msg number: " + aprsMessage.msgNum);
-                        return;
-                    } else {
-                        // Ack an old message
-                        oldAPRSMessage.wasAcknowledged = true;
-                        viewModel.getAppDb().aprsMessageDao().update(oldAPRSMessage);
-                    }
-                } else {
-                    // Not an ack, add a message or merge decoder source when packet was decoded by both paths.
-                    APRSMessage existing = viewModel.getAppDb().aprsMessageDao().getLatestByPacketHash(aprsMessage.packetHash);
-                    if (existing != null && aprsMessage.packetHash != null && !aprsMessage.packetHash.isEmpty()) {
-                        int mergedSource = existing.decoderSource | aprsMessage.decoderSource;
-                        if (mergedSource != existing.decoderSource) {
-                            existing.decoderSource = mergedSource;
-                            viewModel.getAppDb().aprsMessageDao().update(existing);
-                        }
-                    } else {
-                        viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
-                    }
-                }
+    private Integer parseAckMessageNumber(String messageNumber) {
+        if (!hasText(messageNumber)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(messageNumber.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
 
-                viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
+    private void applyRawCommentFallback(APRSPacket aprsPacket, APRSMessage aprsMessage, InformationField infoField, String comment) {
+        if (!aprsPacket.hasFault() && (aprsMessage.type != APRSMessage.UNKNOWN_TYPE || hasText(comment))) {
+            return;
+        }
+        aprsMessage.comment = "Raw: " + new String(infoField.getRawBytes(), StandardCharsets.UTF_8);
+    }
+
+    private void persistChatPacketAsync(APRSMessage aprsMessage) {
+        threadPoolExecutor.execute(() -> {
+            if (aprsMessage.wasAcknowledged) {
+                updateAcknowledgedMessage(aprsMessage);
+                return;
             }
+            upsertReceivedMessage(aprsMessage);
+            notifyAprsDataChanged();
         });
+    }
+
+    private void updateAcknowledgedMessage(APRSMessage aprsMessage) {
+        APRSMessage oldAprsMessage = viewModel.getAppDb().aprsMessageDao().getMsgToAck(aprsMessage.toCallsign, aprsMessage.msgNum);
+        if (oldAprsMessage == null) {
+            Log.d("DEBUG", "Can't ack unknown APRS message from: " + aprsMessage.toCallsign + " with msg number: " + aprsMessage.msgNum);
+            return;
+        }
+        oldAprsMessage.wasAcknowledged = true;
+        viewModel.getAppDb().aprsMessageDao().update(oldAprsMessage);
+        notifyAprsDataChanged();
+    }
+
+    private void upsertReceivedMessage(APRSMessage aprsMessage) {
+        APRSMessage existing = viewModel.getAppDb().aprsMessageDao().getLatestByPacketHash(aprsMessage.packetHash);
+        if (existing == null || !hasText(aprsMessage.packetHash)) {
+            viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
+            return;
+        }
+        int mergedSource = existing.decoderSource | aprsMessage.decoderSource;
+        if (mergedSource != existing.decoderSource) {
+            existing.decoderSource = mergedSource;
+            viewModel.getAppDb().aprsMessageDao().update(existing);
+        }
+    }
+
+    private void notifyAprsDataChanged() {
+        viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private static class PacketFields {
+        private final InformationField infoField;
+        private final WeatherField weatherField;
+        private final PositionField positionField;
+        private final ObjectField objectField;
+
+        private PacketFields(InformationField infoField, WeatherField weatherField, PositionField positionField, ObjectField objectField) {
+            this.infoField = infoField;
+            this.weatherField = weatherField;
+            this.positionField = positionField;
+            this.objectField = objectField;
+        }
     }
 
     private enum ScreenType {
