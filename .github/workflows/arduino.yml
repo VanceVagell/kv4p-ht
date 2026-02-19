@@ -36,6 +36,7 @@ jobs:
               name: arduino-audio-tools
             - source-url: https://github.com/pschatzmann/arduino-libopus/archive/refs/tags/a1.1.0.zip
               name: arduino-libopus
-            - source-url: https://github.com/dkaukov/esp32-afsk.git#v0.1.0
+            - source-url: https://github.com/dkaukov/esp32-afsk.git
+              version: v0.1.0
               name: esp32-afsk
           verbose: true
