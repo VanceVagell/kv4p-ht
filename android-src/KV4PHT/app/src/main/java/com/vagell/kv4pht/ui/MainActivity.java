@@ -639,6 +639,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Keep packet handling in MainActivity for readability; moving it into the service callback
+    // anonymous class would make that callback block harder to navigate.
+    @SuppressWarnings("java:S3398")
     private void handleChatPacket(APRSPacket aprsPacket, int decoderSource, String packetHash) {
         PacketFields fields = extractPacketFields(aprsPacket);
         APRSMessage aprsMessage = createBaseMessage(aprsPacket, decoderSource, packetHash, fields.positionField);
