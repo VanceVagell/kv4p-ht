@@ -1,6 +1,7 @@
 package com.vagell.kv4pht.radio;
 
 import android.os.Handler;
+import android.os.Looper;
 import java.util.function.BooleanSupplier;
 
 final class ConnectionController {
@@ -40,9 +41,14 @@ final class ConnectionController {
 
     void stop() {
         handler.removeCallbacks(periodicRunnable);
+        markAttemptFinished();
     }
 
     void markAttemptFinished() {
-        attemptActive = false;
+        if (Looper.myLooper() == handler.getLooper()) {
+            attemptActive = false;
+        } else {
+            handler.post(() -> attemptActive = false);
+        }
     }
 }

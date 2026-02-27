@@ -1642,7 +1642,9 @@ public class MainActivity extends AppCompatActivity {
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
-            Log.d("DEBUG", "usbReceiver.onReceive()");
+            Thread thread = Thread.currentThread();
+            Log.d("DEBUG", "usbReceiver.onReceive() action=" + intent.getAction()
+                + " thread=" + thread.getName() + "#" + thread.getId());
 
             String action = intent.getAction();
             synchronized (this) {
