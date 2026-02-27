@@ -818,6 +818,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             try {
                 usbIoManager.stop();
             } catch (Exception ignored) {
+                // Best-effort cleanup during teardown; transport may already be stopping.
             }
             usbIoManager = null;
         }
@@ -825,6 +826,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             try {
                 serialPort.close();
             } catch (Exception ignored) {
+                // Best-effort cleanup during teardown; port may already be closed.
             }
             serialPort = null;
         }
