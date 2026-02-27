@@ -298,6 +298,7 @@ public class MainActivity extends AppCompatActivity {
         });
         attachListeners();
         IntentFilter filter = new IntentFilter();
+        filter.addAction(ACTION_USB_PERMISSION);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         registerReceiver(usbReceiver, filter);
@@ -1646,6 +1647,14 @@ public class MainActivity extends AppCompatActivity {
             String action = intent.getAction();
             synchronized (this) {
                 if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+                    if (ACTION_USB_PERMISSION.equals(action)
+                        && !intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        Log.w("DEBUG", "USB permission denied by user.");
+                        if (radioAudioService != null) {
+                            radioAudioService.onUsbPermissionDenied();
+                        }
+                        return;
+                    }
                     if (radioAudioService != null) {
                         radioAudioService.reconnectViaUSB();
                     }
