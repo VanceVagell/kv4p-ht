@@ -84,7 +84,8 @@ class ProtocolHandshake {
                 radioAudioService.setMode(RadioMode.BAD_FIRMWARE);
                 radioAudioService.getCallbacks().missingFirmware();
                 return null;
-            });
+            })
+            .whenComplete((ignored, ex) -> radioAudioService.onHandshakeCompleted());
     }
 
     private void handleResult(HandshakeResult res) {
