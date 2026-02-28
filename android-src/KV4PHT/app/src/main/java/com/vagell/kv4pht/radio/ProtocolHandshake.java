@@ -71,7 +71,7 @@ class ProtocolHandshake {
         activeHandshakeId = handshakeId;
         Log.i(TAG, handshakeLog(handshakeId, "start(): waiting for HELLO"));
         startFor(handshakeId, waitForHello(handshakeId)
-            .thenCompose(ignored -> sendConfigStep(handshakeId, ignored)));
+            .thenCompose(ignored -> sendConfigStep(handshakeId)));
     }
 
     public void onDestroy() {
@@ -80,7 +80,7 @@ class ProtocolHandshake {
 
     private void startFor(int handshakeId, CompletionStage<Void> chain) {
         chain
-            .thenCompose(ignored -> waitForFirmwareVersion(handshakeId, ignored))
+            .thenCompose(ignored -> waitForFirmwareVersion(handshakeId))
             .thenCompose(version -> checkFirmwareVersionAndRadioStatus(handshakeId, version))
             .thenAccept(res -> handleResult(handshakeId, res))
             .exceptionally(ex -> {
@@ -133,7 +133,7 @@ class ProtocolHandshake {
             int handshakeId = ++handshakeSeq;
             activeHandshakeId = handshakeId;
             Log.i(TAG, handshakeLog(handshakeId, "HELLO received after wait completed; restarting from config step"));
-            startFor(handshakeId, sendConfigStep(handshakeId, null)); // ESP32 rebooted mid-session, restart from config step
+            startFor(handshakeId, sendConfigStep(handshakeId)); // ESP32 rebooted mid-session, restart from config step
         }
     }
 
@@ -174,7 +174,7 @@ class ProtocolHandshake {
      *
      * @return A future that completes once the config is sent.
      */
-    private CompletableFuture<Void> sendConfigStep(int handshakeId, Void ignored) {
+    private CompletableFuture<Void> sendConfigStep(int handshakeId) {
         return CompletableFuture.runAsync(() -> {
             radioAudioService.getCallbacks().radioModuleHandshake();
             radioAudioService.setMode(RadioMode.STARTUP);
@@ -190,7 +190,7 @@ class ProtocolHandshake {
      *
      * @return A future that completes when version is received or times out.
      */
-    private CompletableFuture<Optional<Protocol.FirmwareVersion>> waitForFirmwareVersion(int handshakeId, Void ignored) {
+    private CompletableFuture<Optional<Protocol.FirmwareVersion>> waitForFirmwareVersion(int handshakeId) {
         waitFirmwareVersion = new CompletableFuture<>();
         Log.d(TAG, handshakeLog(handshakeId, "waitForFirmwareVersion(): timeout=" + FIRMWARE_VERSION_TIMEOUT_MS + "ms"));
         protocolScheduler.schedule(() -> {
