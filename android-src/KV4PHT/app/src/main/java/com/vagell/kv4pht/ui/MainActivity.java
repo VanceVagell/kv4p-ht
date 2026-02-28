@@ -96,6 +96,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -597,6 +598,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        unregisterReceiver(usbReceiver);
         unregisterReceiver(serviceShutdownReceiver);
         try {
             threadPoolExecutor.shutdownNow();
@@ -1326,9 +1328,8 @@ public class MainActivity extends AppCompatActivity {
 
                 // Save most recent memory so we can restore it on app restart
                 // Could be null if user is just listening to scan in another app, etc.
-                threadPoolExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
+                try {
+                    threadPoolExecutor.execute(() -> {
                         AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_MEMORY_ID);
                         if (lastMemoryIdSetting != null) {
                             lastMemoryIdSetting.value = "" + memoryId;
@@ -1337,8 +1338,10 @@ public class MainActivity extends AppCompatActivity {
                             lastMemoryIdSetting = new AppSetting(AppSetting.SETTING_LAST_MEMORY_ID, "" + memoryId);
                             viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
                         }
-                    }
-                });
+                    });
+                } catch (RejectedExecutionException ignored) {
+                    Log.d("DEBUG", "Skipping last-memory persistence because MainActivity is tearing down.");
+                }
                 return;
             }
         }
