@@ -9,16 +9,22 @@ final class ConnectionController {
     private final long periodMs;
     private final BooleanSupplier isConnectionReady;
     private final Runnable attemptConnect;
+    private boolean running = false;
     private boolean attemptActive = false;
 
     private final Runnable periodicRunnable = new Runnable() {
         @Override
         public void run() {
+            if (!running) {
+                return;
+            }
             if (!isConnectionReady.getAsBoolean() && !attemptActive) {
                 attemptActive = true;
                 attemptConnect.run();
             }
-            handler.postDelayed(this, periodMs);
+            if (running) {
+                handler.postDelayed(this, periodMs);
+            }
         }
     };
 
@@ -36,10 +42,12 @@ final class ConnectionController {
 
     void start() {
         stop();
+        running = true;
         handler.postDelayed(periodicRunnable, periodMs);
     }
 
     void stop() {
+        running = false;
         handler.removeCallbacks(periodicRunnable);
         markAttemptFinished();
     }
