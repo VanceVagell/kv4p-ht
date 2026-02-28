@@ -552,6 +552,8 @@ public class RadioAudioService extends Service implements PacketHandler {
                 Log.d(TAG, "Sending stop to ESP32...");
                 hostToEsp32.stop();
                 Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } catch (Exception ignored) {
                 // Ignore, we are shutting down anyway.
             }
