@@ -1157,7 +1157,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     }
 
     public boolean isRadioConnected() {
-        return hostToEsp32 != null;
+        return isConnectionReady() && mode != RadioMode.STARTUP;
     }
 
     /**
