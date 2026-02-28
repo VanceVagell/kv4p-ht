@@ -547,8 +547,14 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (isConnectionReady() && (mode == RadioMode.RX || mode == RadioMode.TX || mode == RadioMode.SCAN)) {
+            try {
+                hostToEsp32.stop();
+            } catch (Exception ignored) {
+                // Ignore, we are shutting down anyway.
+            }
+        }
         connectionController.stop();
-
         protocolHandshake.onDestroy();
 
         // Clean up APRS beacon executor
