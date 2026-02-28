@@ -549,7 +549,9 @@ public class RadioAudioService extends Service implements PacketHandler {
         super.onDestroy();
         if (isConnectionReady() && (mode == RadioMode.RX || mode == RadioMode.TX || mode == RadioMode.SCAN)) {
             try {
+                Log.d(TAG, "Sending stop to ESP32...");
                 hostToEsp32.stop();
+                Thread.sleep(100);
             } catch (Exception ignored) {
                 // Ignore, we are shutting down anyway.
             }
