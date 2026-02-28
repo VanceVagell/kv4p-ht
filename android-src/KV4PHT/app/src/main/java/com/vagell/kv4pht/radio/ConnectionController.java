@@ -14,6 +14,8 @@ final class ConnectionController {
 
     private final Runnable periodicRunnable = new Runnable() {
         @Override
+        // False positive: attemptConnect.run() can call stop() and flip running to false.
+        @SuppressWarnings("java:S2589")
         public void run() {
             if (!running) {
                 return;
@@ -21,11 +23,10 @@ final class ConnectionController {
             if (!isConnectionReady.getAsBoolean() && !attemptActive) {
                 attemptActive = true;
                 attemptConnect.run();
-                if (!running) {
-                    return;
-                }
             }
-            handler.postDelayed(this, periodMs);
+            if (running) {
+                handler.postDelayed(this, periodMs);
+            }
         }
     };
 
