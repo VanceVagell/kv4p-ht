@@ -613,7 +613,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        viewModel.loadDataAsync(this::applySettings);
         // If we lost reference to the radioAudioService, startAndBindRadioAudioService();
         startAndBindRadioAudioService();
     }
@@ -1827,7 +1826,9 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
             case REQUEST_SETTINGS:
-                // Don't need to do anything here, since settings are applied in onResume() anyway.
+                if (resultCode == Activity.RESULT_OK) {
+                    viewModel.loadDataAsync(this::applySettings);
+                }
                 break;
             case REQUEST_FIRMWARE:
                 if (resultCode == Activity.RESULT_OK) {
