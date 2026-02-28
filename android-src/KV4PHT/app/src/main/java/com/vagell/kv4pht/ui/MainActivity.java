@@ -1834,10 +1834,9 @@ public class MainActivity extends AppCompatActivity {
             case REQUEST_FIRMWARE:
                 if (resultCode == Activity.RESULT_OK) {
                     showSimpleSnackbar(getString(R.string.successfully_updated_firmware));
-
                     // Try to reconnect now that the kv4p HT firmware should be present
-                    if (null != radioAudioService) {
-                        radioAudioService.reconnectViaUSB();
+                    if (radioAudioService != null) {
+                        radioAudioService.renegotiateAfterFlashing();
                     }
                 }
                 break;

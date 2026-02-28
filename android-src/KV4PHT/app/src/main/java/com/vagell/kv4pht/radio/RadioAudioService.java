@@ -819,6 +819,12 @@ public class RadioAudioService extends Service implements PacketHandler {
         connectionController.markAttemptFinished();
     }
 
+    public void renegotiateAfterFlashing() {
+        Log.i(TAG, connectLog("renegotiateAfterFlashing(): closing port and resetting state before renegotiation"));
+        closePortAndReset();
+        reconnectViaUSB();
+    }
+
     public void onUsbPermissionDenied() {
         Log.w(TAG, connectLog("USB permission denied by system dialog"));
         usbPermissionRequestPending = false;
