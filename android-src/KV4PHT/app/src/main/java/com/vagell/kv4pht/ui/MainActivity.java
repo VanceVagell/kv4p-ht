@@ -1826,9 +1826,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
             case REQUEST_SETTINGS:
-                if (resultCode == Activity.RESULT_OK) {
-                    viewModel.loadDataAsync(this::applySettings);
-                }
+                viewModel.loadDataAsync(this::applySettings);
                 break;
             case REQUEST_FIRMWARE:
                 if (resultCode == Activity.RESULT_OK) {
