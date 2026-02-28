@@ -21,10 +21,11 @@ final class ConnectionController {
             if (!isConnectionReady.getAsBoolean() && !attemptActive) {
                 attemptActive = true;
                 attemptConnect.run();
+                if (!running) {
+                    return;
+                }
             }
-            if (running) {
-                handler.postDelayed(this, periodMs);
-            }
+            handler.postDelayed(this, periodMs);
         }
     };
 

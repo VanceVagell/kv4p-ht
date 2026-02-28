@@ -547,17 +547,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (isConnectionReady() && (mode == RadioMode.RX || mode == RadioMode.TX || mode == RadioMode.SCAN)) {
-            try {
-                Log.d(TAG, "Sending stop to ESP32...");
-                hostToEsp32.stop();
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (Exception ignored) {
-                // Ignore, we are shutting down anyway.
-            }
-        }
+        tryToStopRadioModule();
         connectionController.stop();
         protocolHandshake.onDestroy();
 
@@ -591,6 +581,20 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
         wakeLock = null;
         stopForeground(true);
+    }
+
+    private void tryToStopRadioModule() {
+        if (isConnectionReady() && (mode == RadioMode.RX || mode == RadioMode.TX || mode == RadioMode.SCAN)) {
+            try {
+                Log.d(TAG, "Sending stop to ESP32...");
+                hostToEsp32.stop();
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception ignored) {
+                // Ignore, we are shutting down anyway.
+            }
+        }
     }
 
     @Override
