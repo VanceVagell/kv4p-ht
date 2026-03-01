@@ -64,7 +64,7 @@ public final class Protocol {
         COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
         COMMAND_VERSION(0x08),          // [COMMAND_VERSION(Version)]
         COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
-        COMMAND_AX25_RX_PACKET(0x0A);   // [COMMAND_AX25_RX_PACKET(uint8_t decoderId, uint8_t[])]
+        COMMAND_RX_AX25_PACKET(0x0A);   // [COMMAND_RX_AX25_PACKET(uint8_t decoderId, uint8_t[])]
         private final int value;
         RcvCommand(int value) {
             this.value = value;

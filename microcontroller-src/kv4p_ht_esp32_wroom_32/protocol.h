@@ -56,7 +56,7 @@ enum SndCommand {
   COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_VERSION        = 0x08, // [COMMAND_VERSION(Version)]
   COMMAND_WINDOW_UPDATE  = 0x09,
-  COMMAND_AX25_RX_PACKET = 0x0A, // [COMMAND_AX25_RX_PACKET(uint8_t decoder, uint8_t[])]
+  COMMAND_RX_AX25_PACKET = 0x0A, // [COMMAND_RX_AX25_PACKET(uint8_t decoder, uint8_t[])]
 };
 
 // COMMAND_VERSION parameters
@@ -188,7 +188,7 @@ void inline sendAx25Packet(uint8_t decoderId, const uint8_t *data, size_t len) {
   if (len > 0) {
     memcpy(payload + 1, data, len);
   }
-  __sendCmdToHost(COMMAND_AX25_RX_PACKET, payload, len + 1);
+  __sendCmdToHost(COMMAND_RX_AX25_PACKET, payload, len + 1);
 }
 
 void inline sendWindowAck(size_t size) {

@@ -1257,7 +1257,7 @@ public class RadioAudioService extends Service implements PacketHandler {
                 WindowUpdate.from(param, len).ifPresent(windowAck ->
                     hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
                 break;
-            case COMMAND_AX25_RX_PACKET:
+            case COMMAND_RX_AX25_PACKET:
                 handleEsp32Ax25Packet(param, len);
                 break;
 
