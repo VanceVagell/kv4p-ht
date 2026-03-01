@@ -38,11 +38,13 @@ import java.util.concurrent.TimeoutException;
 @SuppressWarnings({"javaarchitecture:S7027"})
 class ProtocolHandshake {
     private static final String TAG = ProtocolHandshake.class.getSimpleName();
-    private static final int HELLO_TIMEOUT_MS = 1000;
+    private static final int HELLO_TIMEOUT_MS = 1500;
     private static final int FIRMWARE_VERSION_TIMEOUT_MS = 60000;
     private enum HandshakeResult {INVALID, TOO_OLD, OK, RADIO_MODULE_NOT_FOUND}
     private final RadioAudioService radioAudioService;
     private ScheduledExecutorService protocolScheduler = Executors.newSingleThreadScheduledExecutor();
+    private int handshakeSeq = 0;
+    private int activeHandshakeId = 0;
 
     /**
      * Future completed when HELLO is received or timeout occurs.
@@ -65,46 +67,52 @@ class ProtocolHandshake {
         if (protocolScheduler.isShutdown()) {
             protocolScheduler = Executors.newSingleThreadScheduledExecutor();
         }
-        Log.i(TAG, "Starting protocol handshake with ESP32.");
-        startFor(waitForHello()
-            .thenCompose(this::sendConfigStep));
+        int handshakeId = ++handshakeSeq;
+        activeHandshakeId = handshakeId;
+        Log.i(TAG, handshakeLog(handshakeId, "start(): waiting for HELLO"));
+        startFor(handshakeId, waitForHello(handshakeId)
+            .thenCompose(ignored -> sendConfigStep(handshakeId)));
     }
 
     public void onDestroy() {
         protocolScheduler.shutdownNow();
     }
 
-    private void startFor(CompletionStage<Void> chain) {
+    private void startFor(int handshakeId, CompletionStage<Void> chain) {
         chain
-            .thenCompose(this::waitForFirmwareVersion)
-            .thenCompose(this::checkFirmwareVersionAndRadioStatus)
-            .thenAccept(this::handleResult)
+            .thenCompose(ignored -> waitForFirmwareVersion(handshakeId))
+            .thenCompose(version -> checkFirmwareVersionAndRadioStatus(handshakeId, version))
+            .thenAccept(res -> handleResult(handshakeId, res))
             .exceptionally(ex -> {
-                Log.e(TAG, "Handshake chain failed: " + ex.getMessage());
+                Log.e(TAG, handshakeLog(handshakeId, "chain failed"), ex);
                 radioAudioService.setMode(RadioMode.BAD_FIRMWARE);
                 radioAudioService.getCallbacks().missingFirmware();
                 return null;
+            })
+            .whenComplete((ignored, ex) -> {
+                Log.d(TAG, handshakeLog(handshakeId, "complete() ex=" + (ex != null)));
+                radioAudioService.onHandshakeCompleted();
             });
     }
 
-    private void handleResult(HandshakeResult res) {
+    private void handleResult(int handshakeId, HandshakeResult res) {
         switch (res) {
             case INVALID:
-                Log.e(TAG, "Cannot parse FirmwareVersion packet.");
+                Log.e(TAG, handshakeLog(handshakeId, "invalid FirmwareVersion packet"));
                 radioAudioService.getCallbacks().missingFirmware();
                 radioAudioService.setMode(RadioMode.BAD_FIRMWARE);
                 return;
             case TOO_OLD:
-                Log.w(TAG, "Firmware version too old, cannot proceed.");
+                Log.w(TAG, handshakeLog(handshakeId, "firmware version too old"));
                 radioAudioService.setMode(RadioMode.BAD_FIRMWARE);
                 return;
             case RADIO_MODULE_NOT_FOUND:
-                Log.e(TAG, "Radio module not found, cannot proceed.");
+                Log.w(TAG, handshakeLog(handshakeId, "radio module not found"));
                 radioAudioService.setMode(RadioMode.BAD_FIRMWARE);
                 radioAudioService.getCallbacks().radioModuleNotFound();
                 return;
             case OK:
-                Log.i(TAG, "Firmware version OK, proceeding with radio communication.");
+                Log.i(TAG, handshakeLog(handshakeId, "firmware version OK; proceeding with radio communication"));
                 radioAudioService.setMode(RadioMode.RX);
                 // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
                 radioAudioService.setScanning(false);
@@ -119,11 +127,13 @@ class ProtocolHandshake {
      */
     public void onHelloReceived() {
         if (!waitForHello.isDone()) {
-            Log.d(TAG, "HELLO received from ESP32.");
+            Log.d(TAG, handshakeLog(activeHandshakeId, "HELLO received"));
             waitForHello.complete(null);
         } else {
-            Log.i(TAG, "ESP32 rebooted, restarting handshake from config step.");
-            startFor(sendConfigStep(null)); // ESP32 rebooted mid-session, restart from config step
+            int handshakeId = ++handshakeSeq;
+            activeHandshakeId = handshakeId;
+            Log.i(TAG, handshakeLog(handshakeId, "HELLO received after wait completed; restarting from config step"));
+            startFor(handshakeId, sendConfigStep(handshakeId)); // ESP32 rebooted mid-session, restart from config step
         }
     }
 
@@ -136,7 +146,7 @@ class ProtocolHandshake {
      */
     public void onVersionReceived(Optional<Protocol.FirmwareVersion> version) {
         if (!waitFirmwareVersion.isDone()) {
-            Log.d(TAG, "Firmware version received from ESP32: " + version);
+            Log.d(TAG, handshakeLog(activeHandshakeId, "firmware version received: " + version));
             waitFirmwareVersion.complete(version);
         }
     }
@@ -146,10 +156,12 @@ class ProtocolHandshake {
      *
      * @return A future that completes when HELLO is received or times out.
      */
-    private CompletableFuture<Void> waitForHello() {
+    private CompletableFuture<Void> waitForHello(int handshakeId) {
         waitForHello = new CompletableFuture<>();
+        Log.d(TAG, handshakeLog(handshakeId, "waitForHello(): timeout=" + HELLO_TIMEOUT_MS + "ms"));
         protocolScheduler.schedule(() -> {
             if (!waitForHello.isDone()) {
+                Log.w(TAG, handshakeLog(handshakeId, "waitForHello(): timed out"));
                 waitForHello.completeExceptionally(new TimeoutException("Timeout waiting for HELLO"));
             }
         }, HELLO_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -162,13 +174,13 @@ class ProtocolHandshake {
      *
      * @return A future that completes once the config is sent.
      */
-    private CompletableFuture<Void> sendConfigStep(Void ignored) {
+    private CompletableFuture<Void> sendConfigStep(int handshakeId) {
         return CompletableFuture.runAsync(() -> {
             radioAudioService.getCallbacks().radioModuleHandshake();
             radioAudioService.setMode(RadioMode.STARTUP);
             radioAudioService.getHostToEsp32().stop();
             Protocol.Config cfg = Protocol.Config.builder().isHigh(radioAudioService.isHighPower()).build();
-            Log.d(TAG, "Sending configuration to ESP32: " + cfg);
+            Log.d(TAG, handshakeLog(handshakeId, "sendConfigStep(): sending " + cfg));
             radioAudioService.getHostToEsp32().config(cfg);
         });
     }
@@ -178,10 +190,12 @@ class ProtocolHandshake {
      *
      * @return A future that completes when version is received or times out.
      */
-    private CompletableFuture<Optional<Protocol.FirmwareVersion>> waitForFirmwareVersion(Void ignored) {
+    private CompletableFuture<Optional<Protocol.FirmwareVersion>> waitForFirmwareVersion(int handshakeId) {
         waitFirmwareVersion = new CompletableFuture<>();
+        Log.d(TAG, handshakeLog(handshakeId, "waitForFirmwareVersion(): timeout=" + FIRMWARE_VERSION_TIMEOUT_MS + "ms"));
         protocolScheduler.schedule(() -> {
             if (!waitFirmwareVersion.isDone()) {
+                Log.w(TAG, handshakeLog(handshakeId, "waitForFirmwareVersion(): timed out"));
                 waitFirmwareVersion.completeExceptionally(new TimeoutException("Timeout waiting for firmware version"));
             }
         }, FIRMWARE_VERSION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -196,12 +210,14 @@ class ProtocolHandshake {
      * @return A future that completes when initialization is done.
      * @noinspection OptionalUsedAsFieldOrParameterType
      */
-    private CompletableFuture<HandshakeResult> checkFirmwareVersionAndRadioStatus(Optional<Protocol.FirmwareVersion> firmwareVersion) {
+    private CompletableFuture<HandshakeResult> checkFirmwareVersionAndRadioStatus(int handshakeId, Optional<Protocol.FirmwareVersion> firmwareVersion) {
         return CompletableFuture.supplyAsync(() -> {
             if (!firmwareVersion.isPresent()) {
+                Log.w(TAG, handshakeLog(handshakeId, "checkFirmwareVersionAndRadioStatus(): no firmware version present"));
                 return HandshakeResult.INVALID;
             }
             final Protocol.FirmwareVersion ver = firmwareVersion.get();
+            Log.d(TAG, handshakeLog(handshakeId, "checkFirmwareVersionAndRadioStatus(): version=" + ver));
             radioAudioService.getCallbacks().firmwareVersionReceived(ver.getVer());
             if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                 radioAudioService.getCallbacks().outdatedFirmware(ver.getVer());
@@ -219,5 +235,12 @@ class ProtocolHandshake {
                 return HandshakeResult.OK;
             }
         });
+    }
+
+    private String handshakeLog(int handshakeId, String message) {
+        return "handshake#" + handshakeId
+            + "/connect#" + radioAudioService.getActiveUsbConnectAttemptId()
+            + " " + RadioAudioService.threadTag()
+            + " " + message;
     }
 }

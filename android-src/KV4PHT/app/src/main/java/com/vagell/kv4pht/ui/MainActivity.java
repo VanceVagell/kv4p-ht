@@ -97,6 +97,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -303,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         ContextCompat.registerReceiver(this, usbReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
-        registerReceiver(serviceShutdownReceiver, new IntentFilter(RadioAudioService.ACTION_SERVICE_STOPPING), ContextCompat.RECEIVER_NOT_EXPORTED);
+        ContextCompat.registerReceiver(this, serviceShutdownReceiver, new IntentFilter(RadioAudioService.ACTION_SERVICE_STOPPING), ContextCompat.RECEIVER_NOT_EXPORTED);
         viewModel.loadDataAsync(this::applySettings);
     }
 
@@ -598,11 +599,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        try {
-            unregisterReceiver(usbReceiver);
-        } catch (Exception ignored) {
-            // Receiver can be unregistered already on some lifecycle/error paths.
-        }
+        unregisterReceiver(usbReceiver);
         unregisterReceiver(serviceShutdownReceiver);
         try {
             threadPoolExecutor.shutdownNow();
@@ -619,7 +616,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        viewModel.loadDataAsync(this::applySettings);
         // If we lost reference to the radioAudioService, startAndBindRadioAudioService();
         startAndBindRadioAudioService();
     }
@@ -1411,9 +1407,8 @@ public class MainActivity extends AppCompatActivity {
 
                 // Save most recent memory so we can restore it on app restart
                 // Could be null if user is just listening to scan in another app, etc.
-                threadPoolExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
+                try {
+                    threadPoolExecutor.execute(() -> {
                         AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_MEMORY_ID);
                         if (lastMemoryIdSetting != null) {
                             lastMemoryIdSetting.value = "" + memoryId;
@@ -1422,8 +1417,10 @@ public class MainActivity extends AppCompatActivity {
                             lastMemoryIdSetting = new AppSetting(AppSetting.SETTING_LAST_MEMORY_ID, "" + memoryId);
                             viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
                         }
-                    }
-                });
+                    });
+                } catch (RejectedExecutionException ignored) {
+                    Log.d("DEBUG", "Skipping last-memory persistence because MainActivity is tearing down.");
+                }
                 return;
             }
         }
@@ -1726,14 +1723,19 @@ public class MainActivity extends AppCompatActivity {
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
-            Log.d("DEBUG", "usbReceiver.onReceive()");
+            Thread thread = Thread.currentThread();
+            Log.d("DEBUG", "usbReceiver.onReceive() action=" + intent.getAction()
+                + " thread=" + thread.getName() + "#" + thread.getId());
 
             String action = intent.getAction();
             synchronized (this) {
                 if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
-                    if (ACTION_USB_PERMISSION.equals(action) &&
-                        !intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                    if (ACTION_USB_PERMISSION.equals(action)
+                        && !intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                         Log.w("DEBUG", "USB permission denied by user.");
+                        if (radioAudioService != null) {
+                            radioAudioService.onUsbPermissionDenied();
+                        }
                         return;
                     }
                     if (radioAudioService != null) {
@@ -1906,15 +1908,14 @@ public class MainActivity extends AppCompatActivity {
                 }
                 break;
             case REQUEST_SETTINGS:
-                // Don't need to do anything here, since settings are applied in onResume() anyway.
+                viewModel.loadDataAsync(this::applySettings);
                 break;
             case REQUEST_FIRMWARE:
                 if (resultCode == Activity.RESULT_OK) {
                     showSimpleSnackbar(getString(R.string.successfully_updated_firmware));
-
                     // Try to reconnect now that the kv4p HT firmware should be present
-                    if (null != radioAudioService) {
-                        radioAudioService.reconnectViaUSB();
+                    if (radioAudioService != null) {
+                        radioAudioService.renegotiateAfterFlashing();
                     }
                 }
                 break;

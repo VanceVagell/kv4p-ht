@@ -193,9 +193,12 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Getter
     private UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
+    private boolean usbPermissionRequestPending = false;
     @Getter
     private Protocol.Sender hostToEsp32;
     private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
+    private int usbConnectAttemptSeq = 0;
+    private int activeUsbConnectAttemptId = 0;
 
     // === AFSK Modem ===
     private final PacketModulator afskModulator = new Afsk1200Modulator(AUDIO_SAMPLE_RATE);
@@ -249,6 +252,10 @@ public class RadioAudioService extends Service implements PacketHandler {
     private @NonNull RadioAudioServiceCallbacks callbacks = NO_OP_CALLBACKS;
     private final ProtocolHandshake protocolHandshake = new ProtocolHandshake(this);
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private static final long CONNECT_RETRY_PERIOD_MS = 500L;
+    private final ConnectionController connectionController =
+        new ConnectionController(handler, CONNECT_RETRY_PERIOD_MS, this::isConnectionReady, this::attemptUsbConnect);
+    private boolean radioMissingNotified = false;
     private Runnable txTimeoutHandler;
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
 
@@ -482,7 +489,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
         createNotificationChannels();
         initAudioTrack();
-        handler.postDelayed(this::findESP32Device, 10);
+        connectionController.start();
     }
 
     @Override
@@ -568,7 +575,8 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Override
     public void onDestroy() {
         super.onDestroy();
-
+        tryToStopRadioModule();
+        connectionController.stop();
         protocolHandshake.onDestroy();
 
         // Clean up APRS beacon executor
@@ -601,6 +609,20 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
         wakeLock = null;
         stopForeground(true);
+    }
+
+    private void tryToStopRadioModule() {
+        if (isConnectionReady() && (mode == RadioMode.RX || mode == RadioMode.TX || mode == RadioMode.SCAN)) {
+            try {
+                Log.d(TAG, "Sending stop to ESP32...");
+                hostToEsp32.stop();
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception ignored) {
+                // Ignore, we are shutting down anyway.
+            }
+        }
     }
 
     @Override
@@ -824,30 +846,78 @@ public class RadioAudioService extends Service implements PacketHandler {
     }
 
     public void reconnectViaUSB() {
-        findESP32Device();
+        Log.i(TAG, connectLog("reconnectViaUSB(): clearing pending state for next attempt"));
+        usbPermissionRequestPending = false;
+        // Re-plug is an explicit user/device action; allow connection attempts again.
+        radioMissingNotified = false;
+        connectionController.markAttemptFinished();
     }
 
-    private void findESP32Device() {
-        Log.i(TAG, "findESP32Device()");
+    public void renegotiateAfterFlashing() {
+        Log.i(TAG, connectLog("renegotiateAfterFlashing(): closing port and resetting state before renegotiation"));
+        closePortAndReset();
+        reconnectViaUSB();
+    }
+
+    public void onUsbPermissionDenied() {
+        Log.w(TAG, connectLog("USB permission denied by system dialog"));
+        usbPermissionRequestPending = false;
+        radioMissing();
+    }
+
+    private boolean isConnectionReady() {
+        return hostToEsp32 != null
+            && serialPort != null
+            && usbIoManager != null;
+    }
+
+    private void closePortAndReset() {
+        hostToEsp32 = null;
+        if (usbIoManager != null) {
+            try {
+                usbIoManager.stop();
+            } catch (Exception ignored) {
+                // Best-effort cleanup during teardown; transport may already be stopping.
+            }
+            usbIoManager = null;
+        }
+        if (serialPort != null) {
+            try {
+                serialPort.close();
+            } catch (Exception ignored) {
+                // Best-effort cleanup during teardown; port may already be closed.
+            }
+            serialPort = null;
+        }
+    }
+
+    private void attemptUsbConnect() {
+        activeUsbConnectAttemptId = ++usbConnectAttemptSeq;
+        Log.d(TAG, connectLog("attemptUsbConnect(): starting; state=" + connectionStateSummary()));
+        if (isConnectionReady()) {
+            Log.d(TAG, connectLog("attemptUsbConnect(): already connected, skipping enumeration"));
+            connectionController.markAttemptFinished();
+            return;
+        }
         setMode(RadioMode.STARTUP);
         setRadioType(RadioModuleType.UNKNOWN);
         Optional<UsbDevice> device = usbManager.getDeviceList().values().stream()
             .filter(this::isESP32Device)
             .findFirst();
         if (device.isPresent()) {
-            Log.i(TAG, "Found ESP32.");
+            Log.d(TAG, connectLog("attemptUsbConnect(): found ESP32 device"));
             callbacks.hideSnackBar();
             setupSerialConnection();
             return;
         }
-        Log.w(TAG, "No ESP32 detected");
+        Log.d(TAG, connectLog("attemptUsbConnect(): no ESP32 detected"));
         radioMissing();
     }
 
     private boolean isESP32Device(UsbDevice device) {
         int vendorId = device.getVendorId();
         int productId = device.getProductId();
-        Log.i(TAG, String.format("Checking USB device: vendorId=%d, productId=%d, product=\"%s\"",
+        Log.d(TAG, String.format("Checking USB device: vendorId=%d, productId=%d, product=\"%s\"",
             vendorId, productId, device.getProductName()));
         for (int i = 0; i < ESP32_VENDOR_IDS.length; i++) {
             if (vendorId == ESP32_VENDOR_IDS[i] && productId == ESP32_PRODUCT_IDS[i]) {
@@ -862,19 +932,24 @@ public class RadioAudioService extends Service implements PacketHandler {
      * If no ESP32 is found, it will call radioMissing() on the callbacks.
      */
     public void setupSerialConnection() {
-        Log.i(TAG, "Setting up serial connection to ESP32...");
+        Log.d(TAG, connectLog("setupSerialConnection(): begin"));
         // Find all available drivers from attached devices.
         UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
         if (availableDrivers.isEmpty()) {
-            Log.e(TAG, "Error: no available USB drivers.");
+            Log.d(TAG, connectLog("setupSerialConnection(): no available USB drivers"));
             radioMissing();
             return;
         }
         // Open a connection to the first available driver.
         UsbSerialDriver driver = availableDrivers.get(0);
         if (!manager.hasPermission(driver.getDevice())) {
-            Log.w(TAG, "No USB permission yet; requesting permission.");
+            if (usbPermissionRequestPending) {
+                Log.d(TAG, connectLog("setupSerialConnection(): USB permission request already pending"));
+                return;
+            }
+            Log.i(TAG, connectLog("setupSerialConnection(): requesting USB permission"));
+            usbPermissionRequestPending = true;
             PendingIntent permissionIntent = PendingIntent.getBroadcast(
                 this,
                 0,
@@ -882,22 +957,23 @@ public class RadioAudioService extends Service implements PacketHandler {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
             );
             manager.requestPermission(driver.getDevice(), permissionIntent);
-            radioMissing();
             return;
         }
+        usbPermissionRequestPending = false;
         UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
         if (connection == null) {
-            Log.e(TAG, "Error: couldn't open USB device.");
+            Log.w(TAG, connectLog("setupSerialConnection(): couldn't open USB device"));
             radioMissing();
             return;
         }
         serialPort = driver.getPorts().get(0); // Most devices have just one port (port 0)
-        Log.i(TAG, "serialPort: " + serialPort);
+        Log.d(TAG, connectLog("setupSerialConnection(): serialPort=" + serialPort));
         try {
             serialPort.open(connection);
             serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
-            Log.e(TAG, "Error: couldn't open USB serial port.");
+            Log.w(TAG, connectLog("setupSerialConnection(): couldn't open USB serial port"), e);
+            closePortAndReset();
             radioMissing();
             return;
         }
@@ -914,18 +990,12 @@ public class RadioAudioService extends Service implements PacketHandler {
             }
             @Override
             public void onRunError(Exception e) {
-                Log.e(TAG, "Error reading from ESP32.");
+                Log.w(TAG, connectLog("onRunError(): error reading from ESP32; state=" + connectionStateSummary()), e);
                 if (audioTrack != null) {
                     audioTrack.stop();
                 }
-                connection.close();
-                try {
-                    serialPort.close();
-                } catch (Exception ignored) {
-                    // Ignore, we don't care if it fails to close.
-                }
-                // Attempt to reconnect after the brief pause above.
-                handler.postDelayed(() -> findESP32Device(), 1000);
+                closePortAndReset();
+                radioMissing();
             }
         });
         usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
@@ -933,12 +1003,15 @@ public class RadioAudioService extends Service implements PacketHandler {
         usbIoManager.setReadBufferCount(16 * 2);
         usbIoManager.start();
         hostToEsp32 = new Protocol.Sender(usbIoManager);
-        Log.i(TAG, "Connected to ESP32.");
+        Log.i(TAG, connectLog("setupSerialConnection(): serial transport connected; starting handshake"));
         protocolHandshake.start();
     }
 
     // Callback for ProtocolHandshake
     public void radioConnected() {
+        Log.i(TAG, connectLog("radioConnected(): handshake complete; state=" + connectionStateSummary()));
+        connectionController.markAttemptFinished();
+        radioMissingNotified = false;
         // Acquire WakeLock if not already held to ensure audio processing continues in background.
         if (wakeLock != null && !wakeLock.isHeld()) {
             wakeLock.acquire();
@@ -948,11 +1021,43 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     // Called in many situations where radio connection is found to be broken
     private void radioMissing() {
-        hostToEsp32 = null;
-        callbacks.radioMissing(); // Notify UI that radio wasn't found
+        Log.i(TAG, connectLog("radioMissing(): state=" + connectionStateSummary()));
+        connectionController.markAttemptFinished();
+        closePortAndReset();
+        if (!radioMissingNotified) {
+            radioMissingNotified = true;
+            callbacks.radioMissing(); // Notify UI only on transition into missing state
+        }
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release(); // Don't keep screen on
         }
+    }
+
+    void onHandshakeCompleted() {
+        Log.d(TAG, connectLog("onHandshakeCompleted(): state=" + connectionStateSummary()));
+        connectionController.markAttemptFinished();
+    }
+
+    int getActiveUsbConnectAttemptId() {
+        return activeUsbConnectAttemptId;
+    }
+
+    private String connectLog(String message) {
+        return "connect#" + activeUsbConnectAttemptId + " " + threadTag() + " " + message;
+    }
+
+    private String connectionStateSummary() {
+        return "mode=" + mode
+            + ",hostToEsp32=" + (hostToEsp32 != null)
+            + ",serialPort=" + (serialPort != null)
+            + ",usbIoManager=" + (usbIoManager != null)
+            + ",usbPermissionPending=" + usbPermissionRequestPending
+            + ",radioMissingNotified=" + radioMissingNotified;
+    }
+
+    static String threadTag() {
+        Thread thread = Thread.currentThread();
+        return "thread=" + thread.getName() + "#" + thread.getId();
     }
 
     /**
@@ -1086,7 +1191,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     }
 
     public boolean isRadioConnected() {
-        return hostToEsp32 != null;
+        return isConnectionReady() && mode != RadioMode.STARTUP;
     }
 
     /**

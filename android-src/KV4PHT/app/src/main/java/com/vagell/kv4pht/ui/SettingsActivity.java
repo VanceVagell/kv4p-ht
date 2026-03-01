@@ -219,7 +219,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     public void doneButtonClicked(View view) {
-        setResult(Activity.RESULT_OK, getIntent());
+        setResult(Activity.RESULT_OK);
         finish();
     }
 
