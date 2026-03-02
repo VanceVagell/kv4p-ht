@@ -223,7 +223,19 @@
           "columnNames": [
             "id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_aprs_messages_packet_hash_id",
+            "unique": false,
+            "columnNames": [
+              "packet_hash",
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_messages_packet_hash_id` ON `${TABLE_NAME}` (`packet_hash`, `id`)"
+          }
+        ]
       }
     ],
     "setupQueries": [

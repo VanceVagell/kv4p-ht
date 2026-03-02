@@ -30,5 +30,6 @@ public class MigrationFrom6To7 extends Migration {
     public void migrate(SupportSQLiteDatabase database) {
         database.execSQL("ALTER TABLE aprs_messages ADD COLUMN decoder_source INTEGER NOT NULL DEFAULT 0");
         database.execSQL("ALTER TABLE aprs_messages ADD COLUMN packet_hash TEXT DEFAULT ''");
+        database.execSQL("CREATE INDEX IF NOT EXISTS index_aprs_messages_packet_hash_id ON aprs_messages(packet_hash, id)");
     }
 }
