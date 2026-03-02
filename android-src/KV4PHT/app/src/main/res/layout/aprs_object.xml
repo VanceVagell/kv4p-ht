@@ -34,6 +34,21 @@
             android:layout_marginRight="4dp" />
 
         <TextView
+            android:id="@+id/decoderSource"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="[-]"
+            android:textColor="@android:color/white"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:paddingLeft="3dp"
+            android:paddingRight="3dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="1dp"
+            android:background="@drawable/decoder_source_unknown"
+            android:layout_marginRight="6dp" />
+
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="&quot;"

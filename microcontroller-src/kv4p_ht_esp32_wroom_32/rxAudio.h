@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AudioTools/AudioCodecs/CodecOpus.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
+#include <AfskDemodulator.h>
 #include "globals.h"
 #include "protocol.h"
 #include "debug.h"
@@ -64,6 +65,46 @@ private:
   }
 };
 
+static void onAfskPacketDecoded(const uint8_t *frame, size_t len) {
+  if (frame && len > 0) {
+    // Decoder ID 0 = ESP32 demodulator path.
+    sendAx25Packet(0, frame, len);
+  }
+}
+
+AfskDemodulator afskDemod(AUDIO_SAMPLE_RATE, 2, onAfskPacketDecoded);
+
+class AfskTapEffect : public AudioEffect {
+public:
+  AfskTapEffect *clone() override {
+    return new AfskTapEffect(*this);
+  }
+
+  effect_t process(effect_t input) {
+    if (active()) {
+      samples[sampleCount++] = (int16_t)input;
+      if (sampleCount >= AFSK_TAP_BUFFER_SAMPLES) {
+        afskDemod.processSamples(samples, sampleCount);
+        sampleCount = 0;
+      }
+    }
+    return input;
+  }
+
+  void flush() {
+    if (sampleCount > 0) {
+      afskDemod.processSamples(samples, sampleCount);
+      sampleCount = 0;
+    }
+    afskDemod.flush();
+  }
+
+private:
+  static const size_t AFSK_TAP_BUFFER_SAMPLES = 256;
+  int16_t samples[AFSK_TAP_BUFFER_SAMPLES];
+  size_t sampleCount = 0;
+};
+
 bool rxStreamConfigured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE, 1, 16);
@@ -75,6 +116,7 @@ StreamCopy rxCopier(rxOut, effects);
 Boost mute(0.0);
 Boost gain(16.0);
 DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
+AfskTapEffect afskTapEffect;
 
 inline void injectADCBias() {
   dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
@@ -107,8 +149,10 @@ void initI2SRx() {
   rxEnc.begin(encoderConfig);
   // effects
   effects.clear();
+  afskTapEffect.setActive(true);
   effects.addEffect(dcOffsetRemover);
   effects.addEffect(gain);
+  effects.addEffect(afskTapEffect);    
   effects.addEffect(mute);
   effects.begin(rxInfo);
   // open output
@@ -118,6 +162,7 @@ void initI2SRx() {
 
 void endI2SRx() {
   if (rxStreamConfigured) {
+    afskTapEffect.flush();
     rxOut.end();
     effects.end();
     in.end();

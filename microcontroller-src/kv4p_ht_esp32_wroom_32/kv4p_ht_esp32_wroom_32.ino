@@ -138,7 +138,9 @@ void doConfig(Config const &config) {
       break;
     }
   }
-  uint8_t features = (hw.features.hasHL ? FEATURE_HAS_HL : 0) | (hw.features.hasPhysPTT ? FEATURE_HAS_PHY_PTT : 0);
+  uint8_t features = (hw.features.hasHL ? FEATURE_HAS_HL : 0)
+    | (hw.features.hasPhysPTT ? FEATURE_HAS_PHY_PTT : 0)
+    | FEATURE_HAS_ESP32_AFSK;
   sendVersion(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, features);
   esp_task_wdt_reset();
 }
@@ -207,6 +209,16 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
         rssiState.on ? rssiOn = true : rssiOn = false;    
       }   
       break;                    
+    case COMMAND_HOST_TX_AX25:
+      if (param_len > 0 && param_len <= PROTO_MTU) {
+        setMode(MODE_TX);
+        digitalWrite(hw.pins.pinLed, HIGH);
+        neopixelColor(COLOR_TX);
+        processTxAx25(params, param_len);
+        setMode(MODE_RX);
+        esp_task_wdt_reset();
+      }
+      break;
   }
 }
 

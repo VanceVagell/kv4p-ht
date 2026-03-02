@@ -104,6 +104,7 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateAprsOptions() {
         setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
+        setDropdownOptions(R.id.aprsTxEncoderTextView, List.of("Android", "ESP32"));
     }
 
     private void populateRadioOptions() {
@@ -183,6 +184,7 @@ public class SettingsActivity extends AppCompatActivity {
                 setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
+                setDropdownWithDefault(settings, AppSetting.SETTING_APRS_TX_ENCODER, R.id.aprsTxEncoderTextView, "Android");
                 setDropdownIfPresent(settings, AppSetting.SETTING_BANDWIDTH, R.id.bandwidthTextView);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
@@ -252,6 +254,7 @@ public class SettingsActivity extends AppCompatActivity {
     private void attachListeners() {
         attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
         attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
+        attachTextView(R.id.aprsTxEncoderTextView, this::setAprsTxEncoder);
         attachTextView(R.id.bandwidthTextView, this::setBandwidth);
         attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text)));
         attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text)));
@@ -278,6 +281,10 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setAprsPositionAccuracy(String accuracy) {
         saveAppSettingAsync(AppSetting.SETTING_APRS_POSITION_ACCURACY, accuracy);
+    }
+
+    private void setAprsTxEncoder(String encoder) {
+        saveAppSettingAsync(AppSetting.SETTING_APRS_TX_ENCODER, encoder);
     }
 
     private void setBandwidth(String bandwidth) {

@@ -38,6 +38,7 @@ enum RcvCommand {
   COMMAND_HOST_TX_AUDIO  = 0x07, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
   COMMAND_HOST_HL        = 0x08, // [COMMAND_HOST_HL(Hl)]
   COMMAND_HOST_RSSI      = 0x09, // [COMMAND_HOST_RSSI(ON)]
+  COMMAND_HOST_TX_AX25   = 0x0A, // [COMMAND_HOST_TX_AX25(uint8_t[])]
 };
 
 // Outgoing commands (ESP32 -> Android)
@@ -55,6 +56,7 @@ enum SndCommand {
   COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_VERSION        = 0x08, // [COMMAND_VERSION(Version)]
   COMMAND_WINDOW_UPDATE  = 0x09,
+  COMMAND_RX_AX25_PACKET = 0x0A, // [COMMAND_RX_AX25_PACKET(uint8_t decoder, uint8_t[])]
 };
 
 // COMMAND_VERSION parameters
@@ -68,6 +70,7 @@ struct [[gnu::packed]] Version {
 REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define FEATURE_HAS_HL      (1 << 0)
 #define FEATURE_HAS_PHY_PTT (1 << 1)
+#define FEATURE_HAS_ESP32_AFSK (1 << 2)
 
 // COMMAND_SMETER_REPORT parameters
 struct [[gnu::packed]] Rssi {
@@ -174,6 +177,18 @@ void inline sendPhysPttState(bool isPhysPttDown) {
 
 void inline sendAudio(const uint8_t *data, size_t len) {
   __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
+}
+
+void inline sendAx25Packet(uint8_t decoderId, const uint8_t *data, size_t len) {
+  uint8_t payload[PROTO_MTU];
+  if (len > (PROTO_MTU - 1)) {
+    len = PROTO_MTU - 1;
+  }
+  payload[0] = decoderId;
+  if (len > 0) {
+    memcpy(payload + 1, data, len);
+  }
+  __sendCmdToHost(COMMAND_RX_AX25_PACKET, payload, len + 1);
 }
 
 void inline sendWindowAck(size_t size) {

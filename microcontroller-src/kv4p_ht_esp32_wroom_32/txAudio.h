@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AudioTools.h>
 #include <AudioTools/AudioCodecs/CodecOpus.h>
 #include <esp_task_wdt.h>
+#include <AfskModulator.h>
 #include "globals.h"
 #include "protocol.h"
 
@@ -33,6 +34,32 @@ EncodedAudioStream txOut(&out, &txDec);
 // Tx runaway detection stuff
 uint32_t txStartTime = -1;
 const uint16_t RUNAWAY_TX_SEC = 200;
+
+static constexpr size_t TX_AFSK_BLOCK_SAMPLES = 256;
+static constexpr float TX_AFSK_GAIN = 0.8f;
+static constexpr float TX_AFSK_LEAD_SILENCE_MS = 1100.0f;
+static constexpr float TX_AFSK_TAIL_SILENCE_MS = 700.0f;
+float txAfskBlock[TX_AFSK_BLOCK_SAMPLES];
+int16_t txAfskPcm[TX_AFSK_BLOCK_SAMPLES];
+
+static void onAfskTxSamples(const float *samples, size_t count) {
+  if (!samples || count == 0 || !txStreamConfigured) {
+    return;
+  }
+  if (count > TX_AFSK_BLOCK_SAMPLES) {
+    count = TX_AFSK_BLOCK_SAMPLES;
+  }
+  for (size_t i = 0; i < count; i++) {
+    float s = samples[i] * TX_AFSK_GAIN;
+    if (s > 1.0f) s = 1.0f;
+    if (s < -1.0f) s = -1.0f;
+    txAfskPcm[i] = (int16_t)lroundf(s * 32767.0f);
+  }
+  out.write((uint8_t *)txAfskPcm, count * sizeof(int16_t));
+  esp_task_wdt_reset();
+}
+
+AfskModulator afskMod(AUDIO_SAMPLE_RATE, onAfskTxSamples);
 
 void initI2STx() {  
   auto config = out.defaultConfig(TX_MODE);
@@ -74,6 +101,13 @@ void processTxAudio(uint8_t *src, size_t len) {
       totalWritten += written;
       esp_task_wdt_reset();
   }
+}
+
+void processTxAx25(uint8_t *src, size_t len) {
+  if (!src || len == 0) {
+    return;
+  }
+  afskMod.modulate(src, len, txAfskBlock, TX_AFSK_BLOCK_SAMPLES, TX_AFSK_LEAD_SILENCE_MS, TX_AFSK_TAIL_SILENCE_MS);
 }
 
 void inline txAudioLoop() {

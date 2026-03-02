@@ -84,6 +84,7 @@
     <string name="position_beacon_message_2">位置信息</string>
     <string name="settings">设置</string>
     <string name="beacon_my_position">广播我的位置</string>
+    <string name="aprs_tx_encoder">APRS 发射编码器</string>
     <string name="done">完成</string>
     <string name="more_display">更多</string>
     <string name="find_repeaters_menu_item">查找附近的中继台</string>

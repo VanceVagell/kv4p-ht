@@ -45,7 +45,9 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.provider.MediaStore;
+import android.util.Base64;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -142,6 +144,8 @@ public class RadioAudioService extends Service implements PacketHandler {
     private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
+    // Suppress duplicate notifications/acks when Android and ESP32 decode the same packet close together.
+    private static final long PACKET_ACTION_DEDUP_WINDOW_MS = 15000L;
     public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
 
     // === Frequency Ranges ===
@@ -238,6 +242,8 @@ public class RadioAudioService extends Service implements PacketHandler {
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     @Setter
     private @NonNull String bandwidth = "25kHz";
+    private @NonNull AprsTxEncoder aprsTxEncoder = AprsTxEncoder.ANDROID;
+    private final Map<String, Long> packetActionSeenMs = new ConcurrentHashMap<>();
 
     // === Android Components ===
     private final IBinder binder = new RadioBinder();
@@ -256,6 +262,21 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     // === Scan Timing ===
     private static final float SEC_BETWEEN_SCANS = 0.5f;
+    public static final int DECODER_SOURCE_UNKNOWN = 0;
+    public static final int DECODER_SOURCE_ANDROID = 1 << 0;
+    public static final int DECODER_SOURCE_ESP32 = 1 << 1;
+
+    public enum AprsTxEncoder {
+        ANDROID,
+        ESP32;
+
+        public static AprsTxEncoder fromSetting(String value) {
+            if ("ESP32".equalsIgnoreCase(value)) {
+                return ESP32;
+            }
+            return ANDROID;
+        }
+    }
 
     /**
      * Class used for the client Binder. This service always runs in the same process as its clients.
@@ -277,7 +298,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         default void radioModuleHandshake() {}
         default void radioModuleNotFound() {}
         default void audioTrackCreated() {}
-        default void packetReceived(APRSPacket aprsPacket) {}
+        default void packetReceived(APRSPacket aprsPacket, int decoderSource, String packetHash) {}
         default void scannedToMemory(int memoryId) {}
         default void outdatedFirmware(int firmwareVer) {}
         default void firmwareVersionReceived(int firmwareVer) {}
@@ -318,6 +339,14 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     public void setMicGainBoost(String micGainBoost) {
         this.micGainBoost = MicGainBoost.parse(micGainBoost);
+    }
+
+    public void setAprsTxEncoder(@NonNull String encoder) {
+        this.aprsTxEncoder = AprsTxEncoder.fromSetting(encoder);
+    }
+
+    public int getOutgoingAprsSourceIndicator() {
+        return aprsTxEncoder == AprsTxEncoder.ESP32 ? DECODER_SOURCE_ESP32 : DECODER_SOURCE_ANDROID;
     }
 
     public void setMinRadioFreq(float newMinFreq) {
@@ -1229,10 +1258,21 @@ public class RadioAudioService extends Service implements PacketHandler {
                 WindowUpdate.from(param, len).ifPresent(windowAck ->
                     hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
                 break;
+            case COMMAND_RX_AX25_PACKET:
+                handleEsp32Ax25Packet(param, len);
+                break;
 
             default:
                 break;
         }
+    }
+
+    private void handleEsp32Ax25Packet(final byte[] param, final Integer len) {
+        if (param == null || len == null || len < 2) {
+            return;
+        }
+        byte[] packet = java.util.Arrays.copyOfRange(param, 1, len);
+        handleAx25Packet(packet, DECODER_SOURCE_ESP32);
     }
 
     private void handlePhysicalPttUp() {
@@ -1313,15 +1353,21 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     @Override
     public void handlePacket(byte[] packet) {
+        handleAx25Packet(packet, DECODER_SOURCE_ANDROID);
+    }
+
+    private void handleAx25Packet(byte[] packet, int decoderSource) {
         try {
+            String hash = packetHash(packet);
             APRSPacket aprsPacket = Parser.parseAX25(packet);
             InformationField info = aprsPacket.getPayload();
+            boolean shouldEmitSideEffects = shouldTriggerPacketActions(hash);
             // Check if the packet is an APRS message type
             if (info.getDataTypeIdentifier() == ':') {
                 MessagePacket msg = new MessagePacket(info.getRawBytes(), aprsPacket.getDestinationCall());
                 String target = msg.getTargetCallsign().trim().toUpperCase();
                 // Handle messages addressed to the current callsign
-                if (!msg.isAck() && target.equals(callsign.toUpperCase())) {
+                if (shouldEmitSideEffects && !msg.isAck() && target.equals(callsign.toUpperCase())) {
                     callbacks.showNotification(
                         MESSAGE_NOTIFICATION_CHANNEL_ID,
                         MESSAGE_NOTIFICATION_TO_YOU_ID,
@@ -1333,10 +1379,35 @@ public class RadioAudioService extends Service implements PacketHandler {
                 }
             }
             // Notify callbacks about the received packet
-            callbacks.packetReceived(aprsPacket);
+            callbacks.packetReceived(aprsPacket, decoderSource, hash);
         } catch (Exception e) {
             Log.d(TAG, "Unable to parse an APRS packet, skipping.");
         }
+    }
+
+    /**
+     * Returns whether user-visible duplicate handling should run for this packet now.
+     *
+     * We may decode the same over-the-air APRS frame through both the Android and ESP32 paths
+     * within a short window. Parsing and storing both copies is fine, but side effects such as
+     * notifications and automatic ACK transmission should only happen once per packet.
+     */
+    private boolean shouldTriggerPacketActions(@NonNull String packetHash) {
+        long nowMs = SystemClock.elapsedRealtime();
+        Long seenAt = packetActionSeenMs.get(packetHash);
+        if (seenAt != null && (nowMs - seenAt) < PACKET_ACTION_DEDUP_WINDOW_MS) {
+            return false;
+        }
+        packetActionSeenMs.put(packetHash, nowMs);
+        // Bound memory in long-running service.
+        if (packetActionSeenMs.size() > 2048) {
+            packetActionSeenMs.entrySet().removeIf(e -> (nowMs - e.getValue()) > PACKET_ACTION_DEDUP_WINDOW_MS);
+        }
+        return true;
+    }
+
+    private String packetHash(byte[] packet) {
+        return Base64.encodeToString(packet, Base64.NO_WRAP);
     }
 
     /**
@@ -1465,33 +1536,41 @@ public class RadioAudioService extends Service implements PacketHandler {
             Log.e(TAG, "Tried to send an AX.25 packet when tx is not allowed, did not send.");
             return;
         }
+        if (hostToEsp32 == null) {
+            Log.e(TAG, "Tried to send AX.25 packet with no ESP32 connection.");
+            return;
+        }
         Log.d(TAG, "Sending AX25 packet: " + ax25Packet);
-        startPtt();
-        float[] opusFrame = new float[OPUS_FRAME_SIZE];
-        // Send lead-in silence
-        sendSilentFrames(MS_SILENCE_BEFORE_DATA_MS);
-        // Prepare AFSK modulator
-        int opusFrameIndex = 0;
-        java.util.Arrays.fill(opusFrame, 0.0f);
-        afskModulator.prepareToTransmit(ax25Packet);
-        float[] buffer = afskModulator.getTxSamplesBuffer();
-        // Modulate and send samples
-        int n;
-        while ((n = afskModulator.getSamples()) > 0) {
-            for (int i = 0; i < n; i++) {
-                opusFrame[opusFrameIndex++] = buffer[i];
-                if (opusFrameIndex == OPUS_FRAME_SIZE) {
-                    sendAudioToESP32(opusFrame, true);
-                    java.util.Arrays.fill(opusFrame, 0.0f);
-                    opusFrameIndex = 0;
+        if (aprsTxEncoder == AprsTxEncoder.ESP32) {
+            hostToEsp32.txAx25(ax25Packet.bytesWithoutCRC());
+        } else {
+            startPtt();
+            float[] opusFrame = new float[OPUS_FRAME_SIZE];
+            // Send lead-in silence
+            sendSilentFrames(MS_SILENCE_BEFORE_DATA_MS);
+            // Prepare AFSK modulator
+            int opusFrameIndex = 0;
+            java.util.Arrays.fill(opusFrame, 0.0f);
+            afskModulator.prepareToTransmit(ax25Packet);
+            float[] buffer = afskModulator.getTxSamplesBuffer();
+            // Modulate and send samples
+            int n;
+            while ((n = afskModulator.getSamples()) > 0) {
+                for (int i = 0; i < n; i++) {
+                    opusFrame[opusFrameIndex++] = buffer[i];
+                    if (opusFrameIndex == OPUS_FRAME_SIZE) {
+                        sendAudioToESP32(opusFrame, true);
+                        java.util.Arrays.fill(opusFrame, 0.0f);
+                        opusFrameIndex = 0;
+                    }
                 }
             }
+            // Send remaining audio if needed
+            sendAudioToESP32(opusFrame, true);
+            // Send tail silence
+            sendSilentFrames(MS_SILENCE_AFTER_DATA_MS);
+            endPtt();
         }
-        // Send remaining audio if needed
-        sendAudioToESP32(opusFrame, true);
-        // Send tail silence
-        sendSilentFrames(MS_SILENCE_AFTER_DATA_MS);
-        endPtt();
         Log.i(TAG, "Send AX25 packet: " + ax25Packet);
     }
 
