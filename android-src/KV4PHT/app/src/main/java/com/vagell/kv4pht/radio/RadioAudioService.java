@@ -144,7 +144,8 @@ public class RadioAudioService extends Service implements PacketHandler {
     private static final int MS_SILENCE_AFTER_DATA_MS = 700;
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
-    private static final long PACKET_SIDE_EFFECT_DEDUP_MS = 15000L;
+    // Suppress duplicate notifications/acks when Android and ESP32 decode the same packet close together.
+    private static final long PACKET_ACTION_DEDUP_WINDOW_MS = 15000L;
     public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
 
     // === Frequency Ranges ===
@@ -242,7 +243,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     @Setter
     private @NonNull String bandwidth = "25kHz";
     private @NonNull AprsTxEncoder aprsTxEncoder = AprsTxEncoder.ANDROID;
-    private final Map<String, Long> packetSideEffectSeenMs = new ConcurrentHashMap<>();
+    private final Map<String, Long> packetActionSeenMs = new ConcurrentHashMap<>();
 
     // === Android Components ===
     private final IBinder binder = new RadioBinder();
@@ -1360,7 +1361,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             String hash = packetHash(packet);
             APRSPacket aprsPacket = Parser.parseAX25(packet);
             InformationField info = aprsPacket.getPayload();
-            boolean shouldEmitSideEffects = shouldEmitPacketSideEffects(hash);
+            boolean shouldEmitSideEffects = shouldTriggerPacketActions(hash);
             // Check if the packet is an APRS message type
             if (info.getDataTypeIdentifier() == ':') {
                 MessagePacket msg = new MessagePacket(info.getRawBytes(), aprsPacket.getDestinationCall());
@@ -1384,16 +1385,23 @@ public class RadioAudioService extends Service implements PacketHandler {
         }
     }
 
-    private boolean shouldEmitPacketSideEffects(@NonNull String packetHash) {
+    /**
+     * Returns whether user-visible duplicate handling should run for this packet now.
+     *
+     * We may decode the same over-the-air APRS frame through both the Android and ESP32 paths
+     * within a short window. Parsing and storing both copies is fine, but side effects such as
+     * notifications and automatic ACK transmission should only happen once per packet.
+     */
+    private boolean shouldTriggerPacketActions(@NonNull String packetHash) {
         long nowMs = SystemClock.elapsedRealtime();
-        Long seenAt = packetSideEffectSeenMs.get(packetHash);
-        if (seenAt != null && (nowMs - seenAt) < PACKET_SIDE_EFFECT_DEDUP_MS) {
+        Long seenAt = packetActionSeenMs.get(packetHash);
+        if (seenAt != null && (nowMs - seenAt) < PACKET_ACTION_DEDUP_WINDOW_MS) {
             return false;
         }
-        packetSideEffectSeenMs.put(packetHash, nowMs);
+        packetActionSeenMs.put(packetHash, nowMs);
         // Bound memory in long-running service.
-        if (packetSideEffectSeenMs.size() > 2048) {
-            packetSideEffectSeenMs.entrySet().removeIf(e -> (nowMs - e.getValue()) > PACKET_SIDE_EFFECT_DEDUP_MS);
+        if (packetActionSeenMs.size() > 2048) {
+            packetActionSeenMs.entrySet().removeIf(e -> (nowMs - e.getValue()) > PACKET_ACTION_DEDUP_WINDOW_MS);
         }
         return true;
     }
