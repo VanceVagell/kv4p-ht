@@ -18,9 +18,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.ui;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
@@ -29,9 +31,18 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.*;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
 import androidx.lifecycle.ViewModelProvider;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.CancellationTokenSource;
+import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
@@ -69,6 +80,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateMaxFrequencies();
         populateMicGainOptions();
         populateAprsOptions();
+        populateLocationOptions();
         populateRadioOptions();
         populateVersions();
     }
@@ -104,6 +116,10 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateAprsOptions() {
         setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
+    }
+
+    private void populateLocationOptions() {
+        setDropdownOptions(R.id.locationModeTextView, List.of(getString(R.string.gps_automatic), getString(R.string.manual)));
     }
 
     private void populateRadioOptions() {
@@ -193,6 +209,14 @@ public class SettingsActivity extends AppCompatActivity {
                     setDropdownWithDefault(settings, AppSetting.SETTING_RF_POWER, R.id.rfPowerTextView,
                         getResources().getStringArray(R.array.rf_power_options)[0]);
                 }
+                // Location settings
+                String locationMode = settings.getOrDefault(AppSetting.SETTING_LOCATION_MODE, AppSetting.LOCATION_MODE_GPS);
+                boolean isManualMode = AppSetting.LOCATION_MODE_MANUAL.equals(locationMode);
+                this.<AutoCompleteTextView>findViewById(R.id.locationModeTextView)
+                    .setText(isManualMode ? getString(R.string.manual) : getString(R.string.gps_automatic), false);
+                updateManualLocationVisibility(isManualMode);
+                setTextIfPresent(settings, AppSetting.SETTING_MANUAL_LATITUDE, R.id.latitudeTextInputEditText);
+                setTextIfPresent(settings, AppSetting.SETTING_MANUAL_LONGITUDE, R.id.longitudeTextInputEditText);
                 callback.run();
             });
         });
@@ -266,6 +290,94 @@ public class SettingsActivity extends AppCompatActivity {
         attachSwitch(R.id.stickyPTTSwitch, this::setStickyPTT);
         attachSwitch(R.id.noAnimationsSwitch, this::setNoAnimations);
         attachSwitch(R.id.aprsPositionSwitch, this::setAprsBeaconPosition);
+        attachTextView(R.id.locationModeTextView, this::setLocationMode);
+        attachTextView(R.id.latitudeTextInputEditText, this::setManualLatitude);
+        attachTextView(R.id.longitudeTextInputEditText, this::setManualLongitude);
+    }
+
+    private void updateManualLocationVisibility(boolean isManualMode) {
+        LinearLayout manualLocationLayout = findViewById(R.id.manualLocationLayout);
+        manualLocationLayout.setVisibility(isManualMode ? View.VISIBLE : View.GONE);
+    }
+
+    private void setLocationMode(String mode) {
+        boolean isManualMode = mode.equals(getString(R.string.manual));
+        String modeValue = isManualMode ? AppSetting.LOCATION_MODE_MANUAL : AppSetting.LOCATION_MODE_GPS;
+        saveAppSettingAsync(AppSetting.SETTING_LOCATION_MODE, modeValue);
+        updateManualLocationVisibility(isManualMode);
+    }
+
+    private void setManualLatitude(String latStr) {
+        if (latStr == null || latStr.trim().isEmpty()) {
+            return;
+        }
+        try {
+            double lat = Double.parseDouble(latStr);
+            TextInputLayout layout = findViewById(R.id.latitudeInputLayout);
+            if (lat < -90 || lat > 90) {
+                layout.setError(getString(R.string.invalid_latitude));
+            } else {
+                layout.setError(null);
+                saveAppSettingAsync(AppSetting.SETTING_MANUAL_LATITUDE, latStr);
+            }
+        } catch (NumberFormatException e) {
+            TextInputLayout layout = findViewById(R.id.latitudeInputLayout);
+            layout.setError(getString(R.string.invalid_latitude));
+        }
+    }
+
+    private void setManualLongitude(String lonStr) {
+        if (lonStr == null || lonStr.trim().isEmpty()) {
+            return;
+        }
+        try {
+            double lon = Double.parseDouble(lonStr);
+            TextInputLayout layout = findViewById(R.id.longitudeInputLayout);
+            if (lon < -180 || lon > 180) {
+                layout.setError(getString(R.string.invalid_longitude));
+            } else {
+                layout.setError(null);
+                saveAppSettingAsync(AppSetting.SETTING_MANUAL_LONGITUDE, lonStr);
+            }
+        } catch (NumberFormatException e) {
+            TextInputLayout layout = findViewById(R.id.longitudeInputLayout);
+            layout.setError(getString(R.string.invalid_longitude));
+        }
+    }
+
+    public void useCurrentGpsButtonClicked(View view) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 100);
+            return;
+        }
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) != ConnectionResult.SUCCESS) {
+            showSnackbar(getString(R.string.gps_location_failed));
+            return;
+        }
+        FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
+            .addOnSuccessListener(location -> {
+                if (location != null) {
+                    TextInputEditText latInput = findViewById(R.id.latitudeTextInputEditText);
+                    TextInputEditText lonInput = findViewById(R.id.longitudeTextInputEditText);
+                    latInput.setText(String.valueOf(location.getLatitude()));
+                    lonInput.setText(String.valueOf(location.getLongitude()));
+                    showSnackbar(getString(R.string.gps_location_fetched));
+                } else {
+                    showSnackbar(getString(R.string.gps_location_failed));
+                }
+            })
+            .addOnFailureListener(e -> showSnackbar(getString(R.string.gps_location_failed)));
+    }
+
+    private void showSnackbar(String message) {
+        Snackbar snackbar = Snackbar.make(findViewById(R.id.settingsTopLevelView), message, Snackbar.LENGTH_LONG)
+            .setBackgroundTint(Color.rgb(50, 50, 50)).setTextColor(Color.WHITE);
+        TextView snackbarTextView = snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+        snackbar.show();
     }
 
     private void saveAppSettingAsync(String key, String value) {
@@ -334,5 +446,13 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setNoAnimations(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_DISABLE_ANIMATIONS, Boolean.toString(enabled));
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 100 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            useCurrentGpsButtonClicked(null);
+        }
     }
 }

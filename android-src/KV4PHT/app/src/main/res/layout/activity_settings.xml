@@ -300,6 +300,121 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/jost"
+                    android:text="@string/location"
+                    android:textColor="@color/primary_deselected"
+                    android:textSize="16dp"
+                    android:layout_marginTop="24dp"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/jost"
+                        android:text="@string/location_source"
+                        android:textColor="@color/primary"
+                        android:textSize="18dp"
+                        android:layout_gravity="center_vertical"
+                        android:layout_weight="1"
+                        android:labelFor="@id/locationModeTextView"/>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:padding="0dp"
+                        android:layout_weight="0"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:hintTextColor="@color/primary_deselected"
+                        app:boxStrokeColor="@color/primary"
+                        android:textColorHint="@color/primary_deselected">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/locationModeTextView"
+                            android:layout_width="180dp"
+                            android:layout_height="wrap_content"
+                            android:padding="0dp"
+                            android:layout_weight="1"
+                            android:inputType="none"
+                            android:text="@string/gps_automatic"
+                            android:textSize="20dp"
+                            android:textColor="@color/primary"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/manualLocationLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/latitudeInputLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:hint="@string/latitude"
+                        app:hintTextColor="@color/primary_deselected"
+                        app:boxStrokeColor="@color/primary"
+                        android:textColorHint="@color/primary_deselected">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/latitudeTextInputEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:textSize="20dp"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:inputType="numberDecimal|numberSigned"
+                            android:textColor="@color/primary"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/longitudeInputLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:hint="@string/longitude"
+                        app:hintTextColor="@color/primary_deselected"
+                        app:boxStrokeColor="@color/primary"
+                        android:textColorHint="@color/primary_deselected">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/longitudeTextInputEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:textSize="20dp"
+                            android:maxLines="1"
+                            android:singleLine="true"
+                            android:inputType="numberDecimal|numberSigned"
+                            android:textColor="@color/primary"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <Button
+                        android:id="@+id/useCurrentGpsButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginTop="8dp"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:text="@string/use_current_gps"
+                        android:textSize="16dp"
+                        android:textFontWeight="500"
+                        android:textColor="@color/primary"
+                        android:textAllCaps="true"
+                        android:enabled="true"
+                        android:onClick="useCurrentGpsButtonClicked"
+                        android:padding="0dp"/>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/jost"
                     android:text="@string/advanced"
                     android:textColor="@color/primary_deselected"
                     android:textSize="16dp"
