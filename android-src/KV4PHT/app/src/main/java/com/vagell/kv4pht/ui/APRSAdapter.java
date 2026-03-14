@@ -305,17 +305,17 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             }
             if (decoderSource == (RadioAudioService.DECODER_SOURCE_ANDROID | RadioAudioService.DECODER_SOURCE_ESP32)) {
                 textViewDecoderSource.setVisibility(View.VISIBLE);
-                textViewDecoderSource.setText("[A+E]");
-                textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_both);
+                textViewDecoderSource.setText(" S+F ");
+                textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_android);
                 textViewDecoderSource.setTextColor(0xFFFFFFFF);
             } else if (decoderSource == RadioAudioService.DECODER_SOURCE_ANDROID) {
                 textViewDecoderSource.setVisibility(View.VISIBLE);
-                textViewDecoderSource.setText("[A]");
-                textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_android);
+                textViewDecoderSource.setText(" S ");
+                textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_both);
                 textViewDecoderSource.setTextColor(0xFFFFFFFF);
             } else if (decoderSource == RadioAudioService.DECODER_SOURCE_ESP32) {
                 textViewDecoderSource.setVisibility(View.VISIBLE);
-                textViewDecoderSource.setText("[E]");
+                textViewDecoderSource.setText(" F ");
                 textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_esp32);
                 textViewDecoderSource.setTextColor(0xFFFFFFFF);
             } else {
