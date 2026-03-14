@@ -1122,7 +1122,8 @@ public class MainActivity extends AppCompatActivity {
     private void applyAprsSettings(Map<String, String> settings) {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
-        String txEncoder = settings.getOrDefault(AppSetting.SETTING_APRS_TX_ENCODER, "Android");
+        String txEncoder = getAx25EncoderSetting(settings);
+        String decoder = settings.getOrDefault(AppSetting.SETTING_AX25_DECODER, "Both");
 
         if (accuracy != null && radioAudioService != null) {
             threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
@@ -1145,7 +1146,16 @@ public class MainActivity extends AppCompatActivity {
         }
         if (radioAudioService != null) {
             radioAudioService.setAprsTxEncoder(txEncoder);
+            radioAudioService.setAx25Decoder(RadioAudioService.Ax25Decoder.fromSetting(decoder));
         }
+    }
+
+    private String getAx25EncoderSetting(Map<String, String> settings) {
+        String stored = settings.get(AppSetting.SETTING_AX25_ENCODER);
+        if (stored != null) {
+            return stored;
+        }
+        return settings.getOrDefault(AppSetting.SETTING_APRS_TX_ENCODER, "Software");
     }
 
     @SuppressLint("ClickableViewAccessibility")

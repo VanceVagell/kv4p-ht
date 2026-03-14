@@ -104,7 +104,8 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateAprsOptions() {
         setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
-        setDropdownOptions(R.id.aprsTxEncoderTextView, List.of("Android", "ESP32"));
+        setDropdownOptions(R.id.ax25DecoderTextView, List.of("Both", "Software", "Firmware"));
+        setDropdownOptions(R.id.ax25EncoderTextView, List.of("Software", "Firmware"));
     }
 
     private void populateRadioOptions() {
@@ -169,6 +170,27 @@ public class SettingsActivity extends AppCompatActivity {
             .setText(settings.getOrDefault(key, defaultValue), false);
     }
 
+    private void setAx25DecoderDropdown(Map<String, String> settings) {
+        setDropdownWithDefault(settings, AppSetting.SETTING_AX25_DECODER, R.id.ax25DecoderTextView, "Both");
+    }
+
+    private void setAx25EncoderDropdown(Map<String, String> settings) {
+        String stored = settings.get(AppSetting.SETTING_AX25_ENCODER);
+        if (stored == null && settings.containsKey(AppSetting.SETTING_APRS_TX_ENCODER)) {
+            stored = mapLegacyEncoderSetting(settings.get(AppSetting.SETTING_APRS_TX_ENCODER));
+            saveAppSettingAsync(AppSetting.SETTING_AX25_ENCODER, stored);
+        }
+        this.<AutoCompleteTextView>findViewById(R.id.ax25EncoderTextView)
+            .setText(stored == null ? "Software" : stored, false);
+    }
+
+    private String mapLegacyEncoderSetting(String stored) {
+        if ("ESP32".equalsIgnoreCase(stored) || "Firmware".equalsIgnoreCase(stored) || "1".equals(stored)) {
+            return "Firmware";
+        }
+        return "Software";
+    }
+
     private void populateOriginalValues(Runnable callback) {
         threadPoolExecutor.execute(() -> {
             final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
@@ -184,7 +206,8 @@ public class SettingsActivity extends AppCompatActivity {
                 setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
-                setDropdownWithDefault(settings, AppSetting.SETTING_APRS_TX_ENCODER, R.id.aprsTxEncoderTextView, "Android");
+                setAx25DecoderDropdown(settings);
+                setAx25EncoderDropdown(settings);
                 setDropdownIfPresent(settings, AppSetting.SETTING_BANDWIDTH, R.id.bandwidthTextView);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
@@ -254,7 +277,8 @@ public class SettingsActivity extends AppCompatActivity {
     private void attachListeners() {
         attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
         attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
-        attachTextView(R.id.aprsTxEncoderTextView, this::setAprsTxEncoder);
+        attachTextView(R.id.ax25DecoderTextView, this::setAx25Decoder);
+        attachTextView(R.id.ax25EncoderTextView, this::setAx25Encoder);
         attachTextView(R.id.bandwidthTextView, this::setBandwidth);
         attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text)));
         attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text)));
@@ -283,8 +307,12 @@ public class SettingsActivity extends AppCompatActivity {
         saveAppSettingAsync(AppSetting.SETTING_APRS_POSITION_ACCURACY, accuracy);
     }
 
-    private void setAprsTxEncoder(String encoder) {
-        saveAppSettingAsync(AppSetting.SETTING_APRS_TX_ENCODER, encoder);
+    private void setAx25Encoder(String encoder) {
+        saveAppSettingAsync(AppSetting.SETTING_AX25_ENCODER, encoder);
+    }
+
+    private void setAx25Decoder(String decoder) {
+        saveAppSettingAsync(AppSetting.SETTING_AX25_DECODER, decoder);
     }
 
     private void setBandwidth(String bandwidth) {

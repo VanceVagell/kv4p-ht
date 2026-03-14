@@ -44,6 +44,8 @@ public class AppSetting {
     public static final String SETTING_APRS_POSITION_ACCURACY = "aprsPositionAccuracy";
     public static final String SETTING_APRS_BEACON_POSITION = "aprsBeaconPosition";
     public static final String SETTING_APRS_TX_ENCODER = "aprsTxEncoder";
+    public static final String SETTING_AX25_ENCODER = "ax25Encoder";
+    public static final String SETTING_AX25_DECODER = "ax25Decoder";
     public static final String SETTING_CALLSIGN = "callsign";
     public static final String SETTING_STICKY_PTT = "stickyPTT";
 

@@ -242,7 +242,8 @@ public class RadioAudioService extends Service implements PacketHandler {
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     @Setter
     private @NonNull String bandwidth = "25kHz";
-    private @NonNull AprsTxEncoder aprsTxEncoder = AprsTxEncoder.ANDROID;
+    private @NonNull AprsTxEncoder aprsTxEncoder = AprsTxEncoder.SOFTWARE;
+    private Ax25Decoder ax25Decoder = Ax25Decoder.BOTH;
     private final Map<String, Long> packetActionSeenMs = new ConcurrentHashMap<>();
 
     // === Android Components ===
@@ -267,14 +268,30 @@ public class RadioAudioService extends Service implements PacketHandler {
     public static final int DECODER_SOURCE_ESP32 = 1 << 1;
 
     public enum AprsTxEncoder {
-        ANDROID,
-        ESP32;
+        SOFTWARE,
+        FIRMWARE;
 
         public static AprsTxEncoder fromSetting(String value) {
-            if ("ESP32".equalsIgnoreCase(value)) {
-                return ESP32;
+            if ("Firmware".equalsIgnoreCase(value)) {
+                return FIRMWARE;
             }
-            return ANDROID;
+            return SOFTWARE;
+        }
+    }
+
+    public enum Ax25Decoder {
+        BOTH,
+        SOFTWARE,
+        FIRMWARE;
+
+        public static Ax25Decoder fromSetting(String value) {
+            if ("Software".equalsIgnoreCase(value)) {
+                return SOFTWARE;
+            }
+            if ("Firmware".equalsIgnoreCase(value)) {
+                return FIRMWARE;
+            }
+            return BOTH;
         }
     }
 
@@ -345,8 +362,12 @@ public class RadioAudioService extends Service implements PacketHandler {
         this.aprsTxEncoder = AprsTxEncoder.fromSetting(encoder);
     }
 
+    public void setAx25Decoder(@NonNull Ax25Decoder decoder) {
+        this.ax25Decoder = decoder;
+    }
+
     public int getOutgoingAprsSourceIndicator() {
-        return aprsTxEncoder == AprsTxEncoder.ESP32 ? DECODER_SOURCE_ESP32 : DECODER_SOURCE_ANDROID;
+        return aprsTxEncoder == AprsTxEncoder.FIRMWARE ? DECODER_SOURCE_ESP32 : DECODER_SOURCE_ANDROID;
     }
 
     public void setMinRadioFreq(float newMinFreq) {
@@ -1272,7 +1293,9 @@ public class RadioAudioService extends Service implements PacketHandler {
             return;
         }
         byte[] packet = java.util.Arrays.copyOfRange(param, 1, len);
-        handleAx25Packet(packet, DECODER_SOURCE_ESP32);
+        if (shouldAcceptDecodedPacket(DECODER_SOURCE_ESP32, packet)) {
+            handleAx25Packet(packet, DECODER_SOURCE_ESP32);
+        }
     }
 
     private void handlePhysicalPttUp() {
@@ -1353,8 +1376,23 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     @Override
     public void handlePacket(byte[] packet) {
-        handleAx25Packet(packet, DECODER_SOURCE_ANDROID);
+        if (shouldAcceptDecodedPacket(DECODER_SOURCE_ANDROID, packet)) {
+            handleAx25Packet(packet, DECODER_SOURCE_ANDROID);
+        }
     }
+
+    private boolean shouldAcceptDecodedPacket(int source, byte[] packet) {
+        switch (ax25Decoder) {
+            case SOFTWARE:
+                return source == DECODER_SOURCE_ANDROID;
+            case FIRMWARE:
+                return source == DECODER_SOURCE_ESP32;
+            case BOTH:
+            default:
+                return true;
+        }
+    }
+
 
     private void handleAx25Packet(byte[] packet, int decoderSource) {
         try {
@@ -1541,7 +1579,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             return;
         }
         Log.d(TAG, "Sending AX25 packet: " + ax25Packet);
-        if (aprsTxEncoder == AprsTxEncoder.ESP32) {
+        if (aprsTxEncoder == AprsTxEncoder.FIRMWARE) {
             hostToEsp32.txAx25(ax25Packet.bytesWithoutCRC());
         } else {
             startPtt();
