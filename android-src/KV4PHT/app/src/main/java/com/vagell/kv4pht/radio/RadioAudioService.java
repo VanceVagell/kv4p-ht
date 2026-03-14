@@ -1294,7 +1294,7 @@ public class RadioAudioService extends Service implements PacketHandler {
             return;
         }
         byte[] packet = java.util.Arrays.copyOfRange(param, 1, len);
-        if (shouldAcceptDecodedPacket(DECODER_SOURCE_ESP32, packet)) {
+        if (shouldAcceptDecodedPacket(DECODER_SOURCE_ESP32)) {
             handleAx25Packet(packet, DECODER_SOURCE_ESP32);
         }
     }
@@ -1377,12 +1377,12 @@ public class RadioAudioService extends Service implements PacketHandler {
 
     @Override
     public void handlePacket(byte[] packet) {
-        if (shouldAcceptDecodedPacket(DECODER_SOURCE_ANDROID, packet)) {
+        if (shouldAcceptDecodedPacket(DECODER_SOURCE_ANDROID)) {
             handleAx25Packet(packet, DECODER_SOURCE_ANDROID);
         }
     }
 
-    private boolean shouldAcceptDecodedPacket(int source, byte[] packet) {
+    private boolean shouldAcceptDecodedPacket(int source) {
         switch (ax25Decoder) {
             case SOFTWARE:
                 return source == DECODER_SOURCE_ANDROID;
