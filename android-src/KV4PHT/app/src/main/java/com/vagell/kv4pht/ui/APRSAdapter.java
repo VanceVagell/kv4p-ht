@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.APRSMessage;
+import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -93,6 +94,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         holder.setComment(aprsMessage.comment);
         holder.setPositionLat(aprsMessage.positionLat);
         holder.setPositionLong(aprsMessage.positionLong);
+        holder.setDecoderSource(aprsMessage.decoderSource);
 
         // Specialized values
         switch (aprsMessage.type) {
@@ -152,6 +154,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         TextView textViewMsgBody;
         View ackIcon;
         TextView textViewObjName;
+        TextView textViewDecoderSource;
 
         public APRSViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -173,6 +176,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             textViewMsgBody = itemView.findViewById(R.id.messageBody);
             ackIcon = itemView.findViewById(R.id.msgAck);
             textViewObjName = itemView.findViewById(R.id.objName);
+            textViewDecoderSource = itemView.findViewById(R.id.decoderSource);
         }
 
         public void setFromCallsign(String fromCallsign) {
@@ -293,6 +297,30 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
                 return;
             }
             textViewObjName.setText(objName);
+        }
+
+        public void setDecoderSource(int decoderSource) {
+            if (textViewDecoderSource == null) {
+                return;
+            }
+            if (decoderSource == (RadioAudioService.DECODER_SOURCE_ANDROID | RadioAudioService.DECODER_SOURCE_ESP32)) {
+                textViewDecoderSource.setVisibility(View.VISIBLE);
+                textViewDecoderSource.setText(" S+F ");
+                textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_android);
+                textViewDecoderSource.setTextColor(0xFFFFFFFF);
+            } else if (decoderSource == RadioAudioService.DECODER_SOURCE_ANDROID) {
+                textViewDecoderSource.setVisibility(View.VISIBLE);
+                textViewDecoderSource.setText(" S ");
+                textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_both);
+                textViewDecoderSource.setTextColor(0xFFFFFFFF);
+            } else if (decoderSource == RadioAudioService.DECODER_SOURCE_ESP32) {
+                textViewDecoderSource.setVisibility(View.VISIBLE);
+                textViewDecoderSource.setText(" F ");
+                textViewDecoderSource.setBackgroundResource(R.drawable.decoder_source_esp32);
+                textViewDecoderSource.setTextColor(0xFFFFFFFF);
+            } else {
+                textViewDecoderSource.setVisibility(View.GONE);
+            }
         }
     }
 }

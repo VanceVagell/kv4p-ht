@@ -34,6 +34,9 @@ public interface APRSMessageDao {
     @Query("SELECT * FROM aprs_messages WHERE `from_callsign` = :fromCallsign AND `message_num` = :msgNum ORDER BY `id` DESC LIMIT 1")
     APRSMessage getMsgToAck(String fromCallsign, int msgNum);
 
+    @Query("SELECT * FROM aprs_messages WHERE `packet_hash` = :packetHash ORDER BY `id` DESC LIMIT 1")
+    APRSMessage getLatestByPacketHash(String packetHash);
+
     @Insert
     void insertAll(APRSMessage... aprsMessages);
 
