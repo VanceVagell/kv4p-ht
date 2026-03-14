@@ -104,8 +104,13 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateAprsOptions() {
         setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
-        setDropdownOptions(R.id.ax25DecoderTextView, List.of("Both", "Software", "Firmware"));
-        setDropdownOptions(R.id.ax25EncoderTextView, List.of("Software", "Firmware"));
+        setDropdownOptions(R.id.ax25DecoderTextView, List.of(
+            AppSetting.VALUE_AX25_BOTH,
+            AppSetting.VALUE_AX25_SOFTWARE,
+            AppSetting.VALUE_AX25_FIRMWARE));
+        setDropdownOptions(R.id.ax25EncoderTextView, List.of(
+            AppSetting.VALUE_AX25_SOFTWARE,
+            AppSetting.VALUE_AX25_FIRMWARE));
     }
 
     private void populateRadioOptions() {
@@ -171,7 +176,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setAx25DecoderDropdown(Map<String, String> settings) {
-        setDropdownWithDefault(settings, AppSetting.SETTING_AX25_DECODER, R.id.ax25DecoderTextView, "Both");
+        setDropdownWithDefault(settings, AppSetting.SETTING_AX25_DECODER, R.id.ax25DecoderTextView, AppSetting.VALUE_AX25_BOTH);
     }
 
     private void setAx25EncoderDropdown(Map<String, String> settings) {
@@ -181,14 +186,16 @@ public class SettingsActivity extends AppCompatActivity {
             saveAppSettingAsync(AppSetting.SETTING_AX25_ENCODER, stored);
         }
         this.<AutoCompleteTextView>findViewById(R.id.ax25EncoderTextView)
-            .setText(stored == null ? "Software" : stored, false);
+            .setText(stored == null ? AppSetting.VALUE_AX25_SOFTWARE : stored, false);
     }
 
     private String mapLegacyEncoderSetting(String stored) {
-        if ("ESP32".equalsIgnoreCase(stored) || "Firmware".equalsIgnoreCase(stored) || "1".equals(stored)) {
-            return "Firmware";
+        if ("ESP32".equalsIgnoreCase(stored)
+            || AppSetting.VALUE_AX25_FIRMWARE.equalsIgnoreCase(stored)
+            || "1".equals(stored)) {
+            return AppSetting.VALUE_AX25_FIRMWARE;
         }
-        return "Software";
+        return AppSetting.VALUE_AX25_SOFTWARE;
     }
 
     private void populateOriginalValues(Runnable callback) {

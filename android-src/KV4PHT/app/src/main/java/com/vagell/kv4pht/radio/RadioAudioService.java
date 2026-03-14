@@ -79,6 +79,7 @@ import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
+import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200Modulator;
 import com.vagell.kv4pht.javAX25.ax25.Afsk1200MultiDemodulator;
@@ -272,7 +273,7 @@ public class RadioAudioService extends Service implements PacketHandler {
         FIRMWARE;
 
         public static AprsTxEncoder fromSetting(String value) {
-            if ("Firmware".equalsIgnoreCase(value)) {
+            if (AppSetting.VALUE_AX25_FIRMWARE.equalsIgnoreCase(value)) {
                 return FIRMWARE;
             }
             return SOFTWARE;
@@ -285,10 +286,10 @@ public class RadioAudioService extends Service implements PacketHandler {
         FIRMWARE;
 
         public static Ax25Decoder fromSetting(String value) {
-            if ("Software".equalsIgnoreCase(value)) {
+            if (AppSetting.VALUE_AX25_SOFTWARE.equalsIgnoreCase(value)) {
                 return SOFTWARE;
             }
-            if ("Firmware".equalsIgnoreCase(value)) {
+            if (AppSetting.VALUE_AX25_FIRMWARE.equalsIgnoreCase(value)) {
                 return FIRMWARE;
             }
             return BOTH;
