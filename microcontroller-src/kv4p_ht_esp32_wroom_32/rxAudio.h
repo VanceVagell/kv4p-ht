@@ -95,7 +95,7 @@ void initI2SRx() {
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = hw.pins.pinAudioIn;
-  config.sample_rate = AUDIO_SAMPLE_RATE * 1.02; // 2% over sample rate to avoid buffer underruns
+  config.sample_rate = AUDIO_SAMPLE_RATE; // Use exact rate — APLL provides precise clock
   in.begin(config);
   rxEnc.setAudioInfo(rxInfo);
   // configure OPUS additinal parameters
