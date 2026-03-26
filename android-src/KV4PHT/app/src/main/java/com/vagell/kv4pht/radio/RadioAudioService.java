@@ -1431,7 +1431,7 @@ public class RadioAudioService extends Service implements PacketHandler {
      * within a short window. Parsing and storing both copies is fine, but side effects such as
      * notifications and automatic ACK transmission should only happen once per packet.
      */
-    private boolean shouldTriggerPacketActions(@NonNull String packetHash) {
+    private synchronized boolean shouldTriggerPacketActions(@NonNull String packetHash) {
         long nowMs = SystemClock.elapsedRealtime();
         Long seenAt = packetActionSeenMs.get(packetHash);
         if (seenAt != null && (nowMs - seenAt) < PACKET_DEDUP_WINDOW_MS) {
