@@ -146,7 +146,7 @@ public class RadioAudioService extends Service implements PacketHandler {
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
     // Suppress duplicate notifications/acks when Android and ESP32 decode the same packet close together.
-    private static final long PACKET_ACTION_DEDUP_WINDOW_MS = 15000L;
+    public static final long PACKET_DEDUP_WINDOW_MS = 15000L;
     public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
 
     // === Frequency Ranges ===
@@ -1434,13 +1434,13 @@ public class RadioAudioService extends Service implements PacketHandler {
     private boolean shouldTriggerPacketActions(@NonNull String packetHash) {
         long nowMs = SystemClock.elapsedRealtime();
         Long seenAt = packetActionSeenMs.get(packetHash);
-        if (seenAt != null && (nowMs - seenAt) < PACKET_ACTION_DEDUP_WINDOW_MS) {
+        if (seenAt != null && (nowMs - seenAt) < PACKET_DEDUP_WINDOW_MS) {
             return false;
         }
         packetActionSeenMs.put(packetHash, nowMs);
         // Bound memory in long-running service.
         if (packetActionSeenMs.size() > 2048) {
-            packetActionSeenMs.entrySet().removeIf(e -> (nowMs - e.getValue()) > PACKET_ACTION_DEDUP_WINDOW_MS);
+            packetActionSeenMs.entrySet().removeIf(e -> (nowMs - e.getValue()) > PACKET_DEDUP_WINDOW_MS);
         }
         return true;
     }

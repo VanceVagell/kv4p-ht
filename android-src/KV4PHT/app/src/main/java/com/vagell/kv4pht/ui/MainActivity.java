@@ -96,10 +96,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -110,6 +110,9 @@ import static com.google.android.material.snackbar.Snackbar.LENGTH_LONG;
 import static com.vagell.kv4pht.radio.RadioAudioService.INTENT_OPEN_CHAT;
 
 public class MainActivity extends AppCompatActivity {
+    private static final long PACKET_ROW_MERGE_WINDOW_SEC =
+        TimeUnit.MILLISECONDS.toSeconds(RadioAudioService.PACKET_DEDUP_WINDOW_MS);
+
     // For transmitting audio to ESP32 / radio
     private AudioRecord audioRecord;
     private boolean isRecording = false;
@@ -787,7 +790,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void upsertReceivedMessage(APRSMessage aprsMessage) {
         APRSMessage existing = viewModel.getAppDb().aprsMessageDao().getLatestByPacketHash(aprsMessage.packetHash);
-        if (existing == null || !hasText(aprsMessage.packetHash)) {
+        if (existing == null
+            || !hasText(aprsMessage.packetHash)
+            || !isWithinPacketMergeWindow(existing, aprsMessage)) {
             viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
             return;
         }
@@ -796,6 +801,10 @@ public class MainActivity extends AppCompatActivity {
             existing.decoderSource = mergedSource;
             viewModel.getAppDb().aprsMessageDao().update(existing);
         }
+    }
+
+    private boolean isWithinPacketMergeWindow(APRSMessage existing, APRSMessage incoming) {
+        return Math.abs(incoming.timestamp - existing.timestamp) <= PACKET_ROW_MERGE_WINDOW_SEC;
     }
 
     private void notifyAprsDataChanged() {
