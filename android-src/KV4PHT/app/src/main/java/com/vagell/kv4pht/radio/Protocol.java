@@ -41,7 +41,8 @@ public final class Protocol {
         COMMAND_HOST_CONFIG(0x06),   // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
         COMMAND_HOST_TX_AUDIO(0x07), // [COMMAND_HOST_TX_AUDIO(byte[])]
         COMMAND_HOST_HL(0x08),       // [COMMAND_HOST_HL(Hl)]
-        COMMAND_HOST_RSSI(0x09);     // [COMMAND_HOST_RSSI(ON)]
+        COMMAND_HOST_RSSI(0x09),     // [COMMAND_HOST_RSSI(ON)]
+        COMMAND_HOST_TX_AX25(0x0A);  // [COMMAND_HOST_TX_AX25(byte[])]
         private final int value;
         SndCommand(int value) {
             this.value = value;
@@ -62,7 +63,8 @@ public final class Protocol {
         COMMAND_HELLO(0x06),            // [COMMAND_HELLO()]
         COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
         COMMAND_VERSION(0x08),          // [COMMAND_VERSION(Version)]
-        COMMAND_WINDOW_UPDATE(0x09);    // [COMMAND_WINDOW_UPDATE()]
+        COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
+        COMMAND_RX_AX25_PACKET(0x0A);   // [COMMAND_RX_AX25_PACKET(uint8_t decoderId, uint8_t[])]
         private final int value;
         RcvCommand(int value) {
             this.value = value;
@@ -290,6 +292,10 @@ public final class Protocol {
 
         public void txAudio(byte[] audio) {
             sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
+        }
+
+        public void txAx25(byte[] ax25Bytes) {
+            sendCommand(SndCommand.COMMAND_HOST_TX_AX25, ax25Bytes);
         }
         
         // Waits until it can send (windowSize > 0)

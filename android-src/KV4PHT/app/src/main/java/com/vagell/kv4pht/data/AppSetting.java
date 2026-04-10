@@ -43,6 +43,12 @@ public class AppSetting {
     public static final String SETTING_DISABLE_ANIMATIONS = "disableAnimations";
     public static final String SETTING_APRS_POSITION_ACCURACY = "aprsPositionAccuracy";
     public static final String SETTING_APRS_BEACON_POSITION = "aprsBeaconPosition";
+    public static final String SETTING_APRS_TX_ENCODER = "aprsTxEncoder";
+    public static final String SETTING_AX25_ENCODER = "ax25Encoder";
+    public static final String SETTING_AX25_DECODER = "ax25Decoder";
+    public static final String VALUE_AX25_SOFTWARE = "Software";
+    public static final String VALUE_AX25_FIRMWARE = "Firmware";
+    public static final String VALUE_AX25_BOTH = "Both";
     public static final String SETTING_CALLSIGN = "callsign";
     public static final String SETTING_STICKY_PTT = "stickyPTT";
 
