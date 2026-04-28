@@ -27,8 +27,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
@@ -38,6 +41,7 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
+import android.media.MediaRecorder;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -173,10 +177,56 @@ public class RadioAudioService extends Service {
     private AudioTrack audioTrack;
     private float audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
+    private boolean audioFocusHeld = false;
+    /** Idle window after which we release the AudioTrack/audio focus so other apps (e.g. music over A2DP) can play. */
+    private static final long RX_IDLE_RELEASE_MS = 1500L;
+    private Runnable rxIdleRunnable;
     private final OpusUtils.OpusDecoderWrapper opusDecoder =
         new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
     private final OpusUtils.OpusEncoderWrapper opusEncoder =
         new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
+
+    // === Mic / TX Recording ===
+    private static final int TX_CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
+    private static final int TX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
+    private static final int TX_MIN_BUFFER_SIZE =
+            AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, TX_CHANNEL_CONFIG, TX_AUDIO_FORMAT);
+    private static final int RECORD_ANIM_FPS = 30;
+    private static final long SCO_CONNECT_TIMEOUT_MS = 1500L;
+    private AudioRecord audioRecord;
+    private volatile boolean isRecording = false;
+    private Thread recordingThread;
+    private boolean usingBluetoothSco = false;
+    private boolean scoReceiverRegistered = false;
+    private Runnable scoConnectTimeoutRunnable;
+    private final BroadcastReceiver scoStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED.equals(intent.getAction())) {
+                return;
+            }
+            int state = intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_STATE,
+                    AudioManager.SCO_AUDIO_STATE_ERROR);
+            Log.d(TAG, "SCO state changed: " + state);
+            if (state == AudioManager.SCO_AUDIO_STATE_CONNECTED && isRecording && audioRecord == null) {
+                if (scoConnectTimeoutRunnable != null) {
+                    handler.removeCallbacks(scoConnectTimeoutRunnable);
+                    scoConnectTimeoutRunnable = null;
+                }
+                startRecordingInternal(MediaRecorder.AudioSource.VOICE_COMMUNICATION);
+            } else if ((state == AudioManager.SCO_AUDIO_STATE_DISCONNECTED
+                    || state == AudioManager.SCO_AUDIO_STATE_ERROR)
+                    && isRecording && audioRecord == null && usingBluetoothSco) {
+                Log.w(TAG, "SCO failed to connect, falling back to built-in mic");
+                if (scoConnectTimeoutRunnable != null) {
+                    handler.removeCallbacks(scoConnectTimeoutRunnable);
+                    scoConnectTimeoutRunnable = null;
+                }
+                tearDownBluetoothSco();
+                startRecordingInternal(MediaRecorder.AudioSource.MIC);
+            }
+        }
+    };
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -225,6 +275,7 @@ public class RadioAudioService extends Service {
     private int activeMemoryId = -1;
     private int consecutiveSilenceBytes = 0;
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
+    private RxGainBoost rxGainBoost = RxGainBoost.NONE;
     @Setter
     private @NonNull String bandwidth = "25kHz";
 
@@ -273,6 +324,7 @@ public class RadioAudioService extends Service {
         default void missingFirmware() {}
         default void txStarted() {}
         default void txEnded() {}
+        default void txAudioLevel(int waitMs, float volume) {}
         default void chatError(String text) {}
         default void sMeterUpdate(int value) {}
         default void aprsBeaconing(boolean beaconing, int accuracy) {}
@@ -307,6 +359,10 @@ public class RadioAudioService extends Service {
 
     public void setMicGainBoost(String micGainBoost) {
         this.micGainBoost = MicGainBoost.parse(micGainBoost);
+    }
+
+    public void setRxGainBoost(String rxGainBoost) {
+        this.rxGainBoost = RxGainBoost.parse(rxGainBoost);
     }
 
     public void setMinRadioFreq(float newMinFreq) {
@@ -537,6 +593,12 @@ public class RadioAudioService extends Service {
     public void onDestroy() {
         super.onDestroy();
         tryToStopRadioModule();
+        stopMicCapture();
+        if (rxIdleRunnable != null) {
+            handler.removeCallbacks(rxIdleRunnable);
+            rxIdleRunnable = null;
+        }
+        abandonAudioFocusIfHeld();
         connectionController.stop();
         protocolHandshake.onDestroy();
 
@@ -743,7 +805,8 @@ public class RadioAudioService extends Service {
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build();
-        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+        // Use a transient focus request so music apps auto-resume after RX traffic ends.
+        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
             .setAudioAttributes(audioAttributes)
             .build();
         audioTrack = new AudioTrack.Builder()
@@ -778,6 +841,16 @@ public class RadioAudioService extends Service {
     }
 
     public void startPtt() {
+        startPtt(false);
+    }
+
+    /**
+     * Starts PTT (transmit). When {@code captureMic} is {@code true}, the service also begins
+     * capturing audio from the microphone (preferring a connected Bluetooth headset via SCO if
+     * available) and streaming it to the ESP32. When {@code false} (e.g. for AFSK data),
+     * the caller is responsible for sourcing audio frames.
+     */
+    public void startPtt(boolean captureMic) {
         if (hostToEsp32 == null) {
             Log.e(TAG, "Attempted to start PTT but hostToEsp32 is null. USB connection likely failed.");
             radioMissing();
@@ -790,7 +863,17 @@ public class RadioAudioService extends Service {
             hostToEsp32.pttDown();
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
+            // Take audio focus so background music (e.g. on a BT headset) ducks/pauses while
+            // the user is transmitting. Cancel any pending idle-release that would abandon it.
+            if (rxIdleRunnable != null) {
+                handler.removeCallbacks(rxIdleRunnable);
+                rxIdleRunnable = null;
+            }
+            requestAudioFocusIfNeeded();
             callbacks.txStarted();
+            if (captureMic) {
+                beginMicCapture();
+            }
         } else {
             Log.w(TAG, "Attempted to start PTT when not allowed", new Throwable());
         }
@@ -798,11 +881,169 @@ public class RadioAudioService extends Service {
 
     public void endPtt() {
         if (mode == RadioMode.TX) {
+            stopMicCapture();
             setMode(RadioMode.RX);
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
             hostToEsp32.pttUp();
+            // Schedule the same idle-release we use for RX so background music apps get their
+            // focus back shortly after PTT release (rather than only after the next RX audio).
+            scheduleRxIdleRelease();
             callbacks.txEnded();
+        }
+    }
+
+    // === Mic capture (TX) ===
+
+    private void beginMicCapture() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "RECORD_AUDIO permission not granted, cannot capture mic for TX.");
+            return;
+        }
+        if (isRecording) {
+            return;
+        }
+        isRecording = true;
+
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        boolean tryBluetooth = am != null && am.isBluetoothScoAvailableOffCall();
+        if (tryBluetooth) {
+            usingBluetoothSco = true;
+            try {
+                if (!scoReceiverRegistered) {
+                    registerReceiver(scoStateReceiver,
+                            new IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED));
+                    scoReceiverRegistered = true;
+                }
+                am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                am.startBluetoothSco();
+                am.setBluetoothScoOn(true);
+                // Fall back to built-in mic if SCO doesn't connect in time.
+                scoConnectTimeoutRunnable = () -> {
+                    if (isRecording && audioRecord == null) {
+                        Log.w(TAG, "SCO connect timed out, falling back to built-in mic");
+                        tearDownBluetoothSco();
+                        startRecordingInternal(MediaRecorder.AudioSource.MIC);
+                    }
+                };
+                handler.postDelayed(scoConnectTimeoutRunnable, SCO_CONNECT_TIMEOUT_MS);
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to start Bluetooth SCO, falling back to built-in mic", e);
+                tearDownBluetoothSco();
+                startRecordingInternal(MediaRecorder.AudioSource.MIC);
+            }
+        } else {
+            usingBluetoothSco = false;
+            startRecordingInternal(MediaRecorder.AudioSource.MIC);
+        }
+    }
+
+    private void startRecordingInternal(int audioSource) {
+        if (!isRecording) {
+            return;
+        }
+        try {
+            audioRecord = new AudioRecord(audioSource,
+                    AUDIO_SAMPLE_RATE,
+                    TX_CHANNEL_CONFIG,
+                    TX_AUDIO_FORMAT,
+                    TX_MIN_BUFFER_SIZE);
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException creating AudioRecord", e);
+            isRecording = false;
+            tearDownBluetoothSco();
+            return;
+        }
+        if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord init failed for source " + audioSource);
+            audioRecord.release();
+            audioRecord = null;
+            // Try built-in mic as a last resort.
+            if (audioSource != MediaRecorder.AudioSource.MIC) {
+                tearDownBluetoothSco();
+                startRecordingInternal(MediaRecorder.AudioSource.MIC);
+            } else {
+                isRecording = false;
+            }
+            return;
+        }
+        audioRecord.startRecording();
+        recordingThread = new Thread(this::processAudioStream, "AudioRecorder Thread");
+        recordingThread.start();
+    }
+
+    private void processAudioStream() {
+        float audioChunkSampleTotal = 0.0f;
+        int accumulatedSamples = 0;
+        int samplesPerAnimFrame = AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
+        float[] audioBuffer = new float[OPUS_FRAME_SIZE];
+        AudioRecord ar = audioRecord;
+        while (isRecording && ar != null) {
+            int samples = ar.read(audioBuffer, 0, OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
+            if (samples == OPUS_FRAME_SIZE) {
+                if (!isRadioConnected()) {
+                    Log.d(TAG, "Radio no longer connected during TX, stopping recording.");
+                    handler.post(this::endPtt);
+                    return;
+                }
+                sendAudioToESP32(audioBuffer, false);
+                for (int i = 0; i < samples; i++) {
+                    audioChunkSampleTotal += Math.abs(audioBuffer[i]) * 8.0f;
+                    accumulatedSamples++;
+                    if (accumulatedSamples >= samplesPerAnimFrame) {
+                        callbacks.txAudioLevel(0, audioChunkSampleTotal / accumulatedSamples);
+                        audioChunkSampleTotal = 0.0f;
+                        accumulatedSamples = 0;
+                    }
+                }
+            }
+            ar = audioRecord;
+        }
+    }
+
+    private void stopMicCapture() {
+        if (!isRecording && audioRecord == null) {
+            tearDownBluetoothSco();
+            return;
+        }
+        isRecording = false;
+        if (scoConnectTimeoutRunnable != null) {
+            handler.removeCallbacks(scoConnectTimeoutRunnable);
+            scoConnectTimeoutRunnable = null;
+        }
+        AudioRecord ar = audioRecord;
+        audioRecord = null;
+        if (ar != null) {
+            try {
+                ar.stop();
+            } catch (IllegalStateException ignored) { /* not started */ }
+            ar.release();
+        }
+        recordingThread = null;
+        callbacks.txAudioLevel(100, 0.0f);
+        tearDownBluetoothSco();
+    }
+
+    private void tearDownBluetoothSco() {
+        if (!usingBluetoothSco && !scoReceiverRegistered) {
+            return;
+        }
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null && usingBluetoothSco) {
+                am.setBluetoothScoOn(false);
+                am.stopBluetoothSco();
+                am.setMode(AudioManager.MODE_NORMAL);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error stopping Bluetooth SCO", e);
+        }
+        usingBluetoothSco = false;
+        if (scoReceiverRegistered) {
+            try {
+                unregisterReceiver(scoStateReceiver);
+            } catch (IllegalArgumentException ignored) { /* not registered */ }
+            scoReceiverRegistered = false;
         }
     }
 
@@ -1139,6 +1380,20 @@ public class RadioAudioService extends Service {
         return newAudioBuffer;
     }
 
+    /** Multiplies samples by the configured RX gain in-place, clamped to [-1, 1]. */
+    private void applyRxGain(float[] audioBuffer, int len) {
+        if (rxGainBoost == RxGainBoost.NONE) {
+            return;
+        }
+        float gain = rxGainBoost.getGain();
+        for (int i = 0; i < len; i++) {
+            float v = audioBuffer[i] * gain;
+            if (v > 1.0f) v = 1.0f;
+            else if (v < -1.0f) v = -1.0f;
+            audioBuffer[i] = v;
+        }
+    }
+
     public void sendAudioToESP32(float[] samples, boolean dataMode) {
         if (hostToEsp32 == null) {
             return; // If connection is lost, just drop the audio frame.
@@ -1243,7 +1498,7 @@ public class RadioAudioService extends Service {
 
     private void handlePhysicalPttDown() {
         if (getMode() == RadioMode.RX && txAllowed) { // Note that people can't hit PTT in the middle of a scan.
-            startPtt();
+            startPtt(true);
             callbacks.forcedPttStart();
         }
     }
@@ -1260,10 +1515,13 @@ public class RadioAudioService extends Service {
         int decoded = opusDecoder.decode(param, len, pcmFloat);
 
         if ((getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) && audioTrack != null) {
-            AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
-            audioManager.requestAudioFocus(audioFocusRequest);
-            ensureAudioPlaying();
+            if (isRxAudible(pcmFloat, decoded)) {
+                requestAudioFocusIfNeeded();
+                applyRxGain(pcmFloat, decoded);
+                audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
+                ensureAudioPlaying();
+                scheduleRxIdleRelease();
+            }
         }
         if (getMode() == RadioMode.SCAN) {
             for (int i = 0; i < decoded; i++) {
@@ -1291,6 +1549,68 @@ public class RadioAudioService extends Service {
      * @see AudioTrack
      * @see AudioTrack#setVolume(float)
      */
+    /**
+     * Returns true if any sample in the buffer is non-trivially loud. Used to avoid holding
+     * audio focus / the BT A2DP channel when the radio is just streaming squelched silence.
+     */
+    private static boolean isRxAudible(float[] samples, int len) {
+        for (int i = 0; i < len; i++) {
+            if (Math.abs(samples[i]) > 0.001f) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void requestAudioFocusIfNeeded() {
+        if (audioFocusHeld || audioFocusRequest == null) {
+            return;
+        }
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (am != null && am.requestAudioFocus(audioFocusRequest)
+                == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            audioFocusHeld = true;
+        }
+    }
+
+    private void abandonAudioFocusIfHeld() {
+        if (!audioFocusHeld || audioFocusRequest == null) {
+            return;
+        }
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (am != null) {
+            am.abandonAudioFocusRequest(audioFocusRequest);
+        }
+        audioFocusHeld = false;
+    }
+
+    private void scheduleRxIdleRelease() {
+        if (rxIdleRunnable != null) {
+            handler.removeCallbacks(rxIdleRunnable);
+        }
+        rxIdleRunnable = this::releaseRxAudio;
+        handler.postDelayed(rxIdleRunnable, RX_IDLE_RELEASE_MS);
+    }
+
+    /**
+     * Stops the AudioTrack and releases audio focus so other apps (e.g. music over A2DP) can
+     * resume. Also forces a fresh routing decision the next time we receive RX audio, which
+     * works around BT headsets that get stuck on the SCO/in-call volume curve after PTT.
+     */
+    private void releaseRxAudio() {
+        rxIdleRunnable = null;
+        if (audioTrack != null && audioTrack.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) {
+            try {
+                audioTrack.pause();
+                audioTrack.flush();
+                audioTrack.stop();
+            } catch (IllegalStateException ignored) { /* not started */ }
+            audioTrackVolume = 0.0f;
+            audioTrack.setVolume(0.0f);
+        }
+        abandonAudioFocusIfHeld();
+    }
+
     private void ensureAudioPlaying() {
         if (audioTrack.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) {
             audioTrackVolume = 0;
@@ -1299,8 +1619,9 @@ public class RadioAudioService extends Service {
         }
         float alpha = 0.05f;
         audioTrackVolume = alpha + (1.0f - alpha) * audioTrackVolume;
+        // Smoothly ramp up to full volume; below the threshold keep muted to avoid pops on idle frames.
         if (audioTrackVolume > 0.7f) {
-            audioTrack.setVolume(audioTrackVolume);
+            audioTrack.setVolume(1.0f);
         }
         else {
             audioTrack.setVolume(0.0f);
