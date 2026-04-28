@@ -36,6 +36,7 @@ public class AppSetting {
     public static final String SETTING_RF_POWER = "rfPower";
     public static final String SETTING_BANDWIDTH = "bandwidth";
     public static final String SETTING_MIC_GAIN_BOOST = "micGainBoost";
+    public static final String SETTING_RX_GAIN_BOOST = "rxGainBoost";
     public static final String SETTING_SQUELCH = "squelch";
     public static final String SETTING_EMPHASIS = "emphasis";
     public static final String SETTING_HIGHPASS = "highpass";
