@@ -806,8 +806,29 @@ public class RadioAudioService extends Service {
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build();
         // Use a transient focus request so music apps auto-resume after RX traffic ends.
+        // The change listener also lets us yield to higher-priority audio (e.g. incoming
+        // phone calls): when focus is lost we end PTT and stop playback so telephony
+        // routing on the BT headset isn't disrupted.
         audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
             .setAudioAttributes(audioAttributes)
+            .setOnAudioFocusChangeListener(focusChange -> {
+                switch (focusChange) {
+                    case AudioManager.AUDIOFOCUS_LOSS:
+                    case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                    case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+                        // Mark as not held so we don't try to abandon a focus we no longer own.
+                        audioFocusHeld = false;
+                        handler.post(() -> {
+                            if (mode == RadioMode.TX) {
+                                endPtt();
+                            }
+                            releaseRxAudio();
+                        });
+                        break;
+                    default:
+                        break;
+                }
+            }, handler)
             .build();
         audioTrack = new AudioTrack.Builder()
             .setAudioAttributes(audioAttributes)
