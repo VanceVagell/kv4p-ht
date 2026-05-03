@@ -8,6 +8,9 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 * **Current Version:** 2.2
 * **Changelog:**
+  * Serial transport now uses KV4P KISS framing. The old `0xDEADBEEF` delimiter and top-level length field are removed.
+  * Standard KISS DATA frames carry AX.25 packets directly.
+  * kv4p-specific commands are carried in KISS SETHARDWARE vendor frames with payload prefix `"KV4P"` and protocol version `1`.
   * Incoming command set now includes COMMAND_HOST_HL (0x08) and COMMAND_HOST_RSSI (0x09).
   * COMMAND_HOST_CONFIG params are bool isHigh (not radioType).
   * COMMAND_VERSION payload includes windowSize, rfModuleType, and features (not hw_ver_t).
@@ -23,14 +26,38 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 ## Packet Structure
 
-Each message consists of the following fields:
+Serial messages use KV4P KISS transport.
 
-| Field             | Size (bytes) | Description                                      |
-| ----------------- | ------------ | ------------------------------------------------ |
-| Command Delimiter | 4            | Fixed value (`0xDEADBEEF`)                       |
-| Command           | 1            | Identifies the request or response               |
-| Parameter Length  | 2            | Length of the following parameters (0-65535, LE) |
-| Parameters        | 0-2048       | Command-specific data                            |
+### AX.25 KISS DATA Frames
+
+AX.25 packets are sent as standard KISS DATA frames:
+
+```
+FEND 0x00 <escaped AX.25 frame bytes> FEND
+```
+
+The AX.25 payload does not include a kv4p command byte, decoder ID, or top-level length field.
+
+### KV4P Vendor Frames
+
+Non-AX.25 kv4p commands are sent as KISS SETHARDWARE vendor frames:
+
+```
+FEND 0x06 "KV4P" 0x01 <kv4pCommand> <escaped command payload bytes> FEND
+```
+
+The payload prefix is ASCII `"KV4P"`, followed by `uint8 protocolVersion = 1`, the existing kv4p command byte, and the existing command payload bytes.
+
+### Escaping
+
+Inside KISS frame payloads, bytes are escaped as follows:
+
+| Byte | Encoded as |
+| ---- | ---------- |
+| `0xC0` | `0xDB 0xDC` |
+| `0xDB` | `0xDB 0xDD` |
+
+All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-level `uint16` length field are no longer present on the wire.
 
 ## Incoming Commands (Android → ESP32)
 
@@ -202,20 +229,21 @@ A window-based flow control mechanism, inspired by HTTP/2, is used to regulate t
 ### Push-to-talk activation
 
 ```
-[ 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x00, 0x00 ]
+[ 0xC0, 0x06, 'K', 'V', '4', 'P', 0x01, 0x01, 0xC0 ]
 ```
 
-* `0xDEADBEEF`: Command Delimiter
+* `0xC0`: KISS FEND
+* `0x06`: KISS SETHARDWARE
+* `"KV4P" 0x01`: KV4P vendor prefix and protocol version
 * `0x01`: `COMMAND_HOST_PTT_DOWN`
-* `0x00 0x00`: Parameter Length (no parameters)
 
 ### Example Debug Message
 
 ```
-[ 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x05, 0x00, 'E', 'r', 'r', 'o', 'r' ]
+[ 0xC0, 0x06, 'K', 'V', '4', 'P', 0x01, 0x01, 'E', 'r', 'r', 'o', 'r', 0xC0 ]
 ```
 
-* `0xDEADBEEF`: Command Delimiter
+* `0x06`: KISS SETHARDWARE
+* `"KV4P" 0x01`: KV4P vendor prefix and protocol version
 * `0x01`: `COMMAND_DEBUG_INFO`
-* `0x05 0x00`: Parameter Length (5 bytes)
 * `'Error'`: Debug message content

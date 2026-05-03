@@ -81,7 +81,7 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.radio.Protocol.Filters;
-import com.vagell.kv4pht.radio.Protocol.FrameParser;
+import com.vagell.kv4pht.radio.Protocol.KissParser;
 import com.vagell.kv4pht.radio.Protocol.Group;
 import com.vagell.kv4pht.radio.Protocol.HlState;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
@@ -186,7 +186,7 @@ public class RadioAudioService extends Service {
     private boolean usbPermissionRequestPending = false;
     @Getter
     private Protocol.Sender hostToEsp32;
-    private final FrameParser esp32DataStreamParser = new FrameParser(this::handleParsedCommand);
+    private final KissParser esp32DataStreamParser = new KissParser(this::handleParsedCommand);
     private int usbConnectAttemptSeq = 0;
     private int activeUsbConnectAttemptId = 0;
 
@@ -1228,10 +1228,10 @@ public class RadioAudioService extends Service {
     }
 
     private void handleEsp32Ax25Packet(final byte[] param, final Integer len) {
-        if (param == null || len == null || len < 2) {
+        if (param == null || len == null || len < 1) {
             return;
         }
-        handleAx25Packet(java.util.Arrays.copyOfRange(param, 1, len));
+        handleAx25Packet(java.util.Arrays.copyOf(param, len));
     }
 
     private void handlePhysicalPttUp() {

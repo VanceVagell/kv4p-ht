@@ -18,13 +18,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <Arduino.h>
+#include <type_traits>
 #include "globals.h"
-#include "debug.h"
 
-// Delimeter must also match Android app
-const uint8_t COMMAND_DELIMITER[] = {0xDE, 0xAD, 0xBE, 0xEF};
-#define DELIMITER_LENGTH sizeof(COMMAND_DELIMITER)
 #define REQUIRE_TRIVIALLY_COPYABLE(T) static_assert(std::is_trivially_copyable<T>::value, #T " must be trivially copyable!")
+
+// KV4P KISS transport. Standard KISS DATA frames carry AX.25 packets.
+// kv4p-specific commands are carried in KISS SETHARDWARE vendor frames:
+// FEND 0x06 "KV4P" 0x01 <kv4pCommand> <payload...> FEND.
+static constexpr uint8_t KISS_FEND = 0xC0;
+static constexpr uint8_t KISS_FESC = 0xDB;
+static constexpr uint8_t KISS_TFEND = 0xDC;
+static constexpr uint8_t KISS_TFESC = 0xDD;
+static constexpr uint8_t KISS_CMD_DATA = 0x00;
+static constexpr uint8_t KISS_CMD_SETHARDWARE = 0x06;
+static constexpr uint8_t KISS_PORT_0 = 0x00;
+static constexpr uint8_t KV4P_PROTOCOL_VERSION = 0x01;
+static constexpr size_t KV4P_VENDOR_HEADER_LEN = 6; // "KV4P" + version + kv4pCommand
+static constexpr size_t KISS_MAX_FRAME_SIZE = PROTO_MTU + 1 + KV4P_VENDOR_HEADER_LEN;
+static constexpr uint8_t KV4P_VENDOR_PREFIX[] = {'K', 'V', '4', 'P'};
 
 // Incoming commands (Android -> ESP32)
 enum RcvCommand {
@@ -123,41 +135,63 @@ struct [[gnu::packed]] RSSIState {
 };
 REQUIRE_TRIVIALLY_COPYABLE(RSSIState);
 
-/**
- * Send a command with params
- * Format: [DELIMITER(8 bytes)] [CMD(1 byte)] [paramLen(1 byte)] [param data(N bytes)]
- */
-void __sendCmdToHost(SndCommand cmd, const uint8_t *params, size_t paramsLen) {
-  // Safety check: limit paramsLen to 255 for 1-byte length
-  if (paramsLen > PROTO_MTU) {
-    paramsLen = PROTO_MTU;  // or handle differently (split, or error, etc.)
-  }
-  // 1. Leading delimiter
-  Serial.write(COMMAND_DELIMITER, DELIMITER_LENGTH);
-  // 2. Command byte
-  Serial.write((uint8_t*) &cmd, 1);
-  // 3. Parameter length
-  uint16_t len = paramsLen;
-  Serial.write((uint8_t*) &len, sizeof(len));
-  // 4. Parameter bytes
-  if (paramsLen > 0) {
-    Serial.write(params, paramsLen);
+static inline void writeKissEscapedByte(uint8_t b) {
+  if (b == KISS_FEND) {
+    Serial.write(KISS_FESC);
+    Serial.write(KISS_TFEND);
+  } else if (b == KISS_FESC) {
+    Serial.write(KISS_FESC);
+    Serial.write(KISS_TFESC);
+  } else {
+    Serial.write(b);
   }
 }
 
-void inline __sendCmdToHost(SndCommand cmd) {
-  __sendCmdToHost(cmd, NULL, 0);
+void sendKissFrame(uint8_t kissCommand, const uint8_t *payload, size_t len) {
+  Serial.write(KISS_FEND);
+  Serial.write(kissCommand);
+  for (size_t i = 0; i < len; i++) {
+    writeKissEscapedByte(payload[i]);
+  }
+  Serial.write(KISS_FEND);
+}
+
+void inline sendKissDataFrame(const uint8_t *ax25, size_t len) {
+  if (ax25 == NULL) {
+    len = 0;
+  }
+  if (len > PROTO_MTU) {
+    len = PROTO_MTU;
+  }
+  sendKissFrame(KISS_CMD_DATA, ax25, len);
+}
+
+void sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
+  if (payload == NULL) {
+    len = 0;
+  }
+  if (len > PROTO_MTU) {
+    len = PROTO_MTU;
+  }
+  uint8_t vendorPayload[KV4P_VENDOR_HEADER_LEN + PROTO_MTU];
+  memcpy(vendorPayload, KV4P_VENDOR_PREFIX, sizeof(KV4P_VENDOR_PREFIX));
+  vendorPayload[4] = KV4P_PROTOCOL_VERSION;
+  vendorPayload[5] = kv4pCommand;
+  if (len > 0 && payload != NULL) {
+    memcpy(vendorPayload + KV4P_VENDOR_HEADER_LEN, payload, len);
+  }
+  sendKissFrame(KISS_CMD_SETHARDWARE, vendorPayload, KV4P_VENDOR_HEADER_LEN + len);
 }
 
 void inline sendHello() {
-  __sendCmdToHost(COMMAND_HELLO);
+  sendKv4pVendorFrame(COMMAND_HELLO, NULL, 0);
 }
 
 void inline sendRssi(uint8_t rssi) {
   Rssi params = {
     .rssi = rssi
   };
-  __sendCmdToHost(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
 }
 
 void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features) {
@@ -168,43 +202,36 @@ void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize,
     .rfModuleType = rfModuleType,
     .features = features,
   };
-  __sendCmdToHost(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
 }
 
 void inline sendPhysPttState(bool isPhysPttDown) {
-  __sendCmdToHost(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP);
+  sendKv4pVendorFrame(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP, NULL, 0);
 }
 
 void inline sendAudio(const uint8_t *data, size_t len) {
-  __sendCmdToHost(COMMAND_RX_AUDIO, data, len);
+  sendKv4pVendorFrame(COMMAND_RX_AUDIO, data, len);
 }
 
 void inline sendAx25Packet(uint8_t decoderId, const uint8_t *data, size_t len) {
-  uint8_t payload[PROTO_MTU];
-  if (len > (PROTO_MTU - 1)) {
-    len = PROTO_MTU - 1;
-  }
-  payload[0] = decoderId;
-  if (len > 0) {
-    memcpy(payload + 1, data, len);
-  }
-  __sendCmdToHost(COMMAND_RX_AX25_PACKET, payload, len + 1);
+  (void)decoderId; // KISS DATA frames are pure AX.25; decoder metadata is intentionally not embedded.
+  sendKissDataFrame(data, len);
 }
 
 void inline sendWindowAck(size_t size) {
   WindowUpdate params = {
     .size = size,
   };
-  __sendCmdToHost(COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
 }
 
 typedef void (*CommandCallback)(RcvCommand command, uint8_t *params, size_t param_len);
 
-class FrameParser {
+class KissParser {
 public:
-  FrameParser(Stream &serial, CommandCallback callback) 
-    : _serial(serial), _callback(callback), _matchedDelimiterTokens(0),
-      _command(COMMAND_RCV_UNKNOWN), _commandParamLen(0), _paramIndex(0) {}
+  KissParser(Stream &serial, CommandCallback callback)
+    : _serial(serial), _callback(callback), _frameLen(0), _encodedFrameLen(0),
+      _escape(false), _dropFrame(false), _inFrame(false) {}
 
   void loop() {
     while (_serial.available() > 0) {
@@ -217,52 +244,100 @@ public:
 private:
   Stream &_serial;
   CommandCallback _callback;
-  uint8_t _matchedDelimiterTokens;
-  RcvCommand _command;
-  size_t _commandParamLen; 
-  uint8_t _commandParams[PROTO_MTU];
-  size_t _paramIndex;
+  uint8_t _frame[KISS_MAX_FRAME_SIZE];
+  size_t _frameLen;
+  size_t _encodedFrameLen;
+  bool _escape;
+  bool _dropFrame;
+  bool _inFrame;
 
   inline bool processByte(uint8_t b) {
-    if (_matchedDelimiterTokens < DELIMITER_LENGTH) {
-      _matchedDelimiterTokens = (b == COMMAND_DELIMITER[_matchedDelimiterTokens]) ? _matchedDelimiterTokens + 1 : 0;
-    } else if (_matchedDelimiterTokens == DELIMITER_LENGTH) {
-      _command = (RcvCommand)b;
-      _matchedDelimiterTokens++;
-    } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 1) {
-      _commandParamLen = b;
-      _matchedDelimiterTokens++;
-    } else if (_matchedDelimiterTokens == DELIMITER_LENGTH + 2) {  
-      _commandParamLen |= (b << 8);
-      _paramIndex = 0;
-      _matchedDelimiterTokens++;
-      if (_commandParamLen == 0) {
-        _callback(_command, _commandParams, 0);
-        sendWindowAck(DELIMITER_LENGTH + 1 + 2);
+    if (b == KISS_FEND) {
+      _encodedFrameLen++;
+      if (_frameLen > 0 && !_dropFrame) {
+        processFrame();
+        sendWindowAck(_encodedFrameLen);
         resetParser();
+        _inFrame = true;
+        _encodedFrameLen = 1;
         return true;
       }
-      if (_commandParamLen > PROTO_MTU) {
-        resetParser();
+      resetParser();
+      _inFrame = true;
+      _encodedFrameLen = 1;
+    } else if (!_inFrame) {
+      return false;
+    } else if (_dropFrame) {
+      _encodedFrameLen++;
+      return false;
+    } else if (_escape) {
+      _encodedFrameLen++;
+      if (b == KISS_TFEND) {
+        appendByte(KISS_FEND);
+      } else if (b == KISS_TFESC) {
+        appendByte(KISS_FESC);
+      } else {
+        // Unknown KISS escape: drop this frame and wait for the next FEND.
+        _dropFrame = true;
       }
+      _escape = false;
+    } else if (b == KISS_FESC) {
+      _encodedFrameLen++;
+      _escape = true;
     } else {
-      if (_paramIndex < _commandParamLen) {
-        _commandParams[_paramIndex++] = b;
-      }
-      if (_paramIndex == _commandParamLen) {
-        _callback(_command, _commandParams, _commandParamLen);
-        sendWindowAck(DELIMITER_LENGTH + 1 + 2 + _commandParamLen);
-        resetParser();
-        return true;
-      }
+      _encodedFrameLen++;
+      appendByte(b);
     }
     return false;
   }
 
+  void appendByte(uint8_t b) {
+    if (_frameLen >= KISS_MAX_FRAME_SIZE) {
+      _dropFrame = true;
+      return;
+    }
+    _frame[_frameLen++] = b;
+  }
+
+  void processFrame() {
+    uint8_t kissCommandByte = _frame[0];
+    uint8_t kissPort = kissCommandByte >> 4;
+    uint8_t kissCommand = kissCommandByte & 0x0F;
+    uint8_t *payload = _frame + 1;
+    size_t payloadLen = _frameLen - 1;
+
+    if (kissPort != KISS_PORT_0) {
+      return;
+    }
+    if (kissCommand == KISS_CMD_DATA) {
+      if (payloadLen > 0 && payloadLen <= PROTO_MTU) {
+        _callback(COMMAND_HOST_TX_AX25, payload, payloadLen);
+      }
+    } else if (kissCommand == KISS_CMD_SETHARDWARE) {
+      processVendorFrame(payload, payloadLen);
+    }
+  }
+
+  void processVendorFrame(uint8_t *payload, size_t payloadLen) {
+    if (payloadLen < KV4P_VENDOR_HEADER_LEN) {
+      return;
+    }
+    if (memcmp(payload, KV4P_VENDOR_PREFIX, sizeof(KV4P_VENDOR_PREFIX)) != 0) {
+      return;
+    }
+    if (payload[4] != KV4P_PROTOCOL_VERSION) {
+      return;
+    }
+    RcvCommand command = (RcvCommand)payload[5];
+    _callback(command, payload + KV4P_VENDOR_HEADER_LEN, payloadLen - KV4P_VENDOR_HEADER_LEN);
+  }
+
   void resetParser() {
-    _matchedDelimiterTokens = 0;
-    _paramIndex = 0;
-    _commandParamLen = 0;
+    _frameLen = 0;
+    _encodedFrameLen = 0;
+    _escape = false;
+    _dropFrame = false;
+    _inFrame = false;
   }
 };
 
@@ -270,9 +345,9 @@ private:
 // This function processes incoming commands, taking a command type, parameters, and their length.
 void handleCommands(RcvCommand command, uint8_t *params, size_t param_len);
 
-// Create an instance of FrameParser and associate it with the handleCommands function
-// The FrameParser object uses the Serial interface and the handleCommands function for processing commands.
-FrameParser parser(Serial, &handleCommands);
+// Create a KISS parser and associate it with the existing command handler.
+// DATA frames dispatch as COMMAND_HOST_TX_AX25; KV4P vendor frames dispatch by kv4pCommand.
+KissParser parser(Serial, &handleCommands);
 
 void inline protocolLoop() {
   parser.loop();

@@ -2,6 +2,8 @@ package com.vagell.kv4pht.radio;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
@@ -18,16 +20,62 @@ import lombok.Getter;
 public final class Protocol {
     private static final String TAG = Protocol.class.getSimpleName();
 
-    // Delimiter must match ESP32 code
-    static final byte[] COMMAND_DELIMITER = new byte[]{(byte) 0xDE, (byte) 0xAD, (byte) 0xBE, (byte) 0xEF};
+    public static final int PROTO_MTU = 2048; // Maximum length of the frame
+
+    // KV4P KISS transport. Standard KISS DATA frames carry AX.25 packets.
+    // kv4p-specific commands are carried in KISS SETHARDWARE vendor frames:
+    // FEND 0x06 "KV4P" 0x01 <kv4pCommand> <payload...> FEND.
+    static final int KISS_FEND = 0xC0;
+    static final int KISS_FESC = 0xDB;
+    static final int KISS_TFEND = 0xDC;
+    static final int KISS_TFESC = 0xDD;
+    static final int KISS_CMD_DATA = 0x00;
+    static final int KISS_CMD_SETHARDWARE = 0x06;
+    static final int KISS_PORT_0 = 0x00;
+    static final int KV4P_PROTOCOL_VERSION = 0x01;
+    static final byte[] KV4P_VENDOR_PREFIX = new byte[]{'K', 'V', '4', 'P'};
+    static final int KV4P_VENDOR_HEADER_LEN = KV4P_VENDOR_PREFIX.length + 2; // "KV4P" + version + kv4pCommand
+    static final int KISS_MAX_FRAME_SIZE = PROTO_MTU + 1 + KV4P_VENDOR_HEADER_LEN;
 
     public static final byte DRA818_25K = 0x01;
     public static final byte DRA818_12K5 = 0x00;
 
-    public static final int PROTO_MTU = 2048; // Maximum length of the frame
-
 
     private Protocol() {
+    }
+
+    static byte[] buildKissFrame(int kissCommand, byte[] payload) {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        buffer.write(KISS_FEND);
+        buffer.write(kissCommand & 0xFF);
+        if (payload != null) {
+            for (byte rawByte : payload) {
+                int b = rawByte & 0xFF;
+                if (b == KISS_FEND) {
+                    buffer.write(KISS_FESC);
+                    buffer.write(KISS_TFEND);
+                } else if (b == KISS_FESC) {
+                    buffer.write(KISS_FESC);
+                    buffer.write(KISS_TFESC);
+                } else {
+                    buffer.write(b);
+                }
+            }
+        }
+        buffer.write(KISS_FEND);
+        return buffer.toByteArray();
+    }
+
+    static byte[] buildKv4pVendorPayload(int kv4pCommand, byte[] param) {
+        int paramLen = param != null ? Math.min(param.length, PROTO_MTU) : 0;
+        ByteBuffer payload = ByteBuffer.allocate(KV4P_VENDOR_HEADER_LEN + paramLen);
+        payload.put(KV4P_VENDOR_PREFIX);
+        payload.put((byte) KV4P_PROTOCOL_VERSION);
+        payload.put((byte) kv4pCommand);
+        if (paramLen > 0) {
+            payload.put(param, 0, paramLen);
+        }
+        return payload.array();
     }
 
     @Getter
@@ -42,7 +90,7 @@ public final class Protocol {
         COMMAND_HOST_TX_AUDIO(0x07), // [COMMAND_HOST_TX_AUDIO(byte[])]
         COMMAND_HOST_HL(0x08),       // [COMMAND_HOST_HL(Hl)]
         COMMAND_HOST_RSSI(0x09),     // [COMMAND_HOST_RSSI(ON)]
-        COMMAND_HOST_TX_AX25(0x0A);  // [COMMAND_HOST_TX_AX25(byte[])]
+        COMMAND_HOST_TX_AX25(0x0A);  // Internal dispatch for KISS DATA AX.25 frames.
         private final int value;
         SndCommand(int value) {
             this.value = value;
@@ -64,7 +112,7 @@ public final class Protocol {
         COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
         COMMAND_VERSION(0x08),          // [COMMAND_VERSION(Version)]
         COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
-        COMMAND_RX_AX25_PACKET(0x0A);   // [COMMAND_RX_AX25_PACKET(uint8_t decoderId, uint8_t[])]
+        COMMAND_RX_AX25_PACKET(0x0A);   // Internal dispatch for KISS DATA AX.25 frames.
         private final int value;
         RcvCommand(int value) {
             this.value = value;
@@ -189,7 +237,7 @@ public final class Protocol {
         private final int sMeter9Value;
         public static Optional<Rssi> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 1)
+                .filter(p -> len != null && len == 1 && p.length >= len)
                 .map(p -> p[0] & 0xFF)
                 .map(Rssi::calculateSMeter9Value)
                 .map(rssi -> Rssi.builder().sMeter9Value(rssi).build());
@@ -211,17 +259,24 @@ public final class Protocol {
         private final boolean hasPhysPtt;
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 12)
+                .filter(p -> len != null && len == 12 && p.length >= len)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
-                .map(b -> FirmwareVersion.builder()
-                    .ver(b.getShort())
-                    .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
-                    .windowSize(b.getInt())
-                    .moduleType(RfModuleType.fromValue(b.getInt()))
-                    .hasHl((b.get() & 0x01) != 0)
-                    .hasPhysPtt((b.get() & 0x02) != 0)
-                    .build());
+                .map(b -> {
+                    short ver = b.getShort();
+                    RadioStatus radioModuleStatus = RadioStatus.fromValue((char) b.get());
+                    int windowSize = b.getInt();
+                    RfModuleType moduleType = RfModuleType.fromValue(b.getInt());
+                    int features = b.get() & 0xFF;
+                    return FirmwareVersion.builder()
+                        .ver(ver)
+                        .radioModuleStatus(radioModuleStatus)
+                        .windowSize(windowSize)
+                        .moduleType(moduleType)
+                        .hasHl((features & 0x01) != 0)
+                        .hasPhysPtt((features & 0x02) != 0)
+                        .build();
+                });
         }
     }
 
@@ -231,7 +286,7 @@ public final class Protocol {
         private final int size;
         public static Optional<WindowUpdate> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len == 4)
+                .filter(p -> len != null && len == 4 && p.length >= len)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> WindowUpdate.builder().size(b.getInt()).build());
@@ -249,53 +304,53 @@ public final class Protocol {
             this.usbIoManager = usbIoManager;
         }
 
-        private void sendCommand(SndCommand commandType, byte[] param) {
-            int frameSize = COMMAND_DELIMITER.length + 1 + 2 + (param != null ? param.length : 0);
+        private void sendKissFrame(int kissCommand, byte[] payload) {
+            byte[] frame = Protocol.buildKissFrame(kissCommand, payload);
+            int frameSize = frame.length;
             waitUntilCanSend(frameSize);
-            ByteBuffer buffer = ByteBuffer.allocate(frameSize);
-            buffer.order(ByteOrder.LITTLE_ENDIAN);
-            buffer.put(COMMAND_DELIMITER);
-            buffer.put((byte) commandType.getValue());
-            if (param != null) {
-                buffer.putShort((short) param.length);
-                buffer.put(param);
-            } else {
-                buffer.putShort((short) 0);
-            }
-            usbIoManager.writeAsync(buffer.array());
+            usbIoManager.writeAsync(frame);
             flowControlWindow.addAndGet(-frameSize);
         }
 
+        private void sendKv4pVendorFrame(SndCommand commandType, byte[] param) {
+            sendKissFrame(KISS_CMD_SETHARDWARE, buildKv4pVendorPayload(commandType.getValue(), param));
+        }
+
+        private void sendKissDataFrame(byte[] ax25Bytes) {
+            byte[] payload = ax25Bytes == null ? new byte[0] : Arrays.copyOf(ax25Bytes, Math.min(ax25Bytes.length, PROTO_MTU));
+            sendKissFrame(KISS_CMD_DATA, payload);
+        }
+
         public void pttDown() {
-            sendCommand(SndCommand.COMMAND_HOST_PTT_DOWN, null);
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_PTT_DOWN, null);
         }
 
         public void pttUp() {
-            sendCommand(SndCommand.COMMAND_HOST_PTT_UP, null);
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_PTT_UP, null);
         }
 
         public void group(Group group) {
-            sendCommand(SndCommand.COMMAND_HOST_GROUP, group.toBytes());
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_GROUP, group.toBytes());
         }
 
         public void filters(Filters filters) {
-            sendCommand(SndCommand.COMMAND_HOST_FILTERS, filters.toBytes());
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_FILTERS, filters.toBytes());
         }
 
         public void stop() {
-            sendCommand(SndCommand.COMMAND_HOST_STOP, null);
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_STOP, null);
         }
 
         public void config(Config config) {
-            sendCommand(SndCommand.COMMAND_HOST_CONFIG, config.toBytes());
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_CONFIG, config.toBytes());
         }
 
         public void txAudio(byte[] audio) {
-            sendCommand(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
         }
 
         public void txAx25(byte[] ax25Bytes) {
-            sendCommand(SndCommand.COMMAND_HOST_TX_AX25, ax25Bytes);
+            sendKissDataFrame(ax25Bytes);
         }
         
         // Waits until it can send (windowSize > 0)
@@ -335,11 +390,11 @@ public final class Protocol {
         }
 
         public void setHighPower(HlState state) {
-            sendCommand(SndCommand.COMMAND_HOST_HL, state.toBytes());
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_HL, state.toBytes());
         }
 
         public void setRssi(RSSIState state) {
-            sendCommand(SndCommand.COMMAND_HOST_RSSI, state.toBytes());
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_RSSI, state.toBytes());
         }
     }
 
@@ -348,16 +403,16 @@ public final class Protocol {
         void accept(T t, U u, V v);
     }
 
-    public static class FrameParser {
+    public static class KissParser {
 
-        private int matchedDelimiterTokens = 0;
-        private byte command;
-        private int commandParamLen;
-        private final byte[] commandParams = new byte[PROTO_MTU];
-        private int paramIndex;
+        private final byte[] frame = new byte[KISS_MAX_FRAME_SIZE];
+        private int frameLen = 0;
+        private boolean escape = false;
+        private boolean dropFrame = false;
+        private boolean inFrame = false;
         private final TriConsumer<RcvCommand, byte[], Integer> onCommand;
 
-        public FrameParser(TriConsumer<RcvCommand, byte[], Integer> onCommand) {
+        public KissParser(TriConsumer<RcvCommand, byte[], Integer> onCommand) {
             this.onCommand = onCommand;
         }
 
@@ -368,50 +423,95 @@ public final class Protocol {
         }
 
         private void processByte(byte b) {
-            if (matchedDelimiterTokens < COMMAND_DELIMITER.length) {
-                matchedDelimiterTokens = (b == COMMAND_DELIMITER[matchedDelimiterTokens]) ? matchedDelimiterTokens + 1 : 0;
-            } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length) {
-                command = b;
-                matchedDelimiterTokens++;
-            } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 1) {
-                commandParamLen = b & 0xFF;
-                matchedDelimiterTokens++;
-            } else if (matchedDelimiterTokens == COMMAND_DELIMITER.length + 2) {
-                commandParamLen = (b & 0xFF) << 8 | commandParamLen;
-                paramIndex = 0;
-                matchedDelimiterTokens++;
-                if (commandParamLen == 0) {
-                    processCommand();
-                    resetParser();
+            int value = b & 0xFF;
+            if (value == KISS_FEND) {
+                if (frameLen > 0 && !dropFrame) {
+                    processFrame();
                 }
-                if (commandParamLen > commandParams.length) {
-                    resetParser();
+                resetParser();
+                inFrame = true;
+            } else if (!inFrame) {
+                return;
+            } else if (dropFrame) {
+                return;
+            } else if (escape) {
+                if (value == KISS_TFEND) {
+                    appendByte((byte) KISS_FEND);
+                } else if (value == KISS_TFESC) {
+                    appendByte((byte) KISS_FESC);
+                } else {
+                    // Unknown KISS escape: drop this frame and wait for the next FEND.
+                    dropFrame = true;
                 }
+                escape = false;
+            } else if (value == KISS_FESC) {
+                escape = true;
             } else {
-                if (paramIndex < commandParamLen) {
-                    commandParams[paramIndex++] = b;
-                }
-                matchedDelimiterTokens++;
-                if (paramIndex == commandParamLen) {
-                    processCommand();
-                    resetParser();
-                }
+                appendByte(b);
             }
         }
 
-        private void processCommand() {
-            RcvCommand cmd = RcvCommand.fromValue(this.command);
-            if (cmd != RcvCommand.COMMAND_RCV_UNKNOWN) {
-                onCommand.accept(cmd, commandParams, commandParamLen);
-            } else {
-                Log.w(TAG, "Unknown cmd received from ESP32: 0x" + Integer.toHexString(this.command & 0xFF) + " paramLen=" + commandParamLen);
+        private void appendByte(byte b) {
+            if (frameLen >= KISS_MAX_FRAME_SIZE) {
+                dropFrame = true;
+                return;
             }
+            frame[frameLen++] = b;
+        }
+
+        private void processFrame() {
+            int kissCommandByte = frame[0] & 0xFF;
+            int kissPort = kissCommandByte >> 4;
+            int kissCommand = kissCommandByte & 0x0F;
+            int payloadLen = frameLen - 1;
+
+            if (kissPort != KISS_PORT_0) {
+                return;
+            }
+            if (kissCommand == KISS_CMD_DATA) {
+                if (payloadLen > 0 && payloadLen <= PROTO_MTU) {
+                    onCommand.accept(
+                        RcvCommand.COMMAND_RX_AX25_PACKET,
+                        Arrays.copyOfRange(frame, 1, frameLen),
+                        payloadLen);
+                }
+            } else if (kissCommand == KISS_CMD_SETHARDWARE) {
+                processVendorFrame(payloadLen);
+            } else {
+                Log.w(TAG, "Unknown KISS cmd received from ESP32: 0x" + Integer.toHexString(kissCommand));
+            }
+        }
+
+        private void processVendorFrame(int payloadLen) {
+            if (payloadLen < KV4P_VENDOR_HEADER_LEN) {
+                return;
+            }
+            int payloadOffset = 1;
+            for (int i = 0; i < KV4P_VENDOR_PREFIX.length; i++) {
+                if (frame[payloadOffset + i] != KV4P_VENDOR_PREFIX[i]) {
+                    return;
+                }
+            }
+            if ((frame[payloadOffset + 4] & 0xFF) != KV4P_PROTOCOL_VERSION) {
+                return;
+            }
+
+            int command = frame[payloadOffset + 5] & 0xFF;
+            int commandPayloadOffset = payloadOffset + KV4P_VENDOR_HEADER_LEN;
+            int commandPayloadLen = payloadLen - KV4P_VENDOR_HEADER_LEN;
+            RcvCommand cmd = RcvCommand.fromValue(command);
+            if (cmd == RcvCommand.COMMAND_RCV_UNKNOWN) {
+                Log.w(TAG, "Unknown KV4P vendor cmd received from ESP32: 0x" + Integer.toHexString(command) + " paramLen=" + commandPayloadLen);
+                return;
+            }
+            onCommand.accept(cmd, Arrays.copyOfRange(frame, commandPayloadOffset, commandPayloadOffset + commandPayloadLen), commandPayloadLen);
         }
 
         private void resetParser() {
-            matchedDelimiterTokens = 0;
-            paramIndex = 0;
-            commandParamLen = 0;
+            frameLen = 0;
+            escape = false;
+            dropFrame = false;
+            inFrame = false;
         }
     }
 }
