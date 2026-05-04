@@ -42,6 +42,22 @@ public class ProtocolKissTest {
     }
 
     @Test
+    public void encoderUsesOnlyProvidedPayloadLength() {
+        byte[] frame = Protocol.buildKissFrame(
+            Protocol.KISS_CMD_DATA,
+            new byte[]{0x11, 0x22, (byte) Protocol.KISS_FEND, (byte) Protocol.KISS_FESC},
+            2);
+
+        assertArrayEquals(new byte[]{
+            (byte) Protocol.KISS_FEND,
+            Protocol.KISS_CMD_DATA,
+            0x11,
+            0x22,
+            (byte) Protocol.KISS_FEND,
+        }, frame);
+    }
+
+    @Test
     public void parserUnescapesDataFrameAndDispatchesAx25() {
         Protocol.KissParser parser = newParser();
         parser.processBytes(new byte[]{
@@ -142,6 +158,21 @@ public class ProtocolKissTest {
         assertEquals(Protocol.RcvCommand.COMMAND_SMETER_REPORT, command);
         assertEquals(commandPayload.length, payloadLen);
         assertArrayEquals(commandPayload, payload);
+    }
+
+    @Test
+    public void rxAudioVendorFrameUnescapesAndDispatchesPayload() {
+        byte[] audioPayload = new byte[]{0x11, (byte) Protocol.KISS_FEND, 0x22, (byte) Protocol.KISS_FESC};
+        byte[] frame = Protocol.buildKissFrame(
+            Protocol.KISS_CMD_SETHARDWARE,
+            Protocol.buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_RX_AUDIO.getValue(), audioPayload));
+
+        newParser().processBytes(frame);
+
+        assertTrue(called);
+        assertEquals(Protocol.RcvCommand.COMMAND_RX_AUDIO, command);
+        assertEquals(audioPayload.length, payloadLen);
+        assertArrayEquals(audioPayload, payload);
     }
 
     @Test

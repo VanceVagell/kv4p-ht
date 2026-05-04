@@ -135,25 +135,64 @@ struct [[gnu::packed]] RSSIState {
 };
 REQUIRE_TRIVIALLY_COPYABLE(RSSIState);
 
-static inline void writeKissEscapedByte(uint8_t b) {
-  if (b == KISS_FEND) {
-    Serial.write(KISS_FESC);
-    Serial.write(KISS_TFEND);
-  } else if (b == KISS_FESC) {
-    Serial.write(KISS_FESC);
-    Serial.write(KISS_TFESC);
-  } else {
-    Serial.write(b);
+class KissBufferedWriter {
+public:
+  explicit KissBufferedWriter(Stream &out) : _out(out), _used(0) {}
+
+  void begin(uint8_t command) {
+    put(KISS_FEND);
+    put(command);
   }
-}
+
+  void writeEscaped(uint8_t b) {
+    if (b == KISS_FEND) {
+      put(KISS_FESC);
+      put(KISS_TFEND);
+    } else if (b == KISS_FESC) {
+      put(KISS_FESC);
+      put(KISS_TFESC);
+    } else {
+      put(b);
+    }
+  }
+
+  void end() {
+    put(KISS_FEND);
+    flush();
+  }
+
+private:
+  static constexpr size_t BUF_SIZE = 64;
+
+  Stream &_out;
+  uint8_t _buf[BUF_SIZE];
+  size_t _used;
+
+  void put(uint8_t b) {
+    if (_used == BUF_SIZE) {
+      flush();
+    }
+    _buf[_used++] = b;
+  }
+
+  void flush() {
+    if (_used > 0) {
+      _out.write(_buf, _used);
+      _used = 0;
+    }
+  }
+};
 
 void sendKissFrame(uint8_t kissCommand, const uint8_t *payload, size_t len) {
-  Serial.write(KISS_FEND);
-  Serial.write(kissCommand);
-  for (size_t i = 0; i < len; i++) {
-    writeKissEscapedByte(payload[i]);
+  if (len > (PROTO_MTU + KV4P_VENDOR_HEADER_LEN)) {
+    len = PROTO_MTU + KV4P_VENDOR_HEADER_LEN;
   }
-  Serial.write(KISS_FEND);
+  KissBufferedWriter writer(Serial);
+  writer.begin(kissCommand);
+  for (size_t i = 0; i < len; i++) {
+    writer.writeEscaped(payload[i]);
+  }
+  writer.end();
 }
 
 void inline sendKissDataFrame(const uint8_t *ax25, size_t len) {

@@ -44,22 +44,32 @@ public final class Protocol {
     private Protocol() {
     }
 
+    private static int boundedPayloadLen(byte[] payload, int len) {
+        if (payload == null || len <= 0) {
+            return 0;
+        }
+        return Math.min(len, Math.min(payload.length, PROTO_MTU));
+    }
+
     static byte[] buildKissFrame(int kissCommand, byte[] payload) {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        return buildKissFrame(kissCommand, payload, payload != null ? payload.length : 0);
+    }
+
+    static byte[] buildKissFrame(int kissCommand, byte[] payload, int len) {
+        int payloadLen = boundedPayloadLen(payload, len);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream(payloadLen + 3);
         buffer.write(KISS_FEND);
         buffer.write(kissCommand & 0xFF);
-        if (payload != null) {
-            for (byte rawByte : payload) {
-                int b = rawByte & 0xFF;
-                if (b == KISS_FEND) {
-                    buffer.write(KISS_FESC);
-                    buffer.write(KISS_TFEND);
-                } else if (b == KISS_FESC) {
-                    buffer.write(KISS_FESC);
-                    buffer.write(KISS_TFESC);
-                } else {
-                    buffer.write(b);
-                }
+        for (int i = 0; i < payloadLen; i++) {
+            int b = payload[i] & 0xFF;
+            if (b == KISS_FEND) {
+                buffer.write(KISS_FESC);
+                buffer.write(KISS_TFEND);
+            } else if (b == KISS_FESC) {
+                buffer.write(KISS_FESC);
+                buffer.write(KISS_TFESC);
+            } else {
+                buffer.write(b);
             }
         }
         buffer.write(KISS_FEND);
@@ -67,7 +77,11 @@ public final class Protocol {
     }
 
     static byte[] buildKv4pVendorPayload(int kv4pCommand, byte[] param) {
-        int paramLen = param != null ? Math.min(param.length, PROTO_MTU) : 0;
+        return buildKv4pVendorPayload(kv4pCommand, param, param != null ? param.length : 0);
+    }
+
+    static byte[] buildKv4pVendorPayload(int kv4pCommand, byte[] param, int len) {
+        int paramLen = boundedPayloadLen(param, len);
         ByteBuffer payload = ByteBuffer.allocate(KV4P_VENDOR_HEADER_LEN + paramLen);
         payload.put(KV4P_VENDOR_PREFIX);
         payload.put((byte) KV4P_PROTOCOL_VERSION);
@@ -305,7 +319,11 @@ public final class Protocol {
         }
 
         private void sendKissFrame(int kissCommand, byte[] payload) {
-            byte[] frame = Protocol.buildKissFrame(kissCommand, payload);
+            sendKissFrame(kissCommand, payload, payload != null ? payload.length : 0);
+        }
+
+        private void sendKissFrame(int kissCommand, byte[] payload, int len) {
+            byte[] frame = Protocol.buildKissFrame(kissCommand, payload, len);
             int frameSize = frame.length;
             waitUntilCanSend(frameSize);
             usbIoManager.writeAsync(frame);
@@ -313,7 +331,11 @@ public final class Protocol {
         }
 
         private void sendKv4pVendorFrame(SndCommand commandType, byte[] param) {
-            sendKissFrame(KISS_CMD_SETHARDWARE, buildKv4pVendorPayload(commandType.getValue(), param));
+            sendKv4pVendorFrame(commandType, param, param != null ? param.length : 0);
+        }
+
+        private void sendKv4pVendorFrame(SndCommand commandType, byte[] param, int len) {
+            sendKissFrame(KISS_CMD_SETHARDWARE, buildKv4pVendorPayload(commandType.getValue(), param, len));
         }
 
         private void sendKissDataFrame(byte[] ax25Bytes) {
@@ -347,6 +369,10 @@ public final class Protocol {
 
         public void txAudio(byte[] audio) {
             sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
+        }
+
+        public void txAudio(byte[] audio, int len) {
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO, audio, len);
         }
 
         public void txAx25(byte[] ax25Bytes) {
@@ -406,6 +432,7 @@ public final class Protocol {
     public static class KissParser {
 
         private final byte[] frame = new byte[KISS_MAX_FRAME_SIZE];
+        private final byte[] commandParams = new byte[PROTO_MTU];
         private int frameLen = 0;
         private boolean escape = false;
         private boolean dropFrame = false;
@@ -499,12 +526,16 @@ public final class Protocol {
             int command = frame[payloadOffset + 5] & 0xFF;
             int commandPayloadOffset = payloadOffset + KV4P_VENDOR_HEADER_LEN;
             int commandPayloadLen = payloadLen - KV4P_VENDOR_HEADER_LEN;
+            if (commandPayloadLen > commandParams.length) {
+                return;
+            }
             RcvCommand cmd = RcvCommand.fromValue(command);
             if (cmd == RcvCommand.COMMAND_RCV_UNKNOWN) {
                 Log.w(TAG, "Unknown KV4P vendor cmd received from ESP32: 0x" + Integer.toHexString(command) + " paramLen=" + commandPayloadLen);
                 return;
             }
-            onCommand.accept(cmd, Arrays.copyOfRange(frame, commandPayloadOffset, commandPayloadOffset + commandPayloadLen), commandPayloadLen);
+            System.arraycopy(frame, commandPayloadOffset, commandParams, 0, commandPayloadLen);
+            onCommand.accept(cmd, commandParams, commandPayloadLen);
         }
 
         private void resetParser() {

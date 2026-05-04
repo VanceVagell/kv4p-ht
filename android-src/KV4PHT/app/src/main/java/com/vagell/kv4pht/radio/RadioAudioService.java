@@ -177,6 +177,7 @@ public class RadioAudioService extends Service {
         new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
     private final OpusUtils.OpusEncoderWrapper opusEncoder =
         new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
+    private final byte[] txAudioFrame = new byte[Protocol.PROTO_MTU];
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -1146,9 +1147,8 @@ public class RadioAudioService extends Service {
         if (!dataMode) {
             samples = applyMicGain(samples);
         }
-        byte[] audioFrame = new byte[Protocol.PROTO_MTU];
-        int encodedLength = opusEncoder.encode(samples, audioFrame);
-        hostToEsp32.txAudio(java.util.Arrays.copyOfRange(audioFrame, 0, encodedLength));
+        int encodedLength = opusEncoder.encode(samples, txAudioFrame);
+        hostToEsp32.txAudio(txAudioFrame, encodedLength);
     }
 
     public boolean isRadioConnected() {
