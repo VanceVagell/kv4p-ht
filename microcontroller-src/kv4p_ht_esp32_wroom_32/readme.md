@@ -16,8 +16,7 @@ The KV4P-HT protocol defines the communication interface between the microcontro
   * Firmware replies with `COMMAND_DEVICE_STATE` snapshots describing applied state.
   * Legacy one-shot control commands were removed.
  
-* 2.1
-* **Changelog:**
+* **Historical 2.1 changelog:**
   * Initial version with core command set.
   * Parameter length field upgraded from 1 byte to 2 bytes (`uint16_t`).
   * Added `COMMAND_WINDOW_UPDATE` **(ESP32 → Android)**.
@@ -60,15 +59,28 @@ Inside KISS frame payloads, bytes are escaped as follows:
 
 All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-level `uint16` length field are no longer present on the wire.
 
-## Incoming Commands (Android → ESP32)
+## Incoming KISS Frame Types (Android → ESP32)
+
+| KISS Command | Name                   | Description                       |
+| ------------ | ---------------------- | --------------------------------- |
+| `0x00`       | KISS DATA frame        | Transmit AX.25 packet bytes       |
+| `0x06`       | KISS SETHARDWARE frame | Carry a kv4p vendor command frame |
+
+## Incoming KV4P Vendor Commands (Android → ESP32)
 
 | Command Code | Name                    | Description                                                    |
 | ------------ | ----------------------- | -------------------------------------------------------------- |
 | `0x07`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx OPUS audio data (payload required, flow-controlled) |
-| `0x0A`       | KISS DATA frame         | Transmit AX.25 packet bytes                                    |
 | `0x0D`       | `COMMAND_HOST_DESIRED_STATE` | Desired radio/control state snapshot                     |
 
-## Outgoing Commands (ESP32 → Android)
+## Outgoing KISS Frame Types (ESP32 → Android)
+
+| KISS Command | Name                   | Description                         |
+| ------------ | ---------------------- | ----------------------------------- |
+| `0x00`       | KISS DATA frame        | Received AX.25 packet bytes         |
+| `0x06`       | KISS SETHARDWARE frame | Carry a kv4p vendor command frame   |
+
+## Outgoing KV4P Vendor Commands (ESP32 → Android)
 
 | Command Code | Name                    | Description                                 |
 | ------------ | ----------------------- | ------------------------------------------- |
@@ -207,10 +219,10 @@ A window-based flow control mechanism, inspired by HTTP/2, is used to regulate t
 
 ## Command Handling Strategy
 
-* Most commands follow a **fire-and-forget** approach.
-* Some commands may trigger a reply (indicated in comments).
-* There are no explicit response types; responses are sent as separate commands.
-* All ESP32 incoming commands are subject to **window-based flow control**.
+* Android sends complete `COMMAND_HOST_DESIRED_STATE` snapshots instead of separate one-shot control commands.
+* Firmware reports the applied runtime state through `COMMAND_DEVICE_STATE` snapshots.
+* KISS DATA frames carry AX.25 packets directly, outside the kv4p vendor command namespace.
+* Android-to-firmware vendor commands are subject to **window-based flow control**.
 
 ## Byte Order and Bit Significance
 

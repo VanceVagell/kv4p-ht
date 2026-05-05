@@ -70,7 +70,7 @@ private:
 static void onAfskPacketDecoded(const uint8_t *frame, size_t len) {
   if (frame && len > 0) {
     // Decoder ID 0 = ESP32 demodulator path.
-    sendAx25Packet(0, frame, len);
+    sendAx25Packet(frame, len);
   }
 }
 

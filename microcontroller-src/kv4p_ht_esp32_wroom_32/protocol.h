@@ -222,14 +222,17 @@ void sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len
   if (len > PROTO_MTU) {
     len = PROTO_MTU;
   }
-  uint8_t vendorPayload[KV4P_VENDOR_HEADER_LEN + PROTO_MTU];
-  memcpy(vendorPayload, KV4P_VENDOR_PREFIX, sizeof(KV4P_VENDOR_PREFIX));
-  vendorPayload[4] = KV4P_PROTOCOL_VERSION;
-  vendorPayload[5] = kv4pCommand;
-  if (len > 0 && payload != NULL) {
-    memcpy(vendorPayload + KV4P_VENDOR_HEADER_LEN, payload, len);
+  KissBufferedWriter writer(Serial);
+  writer.begin(KISS_CMD_SETHARDWARE);
+  for (size_t i = 0; i < sizeof(KV4P_VENDOR_PREFIX); i++) {
+    writer.writeEscaped(KV4P_VENDOR_PREFIX[i]);
   }
-  sendKissFrame(KISS_CMD_SETHARDWARE, vendorPayload, KV4P_VENDOR_HEADER_LEN + len);
+  writer.writeEscaped(KV4P_PROTOCOL_VERSION);
+  writer.writeEscaped(kv4pCommand);
+  for (size_t i = 0; i < len; i++) {
+    writer.writeEscaped(payload[i]);
+  }
+  writer.end();
 }
 
 void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features, const DeviceState &deviceState) {
@@ -254,8 +257,7 @@ void inline sendAudio(const uint8_t *data, size_t len) {
   sendKv4pVendorFrame(COMMAND_RX_AUDIO, data, len);
 }
 
-void inline sendAx25Packet(uint8_t decoderId, const uint8_t *data, size_t len) {
-  (void)decoderId; // KISS DATA frames are pure AX.25; decoder metadata is intentionally not embedded.
+void inline sendAx25Packet(const uint8_t *data, size_t len) {
   sendKissDataFrame(data, len);
 }
 

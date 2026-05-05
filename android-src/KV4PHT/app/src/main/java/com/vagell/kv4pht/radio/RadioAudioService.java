@@ -87,6 +87,7 @@ import com.vagell.kv4pht.ui.MainActivity;
 import com.vagell.kv4pht.ui.ToneHelper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
@@ -1201,23 +1202,23 @@ public class RadioAudioService extends Service {
     private void handleParsedCommand(final RcvCommand cmd, final byte[] param, final Integer len) {
         switch (cmd) {
             case COMMAND_DEBUG_INFO:
-                Log.i(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
+                Log.i(FIRMWARE_TAG, firmwareString(param, len));
                 break;
 
             case COMMAND_DEBUG_DEBUG:
-                Log.d(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
+                Log.d(FIRMWARE_TAG, firmwareString(param, len));
                 break;
 
             case COMMAND_DEBUG_ERROR:
-                Log.e(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
+                Log.e(FIRMWARE_TAG, firmwareString(param, len));
                 break;
 
             case COMMAND_DEBUG_WARN:
-                Log.w(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
+                Log.w(FIRMWARE_TAG, firmwareString(param, len));
                 break;
 
             case COMMAND_DEBUG_TRACE:
-                Log.v(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
+                Log.v(FIRMWARE_TAG, firmwareString(param, len));
                 break;
 
             case COMMAND_HELLO:
@@ -1240,6 +1241,11 @@ public class RadioAudioService extends Service {
             default:
                 break;
         }
+    }
+
+    private String firmwareString(byte[] param, Integer len) {
+        int safeLen = param == null || len == null ? 0 : Math.min(len, param.length);
+        return new String(param, 0, safeLen, StandardCharsets.UTF_8);
     }
 
     private void handleEsp32Ax25Packet(final byte[] param, final Integer len) {
