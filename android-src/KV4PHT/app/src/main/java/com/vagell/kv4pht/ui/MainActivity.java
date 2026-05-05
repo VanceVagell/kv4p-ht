@@ -994,10 +994,8 @@ public class MainActivity extends AppCompatActivity {
         if (radioAudioService == null) return;
         String bandwidth = settings.get(AppSetting.SETTING_BANDWIDTH);
         String gain = settings.get(AppSetting.SETTING_MIC_GAIN_BOOST);
-        String rxGain = settings.get(AppSetting.SETTING_RX_GAIN_BOOST);
         if (bandwidth != null) radioAudioService.setBandwidth(bandwidth);
         if (gain != null) radioAudioService.setMicGainBoost(gain);
-        if (rxGain != null) radioAudioService.setRxGainBoost(rxGain);
     }
 
     private void applySquelchSettings(Map<String, String> settings) {
