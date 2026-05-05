@@ -927,8 +927,11 @@ public class RadioAudioService extends Service {
             usingBluetoothSco = true;
             try {
                 if (!scoReceiverRegistered) {
-                    registerReceiver(scoStateReceiver,
-                            new IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED));
+                    // RECEIVER_NOT_EXPORTED: only the system can deliver this broadcast,
+                    // so we don't accept the intent from arbitrary apps.
+                    ContextCompat.registerReceiver(this, scoStateReceiver,
+                            new IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED),
+                            ContextCompat.RECEIVER_NOT_EXPORTED);
                     scoReceiverRegistered = true;
                 }
                 am.setMode(AudioManager.MODE_IN_COMMUNICATION);
