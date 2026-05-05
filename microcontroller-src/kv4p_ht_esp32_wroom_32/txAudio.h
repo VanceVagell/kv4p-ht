@@ -110,7 +110,7 @@ void inline txAudioLoop() {
   if (mode == MODE_TX) {
     // Check for runaway tx
     if ((millis() - txStartTime) > RUNAWAY_TX_SEC * 1000) {
-      setMode(MODE_RX);
+      setMode(rxIdleMode());
       esp_task_wdt_reset();
     }
   }

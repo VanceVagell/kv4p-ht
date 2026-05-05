@@ -41,37 +41,25 @@ static constexpr uint8_t KV4P_VENDOR_PREFIX[] = {'K', 'V', '4', 'P'};
 // Incoming commands (Android -> ESP32)
 enum RcvCommand {
   COMMAND_RCV_UNKNOWN    = 0x00,
-  COMMAND_HOST_PTT_DOWN  = 0x01, // [COMMAND_HOST_PTT_DOWN()]
-  COMMAND_HOST_PTT_UP    = 0x02, // [COMMAND_HOST_PTT_UP()]
-  COMMAND_HOST_GROUP     = 0x03, // [COMMAND_HOST_GROUP(Group)]
-  COMMAND_HOST_FILTERS   = 0x04, // [COMMAND_HOST_FILTERS(Filters)]
-  COMMAND_HOST_STOP      = 0x05, // [COMMAND_HOST_STOP()] 
-  COMMAND_HOST_CONFIG    = 0x06, // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
   COMMAND_HOST_TX_AUDIO  = 0x07, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
-  COMMAND_HOST_HL        = 0x08, // [COMMAND_HOST_HL(Hl)]
-  COMMAND_HOST_RSSI      = 0x09, // [COMMAND_HOST_RSSI(ON)]
-  COMMAND_HOST_TX_AX25   = 0x0A, // [COMMAND_HOST_TX_AX25(uint8_t[])]
+  COMMAND_HOST_DESIRED_STATE = 0x0D, // [COMMAND_HOST_DESIRED_STATE(HostDesiredState)]
 };
 
 // Outgoing commands (ESP32 -> Android)
 enum SndCommand {
   COMMAND_SND_UNKNOWN    = 0x00,
-  COMMAND_SMETER_REPORT  = 0x53, // [COMMAND_SMETER_REPORT(Rssi)]
-  COMMAND_PHYS_PTT_DOWN  = 0x44, // [COMMAND_PHYS_PTT_DOWN()]
-  COMMAND_PHYS_PTT_UP    = 0x55, // [COMMAND_PHYS_PTT_UP()]
   COMMAND_DEBUG_INFO     = 0x01, // [COMMAND_DEBUG_INFO(char[])]
   COMMAND_DEBUG_ERROR    = 0x02, // [COMMAND_DEBUG_ERROR(char[])]
   COMMAND_DEBUG_WARN     = 0x03, // [COMMAND_DEBUG_WARN(char[])]
   COMMAND_DEBUG_DEBUG    = 0x04, // [COMMAND_DEBUG_DEBUG(char[])]
   COMMAND_DEBUG_TRACE    = 0x05, // [COMMAND_DEBUG_TRACE(char[])]
-  COMMAND_HELLO          = 0x06, // [COMMAND_HELLO()]
+  COMMAND_HELLO          = 0x06, // [COMMAND_HELLO(Version)]
   COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
-  COMMAND_VERSION        = 0x08, // [COMMAND_VERSION(Version)]
   COMMAND_WINDOW_UPDATE  = 0x09,
-  COMMAND_RX_AX25_PACKET = 0x0A, // [COMMAND_RX_AX25_PACKET(uint8_t decoder, uint8_t[])]
+  COMMAND_DEVICE_STATE   = 0x0B, // [COMMAND_DEVICE_STATE(DeviceState)]
 };
 
-// COMMAND_VERSION parameters
+// COMMAND_HELLO parameters
 struct [[gnu::packed]] Version {
   uint16_t     ver;
   char         radioModuleStatus;
@@ -84,14 +72,42 @@ REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define FEATURE_HAS_PHY_PTT (1 << 1)
 #define FEATURE_HAS_ESP32_AFSK (1 << 2)
 
-// COMMAND_SMETER_REPORT parameters
-struct [[gnu::packed]] Rssi {
-  uint8_t     rssi;
-};
-REQUIRE_TRIVIALLY_COPYABLE(Rssi);
+#define HOST_STATE_RADIO_CONFIG_VALID (1 << 0)
+#define HOST_STATE_PTT_REQUESTED      (1 << 1)
+#define HOST_STATE_RX_AUDIO_OPEN      (1 << 2)
+#define HOST_STATE_HIGH_POWER         (1 << 3)
+#define HOST_STATE_RSSI_ENABLED       (1 << 4)
+#define HOST_STATE_FILTER_PRE         (1 << 5)
+#define HOST_STATE_FILTER_HIGH        (1 << 6)
+#define HOST_STATE_FILTER_LOW         (1 << 7)
 
-// COMMAND_HOST_GROUP parameters
-struct [[gnu::packed]] Group {
+#define DEVICE_STATE_RADIO_CONFIG_VALID HOST_STATE_RADIO_CONFIG_VALID
+#define DEVICE_STATE_PTT_REQUESTED      HOST_STATE_PTT_REQUESTED
+#define DEVICE_STATE_RX_AUDIO_OPEN      HOST_STATE_RX_AUDIO_OPEN
+#define DEVICE_STATE_HIGH_POWER         HOST_STATE_HIGH_POWER
+#define DEVICE_STATE_RSSI_ENABLED       HOST_STATE_RSSI_ENABLED
+#define DEVICE_STATE_FILTER_PRE         HOST_STATE_FILTER_PRE
+#define DEVICE_STATE_FILTER_HIGH        HOST_STATE_FILTER_HIGH
+#define DEVICE_STATE_FILTER_LOW         HOST_STATE_FILTER_LOW
+#define DEVICE_STATE_PHYS_PTT_DOWN      (1 << 8)
+#define DEVICE_STATE_TX_ACTIVE          (1 << 9)
+#define DEVICE_STATE_SQUELCHED          (1 << 10)
+
+enum DeviceMode : uint8_t {
+  DEVICE_MODE_TX = 0,
+  DEVICE_MODE_RX = 1,
+  DEVICE_MODE_STOPPED = 2,
+};
+
+enum DeviceStateError : uint8_t {
+  DEVICE_STATE_ERROR_NONE = 0,
+  DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED = 1,
+  DEVICE_STATE_ERROR_FILTERS_FAILED = 2,
+};
+
+struct [[gnu::packed]] HostDesiredState {
+  uint32_t sequence;
+  uint16_t flags;
   uint8_t bw;
   float freq_tx;
   float freq_rx;
@@ -99,41 +115,29 @@ struct [[gnu::packed]] Group {
   uint8_t squelch;
   uint8_t ctcss_rx;
 };
-REQUIRE_TRIVIALLY_COPYABLE(Group);
+REQUIRE_TRIVIALLY_COPYABLE(HostDesiredState);
 
-// COMMAND_HOST_FILTERS parameters
-struct [[gnu::packed]] Filters {
-  uint8_t flags;  // Uses bitmask for pre, high, and low
+struct [[gnu::packed]] DeviceState {
+  uint32_t appliedSequence;
+  uint16_t flags;
+  uint8_t bw;
+  float freq_tx;
+  float freq_rx;
+  uint8_t ctcss_tx;
+  uint8_t squelch;
+  uint8_t ctcss_rx;
+  char radioModuleStatus;
+  uint8_t mode;
+  uint8_t lastError;
+  uint8_t latestRssi;
 };
-REQUIRE_TRIVIALLY_COPYABLE(Filters);
-
-#define FILTER_PRE  (1 << 0)
-#define FILTER_HIGH (1 << 1)
-#define FILTER_LOW  (1 << 2)
-
-// COMMAND_HOST_CONFIG parameters
-struct [[gnu::packed]] Config { 
-  bool isHigh;   
-};
-REQUIRE_TRIVIALLY_COPYABLE(Config);
+REQUIRE_TRIVIALLY_COPYABLE(DeviceState);
 
 // COMMAND_WINDOW_ACK parameters
 struct [[gnu::packed]] WindowUpdate {
   size_t size; 
 };
 REQUIRE_TRIVIALLY_COPYABLE(WindowUpdate);
-
-// COMMAND_HOST_HL parameters
-struct [[gnu::packed]] HlState {
-  bool isHigh; 
-};
-REQUIRE_TRIVIALLY_COPYABLE(HlState);
-
-// COMMAND_HOST_RSSI parameters
-struct [[gnu::packed]] RSSIState {
-  bool on; // true if RSSI is enabled
-};
-REQUIRE_TRIVIALLY_COPYABLE(RSSIState);
 
 class KissBufferedWriter {
 public:
@@ -222,18 +226,7 @@ void sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len
   sendKissFrame(KISS_CMD_SETHARDWARE, vendorPayload, KV4P_VENDOR_HEADER_LEN + len);
 }
 
-void inline sendHello() {
-  sendKv4pVendorFrame(COMMAND_HELLO, NULL, 0);
-}
-
-void inline sendRssi(uint8_t rssi) {
-  Rssi params = {
-    .rssi = rssi
-  };
-  sendKv4pVendorFrame(COMMAND_SMETER_REPORT, (uint8_t*) &params, sizeof(params));
-}
-
-void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features) {
+void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features) {
   Version params = {
     .ver = ver,
     .radioModuleStatus = radioModuleStatus,
@@ -241,11 +234,11 @@ void inline sendVersion(uint16_t ver, char radioModuleStatus, size_t windowSize,
     .rfModuleType = rfModuleType,
     .features = features,
   };
-  sendKv4pVendorFrame(COMMAND_VERSION, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(COMMAND_HELLO, (uint8_t*) &params, sizeof(params));
 }
 
-void inline sendPhysPttState(bool isPhysPttDown) {
-  sendKv4pVendorFrame(isPhysPttDown ? COMMAND_PHYS_PTT_DOWN : COMMAND_PHYS_PTT_UP, NULL, 0);
+void inline sendDeviceState(const DeviceState &state) {
+  sendKv4pVendorFrame(COMMAND_DEVICE_STATE, (const uint8_t*) &state, sizeof(state));
 }
 
 void inline sendAudio(const uint8_t *data, size_t len) {
@@ -265,11 +258,12 @@ void inline sendWindowAck(size_t size) {
 }
 
 typedef void (*CommandCallback)(RcvCommand command, uint8_t *params, size_t param_len);
+typedef void (*Ax25Callback)(uint8_t *ax25, size_t ax25_len);
 
 class KissParser {
 public:
-  KissParser(Stream &serial, CommandCallback callback)
-    : _serial(serial), _callback(callback), _frameLen(0), _encodedFrameLen(0),
+  KissParser(Stream &serial, CommandCallback callback, Ax25Callback ax25Callback)
+    : _serial(serial), _callback(callback), _ax25Callback(ax25Callback), _frameLen(0), _encodedFrameLen(0),
       _escape(false), _dropFrame(false), _inFrame(false) {}
 
   void loop() {
@@ -283,6 +277,7 @@ public:
 private:
   Stream &_serial;
   CommandCallback _callback;
+  Ax25Callback _ax25Callback;
   uint8_t _frame[KISS_MAX_FRAME_SIZE];
   size_t _frameLen;
   size_t _encodedFrameLen;
@@ -350,7 +345,7 @@ private:
     }
     if (kissCommand == KISS_CMD_DATA) {
       if (payloadLen > 0 && payloadLen <= PROTO_MTU) {
-        _callback(COMMAND_HOST_TX_AX25, payload, payloadLen);
+        _ax25Callback(payload, payloadLen);
       }
     } else if (kissCommand == KISS_CMD_SETHARDWARE) {
       processVendorFrame(payload, payloadLen);
@@ -383,10 +378,11 @@ private:
 // Forward declaration of handleCommands function
 // This function processes incoming commands, taking a command type, parameters, and their length.
 void handleCommands(RcvCommand command, uint8_t *params, size_t param_len);
+void handleAx25Data(uint8_t *ax25, size_t ax25_len);
 
 // Create a KISS parser and associate it with the existing command handler.
-// DATA frames dispatch as COMMAND_HOST_TX_AX25; KV4P vendor frames dispatch by kv4pCommand.
-KissParser parser(Serial, &handleCommands);
+// DATA frames dispatch as AX.25 bytes; KV4P vendor frames dispatch by kv4pCommand.
+KissParser parser(Serial, &handleCommands, &handleAx25Data);
 
 void inline protocolLoop() {
   parser.loop();
