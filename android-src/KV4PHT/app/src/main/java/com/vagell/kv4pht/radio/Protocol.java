@@ -95,16 +95,8 @@ public final class Protocol {
     @Getter
     public enum SndCommand {
         COMMAND_SND_UNKNOWN(0x00),
-        COMMAND_HOST_PTT_DOWN(0x01), // [COMMAND_HOST_PTT_DOWN()]
-        COMMAND_HOST_PTT_UP(0x02),   // [COMMAND_HOST_PTT_UP()]
-        COMMAND_HOST_GROUP(0x03),    // [COMMAND_HOST_GROUP(Group)]
-        COMMAND_HOST_FILTERS(0x04),  // [COMMAND_HOST_FILTERS(Filters)]
-        COMMAND_HOST_STOP(0x05),     // [COMMAND_HOST_STOP()]
-        COMMAND_HOST_CONFIG(0x06),   // [COMMAND_HOST_CONFIG(Config)] -> [COMMAND_VERSION(Version)]
         COMMAND_HOST_TX_AUDIO(0x07), // [COMMAND_HOST_TX_AUDIO(byte[])]
-        COMMAND_HOST_HL(0x08),       // [COMMAND_HOST_HL(Hl)]
-        COMMAND_HOST_RSSI(0x09),     // [COMMAND_HOST_RSSI(ON)]
-        COMMAND_HOST_TX_AX25(0x0A);  // Internal dispatch for KISS DATA AX.25 frames.
+        COMMAND_HOST_DESIRED_STATE(0x0D);
         private final int value;
         SndCommand(int value) {
             this.value = value;
@@ -114,19 +106,15 @@ public final class Protocol {
     @Getter
     public enum RcvCommand {
         COMMAND_RCV_UNKNOWN(0x00),
-        COMMAND_SMETER_REPORT( 0x53),   // [COMMAND_SMETER_REPORT(Rssi)]
-        COMMAND_PHYS_PTT_DOWN(0x44),    // [COMMAND_PHYS_PTT_DOWN()]
-        COMMAND_PHYS_PTT_UP(0x55),      // [COMMAND_PHYS_PTT_UP()]
         COMMAND_DEBUG_INFO(0x01),       // [COMMAND_DEBUG_INFO(char[])]
         COMMAND_DEBUG_ERROR(0x02),      // [COMMAND_DEBUG_ERROR(char[])]
         COMMAND_DEBUG_WARN(0x03),       // [COMMAND_DEBUG_WARN(char[])]
         COMMAND_DEBUG_DEBUG(0x04),      // [COMMAND_DEBUG_DEBUG(char[])]
         COMMAND_DEBUG_TRACE(0x05),      // [COMMAND_DEBUG_TRACE(char[])]
-        COMMAND_HELLO(0x06),            // [COMMAND_HELLO()]
+        COMMAND_HELLO(0x06),            // [COMMAND_HELLO(Hello)]
         COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
-        COMMAND_VERSION(0x08),          // [COMMAND_VERSION(Version)]
         COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
-        COMMAND_RX_AX25_PACKET(0x0A);   // Internal dispatch for KISS DATA AX.25 frames.
+        COMMAND_DEVICE_STATE(0x0B);
         private final int value;
         RcvCommand(int value) {
             this.value = value;
@@ -160,43 +148,68 @@ public final class Protocol {
         }
     }
 
-    @Data
-    @Builder
-    public static class Config {
-        private final boolean isHigh;
-        public byte[] toBytes() {
-            byte[] bytes = new byte[1];
-            bytes[0] = isHigh ? (byte) 0x01 : (byte) 0x00;
-            return bytes;
+    static final int HOST_STATE_RADIO_CONFIG_VALID = 1 << 0;
+    static final int HOST_STATE_PTT_REQUESTED = 1 << 1;
+    static final int HOST_STATE_RX_AUDIO_OPEN = 1 << 2;
+    static final int HOST_STATE_HIGH_POWER = 1 << 3;
+    static final int HOST_STATE_RSSI_ENABLED = 1 << 4;
+    static final int HOST_STATE_FILTER_PRE = 1 << 5;
+    static final int HOST_STATE_FILTER_HIGH = 1 << 6;
+    static final int HOST_STATE_FILTER_LOW = 1 << 7;
+    static final int DEVICE_STATE_PHYS_PTT_DOWN = 1 << 8;
+    static final int DEVICE_STATE_TX_ACTIVE = 1 << 9;
+    static final int DEVICE_STATE_SQUELCHED = 1 << 10;
+
+    @Getter
+    public enum DeviceMode {
+        DEVICE_MODE_TX(0),
+        DEVICE_MODE_RX(1),
+        DEVICE_MODE_STOPPED(2),
+        DEVICE_MODE_UNKNOWN(255);
+        private final int value;
+        DeviceMode(int value) {
+            this.value = value;
+        }
+        public static DeviceMode fromValue(int value) {
+            for (DeviceMode mode : DeviceMode.values()) {
+                if (mode.getValue() == value) {
+                    return mode;
+                }
+            }
+            return DEVICE_MODE_UNKNOWN;
         }
     }
 
     @Data
     @Builder
-    public static class Filters {
-        private final boolean pre;
-        private final boolean high;
-        private final boolean low;
-        public byte[] toBytes() {
-            byte result = 0;
-            if (pre) result |= 0x01;
-            if (high) result |= 0x02;
-            if (low) result |= 0x04;
-            return new byte[]{result};
-        }
-    }
+    public static class HostDesiredState {
+        static final int BYTE_LEN = 18;
+        private int sequence;
+        private int flags;
+        private byte bw;
+        private float freqTx;
+        private float freqRx;
+        private byte ctcssTx;
+        private byte squelch;
+        private byte ctcssRx;
 
-    @Data
-    @Builder
-    public static class Group {
-        private final byte bw;
-        private final float freqTx;
-        private final float freqRx;
-        private final byte ctcssTx;
-        private final byte squelch;
-        private final byte ctcssRx;
+        public HostDesiredState copy() {
+            return HostDesiredState.builder()
+                .sequence(sequence)
+                .flags(flags)
+                .bw(bw)
+                .freqTx(freqTx)
+                .freqRx(freqRx)
+                .ctcssTx(ctcssTx)
+                .squelch(squelch)
+                .ctcssRx(ctcssRx)
+                .build();
+        }
+
         public byte[] toBytes() {
-            ByteBuffer buffer = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN);
+            ByteBuffer buffer = ByteBuffer.allocate(BYTE_LEN).order(ByteOrder.LITTLE_ENDIAN);
+            buffer.putInt(sequence);
+            buffer.putShort((short) flags);
             buffer.put(bw);
             buffer.putFloat(freqTx);
             buffer.putFloat(freqRx);
@@ -209,21 +222,42 @@ public final class Protocol {
 
     @Data
     @Builder
-    public static class HlState {
-        private final boolean isHighPower;
-        public byte[] toBytes() {
-            byte result = isHighPower ? (byte) 0x01 : (byte) 0x00;
-            return new byte[]{result};
+    public static class DeviceState {
+        static final int BYTE_LEN = 22;
+        private final int appliedSequence;
+        private final int flags;
+        private final byte bw;
+        private final float freqTx;
+        private final float freqRx;
+        private final byte ctcssTx;
+        private final byte squelch;
+        private final byte ctcssRx;
+        private final RadioStatus radioModuleStatus;
+        private final DeviceMode mode;
+        private final int lastError;
+        private final int latestRssi;
+        public static Optional<DeviceState> from(final byte[] param, Integer len) {
+            return from(param, 0, len);
         }
-    }
-
-    @Data
-    @Builder
-    public static class RSSIState {
-        private final boolean on;
-        public byte[] toBytes() {
-            byte result = on ? (byte) 0x01 : (byte) 0x00;
-            return new byte[]{result};
+        public static Optional<DeviceState> from(final byte[] param, int offset, Integer len) {
+            return Optional.ofNullable(param)
+                .filter(p -> len != null && len == BYTE_LEN && offset >= 0 && p.length >= offset + len)
+                .map(p -> ByteBuffer.wrap(p, offset, len))
+                .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
+                .map(b -> DeviceState.builder()
+                    .appliedSequence(b.getInt())
+                    .flags(b.getShort() & 0xFFFF)
+                    .bw(b.get())
+                    .freqTx(b.getFloat())
+                    .freqRx(b.getFloat())
+                    .ctcssTx(b.get())
+                    .squelch(b.get())
+                    .ctcssRx(b.get())
+                    .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
+                    .mode(DeviceMode.fromValue(b.get() & 0xFF))
+                    .lastError(b.get() & 0xFF)
+                    .latestRssi(b.get() & 0xFF)
+                    .build());
         }
     }
 
@@ -245,35 +279,25 @@ public final class Protocol {
         }
     }
 
-    @Data
-    @Builder
-    public static class Rssi {
-        private final int sMeter9Value;
-        public static Optional<Rssi> from(final byte[] param, Integer len) {
-            return Optional.ofNullable(param)
-                .filter(p -> len != null && len == 1 && p.length >= len)
-                .map(p -> p[0] & 0xFF)
-                .map(Rssi::calculateSMeter9Value)
-                .map(rssi -> Rssi.builder().sMeter9Value(rssi).build());
-        }
-        private static int calculateSMeter9Value(int sMeter255Value) {
-            double result = 9.73 * Math.log(0.0297 * sMeter255Value) - 1.88;
-            return Math.max(1, Math.min(9, (int) Math.round(result)));
-        }
+    public static int calculateSMeter9Value(int sMeter255Value) {
+        double result = 9.73 * Math.log(0.0297 * sMeter255Value) - 1.88;
+        return Math.max(1, Math.min(9, (int) Math.round(result)));
     }
 
     @Data
     @Builder
     public static class FirmwareVersion {
+        private static final int BYTE_LEN = 12;
         private final short ver;  // equivalent to uint16_t
         private final RadioStatus radioModuleStatus;  // equivalent to char
         private final int windowSize; // equivalent to size_t
         private final RfModuleType moduleType;
         private final boolean hasHl;
         private final boolean hasPhysPtt;
+        private final DeviceState deviceState;
         public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
             return Optional.ofNullable(param)
-                .filter(p -> len != null && len == 12 && p.length >= len)
+                .filter(p -> len != null && len >= BYTE_LEN && p.length >= len)
                 .map(ByteBuffer::wrap)
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> {
@@ -282,6 +306,10 @@ public final class Protocol {
                     int windowSize = b.getInt();
                     RfModuleType moduleType = RfModuleType.fromValue(b.getInt());
                     int features = b.get() & 0xFF;
+                    DeviceState deviceState = null;
+                    if (len >= BYTE_LEN + DeviceState.BYTE_LEN) {
+                        deviceState = DeviceState.from(param, BYTE_LEN, DeviceState.BYTE_LEN).orElse(null);
+                    }
                     return FirmwareVersion.builder()
                         .ver(ver)
                         .radioModuleStatus(radioModuleStatus)
@@ -289,6 +317,7 @@ public final class Protocol {
                         .moduleType(moduleType)
                         .hasHl((features & 0x01) != 0)
                         .hasPhysPtt((features & 0x02) != 0)
+                        .deviceState(deviceState)
                         .build();
                 });
         }
@@ -343,30 +372,6 @@ public final class Protocol {
             sendKissFrame(KISS_CMD_DATA, payload);
         }
 
-        public void pttDown() {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_PTT_DOWN, null);
-        }
-
-        public void pttUp() {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_PTT_UP, null);
-        }
-
-        public void group(Group group) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_GROUP, group.toBytes());
-        }
-
-        public void filters(Filters filters) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_FILTERS, filters.toBytes());
-        }
-
-        public void stop() {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_STOP, null);
-        }
-
-        public void config(Config config) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_CONFIG, config.toBytes());
-        }
-
         public void txAudio(byte[] audio) {
             sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
         }
@@ -415,18 +420,19 @@ public final class Protocol {
             }
         }
 
-        public void setHighPower(HlState state) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_HL, state.toBytes());
-        }
-
-        public void setRssi(RSSIState state) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_RSSI, state.toBytes());
+        public void sendDesiredState(HostDesiredState state) {
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_DESIRED_STATE, state.toBytes());
         }
     }
 
     @FunctionalInterface
     public interface TriConsumer<T, U, V> {
         void accept(T t, U u, V v);
+    }
+
+    @FunctionalInterface
+    public interface PayloadConsumer {
+        void accept(byte[] payload, Integer len);
     }
 
     public static class KissParser {
@@ -438,9 +444,11 @@ public final class Protocol {
         private boolean dropFrame = false;
         private boolean inFrame = false;
         private final TriConsumer<RcvCommand, byte[], Integer> onCommand;
+        private final PayloadConsumer onAx25;
 
-        public KissParser(TriConsumer<RcvCommand, byte[], Integer> onCommand) {
+        public KissParser(TriConsumer<RcvCommand, byte[], Integer> onCommand, PayloadConsumer onAx25) {
             this.onCommand = onCommand;
+            this.onAx25 = onAx25;
         }
 
         public void processBytes(byte[] newData) {
@@ -497,10 +505,7 @@ public final class Protocol {
             }
             if (kissCommand == KISS_CMD_DATA) {
                 if (payloadLen > 0 && payloadLen <= PROTO_MTU) {
-                    onCommand.accept(
-                        RcvCommand.COMMAND_RX_AX25_PACKET,
-                        Arrays.copyOfRange(frame, 1, frameLen),
-                        payloadLen);
+                    onAx25.accept(Arrays.copyOfRange(frame, 1, frameLen), payloadLen);
                 }
             } else if (kissCommand == KISS_CMD_SETHARDWARE) {
                 processVendorFrame(payloadLen);

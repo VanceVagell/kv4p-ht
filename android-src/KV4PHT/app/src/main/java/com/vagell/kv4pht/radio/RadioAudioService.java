@@ -80,10 +80,7 @@ import com.vagell.kv4pht.aprs.parser.PositionField;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
-import com.vagell.kv4pht.radio.Protocol.Filters;
 import com.vagell.kv4pht.radio.Protocol.KissParser;
-import com.vagell.kv4pht.radio.Protocol.Group;
-import com.vagell.kv4pht.radio.Protocol.HlState;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
@@ -187,7 +184,8 @@ public class RadioAudioService extends Service {
     private boolean usbPermissionRequestPending = false;
     @Getter
     private Protocol.Sender hostToEsp32;
-    private final KissParser esp32DataStreamParser = new KissParser(this::handleParsedCommand);
+    private RadioModuleController radioModule;
+    private final KissParser esp32DataStreamParser = new KissParser(this::handleParsedCommand, this::handleEsp32Ax25Packet);
     private int usbConnectAttemptSeq = 0;
     private int activeUsbConnectAttemptId = 0;
 
@@ -209,9 +207,7 @@ public class RadioAudioService extends Service {
     @Getter
     @Setter
     private boolean hasPhysPttButton = false;
-    @Getter
     private boolean isHighPower = true;
-    @Getter
     private boolean isRssiOn = true;
     @Getter
     private boolean txAllowed = true;
@@ -224,7 +220,7 @@ public class RadioAudioService extends Service {
     @Getter
     private RadioModuleType radioType = RadioModuleType.UNKNOWN;
     private int activeMemoryId = -1;
-    private int consecutiveSilenceBytes = 0;
+    private long scanSquelchedSinceMs = -1L;
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
     @Setter
     private @NonNull String bandwidth = "25kHz";
@@ -386,7 +382,7 @@ public class RadioAudioService extends Service {
 
     public void setMode(RadioMode mode) {
         if (mode == RadioMode.FLASHING) {
-            hostToEsp32.stop();
+            Optional.ofNullable(radioModule).ifPresent(RadioModuleController::stop);
             audioTrack.stop();
             usbIoManager.stop();
             try {
@@ -404,7 +400,28 @@ public class RadioAudioService extends Service {
             }
         }
 
+        RadioMode previousMode = this.mode;
         this.mode = mode;
+        if (previousMode != mode) {
+            syncFirmwareAudioStateForMode(mode);
+        }
+    }
+
+    private void syncFirmwareAudioStateForMode(RadioMode mode) {
+        if (!isConnectionReady()) {
+            return;
+        }
+        if (mode == RadioMode.RX || mode == RadioMode.SCAN) {
+            openFirmwareAudio();
+        } else if (mode == RadioMode.STARTUP || mode == RadioMode.BAD_FIRMWARE || mode == RadioMode.UNKNOWN) {
+            radioModule.closeAudio();
+        }
+    }
+
+    void openFirmwareAudio() {
+        if (isConnectionReady()) {
+            radioModule.openAudio();
+        }
     }
 
     public void setActiveMemoryId(int activeMemoryId) {
@@ -577,7 +594,7 @@ public class RadioAudioService extends Service {
         if (isConnectionReady() && (mode == RadioMode.RX || mode == RadioMode.TX || mode == RadioMode.SCAN)) {
             try {
                 Log.d(TAG, "Sending stop to ESP32...");
-                hostToEsp32.stop();
+                radioModule.closeAudio();
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -603,11 +620,7 @@ public class RadioAudioService extends Service {
     }
 
     private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        hostToEsp32.filters(Filters.builder()
-            .high(highpass)
-            .low(lowpass)
-            .pre(emphasis)
-            .build());
+        radioModule.setFilters(emphasis, highpass, lowpass);
     }
 
     /**
@@ -643,12 +656,17 @@ public class RadioAudioService extends Service {
         activeMemoryId = -1; // Reset active memory ID since we're tuning to a frequency, not a memory.
         squelch = squelchLevel;
         if (isRadioConnected()) {
-            hostToEsp32.group(Group.builder()
-                .freqTx(freq)
-                .freqRx(freq)
-                .bw((bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5))
-                .squelch((byte) squelchLevel)
-                .build());
+            radioModule.beginUpdate();
+            try {
+                radioModule.setBandwidth(bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5);
+                radioModule.setTxFrequency(freq);
+                radioModule.setRxFrequency(freq);
+                radioModule.setTxTone((byte) 0);
+                radioModule.setSquelch((byte) squelchLevel);
+                radioModule.setRxTone((byte) 0);
+            } finally {
+                radioModule.endUpdate();
+            }
         }
         txAllowed = isTxAllowed(freq);
     }
@@ -695,14 +713,17 @@ public class RadioAudioService extends Service {
         activeMemoryId = memory.memoryId;
         final float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
         if (isRadioConnected()) {
-            hostToEsp32.group(Group.builder()
-                .freqTx(txFreq)
-                .freqRx(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)))
-                .bw(bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5)
-                .squelch((byte) squelchLevel)
-                .ctcssRx((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)))
-                .ctcssTx((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)))
-                .build());
+            radioModule.beginUpdate();
+            try {
+                radioModule.setBandwidth(bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5);
+                radioModule.setTxFrequency(txFreq);
+                radioModule.setRxFrequency(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)));
+                radioModule.setTxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)));
+                radioModule.setSquelch((byte) squelchLevel);
+                radioModule.setRxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)));
+            } finally {
+                radioModule.endUpdate();
+            }
         }
         txAllowed = isTxAllowed(txFreq);
 
@@ -723,14 +744,21 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private void checkScanDueToSilence() {
-        // Note that we handle scanning explicitly like this rather than using dra->scan() because
-        // as best I can tell the DRA818v chip has a defect where it always returns "S=1" (which
-        // means there is no signal detected on the given frequency) even when there is. I did
-        // extensive debugging and even rewrote large portions of the DRA818v library to determine
-        // that this was the case. So in lieu of that, we scan using a timing/silence-based system.
-        if (consecutiveSilenceBytes >= (AUDIO_SAMPLE_RATE * SEC_BETWEEN_SCANS)) {
-            consecutiveSilenceBytes = 0;
+    private void checkScanDueToSquelch() {
+        if (getMode() != RadioMode.SCAN || radioModule == null) {
+            scanSquelchedSinceMs = -1L;
+            return;
+        }
+        if (!radioModule.isSquelched()) {
+            scanSquelchedSinceMs = -1L;
+            return;
+        }
+        long nowMs = System.currentTimeMillis();
+        if (scanSquelchedSinceMs < 0) {
+            scanSquelchedSinceMs = nowMs;
+        }
+        if (nowMs - scanSquelchedSinceMs >= (long) (SEC_BETWEEN_SCANS * 1000L)) {
+            scanSquelchedSinceMs = -1L;
             nextScan();
         }
     }
@@ -788,7 +816,7 @@ public class RadioAudioService extends Service {
             setMode(RadioMode.TX);
             callbacks.sMeterUpdate(0);
             setTxRunAwayTimer();
-            hostToEsp32.pttDown();
+            radioModule.pttDown();
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
             callbacks.txStarted();
@@ -802,7 +830,7 @@ public class RadioAudioService extends Service {
             setMode(RadioMode.RX);
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
-            hostToEsp32.pttUp();
+            radioModule.pttUp();
             callbacks.txEnded();
         }
     }
@@ -829,11 +857,13 @@ public class RadioAudioService extends Service {
 
     private boolean isConnectionReady() {
         return hostToEsp32 != null
+            && radioModule != null
             && serialPort != null
             && usbIoManager != null;
     }
 
     private void closePortAndReset() {
+        radioModule = null;
         hostToEsp32 = null;
         if (usbIoManager != null) {
             try {
@@ -965,6 +995,7 @@ public class RadioAudioService extends Service {
         usbIoManager.setReadBufferCount(16 * 2);
         usbIoManager.start();
         hostToEsp32 = new Protocol.Sender(usbIoManager);
+        radioModule = new RadioModuleController(hostToEsp32);
         Log.i(TAG, connectLog("setupSerialConnection(): serial transport connected; starting handshake"));
         protocolHandshake.start();
     }
@@ -1051,8 +1082,11 @@ public class RadioAudioService extends Service {
         Log.d(TAG, "Max radio freq: " + maxRadioFreq);
         Log.d(TAG, "Min tx freq: " + minTxFreq);
         Log.d(TAG, "Max tx freq: " + maxTxFreq);
-        txAllowed = isTxAllowed(Float.parseFloat(activeFrequencyStr));
-        Log.d(TAG, String.format("Tx allowed: %b (%s)", txAllowed, activeFrequencyStr));
+        float txFrequency = radioModule != null && radioModule.getTxFrequency() > 0
+            ? radioModule.getTxFrequency()
+            : Float.parseFloat(activeFrequencyStr);
+        txAllowed = isTxAllowed(txFrequency);
+        Log.d(TAG, String.format("Tx allowed: %b (%s)", txAllowed, txFrequency));
     }
 
     public void setScanning(boolean scanning, boolean goToRxMode) {
@@ -1114,8 +1148,7 @@ public class RadioAudioService extends Service {
                 Log.d(TAG, "Memory with id " + candidate.memoryId + " had invalid frequency.");
             }
             if (!candidate.skipDuringScan && memoryFreqFloat >= minRadioFreq && memoryFreqFloat <= maxRadioFreq) {
-                // Reset silence since we found an active memory.
-                consecutiveSilenceBytes = 0;
+                scanSquelchedSinceMs = -1L;
                 // If squelch is off (0), use squelch=1 during scanning.
                 tuneToMemory(candidate, squelch > 0 ? squelch : 1, true);
                 callbacks.scannedToMemory(candidate.memoryId);
@@ -1167,21 +1200,6 @@ public class RadioAudioService extends Service {
     @SuppressWarnings({"java:S6541"})
     private void handleParsedCommand(final RcvCommand cmd, final byte[] param, final Integer len) {
         switch (cmd) {
-            case COMMAND_SMETER_REPORT:
-                Protocol.Rssi.from(param, len)
-                    .map(Protocol.Rssi::getSMeter9Value)
-                    .filter(i -> getMode() == RadioMode.RX || getMode() == RadioMode.SCAN)
-                    .ifPresent(callbacks::sMeterUpdate);
-                break;
-
-            case COMMAND_PHYS_PTT_DOWN:
-                handlePhysicalPttDown();
-                break;
-
-            case COMMAND_PHYS_PTT_UP:
-                handlePhysicalPttUp();
-                break;
-
             case COMMAND_DEBUG_INFO:
                 Log.i(FIRMWARE_TAG, new String(Arrays.copyOf(param, len)));
                 break;
@@ -1203,23 +1221,20 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_HELLO:
-                protocolHandshake.onHelloReceived();
+                protocolHandshake.onHelloReceived(Protocol.FirmwareVersion.from(param, len));
                 break;
 
             case COMMAND_RX_AUDIO:
                 handleRxAudio(param, len);
                 break;
 
-            case COMMAND_VERSION:
-                protocolHandshake.onVersionReceived(Protocol.FirmwareVersion.from(param, len));
-                break;
-
             case COMMAND_WINDOW_UPDATE:
                 WindowUpdate.from(param, len).ifPresent(windowAck ->
                     hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
                 break;
-            case COMMAND_RX_AX25_PACKET:
-                handleEsp32Ax25Packet(param, len);
+
+            case COMMAND_DEVICE_STATE:
+                Protocol.DeviceState.from(param, len).ifPresent(this::handleDeviceState);
                 break;
 
             default:
@@ -1234,24 +1249,44 @@ public class RadioAudioService extends Service {
         handleAx25Packet(java.util.Arrays.copyOf(param, len));
     }
 
-    private void handlePhysicalPttUp() {
-        if (getMode() == RadioMode.TX) {
-            endPtt();
-            callbacks.forcedPttEnd();
+    void handleInitialDeviceState(Protocol.DeviceState state) {
+        if (radioModule != null) {
+            radioModule.seedFromDeviceState(state);
         }
+        handleDeviceState(state);
     }
 
-    private void handlePhysicalPttDown() {
-        if (getMode() == RadioMode.RX && txAllowed) { // Note that people can't hit PTT in the middle of a scan.
-            startPtt();
-            callbacks.forcedPttStart();
+    private void handleDeviceState(Protocol.DeviceState state) {
+        Log.d(TAG, "Device state: " + state);
+        if (radioModule == null) {
+            return;
+        }
+        radioModule.updateDeviceState(state);
+        if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
+            txAllowed = isTxAllowed(radioModule.getTxFrequency());
+        }
+        if (getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
+            callbacks.sMeterUpdate(radioModule.getSMeter9Value());
+        }
+        checkScanDueToSquelch();
+        if (radioModule.didPhysPttChange()) {
+            boolean physPttDown = radioModule.isPhysPttDown();
+            if (physPttDown) {
+                if (getMode() == RadioMode.RX && txAllowed) {
+                    startPtt();
+                    callbacks.forcedPttStart();
+                }
+            } else if (getMode() == RadioMode.TX) {
+                endPtt();
+                callbacks.forcedPttEnd();
+            }
         }
     }
 
     /**
      * Handles incoming audio data from the ESP32, decoding it and playing it through the AudioTrack.
      * If in RX or SCAN mode, it processes the audio samples and manages the AFSK demodulator.
-     * In SCAN mode, it checks for silence to determine if a scan should be triggered.
+     * In SCAN mode, firmware squelch state determines whether scanning should advance.
      *
      * @param param The byte array containing the audio data.
      * @param len   The length of the audio data in bytes.
@@ -1264,16 +1299,6 @@ public class RadioAudioService extends Service {
             audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
             audioManager.requestAudioFocus(audioFocusRequest);
             ensureAudioPlaying();
-        }
-        if (getMode() == RadioMode.SCAN) {
-            for (int i = 0; i < decoded; i++) {
-                if (Math.abs(pcmFloat[i]) > 0.001) {
-                    consecutiveSilenceBytes = 0;
-                } else {
-                    consecutiveSilenceBytes++;
-                    checkScanDueToSilence();
-                }
-            }
         }
     }
 
@@ -1470,13 +1495,22 @@ public class RadioAudioService extends Service {
      * @param highPower true to enable high power mode, false to disable it.
      */
     public void setHighPower(boolean highPower) {
-        if (isHighPower != highPower) {
+        if (isHighPower() != highPower) {
             isHighPower = highPower;
-            if (isRadioConnected()) {
-                hostToEsp32.setHighPower(HlState.builder()
-                    .isHighPower(highPower)
-                    .build());
-            }
+            applyRadioPreferencesToFirmware(hasHighLowPowerSwitch);
+        }
+    }
+
+    public boolean isHighPower() {
+        return radioModule != null ? radioModule.isHighPowerEnabled() : isHighPower;
+    }
+
+    void applyRadioPreferencesToFirmware(boolean canSetHighPower) {
+        if (isConnectionReady() && canSetHighPower) {
+            radioModule.setHighPower(isHighPower);
+        }
+        if (isConnectionReady()) {
+            radioModule.setRssi(isRssiOn);
         }
     }
 
@@ -1491,13 +1525,15 @@ public class RadioAudioService extends Service {
      * @param on true to enable RSSI, false to disable it.
      */
     public void setRssi(boolean on) {
-        if (isRssiOn != on) {
+        if (isRssiOn() != on) {
             isRssiOn = on;
             if (isRadioConnected()) {
-                hostToEsp32.setRssi(Protocol.RSSIState.builder()
-                        .on(isRssiOn)
-                        .build());
+                radioModule.setRssi(isRssiOn);
             }
         }
+    }
+
+    public boolean isRssiOn() {
+        return radioModule != null ? radioModule.isRssiEnabled() : isRssiOn;
     }
 }

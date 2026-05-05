@@ -77,7 +77,7 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 | `0x03`       | `COMMAND_DEBUG_WARN`    | Sends debug warning message                 |
 | `0x04`       | `COMMAND_DEBUG_DEBUG`   | Sends debug debug-level message             |
 | `0x05`       | `COMMAND_DEBUG_TRACE`   | Sends debug trace message                   |
-| `0x06`       | `COMMAND_HELLO`         | Hello handshake message with version/status |
+| `0x06`       | `COMMAND_HELLO`         | Hello handshake message with version/status and initial device state |
 | `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx OPUS audio data (payload required) |
 | `0x09`       | `COMMAND_WINDOW_UPDATE` | Updates available receive window            |
 | `0x0B`       | `COMMAND_DEVICE_STATE`  | Applied radio/control state snapshot         |
@@ -100,9 +100,15 @@ typedef struct version Version;
 #define FEATURE_HAS_HL      (1 << 0)
 #define FEATURE_HAS_PHY_PTT (1 << 1)
 #define FEATURE_HAS_ESP32_AFSK (1 << 2)
+
+struct hello {
+  Version     version;
+  DeviceState deviceState;
+} __attribute__((__packed__));
+typedef struct hello Hello;
 ```
 
-Firmware sends `COMMAND_HELLO(Version)` after boot-time radio initialization. Android validates this payload directly.
+Firmware sends `COMMAND_HELLO(Hello)` after boot-time radio initialization. Android validates the version/status fields and seeds its initial radio-module state from the appended `DeviceState`.
 
 ### `COMMAND_HOST_DESIRED_STATE` Parameters
 
@@ -156,6 +162,8 @@ typedef struct device_state DeviceState;
 ```
 
 Firmware sends `COMMAND_DEVICE_STATE` immediately after applying desired state, immediately when `latestRssi` changes, and periodically every 500 ms as a heartbeat/state refresh. RSSI/S-meter data is reported through `latestRssi`; there is no separate S-meter report command.
+
+Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, and filter flags. Transient state is not restored: sequence, PTT requested, and RX audio open always start clear.
 
 ### `COMMAND_WINDOW_UPDATE` Parameters **(ESP32 → Android)**
 

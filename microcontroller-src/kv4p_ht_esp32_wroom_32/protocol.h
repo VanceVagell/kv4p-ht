@@ -53,13 +53,13 @@ enum SndCommand {
   COMMAND_DEBUG_WARN     = 0x03, // [COMMAND_DEBUG_WARN(char[])]
   COMMAND_DEBUG_DEBUG    = 0x04, // [COMMAND_DEBUG_DEBUG(char[])]
   COMMAND_DEBUG_TRACE    = 0x05, // [COMMAND_DEBUG_TRACE(char[])]
-  COMMAND_HELLO          = 0x06, // [COMMAND_HELLO(Version)]
+  COMMAND_HELLO          = 0x06, // [COMMAND_HELLO(Hello)]
   COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_WINDOW_UPDATE  = 0x09,
   COMMAND_DEVICE_STATE   = 0x0B, // [COMMAND_DEVICE_STATE(DeviceState)]
 };
 
-// COMMAND_HELLO parameters
+// COMMAND_HELLO parameters: Version + initial DeviceState
 struct [[gnu::packed]] Version {
   uint16_t     ver;
   char         radioModuleStatus;
@@ -132,6 +132,12 @@ struct [[gnu::packed]] DeviceState {
   uint8_t latestRssi;
 };
 REQUIRE_TRIVIALLY_COPYABLE(DeviceState);
+
+struct [[gnu::packed]] Hello {
+  Version version;
+  DeviceState deviceState;
+};
+REQUIRE_TRIVIALLY_COPYABLE(Hello);
 
 // COMMAND_WINDOW_ACK parameters
 struct [[gnu::packed]] WindowUpdate {
@@ -226,13 +232,16 @@ void sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len
   sendKissFrame(KISS_CMD_SETHARDWARE, vendorPayload, KV4P_VENDOR_HEADER_LEN + len);
 }
 
-void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features) {
-  Version params = {
-    .ver = ver,
-    .radioModuleStatus = radioModuleStatus,
-    .windowSize = windowSize,
-    .rfModuleType = rfModuleType,
-    .features = features,
+void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features, const DeviceState &deviceState) {
+  Hello params = {
+    .version = {
+      .ver = ver,
+      .radioModuleStatus = radioModuleStatus,
+      .windowSize = windowSize,
+      .rfModuleType = rfModuleType,
+      .features = features,
+    },
+    .deviceState = deviceState,
   };
   sendKv4pVendorFrame(COMMAND_HELLO, (uint8_t*) &params, sizeof(params));
 }

@@ -61,8 +61,82 @@ bool radioConfigApplied = false;
 bool filtersApplied = false;
 uint8_t lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
 uint8_t latestRssi = 0;
+bool hasPersistedRadioState = false;
 
 Debounce squelchDebounce(100);
+
+void loadPersistedRadioState() {
+  prefs.begin("radio", true);
+  hasPersistedRadioState = prefs.getBool("valid", false);
+  uint16_t flags = desiredState.flags;
+  flags &= ~(HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW);
+  if (hasPersistedRadioState) {
+    flags |= HOST_STATE_RADIO_CONFIG_VALID;
+    desiredState.bw = prefs.getUChar("bw", DRA818_25K);
+    desiredState.freq_tx = prefs.getFloat("freq_tx", 0.0f);
+    desiredState.freq_rx = prefs.getFloat("freq_rx", 0.0f);
+    desiredState.ctcss_tx = prefs.getUChar("ctcss_tx", 0);
+    desiredState.squelch = prefs.getUChar("squelch", 0);
+    desiredState.ctcss_rx = prefs.getUChar("ctcss_rx", 0);
+  }
+  if (prefs.getBool("high", true)) {
+    flags |= HOST_STATE_HIGH_POWER;
+  }
+  if (prefs.getBool("rssi", true)) {
+    flags |= HOST_STATE_RSSI_ENABLED;
+  }
+  if (prefs.getBool("flt_pre", false)) {
+    flags |= HOST_STATE_FILTER_PRE;
+  }
+  if (prefs.getBool("flt_high", false)) {
+    flags |= HOST_STATE_FILTER_HIGH;
+  }
+  if (prefs.getBool("flt_low", false)) {
+    flags |= HOST_STATE_FILTER_LOW;
+  }
+  desiredState.flags = flags;
+  desiredState.sequence = 0;
+  desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_RX_AUDIO_OPEN);
+  prefs.end();
+}
+
+bool persistedRadioStateMatchesDesired() {
+  prefs.begin("radio", true);
+  bool matches = prefs.getBool("valid", false) == ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) != 0)
+    && prefs.getUChar("bw", DRA818_25K) == desiredState.bw
+    && prefs.getFloat("freq_tx", 0.0f) == desiredState.freq_tx
+    && prefs.getFloat("freq_rx", 0.0f) == desiredState.freq_rx
+    && prefs.getUChar("ctcss_tx", 0) == desiredState.ctcss_tx
+    && prefs.getUChar("squelch", 0) == desiredState.squelch
+    && prefs.getUChar("ctcss_rx", 0) == desiredState.ctcss_rx
+    && prefs.getBool("high", true) == ((desiredState.flags & HOST_STATE_HIGH_POWER) != 0)
+    && prefs.getBool("rssi", true) == ((desiredState.flags & HOST_STATE_RSSI_ENABLED) != 0)
+    && prefs.getBool("flt_pre", false) == ((desiredState.flags & HOST_STATE_FILTER_PRE) != 0)
+    && prefs.getBool("flt_high", false) == ((desiredState.flags & HOST_STATE_FILTER_HIGH) != 0)
+    && prefs.getBool("flt_low", false) == ((desiredState.flags & HOST_STATE_FILTER_LOW) != 0);
+  prefs.end();
+  return matches;
+}
+
+void savePersistedRadioStateIfChanged() {
+  if (persistedRadioStateMatchesDesired()) {
+    return;
+  }
+  prefs.begin("radio", false);
+  prefs.putBool("valid", (desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) != 0);
+  prefs.putUChar("bw", desiredState.bw);
+  prefs.putFloat("freq_tx", desiredState.freq_tx);
+  prefs.putFloat("freq_rx", desiredState.freq_rx);
+  prefs.putUChar("ctcss_tx", desiredState.ctcss_tx);
+  prefs.putUChar("squelch", desiredState.squelch);
+  prefs.putUChar("ctcss_rx", desiredState.ctcss_rx);
+  prefs.putBool("high", (desiredState.flags & HOST_STATE_HIGH_POWER) != 0);
+  prefs.putBool("rssi", (desiredState.flags & HOST_STATE_RSSI_ENABLED) != 0);
+  prefs.putBool("flt_pre", (desiredState.flags & HOST_STATE_FILTER_PRE) != 0);
+  prefs.putBool("flt_high", (desiredState.flags & HOST_STATE_FILTER_HIGH) != 0);
+  prefs.putBool("flt_low", (desiredState.flags & HOST_STATE_FILTER_LOW) != 0);
+  prefs.end();
+}
 
 uint8_t getFirmwareFeatures() {
   return (hw.features.hasHL ? FEATURE_HAS_HL : 0)
@@ -104,8 +178,8 @@ uint8_t deviceMode() {
   }
 }
 
-void sendCurrentDeviceState() {
-  DeviceState state = {
+DeviceState currentDeviceState() {
+  return {
     .appliedSequence = desiredState.sequence,
     .flags = deviceStateFlags(),
     .bw = appliedState.bw,
@@ -119,7 +193,10 @@ void sendCurrentDeviceState() {
     .lastError = lastDeviceStateError,
     .latestRssi = latestRssi,
   };
-  sendDeviceState(state);
+}
+
+void sendCurrentDeviceState() {
+  sendDeviceState(currentDeviceState());
 }
 
 bool radioConfigChanged() {
@@ -132,7 +209,7 @@ bool radioConfigChanged() {
     || appliedState.ctcss_rx != desiredState.ctcss_rx;
 }
 
-void reconcileDesiredState() {
+void reconcileDesiredState(bool sendReport = true) {
   lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
   bool wantHigh = desiredState.flags & HOST_STATE_HIGH_POWER;
   if (hw.features.hasHL) {
@@ -172,7 +249,10 @@ void reconcileDesiredState() {
   } else {
     setMode(rxIdleMode());
   }
-  sendCurrentDeviceState();
+  savePersistedRadioStateIfChanged();
+  if (sendReport) {
+    sendCurrentDeviceState();
+  }
 }
 
 void setMode(Mode newMode) {
@@ -206,6 +286,7 @@ void setMode(Mode newMode) {
 
 void setup() {
   boardSetup();
+  loadPersistedRadioState();
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
@@ -241,8 +322,11 @@ void setup() {
   setMode(MODE_STOPPED);
   initI2SRx();
   ledSetup();
-  initRadio(true);
-  sendHello(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, getFirmwareFeatures());
+  initRadio((desiredState.flags & HOST_STATE_HIGH_POWER) != 0);
+  if (radioModuleStatus == RADIO_MODULE_FOUND) {
+    reconcileDesiredState(false);
+  }
+  sendHello(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, getFirmwareFeatures(), currentDeviceState());
   _LOGI("Setup is finished");
 }
 
