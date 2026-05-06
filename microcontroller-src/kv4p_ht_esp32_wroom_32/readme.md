@@ -14,6 +14,8 @@ The KV4P-HT protocol defines the communication interface between the microcontro
   * `COMMAND_HELLO` now carries the version/status payload after firmware radio initialization completes.
   * Android now sends `COMMAND_HOST_DESIRED_STATE` snapshots for radio config, filters, PTT, audio-open, high-power, and RSSI state.
   * Firmware replies with `COMMAND_DEVICE_STATE` snapshots describing applied state.
+  * Firmware coalesces state changes through a dirty flag; `deviceStateLoop()` is the single state-report sender.
+  * Android retries an unacknowledged desired-state snapshot by resending the same sequence.
   * Legacy one-shot control commands were removed.
  
 * **Historical 2.1 changelog:**
@@ -150,7 +152,9 @@ typedef struct host_desired_state HostDesiredState;
 #define HOST_STATE_FILTER_LOW         (1 << 7)
 ```
 
-Android sends the full desired-state snapshot whenever one field changes. Firmware applies changed radio/filter/control fields, derives its mode, and reports the result with `COMMAND_DEVICE_STATE`.
+Android sends the full desired-state snapshot whenever one field changes. Firmware applies changed radio/filter/control fields, derives its mode, and marks device state dirty so `deviceStateLoop()` can report the result with `COMMAND_DEVICE_STATE`.
+
+Android treats `DeviceState.appliedSequence` as the acknowledgement for the latest desired-state snapshot. If received device state does not match the last sent desired snapshot, Android may retry the exact same `HostDesiredState` with the same `sequence`. Retries are bounded; they are not new logical state changes and must not increment `sequence`.
 
 ### `COMMAND_DEVICE_STATE` Parameters
 
@@ -177,7 +181,9 @@ typedef struct device_state DeviceState;
 #define DEVICE_STATE_SQUELCHED     (1 << 10)
 ```
 
-Firmware sends `COMMAND_DEVICE_STATE` immediately after applying desired state, immediately when `latestRssi` changes, and periodically every 500 ms as a heartbeat/state refresh. RSSI/S-meter data is reported through `latestRssi`; there is no separate S-meter report command.
+Firmware sends `COMMAND_DEVICE_STATE` from `deviceStateLoop()`. State producers such as desired-state reconciliation, RSSI changes, squelch changes, and physical PTT changes set a dirty flag instead of writing serial frames directly. The next loop pass flushes dirty state, so change reports are effectively immediate but still async and coalesced through one sender. Firmware also sends `COMMAND_DEVICE_STATE` every 500 ms as a heartbeat/state refresh. RSSI/S-meter data is reported through `latestRssi`; there is no separate S-meter report command.
+
+Scanning remains Android-owned because Android owns the memory list, memory groups, skip-during-scan flags, offsets, and UI selection. Firmware reports the current squelch state with `DEVICE_STATE_SQUELCHED`; Android uses that received state to decide when to advance to the next memory.
 
 Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: memory id, bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, and filter flags. If persisted TX/RX frequencies are outside the configured RF module's range, firmware clamps them into range and clears `memoryId` to `-1` before applying radio config. Transient state is not restored: sequence, PTT requested, and RX audio open always start clear.
 
@@ -225,6 +231,8 @@ A window-based flow control mechanism, inspired by HTTP/2, is used to regulate t
 
 * Android sends complete `COMMAND_HOST_DESIRED_STATE` snapshots instead of separate one-shot control commands.
 * Firmware reports the applied runtime state through `COMMAND_DEVICE_STATE` snapshots.
+* Firmware state producers mark device state dirty; only `deviceStateLoop()` sends `COMMAND_DEVICE_STATE`.
+* Android compares desired and device state. If the device does not acknowledge the latest desired snapshot, Android may resend the same snapshot/sequence a small number of times.
 * KISS DATA frames carry AX.25 packets directly, outside the kv4p vendor command namespace.
 * Android-to-firmware vendor commands are subject to **window-based flow control**.
 

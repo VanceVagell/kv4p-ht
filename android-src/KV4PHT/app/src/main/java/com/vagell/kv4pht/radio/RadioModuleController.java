@@ -12,6 +12,7 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
  * firmware.
  */
 public class RadioModuleController {
+    private static final int MAX_DESIRED_STATE_RETRIES = 3;
     private static final int DESIRED_DEVICE_FLAGS_MASK =
         Protocol.HOST_STATE_RADIO_CONFIG_VALID
             | Protocol.HOST_STATE_PTT_REQUESTED
@@ -43,6 +44,7 @@ public class RadioModuleController {
     private boolean transportReady = false;
     private byte vfoTxTone = 0;
     private byte vfoRxTone = 0;
+    private int desiredStateRetries = 0;
 
     synchronized void attachSender(Protocol.Sender sender) {
         this.sender = sender;
@@ -61,6 +63,7 @@ public class RadioModuleController {
         lastDeviceState = null;
         firmwareVersion = null;
         appliedStateInSync = false;
+        desiredStateRetries = 0;
     }
 
     synchronized void seedFirmwareVersion(Protocol.FirmwareVersion version) {
@@ -78,6 +81,7 @@ public class RadioModuleController {
         copyDesiredState(deviceState);
         lastDesiredStateSent = desiredState.copy();
         appliedStateInSync = isDeviceStateInSyncWithDesired(state, lastDesiredStateSent);
+        desiredStateRetries = 0;
     }
 
     synchronized void pttDown() {
@@ -219,6 +223,11 @@ public class RadioModuleController {
         lastPhysPttDown = isPhysPttDown();
         lastDeviceState = state;
         appliedStateInSync = isDeviceStateInSyncWithDesired(state, lastDesiredStateSent);
+        if (appliedStateInSync) {
+            desiredStateRetries = 0;
+        } else {
+            retryDesiredStateIfNeeded();
+        }
     }
 
     synchronized boolean isAppliedStateInSync() {
@@ -407,7 +416,20 @@ public class RadioModuleController {
         desiredState.setSequence(desiredState.getSequence() + 1);
         Protocol.HostDesiredState state = desiredState.copy();
         lastDesiredStateSent = state;
+        desiredStateRetries = 0;
         appliedStateInSync = false;
         sender.sendDesiredState(state);
+    }
+
+    private void retryDesiredStateIfNeeded() {
+        if (sender == null
+            || !transportReady
+            || lastDesiredStateSent == null
+            || !desiredState.equals(lastDesiredStateSent)
+            || desiredStateRetries >= MAX_DESIRED_STATE_RETRIES) {
+            return;
+        }
+        desiredStateRetries++;
+        sender.sendDesiredState(lastDesiredStateSent);
     }
 }

@@ -314,6 +314,43 @@ public class ProtocolKissTest {
     }
 
     @Test
+    public void radioModuleControllerRetriesLastDesiredStateWhenDeviceStateDoesNotMatch() {
+        CapturingSender sender = new CapturingSender();
+        RadioModuleController controller = new RadioModuleController();
+        controller.attachSender(sender);
+        Protocol.DeviceState initialState = Protocol.DeviceState.builder()
+            .appliedSequence(7)
+            .memoryId(42)
+            .flags(Protocol.HOST_STATE_RADIO_CONFIG_VALID
+                | Protocol.HOST_STATE_HIGH_POWER
+                | Protocol.HOST_STATE_RSSI_ENABLED)
+            .bw(Protocol.DRA818_25K)
+            .freqTx(146.5200f)
+            .freqRx(146.5200f)
+            .ctcssTx((byte) 0)
+            .squelch((byte) 1)
+            .ctcssRx((byte) 0)
+            .radioModuleStatus(Protocol.RadioStatus.RADIO_STATUS_FOUND)
+            .mode(Protocol.DeviceMode.DEVICE_MODE_STOPPED)
+            .lastError(0)
+            .latestRssi(0)
+            .build();
+
+        controller.seedFromDeviceState(initialState);
+        controller.markTransportReady();
+        controller.openAudio();
+
+        assertEquals(1, sender.sentStates.size());
+        Protocol.HostDesiredState firstSend = sender.sentStates.get(0);
+        controller.updateDeviceState(initialState);
+
+        assertEquals(2, sender.sentStates.size());
+        Protocol.HostDesiredState retry = sender.sentStates.get(1);
+        assertEquals(firstSend.getSequence(), retry.getSequence());
+        assertEquals(firstSend, retry);
+    }
+
+    @Test
     public void deviceStateParsesPackedFirmwareStruct() {
         java.nio.ByteBuffer payload = java.nio.ByteBuffer.allocate(26).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         payload.putInt(9);
