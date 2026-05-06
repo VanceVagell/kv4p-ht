@@ -36,6 +36,7 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -178,6 +179,10 @@ public class RadioAudioService extends Service {
     private float audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
     private boolean audioFocusHeld = false;
+    /** When true, music ducks (lowers volume) while we play; when false, music pauses. */
+    private boolean duckMusic = true;
+    /** When true, keep BT SCO link warm while the radio is connected so first PTT has no handshake delay. */
+    private boolean lowLatencyBtMic = false;
     /** Idle window after which we release the AudioTrack/audio focus so other apps (e.g. music over A2DP) can play. */
     private static final long RX_IDLE_RELEASE_MS = 1500L;
     private Runnable rxIdleRunnable;
@@ -193,12 +198,19 @@ public class RadioAudioService extends Service {
             AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, TX_CHANNEL_CONFIG, TX_AUDIO_FORMAT);
     private static final int RECORD_ANIM_FPS = 30;
     private static final long SCO_CONNECT_TIMEOUT_MS = 1500L;
+    // Keep the BT SCO link up briefly after PTT release so a quick subsequent PTT
+    // doesn't pay the 300-800ms profile-switch cost again.
+    private static final long SCO_RELEASE_GRACE_MS = 3000L;
     private AudioRecord audioRecord;
     private volatile boolean isRecording = false;
     private Thread recordingThread;
     private boolean usingBluetoothSco = false;
     private boolean scoReceiverRegistered = false;
+    // True when SCO was acquired via the modern AudioManager.setCommunicationDevice()
+    // path (API 31+) instead of legacy startBluetoothSco().
+    private boolean usingModernCommDevice = false;
     private Runnable scoConnectTimeoutRunnable;
+    private Runnable pendingScoTeardownRunnable;
     private final BroadcastReceiver scoStateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -358,6 +370,83 @@ public class RadioAudioService extends Service {
 
     public void setMicGainBoost(String micGainBoost) {
         this.micGainBoost = MicGainBoost.parse(micGainBoost);
+    }
+
+    /**
+     * Toggle the "low latency BT mic" preference. When enabled, we keep the BT SCO
+     * link warm while the radio is connected so first PTT has no handshake delay.
+     * Only takes effect on Android 12+ (uses the modern setCommunicationDevice API).
+     */
+    public void setLowLatencyBtMic(boolean enabled) {
+        if (this.lowLatencyBtMic == enabled) {
+            return;
+        }
+        this.lowLatencyBtMic = enabled;
+        if (enabled) {
+            if (isRadioConnected()) {
+                prewarmBluetoothScoIfEnabled();
+            }
+        } else if (mode != RadioMode.TX) {
+            // Disabling: release SCO immediately if we're not actively transmitting.
+            cancelPendingScoTeardown();
+            tearDownBluetoothSco();
+        }
+    }
+
+    /**
+     * Toggle whether music ducks (lowers volume) or pauses while we play radio audio.
+     * Rebuilds the audio focus request and re-acquires focus if currently held.
+     */
+    public void setDuckMusic(boolean duckMusic) {
+        if (this.duckMusic == duckMusic) {
+            return;
+        }
+        this.duckMusic = duckMusic;
+        if (audioTrack != null) {
+            // Rebuild the AudioFocusRequest with the new gain hint; re-acquire if held.
+            boolean wasHeld = audioFocusHeld;
+            abandonAudioFocusIfHeld();
+            initAudioTrack();
+            if (wasHeld) {
+                requestAudioFocusIfNeeded();
+            }
+        }
+    }
+
+    /**
+     * Pre-establish the BT SCO link so the first PTT has no handshake latency.
+     * Only runs on Android 12+ where setCommunicationDevice() returns synchronously;
+     * the legacy startBluetoothSco() broadcast handshake is too unreliable to use
+     * outside of an active recording session.
+     */
+    private void prewarmBluetoothScoIfEnabled() {
+        if (!lowLatencyBtMic) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return;
+        }
+        if (usingBluetoothSco) {
+            cancelPendingScoTeardown();
+            return;
+        }
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (am == null || !am.isBluetoothScoAvailableOffCall()) {
+            return;
+        }
+        try {
+            am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            if (trySetBluetoothCommunicationDevice(am)) {
+                usingBluetoothSco = true;
+                usingModernCommDevice = true;
+                Log.i(TAG, "BT SCO prewarmed via setCommunicationDevice()");
+            } else {
+                // Roll back the mode change if we couldn't grab the device.
+                am.setMode(AudioManager.MODE_NORMAL);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "BT SCO prewarm failed", e);
+        }
     }
 
     public void setMinRadioFreq(float newMinFreq) {
@@ -589,6 +678,8 @@ public class RadioAudioService extends Service {
         super.onDestroy();
         tryToStopRadioModule();
         stopMicCapture();
+        cancelPendingScoTeardown();
+        tearDownBluetoothSco();
         if (rxIdleRunnable != null) {
             handler.removeCallbacks(rxIdleRunnable);
             rxIdleRunnable = null;
@@ -796,29 +887,49 @@ public class RadioAudioService extends Service {
             audioTrack.release();
             audioTrack = null;
         }
-        AudioAttributes audioAttributes = new AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build();
+        // When ducking, advertise as navigation-guidance speech (like Google Maps voice
+        // prompts). Android's audio policy ducks music to a comfortable ~30-40% level for
+        // this category instead of the near-mute it applies when both streams declare
+        // USAGE_MEDIA. When pausing music (no ducking), keep USAGE_MEDIA so the music app
+        // pauses cleanly and auto-resumes after we abandon focus.
+        AudioAttributes.Builder attrBuilder = new AudioAttributes.Builder();
+        if (duckMusic) {
+            attrBuilder.setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                       .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH);
+        } else {
+            attrBuilder.setUsage(AudioAttributes.USAGE_MEDIA)
+                       .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC);
+        }
+        AudioAttributes audioAttributes = attrBuilder.build();
         // Use a transient focus request so music apps auto-resume after RX traffic ends.
         // The change listener also lets us yield to higher-priority audio (e.g. incoming
         // phone calls): when focus is lost we end PTT and stop playback so telephony
         // routing on the BT headset isn't disrupted.
-        audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        int focusGain = duckMusic
+            ? AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+            : AudioManager.AUDIOFOCUS_GAIN_TRANSIENT;
+        audioFocusRequest = new AudioFocusRequest.Builder(focusGain)
             .setAudioAttributes(audioAttributes)
             .setOnAudioFocusChangeListener(focusChange -> {
                 switch (focusChange) {
                     case AudioManager.AUDIOFOCUS_LOSS:
                     case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
-                    case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
-                        // Mark as not held so we don't try to abandon a focus we no longer own.
+                        // Hard loss (e.g. incoming phone call): yield completely and
+                        // release BT SCO immediately so telephony can take the headset.
                         audioFocusHeld = false;
                         handler.post(() -> {
                             if (mode == RadioMode.TX) {
                                 endPtt();
                             }
                             releaseRxAudio();
+                            cancelPendingScoTeardown();
+                            tearDownBluetoothSco();
                         });
+                        break;
+                    case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+                        // Another stream wants to play alongside us (e.g. nav prompt).
+                        // Android automatically lowers our AudioTrack volume; keep
+                        // playing so the user doesn't miss radio traffic.
                         break;
                     default:
                         break;
@@ -921,11 +1032,28 @@ public class RadioAudioService extends Service {
         }
         isRecording = true;
 
+        // Fast path: SCO link is already up (from a prior PTT's grace window or
+        // from the low-latency-mic prewarm). Skip the 300-800ms BT handshake.
+        if (usingBluetoothSco) {
+            cancelPendingScoTeardown();
+            startRecordingInternal(MediaRecorder.AudioSource.VOICE_COMMUNICATION);
+            return;
+        }
+
         AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         boolean tryBluetooth = am != null && am.isBluetoothScoAvailableOffCall();
         if (tryBluetooth) {
             usingBluetoothSco = true;
             try {
+                am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                // Win #2: modern API on Android 12+ avoids the broadcast handshake.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                        && trySetBluetoothCommunicationDevice(am)) {
+                    usingModernCommDevice = true;
+                    startRecordingInternal(MediaRecorder.AudioSource.VOICE_COMMUNICATION);
+                    return;
+                }
+                // Legacy path: register the SCO state receiver and wait for CONNECTED.
                 if (!scoReceiverRegistered) {
                     // RECEIVER_NOT_EXPORTED: only the system can deliver this broadcast,
                     // so we don't accept the intent from arbitrary apps.
@@ -934,7 +1062,6 @@ public class RadioAudioService extends Service {
                             ContextCompat.RECEIVER_NOT_EXPORTED);
                     scoReceiverRegistered = true;
                 }
-                am.setMode(AudioManager.MODE_IN_COMMUNICATION);
                 am.startBluetoothSco();
                 am.setBluetoothScoOn(true);
                 // Fall back to built-in mic if SCO doesn't connect in time.
@@ -954,6 +1081,32 @@ public class RadioAudioService extends Service {
         } else {
             usingBluetoothSco = false;
             startRecordingInternal(MediaRecorder.AudioSource.MIC);
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private boolean trySetBluetoothCommunicationDevice(AudioManager am) {
+        try {
+            AudioDeviceInfo bt = null;
+            for (AudioDeviceInfo info : am.getAvailableCommunicationDevices()) {
+                int t = info.getType();
+                if (t == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                        || t == AudioDeviceInfo.TYPE_BLE_HEADSET) {
+                    bt = info;
+                    break;
+                }
+            }
+            if (bt == null) {
+                return false;
+            }
+            boolean ok = am.setCommunicationDevice(bt);
+            if (!ok) {
+                Log.w(TAG, "setCommunicationDevice() returned false for " + bt.getType());
+            }
+            return ok;
+        } catch (Exception e) {
+            Log.w(TAG, "setCommunicationDevice() failed", e);
+            return false;
         }
     }
 
@@ -1040,24 +1193,56 @@ public class RadioAudioService extends Service {
         }
         recordingThread = null;
         callbacks.txAudioLevel(100, 0.0f);
-        tearDownBluetoothSco();
+        if (usingBluetoothSco) {
+            if (lowLatencyBtMic) {
+                // User opted into keeping SCO permanently warm while the radio is
+                // connected; don't tear it down between transmissions.
+                cancelPendingScoTeardown();
+            } else {
+                // Win #1: short grace window so a fast subsequent PTT skips the
+                // BT handshake.
+                cancelPendingScoTeardown();
+                pendingScoTeardownRunnable = this::tearDownBluetoothSco;
+                handler.postDelayed(pendingScoTeardownRunnable, SCO_RELEASE_GRACE_MS);
+            }
+        } else {
+            tearDownBluetoothSco();
+        }
+    }
+
+    private void cancelPendingScoTeardown() {
+        if (pendingScoTeardownRunnable != null) {
+            handler.removeCallbacks(pendingScoTeardownRunnable);
+            pendingScoTeardownRunnable = null;
+        }
     }
 
     private void tearDownBluetoothSco() {
+        cancelPendingScoTeardown();
         if (!usingBluetoothSco && !scoReceiverRegistered) {
             return;
         }
         try {
             AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             if (am != null && usingBluetoothSco) {
-                am.setBluetoothScoOn(false);
-                am.stopBluetoothSco();
+                if (usingModernCommDevice
+                        && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    try {
+                        am.clearCommunicationDevice();
+                    } catch (Exception e) {
+                        Log.w(TAG, "clearCommunicationDevice() failed", e);
+                    }
+                } else {
+                    am.setBluetoothScoOn(false);
+                    am.stopBluetoothSco();
+                }
                 am.setMode(AudioManager.MODE_NORMAL);
             }
         } catch (Exception e) {
             Log.w(TAG, "Error stopping Bluetooth SCO", e);
         }
         usingBluetoothSco = false;
+        usingModernCommDevice = false;
         if (scoReceiverRegistered) {
             try {
                 unregisterReceiver(scoStateReceiver);
@@ -1237,6 +1422,7 @@ public class RadioAudioService extends Service {
         if (wakeLock != null && !wakeLock.isHeld()) {
             wakeLock.acquire();
         }
+        prewarmBluetoothScoIfEnabled();
         callbacks.radioConnected();
     }
 

@@ -1033,6 +1033,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         stickyPTT = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_STICKY_PTT, "false"));
+
+        if (radioAudioService != null) {
+            radioAudioService.setDuckMusic(Boolean.parseBoolean(
+                settings.getOrDefault(AppSetting.SETTING_DUCK_MUSIC, "true")));
+            radioAudioService.setLowLatencyBtMic(Boolean.parseBoolean(
+                settings.getOrDefault(AppSetting.SETTING_BT_LOW_LATENCY_MIC, "false")));
+        }
     }
 
     private void applyAprsSettings(Map<String, String> settings) {
