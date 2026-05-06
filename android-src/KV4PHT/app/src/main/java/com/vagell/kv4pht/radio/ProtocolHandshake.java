@@ -164,16 +164,11 @@ class ProtocolHandshake {
             }
             final Protocol.FirmwareVersion ver = firmwareVersion.get();
             Log.d(TAG, handshakeLog(handshakeId, "checkFirmwareVersionAndRadioStatus(): version=" + ver));
-            radioAudioService.getCallbacks().firmwareVersionReceived(ver.getVer());
             if (ver.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
                 radioAudioService.getCallbacks().outdatedFirmware(ver.getVer());
                 return HandshakeResult.TOO_OLD;
             }
-            radioAudioService.setRadioType(Protocol.RfModuleType.RF_SA818_VHF.equals(ver.getModuleType())
-                ? RadioAudioService.RadioModuleType.VHF
-                : RadioAudioService.RadioModuleType.UHF);
-            radioAudioService.setHasHighLowPowerSwitch(ver.isHasHl());
-            radioAudioService.setHasPhysPttButton(ver.isHasPhysPtt());
+            radioAudioService.handleFirmwareVersion(ver);
             if (Protocol.RadioStatus.RADIO_STATUS_NOT_FOUND.equals(ver.getRadioModuleStatus())) {
                 return HandshakeResult.RADIO_MODULE_NOT_FOUND;
             } else {
@@ -181,7 +176,7 @@ class ProtocolHandshake {
                 if (ver.getDeviceState() != null) {
                     radioAudioService.handleInitialDeviceState(ver.getDeviceState());
                 }
-                radioAudioService.applyRadioPreferencesToFirmware(ver.isHasHl());
+                radioAudioService.markRadioTransportReady();
                 return HandshakeResult.OK;
             }
         });

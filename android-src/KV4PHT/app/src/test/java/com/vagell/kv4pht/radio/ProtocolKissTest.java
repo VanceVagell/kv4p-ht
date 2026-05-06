@@ -184,20 +184,23 @@ public class ProtocolKissTest {
 
     @Test
     public void firmwareVersionParsesSingleFeaturesByte() {
-        byte[] payload = new byte[]{
-            0x10, 0x00,                  // firmware version 16
-            'f',                         // radio module found
-            0x00, 0x08, 0x00, 0x00,      // window size 2048
-            0x01, 0x00, 0x00, 0x00,      // UHF module
-            0x03,                        // has HL + physical PTT
-        };
+        java.nio.ByteBuffer payload = java.nio.ByteBuffer.allocate(20).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        payload.putShort((short) 16);
+        payload.put((byte) 'f');
+        payload.putInt(2048);
+        payload.putInt(1);
+        payload.putFloat(400.0f);
+        payload.putFloat(480.0f);
+        payload.put((byte) 0x03);
 
-        java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(payload, payload.length);
+        java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(payload.array(), payload.array().length);
 
         assertTrue(parsed.isPresent());
         assertEquals(16, parsed.get().getVer());
         assertEquals(2048, parsed.get().getWindowSize());
         assertEquals(Protocol.RfModuleType.RF_SA818_UHF, parsed.get().getModuleType());
+        assertEquals(400.0f, parsed.get().getMinRadioFreq(), 0.0001f);
+        assertEquals(480.0f, parsed.get().getMaxRadioFreq(), 0.0001f);
         assertTrue(parsed.get().isHasHl());
         assertTrue(parsed.get().isHasPhysPtt());
         assertNull(parsed.get().getDeviceState());
@@ -205,13 +208,16 @@ public class ProtocolKissTest {
 
     @Test
     public void helloCarriesFirmwareVersionAndInitialDeviceStatePayload() {
-        java.nio.ByteBuffer helloPayload = java.nio.ByteBuffer.allocate(34).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        java.nio.ByteBuffer helloPayload = java.nio.ByteBuffer.allocate(46).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         helloPayload.putShort((short) 16);
         helloPayload.put((byte) 'f');
         helloPayload.putInt(2048);
         helloPayload.putInt(1);
+        helloPayload.putFloat(400.0f);
+        helloPayload.putFloat(480.0f);
         helloPayload.put((byte) 0x07);
         helloPayload.putInt(9);
+        helloPayload.putInt(42);
         helloPayload.putShort((short) Protocol.HOST_STATE_RADIO_CONFIG_VALID);
         helloPayload.put(Protocol.DRA818_12K5);
         helloPayload.putFloat(144.3900f);
@@ -235,8 +241,11 @@ public class ProtocolKissTest {
         java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(payload, payloadLen);
         assertTrue(parsed.isPresent());
         assertEquals(16, parsed.get().getVer());
+        assertEquals(400.0f, parsed.get().getMinRadioFreq(), 0.0001f);
+        assertEquals(480.0f, parsed.get().getMaxRadioFreq(), 0.0001f);
         assertTrue(parsed.get().getDeviceState() != null);
         assertEquals(9, parsed.get().getDeviceState().getAppliedSequence());
+        assertEquals(42, parsed.get().getDeviceState().getMemoryId());
         assertEquals(123, parsed.get().getDeviceState().getLatestRssi());
     }
 
@@ -244,6 +253,7 @@ public class ProtocolKissTest {
     public void hostDesiredStateSerializesAsPackedFirmwareStruct() {
         byte[] payload = Protocol.HostDesiredState.builder()
             .sequence(7)
+            .memoryId(42)
             .flags(Protocol.HOST_STATE_RADIO_CONFIG_VALID | Protocol.HOST_STATE_RX_AUDIO_OPEN)
             .bw(Protocol.DRA818_25K)
             .freqTx(146.5200f)
@@ -254,16 +264,20 @@ public class ProtocolKissTest {
             .build()
             .toBytes();
 
-        assertEquals(18, payload.length);
-        assertEquals(7, java.nio.ByteBuffer.wrap(payload).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt());
+        java.nio.ByteBuffer parsed = java.nio.ByteBuffer.wrap(payload).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(22, payload.length);
+        assertEquals(7, parsed.getInt());
+        assertEquals(42, parsed.getInt());
     }
 
     @Test
     public void radioModuleControllerSeedsInitialDeviceStateBeforeFirstSend() {
         CapturingSender sender = new CapturingSender();
-        RadioModuleController controller = new RadioModuleController(sender);
+        RadioModuleController controller = new RadioModuleController();
+        controller.attachSender(sender);
         Protocol.DeviceState initialState = Protocol.DeviceState.builder()
             .appliedSequence(7)
+            .memoryId(42)
             .flags(Protocol.HOST_STATE_RADIO_CONFIG_VALID
                 | Protocol.HOST_STATE_HIGH_POWER
                 | Protocol.HOST_STATE_RSSI_ENABLED)
@@ -280,6 +294,7 @@ public class ProtocolKissTest {
             .build();
 
         controller.seedFromDeviceState(initialState);
+        controller.markTransportReady();
         controller.openAudio();
 
         assertEquals(1, sender.sentStates.size());
@@ -290,6 +305,7 @@ public class ProtocolKissTest {
         assertTrue((sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER) != 0);
         assertTrue((sent.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED) != 0);
         assertEquals(Protocol.DRA818_12K5, sent.getBw());
+        assertEquals(42, sent.getMemoryId());
         assertEquals(144.3900f, sent.getFreqTx(), 0.0001f);
         assertEquals(144.3900f, sent.getFreqRx(), 0.0001f);
         assertEquals(4, sent.getCtcssTx());
@@ -299,8 +315,9 @@ public class ProtocolKissTest {
 
     @Test
     public void deviceStateParsesPackedFirmwareStruct() {
-        java.nio.ByteBuffer payload = java.nio.ByteBuffer.allocate(22).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        java.nio.ByteBuffer payload = java.nio.ByteBuffer.allocate(26).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         payload.putInt(9);
+        payload.putInt(42);
         payload.putShort((short) (Protocol.HOST_STATE_RADIO_CONFIG_VALID | Protocol.DEVICE_STATE_TX_ACTIVE));
         payload.put(Protocol.DRA818_12K5);
         payload.putFloat(144.3900f);
@@ -317,6 +334,7 @@ public class ProtocolKissTest {
 
         assertTrue(parsed.isPresent());
         assertEquals(9, parsed.get().getAppliedSequence());
+        assertEquals(42, parsed.get().getMemoryId());
         assertEquals(Protocol.DeviceMode.DEVICE_MODE_TX, parsed.get().getMode());
         assertEquals(Protocol.RadioStatus.RADIO_STATUS_FOUND, parsed.get().getRadioModuleStatus());
         assertEquals(123, parsed.get().getLatestRssi());

@@ -65,6 +65,8 @@ struct [[gnu::packed]] Version {
   char         radioModuleStatus;
   size_t       windowSize;
   RfModuleType rfModuleType;
+  float        minRadioFreq;
+  float        maxRadioFreq;
   uint8_t      features; 
 };
 REQUIRE_TRIVIALLY_COPYABLE(Version);
@@ -107,6 +109,7 @@ enum DeviceStateError : uint8_t {
 
 struct [[gnu::packed]] HostDesiredState {
   uint32_t sequence;
+  int32_t memoryId;
   uint16_t flags;
   uint8_t bw;
   float freq_tx;
@@ -119,6 +122,7 @@ REQUIRE_TRIVIALLY_COPYABLE(HostDesiredState);
 
 struct [[gnu::packed]] DeviceState {
   uint32_t appliedSequence;
+  int32_t memoryId;
   uint16_t flags;
   uint8_t bw;
   float freq_tx;
@@ -235,13 +239,15 @@ void sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len
   writer.end();
 }
 
-void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, uint8_t features, const DeviceState &deviceState) {
+void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
   Hello params = {
     .version = {
       .ver = ver,
       .radioModuleStatus = radioModuleStatus,
       .windowSize = windowSize,
       .rfModuleType = rfModuleType,
+      .minRadioFreq = minRadioFreq,
+      .maxRadioFreq = maxRadioFreq,
       .features = features,
     },
     .deviceState = deviceState,

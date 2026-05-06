@@ -104,6 +104,8 @@ struct version {
   char         radioModuleStatus; // 1 byte
   size_t       windowSize;        // 4 bytes
   uint32_t     rfModuleType;      // 4 bytes (enum)
+  float        minRadioFreq;      // 4 bytes
+  float        maxRadioFreq;      // 4 bytes
   uint8_t      features;          // 1 byte (bitmask)
 } __attribute__((__packed__));
 typedef struct version Version;
@@ -120,13 +122,14 @@ struct hello {
 typedef struct hello Hello;
 ```
 
-Firmware sends `COMMAND_HELLO(Hello)` after boot-time radio initialization. Android validates the version/status fields and seeds its initial radio-module state from the appended `DeviceState`.
+Firmware sends `COMMAND_HELLO(Hello)` after boot-time radio initialization. Android validates the version/status fields, adopts `minRadioFreq`/`maxRadioFreq` as the module's usable RX range, and seeds its initial radio-module state from the appended `DeviceState`.
 
 ### `COMMAND_HOST_DESIRED_STATE` Parameters
 
 ```c
 struct host_desired_state {
   uint32_t sequence;
+  int32_t  memoryId; // -1 means VFO/no memory
   uint16_t flags;
   uint8_t  bw;
   float    freq_tx;
@@ -154,6 +157,7 @@ Android sends the full desired-state snapshot whenever one field changes. Firmwa
 ```c
 struct device_state {
   uint32_t appliedSequence;
+  int32_t  memoryId; // -1 means VFO/no memory
   uint16_t flags;
   uint8_t  bw;
   float    freq_tx;
@@ -175,7 +179,7 @@ typedef struct device_state DeviceState;
 
 Firmware sends `COMMAND_DEVICE_STATE` immediately after applying desired state, immediately when `latestRssi` changes, and periodically every 500 ms as a heartbeat/state refresh. RSSI/S-meter data is reported through `latestRssi`; there is no separate S-meter report command.
 
-Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, and filter flags. Transient state is not restored: sequence, PTT requested, and RX audio open always start clear.
+Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: memory id, bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, and filter flags. If persisted TX/RX frequencies are outside the configured RF module's range, firmware clamps them into range and clears `memoryId` to `-1` before applying radio config. Transient state is not restored: sequence, PTT requested, and RX audio open always start clear.
 
 ### `COMMAND_WINDOW_UPDATE` Parameters **(ESP32 → Android)**
 

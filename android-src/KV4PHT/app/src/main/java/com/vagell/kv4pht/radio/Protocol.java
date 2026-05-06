@@ -183,8 +183,9 @@ public final class Protocol {
     @Data
     @Builder
     public static class HostDesiredState {
-        static final int BYTE_LEN = 18;
+        static final int BYTE_LEN = 22;
         private int sequence;
+        private int memoryId;
         private int flags;
         private byte bw;
         private float freqTx;
@@ -196,6 +197,7 @@ public final class Protocol {
         public HostDesiredState copy() {
             return HostDesiredState.builder()
                 .sequence(sequence)
+                .memoryId(memoryId)
                 .flags(flags)
                 .bw(bw)
                 .freqTx(freqTx)
@@ -209,6 +211,7 @@ public final class Protocol {
         public byte[] toBytes() {
             ByteBuffer buffer = ByteBuffer.allocate(BYTE_LEN).order(ByteOrder.LITTLE_ENDIAN);
             buffer.putInt(sequence);
+            buffer.putInt(memoryId);
             buffer.putShort((short) flags);
             buffer.put(bw);
             buffer.putFloat(freqTx);
@@ -223,8 +226,9 @@ public final class Protocol {
     @Data
     @Builder
     public static class DeviceState {
-        static final int BYTE_LEN = 22;
+        static final int BYTE_LEN = 26;
         private final int appliedSequence;
+        private final int memoryId;
         private final int flags;
         private final byte bw;
         private final float freqTx;
@@ -236,6 +240,11 @@ public final class Protocol {
         private final DeviceMode mode;
         private final int lastError;
         private final int latestRssi;
+
+        public boolean hasRadioConfig() {
+            return (flags & HOST_STATE_RADIO_CONFIG_VALID) != 0;
+        }
+
         public static Optional<DeviceState> from(final byte[] param, Integer len) {
             return from(param, 0, len);
         }
@@ -246,6 +255,7 @@ public final class Protocol {
                 .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
                 .map(b -> DeviceState.builder()
                     .appliedSequence(b.getInt())
+                    .memoryId(b.getInt())
                     .flags(b.getShort() & 0xFFFF)
                     .bw(b.get())
                     .freqTx(b.getFloat())
@@ -287,11 +297,13 @@ public final class Protocol {
     @Data
     @Builder
     public static class FirmwareVersion {
-        private static final int BYTE_LEN = 12;
+        private static final int BYTE_LEN = 20;
         private final short ver;  // equivalent to uint16_t
         private final RadioStatus radioModuleStatus;  // equivalent to char
         private final int windowSize; // equivalent to size_t
         private final RfModuleType moduleType;
+        private final float minRadioFreq;
+        private final float maxRadioFreq;
         private final boolean hasHl;
         private final boolean hasPhysPtt;
         private final DeviceState deviceState;
@@ -305,6 +317,8 @@ public final class Protocol {
                     RadioStatus radioModuleStatus = RadioStatus.fromValue((char) b.get());
                     int windowSize = b.getInt();
                     RfModuleType moduleType = RfModuleType.fromValue(b.getInt());
+                    float minRadioFreq = b.getFloat();
+                    float maxRadioFreq = b.getFloat();
                     int features = b.get() & 0xFF;
                     DeviceState deviceState = null;
                     if (len >= BYTE_LEN + DeviceState.BYTE_LEN) {
@@ -315,6 +329,8 @@ public final class Protocol {
                         .radioModuleStatus(radioModuleStatus)
                         .windowSize(windowSize)
                         .moduleType(moduleType)
+                        .minRadioFreq(minRadioFreq)
+                        .maxRadioFreq(maxRadioFreq)
                         .hasHl((features & 0x01) != 0)
                         .hasPhysPtt((features & 0x02) != 0)
                         .deviceState(deviceState)

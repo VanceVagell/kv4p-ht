@@ -18,9 +18,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
-import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
-import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
-
 import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -135,12 +132,6 @@ public class RadioAudioService extends Service {
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
     public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
 
-    // === Frequency Ranges ===
-    private static final float VHF_MIN_FREQ = 134.0f;
-    private static final float VHF_MAX_FREQ = 174.0f;
-    private static final float UHF_MIN_FREQ = 400.0f;
-    private static final float UHF_MAX_FREQ = 480.0f;
-
     // === Used for the persistent notification ===
     private PowerManager.WakeLock wakeLock;
     private static final int SERVICE_ID = 1;
@@ -155,10 +146,6 @@ public class RadioAudioService extends Service {
     @Setter
     private float max70cmTxFreq = 450.0f;
 
-    @Getter
-    private float minRadioFreq = VHF_MIN_FREQ;
-    @Getter
-    private float maxRadioFreq = VHF_MAX_FREQ;
     @Setter
     private float minTxFreq = min2mTxFreq;
     @Setter
@@ -185,7 +172,8 @@ public class RadioAudioService extends Service {
     private boolean usbPermissionRequestPending = false;
     @Getter
     private Protocol.Sender hostToEsp32;
-    private RadioModuleController radioModule;
+    @Getter
+    private final RadioModuleController radioModule = new RadioModuleController();
     private final KissParser esp32DataStreamParser = new KissParser(this::handleParsedCommand, this::handleEsp32Ax25Packet);
     private int usbConnectAttemptSeq = 0;
     private int activeUsbConnectAttemptId = 0;
@@ -203,28 +191,15 @@ public class RadioAudioService extends Service {
     @Getter
     private @NonNull RadioMode mode = RadioMode.STARTUP;
     @Getter
-    @Setter
-    private boolean hasHighLowPowerSwitch = false;
-    @Getter
-    @Setter
-    private boolean hasPhysPttButton = false;
-    private boolean isHighPower = true;
-    private boolean isRssiOn = true;
-    @Getter
     private boolean txAllowed = true;
-    @Setter
-    private int squelch = 0;
     @Setter
     private @NonNull String callsign = "";
     @Getter
     private @NonNull String activeFrequencyStr = "";
-    @Getter
-    private RadioModuleType radioType = RadioModuleType.UNKNOWN;
     private int activeMemoryId = -1;
     private long scanSquelchedSinceMs = -1L;
+    private int scanBaseSquelch = -1;
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
-    @Setter
-    private @NonNull String bandwidth = "25kHz";
 
     // === Android Components ===
     private final IBinder binder = new RadioBinder();
@@ -267,7 +242,7 @@ public class RadioAudioService extends Service {
         default void packetReceived(APRSPacket aprsPacket) {}
         default void scannedToMemory(int memoryId) {}
         default void outdatedFirmware(int firmwareVer) {}
-        default void firmwareVersionReceived(int firmwareVer) {}
+        default void initialDeviceStateReceived() {}
         default void missingFirmware() {}
         default void txStarted() {}
         default void txEnded() {}
@@ -293,36 +268,16 @@ public class RadioAudioService extends Service {
 
         // Retrieve necessary parameters from the intent.
         callsign = bundle.getString("callsign");
-        squelch = bundle.getInt("squelch");
+        if (bundle.containsKey("squelch")) {
+            radioModule.seedDesiredSquelch(bundle.getInt("squelch"));
+        }
         activeMemoryId = bundle.getInt("activeMemoryId");
         activeFrequencyStr = bundle.getString("activeFrequencyStr");
         return binder;
     }
 
-    public void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        setRadioFilters(emphasis, highpass, lowpass);
-    }
-
     public void setMicGainBoost(String micGainBoost) {
         this.micGainBoost = MicGainBoost.parse(micGainBoost);
-    }
-
-    public void setMinRadioFreq(float newMinFreq) {
-        minRadioFreq = newMinFreq;
-        // Detect if we're moving from VHF to UHF, and move active frequency to within band.
-        if (mode != RadioMode.STARTUP && Float.parseFloat(activeFrequencyStr) < minRadioFreq) {
-            tuneToFreq(String.format(java.util.Locale.US, "%.4f", min70cmTxFreq), squelch, true);
-            callbacks.forceTunedToFreq(activeFrequencyStr);
-        }
-    }
-
-    public void setMaxRadioFreq(float newMaxFreq) {
-        maxRadioFreq = newMaxFreq;
-        // Detect if we're moving from UHF to VHF, and move active frequency to within band.
-        if (mode != RadioMode.STARTUP && Float.parseFloat(activeFrequencyStr) > maxRadioFreq) {
-            tuneToFreq(String.format(java.util.Locale.US, "%.4f", min2mTxFreq), squelch, true);
-            callbacks.forceTunedToFreq(activeFrequencyStr);
-        }
     }
 
     public void setAprsBeaconPosition(boolean enabled) {
@@ -383,7 +338,7 @@ public class RadioAudioService extends Service {
 
     public void setMode(RadioMode mode) {
         if (mode == RadioMode.FLASHING) {
-            Optional.ofNullable(radioModule).ifPresent(RadioModuleController::stop);
+            radioModule.stop();
             audioTrack.stop();
             usbIoManager.stop();
             try {
@@ -428,9 +383,9 @@ public class RadioAudioService extends Service {
     public void setActiveMemoryId(int activeMemoryId) {
         this.activeMemoryId = activeMemoryId;
         if (activeMemoryId > -1) {
-            tuneToMemory(activeMemoryId, squelch, false);
+            tuneToMemory(activeMemoryId);
         } else {
-            tuneToFreq(activeFrequencyStr, squelch, false);
+            tuneToFreq(activeFrequencyStr);
         }
     }
 
@@ -620,10 +575,6 @@ public class RadioAudioService extends Service {
         notificationManager.createNotificationChannel(channel);
     }
 
-    private void setRadioFilters(boolean emphasis, boolean highpass, boolean lowpass) {
-        radioModule.setFilters(emphasis, highpass, lowpass);
-    }
-
     /**
      * Determines if transmission (TX) is allowed on the given frequency.
      *
@@ -631,20 +582,15 @@ public class RadioAudioService extends Service {
      * @return true if the frequency is within the allowed transmission range, false otherwise.
      */
     private boolean isTxAllowed(float freq) {
-        final float halfBandwidth = (bandwidth.equals("25kHz") ? 0.025f : 0.0125f) / 2;
+        final float halfBandwidth = radioModule.getHalfBandwidthMhz();
         return  (freq >= (minTxFreq + halfBandwidth)) && (freq <= (maxTxFreq - halfBandwidth));
     }
 
-    // Tell microcontroller to tune to the given frequency string, which must already be formatted
-    // in the style the radio module expects.
-    public void tuneToFreq(String frequencyStr, int squelchLevel, boolean forceTune) {
+    public void tuneToFreq(String frequencyStr) {
         if (mode == RadioMode.STARTUP) {
             return; // Not fully loaded and initialized yet, don't tune.
         }
         setMode(RadioMode.RX);
-        if (!forceTune && activeFrequencyStr.equals(frequencyStr) && squelch == squelchLevel) {
-            return; // Already tuned to this frequency with this squelch level.
-        }
         float freq;
         try {
             freq = Float.parseFloat(makeSafeHamFreq(frequencyStr));
@@ -655,19 +601,16 @@ public class RadioAudioService extends Service {
         }
         activeFrequencyStr = frequencyStr;
         activeMemoryId = -1; // Reset active memory ID since we're tuning to a frequency, not a memory.
-        squelch = squelchLevel;
-        if (isRadioConnected()) {
-            radioModule.beginUpdate();
-            try {
-                radioModule.setBandwidth(bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5);
-                radioModule.setTxFrequency(freq);
-                radioModule.setRxFrequency(freq);
-                radioModule.setTxTone((byte) 0);
-                radioModule.setSquelch((byte) squelchLevel);
-                radioModule.setRxTone((byte) 0);
-            } finally {
-                radioModule.endUpdate();
-            }
+        radioModule.beginUpdate();
+        try {
+            radioModule.setMemoryId(-1);
+            radioModule.setVfoTones((byte) 0, (byte) 0);
+            radioModule.setTxFrequency(freq);
+            radioModule.setRxFrequency(freq);
+            radioModule.setTxTone((byte) 0);
+            radioModule.setRxTone((byte) 0);
+        } finally {
+            radioModule.endUpdate();
         }
         txAllowed = isTxAllowed(freq);
     }
@@ -679,7 +622,7 @@ public class RadioAudioService extends Service {
             while (freq > 500.0f) {
                 freq /= 10;
             }
-            return formatFreq(Math.max(minRadioFreq, Math.min(freq, maxRadioFreq)));
+            return formatFreq(Math.max(getMinRadioFreq(), Math.min(freq, getMaxRadioFreq())));
         } catch (NumberFormatException e) {
             return formatFreq(minTxFreq);
         }
@@ -694,40 +637,34 @@ public class RadioAudioService extends Service {
         return makeSafeHamFreq(tempFrequency);
     }
 
-    public void tuneToMemory(int memoryId, int squelchLevel, boolean forceTune) {
-        if (forceTune || activeMemoryId != memoryId || squelch != squelchLevel) {
-            Optional.ofNullable(channelMemoriesLiveData)
-                .map(LiveData::getValue)
-                .orElse(Collections.emptyList())
-                .stream()
-                .filter(channelMemory -> channelMemory.memoryId == memoryId)
-                .findFirst()
-                .ifPresent(channelMemory -> tuneToMemory(channelMemory, squelchLevel, forceTune));
-        }
+    public void tuneToMemory(int memoryId) {
+        Optional.ofNullable(channelMemoriesLiveData)
+            .map(LiveData::getValue)
+            .orElse(Collections.emptyList())
+            .stream()
+            .filter(channelMemory -> channelMemory.memoryId == memoryId)
+            .findFirst()
+            .ifPresent(this::tuneToMemory);
     }
 
-    public void tuneToMemory(ChannelMemory memory, int squelchLevel, boolean forceTune) {
-        if (memory == null || (!forceTune && activeMemoryId == memory.memoryId && squelch == squelchLevel) || mode == RadioMode.STARTUP) {
-            return; // Skip if memory is null, already tuned, or in STARTUP mode.
+    public void tuneToMemory(ChannelMemory memory) {
+        if (memory == null || mode == RadioMode.STARTUP) {
+            return;
         }
         activeFrequencyStr = validateFrequency(memory.frequency);
         activeMemoryId = memory.memoryId;
         final float txFreq = Float.parseFloat(getTxFreq(memory.frequency, memory.offset, memory.offsetKhz));
-        if (isRadioConnected()) {
-            radioModule.beginUpdate();
-            try {
-                radioModule.setBandwidth(bandwidth.equals("25kHz") ? DRA818_25K : DRA818_12K5);
-                radioModule.setTxFrequency(txFreq);
-                radioModule.setRxFrequency(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)));
-                radioModule.setTxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)));
-                radioModule.setSquelch((byte) squelchLevel);
-                radioModule.setRxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)));
-            } finally {
-                radioModule.endUpdate();
-            }
+        radioModule.beginUpdate();
+        try {
+            radioModule.setMemoryId(memory.memoryId);
+            radioModule.setTxFrequency(txFreq);
+            radioModule.setRxFrequency(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)));
+            radioModule.setTxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)));
+            radioModule.setRxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)));
+        } finally {
+            radioModule.endUpdate();
         }
         txAllowed = isTxAllowed(txFreq);
-
         updateForegroundNotification(memory.name + " (" + memory.frequency + " MHz)");
     }
 
@@ -746,7 +683,7 @@ public class RadioAudioService extends Service {
     }
 
     private void checkScanDueToSquelch() {
-        if (getMode() != RadioMode.SCAN || radioModule == null) {
+        if (getMode() != RadioMode.SCAN) {
             scanSquelchedSinceMs = -1L;
             return;
         }
@@ -858,13 +795,12 @@ public class RadioAudioService extends Service {
 
     private boolean isConnectionReady() {
         return hostToEsp32 != null
-            && radioModule != null
             && serialPort != null
             && usbIoManager != null;
     }
 
     private void closePortAndReset() {
-        radioModule = null;
+        radioModule.detachSender();
         hostToEsp32 = null;
         if (usbIoManager != null) {
             try {
@@ -893,7 +829,7 @@ public class RadioAudioService extends Service {
             return;
         }
         setMode(RadioMode.STARTUP);
-        setRadioType(RadioModuleType.UNKNOWN);
+        clearRadioTypeAndLimits();
         Optional<UsbDevice> device = usbManager.getDeviceList().values().stream()
             .filter(this::isESP32Device)
             .findFirst();
@@ -996,7 +932,7 @@ public class RadioAudioService extends Service {
         usbIoManager.setReadBufferCount(16 * 2);
         usbIoManager.start();
         hostToEsp32 = new Protocol.Sender(usbIoManager);
-        radioModule = new RadioModuleController(hostToEsp32);
+        radioModule.attachSender(hostToEsp32);
         Log.i(TAG, connectLog("setupSerialConnection(): serial transport connected; starting handshake"));
         protocolHandshake.start();
     }
@@ -1054,40 +990,68 @@ public class RadioAudioService extends Service {
         return "thread=" + thread.getName() + "#" + thread.getId();
     }
 
-    /**
-     * @param radioType should be RADIO_TYPE_UHF or RADIO_TYPE_VHF
-     */
-    public void setRadioType(RadioModuleType radioType) {
-        callbacks.setRadioType(radioType);
-        if (!Objects.equals(this.radioType, radioType)) {
-            this.radioType = radioType;
-            updateFrequencyLimitsForBand();
+    public RadioModuleType getRadioType() {
+        Protocol.RfModuleType rfModuleType = radioModule.getRfModuleType();
+        if (Protocol.RfModuleType.RF_SA818_UHF.equals(rfModuleType)) {
+            return RadioModuleType.UHF;
+        }
+        if (Protocol.RfModuleType.RF_SA818_VHF.equals(rfModuleType)) {
+            return RadioModuleType.VHF;
+        }
+        return RadioModuleType.UNKNOWN;
+    }
+
+    private void clearRadioTypeAndLimits() {
+        radioModule.clearFirmwareVersion();
+        callbacks.setRadioType(RadioModuleType.UNKNOWN);
+    }
+
+    public void handleFirmwareVersion(Protocol.FirmwareVersion version) {
+        radioModule.seedFirmwareVersion(version);
+        callbacks.setRadioType(getRadioType());
+        updateTxLimitsForBand();
+    }
+
+    public void updateTxLimitsForBand() {
+        if (RadioModuleType.VHF.equals(getRadioType())) {
+            setMinTxFreq(min2mTxFreq);
+            setMaxTxFreq(max2mTxFreq);
+        } else if (RadioModuleType.UHF.equals(getRadioType())) {
+            setMinTxFreq(min70cmTxFreq);
+            setMaxTxFreq(max70cmTxFreq);
+        }
+        Log.d(TAG, "Radio type set to: " + getRadioType());
+        Log.d(TAG, "Min radio freq: " + getMinRadioFreq());
+        Log.d(TAG, "Max radio freq: " + getMaxRadioFreq());
+        Log.d(TAG, "Min tx freq: " + minTxFreq);
+        Log.d(TAG, "Max tx freq: " + maxTxFreq);
+        float txFrequency = radioModule.getTxFrequency() > 0 ? radioModule.getTxFrequency() : parseActiveFrequencyOrZero();
+        txAllowed = isTxAllowed(txFrequency);
+        Log.d(TAG, String.format("Tx allowed: %b (%s)", txAllowed, txFrequency));
+    }
+
+    private float parseActiveFrequencyOrZero() {
+        try {
+            return Float.parseFloat(activeFrequencyStr);
+        } catch (NumberFormatException e) {
+            return 0.0f;
         }
     }
 
-    public void updateFrequencyLimitsForBand() {
-        // Ensure frequencies we're using match the radioType
-        if (RadioModuleType.VHF.equals(getRadioType())) {
-            setMinRadioFreq(VHF_MIN_FREQ);
-            setMinTxFreq(min2mTxFreq);
-            setMaxTxFreq(max2mTxFreq);
-            setMaxRadioFreq(VHF_MAX_FREQ);
-        } else if (RadioModuleType.UHF.equals(getRadioType())) {
-            setMinRadioFreq(UHF_MIN_FREQ);
-            setMinTxFreq(min70cmTxFreq);
-            setMaxTxFreq(max70cmTxFreq);
-            setMaxRadioFreq(UHF_MAX_FREQ);
-        }
-        Log.d(TAG, "Radio type set to: " + radioType);
-        Log.d(TAG, "Min radio freq: " + minRadioFreq);
-        Log.d(TAG, "Max radio freq: " + maxRadioFreq);
-        Log.d(TAG, "Min tx freq: " + minTxFreq);
-        Log.d(TAG, "Max tx freq: " + maxTxFreq);
-        float txFrequency = radioModule != null && radioModule.getTxFrequency() > 0
-            ? radioModule.getTxFrequency()
-            : Float.parseFloat(activeFrequencyStr);
-        txAllowed = isTxAllowed(txFrequency);
-        Log.d(TAG, String.format("Tx allowed: %b (%s)", txAllowed, txFrequency));
+    public boolean isHasHighLowPowerSwitch() {
+        return radioModule.hasHighLowPowerSwitch();
+    }
+
+    public boolean isHasPhysPttButton() {
+        return radioModule.hasPhysPttButton();
+    }
+
+    public float getMinRadioFreq() {
+        return radioModule.getMinRadioFreq();
+    }
+
+    public float getMaxRadioFreq() {
+        return radioModule.getMaxRadioFreq();
     }
 
     public void setScanning(boolean scanning, boolean goToRxMode) {
@@ -1095,14 +1059,25 @@ public class RadioAudioService extends Service {
             return;
         }
         if (!scanning) {
-            // If squelch was off before we started scanning, turn it off again
-            if (squelch == 0) {
-                tuneToMemory(activeMemoryId, squelch, true);
+            if (scanBaseSquelch >= 0 && scanBaseSquelch != radioModule.getDesiredSquelch()) {
+                radioModule.beginUpdate();
+                try {
+                    radioModule.setSquelch((byte) scanBaseSquelch);
+                    if (activeMemoryId > -1) {
+                        tuneToMemory(activeMemoryId);
+                    } else {
+                        tuneToFreq(activeFrequencyStr);
+                    }
+                } finally {
+                    radioModule.endUpdate();
+                }
             }
+            scanBaseSquelch = -1;
             if (goToRxMode) {
                 setMode(RadioMode.RX);
             }
         } else { // Start scanning
+            scanBaseSquelch = radioModule.getDesiredSquelch();
             setMode(RadioMode.SCAN);
             nextScan();
         }
@@ -1148,10 +1123,17 @@ public class RadioAudioService extends Service {
             } catch (Exception e) {
                 Log.d(TAG, "Memory with id " + candidate.memoryId + " had invalid frequency.");
             }
-            if (!candidate.skipDuringScan && memoryFreqFloat >= minRadioFreq && memoryFreqFloat <= maxRadioFreq) {
+            if (!candidate.skipDuringScan && memoryFreqFloat >= getMinRadioFreq() && memoryFreqFloat <= getMaxRadioFreq()) {
                 scanSquelchedSinceMs = -1L;
                 // If squelch is off (0), use squelch=1 during scanning.
-                tuneToMemory(candidate, squelch > 0 ? squelch : 1, true);
+                int desiredSquelch = scanBaseSquelch >= 0 ? scanBaseSquelch : radioModule.getDesiredSquelch();
+                radioModule.beginUpdate();
+                try {
+                    radioModule.setSquelch((byte) (desiredSquelch > 0 ? desiredSquelch : 1));
+                    tuneToMemory(candidate);
+                } finally {
+                    radioModule.endUpdate();
+                }
                 callbacks.scannedToMemory(candidate.memoryId);
                 return;
             }
@@ -1252,21 +1234,25 @@ public class RadioAudioService extends Service {
         if (param == null || len == null || len < 1) {
             return;
         }
-        handleAx25Packet(java.util.Arrays.copyOf(param, len));
+        handleAx25Packet(len == param.length ? param : java.util.Arrays.copyOf(param, len));
     }
 
     void handleInitialDeviceState(Protocol.DeviceState state) {
-        if (radioModule != null) {
-            radioModule.seedFromDeviceState(state);
+        radioModule.seedFromDeviceState(state);
+        if (state.hasRadioConfig()) {
+            activeFrequencyStr = formatFreq(state.getFreqRx());
+            activeMemoryId = state.getMemoryId();
         }
         handleDeviceState(state);
+        callbacks.initialDeviceStateReceived();
+    }
+
+    void markRadioTransportReady() {
+        radioModule.markTransportReady();
     }
 
     private void handleDeviceState(Protocol.DeviceState state) {
         Log.d(TAG, "Device state: " + state);
-        if (radioModule == null) {
-            return;
-        }
         radioModule.updateDeviceState(state);
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
             txAllowed = isTxAllowed(radioModule.getTxFrequency());
@@ -1501,23 +1487,11 @@ public class RadioAudioService extends Service {
      * @param highPower true to enable high power mode, false to disable it.
      */
     public void setHighPower(boolean highPower) {
-        if (isHighPower() != highPower) {
-            isHighPower = highPower;
-            applyRadioPreferencesToFirmware(hasHighLowPowerSwitch);
-        }
+        radioModule.setHighPower(highPower);
     }
 
     public boolean isHighPower() {
-        return radioModule != null ? radioModule.isHighPowerEnabled() : isHighPower;
-    }
-
-    void applyRadioPreferencesToFirmware(boolean canSetHighPower) {
-        if (isConnectionReady() && canSetHighPower) {
-            radioModule.setHighPower(isHighPower);
-        }
-        if (isConnectionReady()) {
-            radioModule.setRssi(isRssiOn);
-        }
+        return radioModule.isHighPowerEnabled();
     }
 
     /**
@@ -1531,15 +1505,11 @@ public class RadioAudioService extends Service {
      * @param on true to enable RSSI, false to disable it.
      */
     public void setRssi(boolean on) {
-        if (isRssiOn() != on) {
-            isRssiOn = on;
-            if (isRadioConnected()) {
-                radioModule.setRssi(isRssiOn);
-            }
-        }
+        radioModule.setRssi(on);
     }
 
     public boolean isRssiOn() {
-        return radioModule != null ? radioModule.isRssiEnabled() : isRssiOn;
+        return radioModule.isRssiEnabled();
     }
+
 }

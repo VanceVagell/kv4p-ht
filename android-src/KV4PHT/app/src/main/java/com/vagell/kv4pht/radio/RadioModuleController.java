@@ -1,14 +1,17 @@
 package com.vagell.kv4pht.radio;
 
+import static com.vagell.kv4pht.radio.Protocol.DRA818_12K5;
 import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
 
 /**
  * Owns the Android-side desired/applied radio state.
- *
+ * <p>
  * Protocol.Sender only knows how to write frames; this class decides what the
- * next desired-state snapshot should contain.
+ * next desired-state snapshot should contain. Public getters expose the latest
+ * firmware-reported state; setters mutate desired state that will be sent to
+ * firmware.
  */
-class RadioModuleController {
+public class RadioModuleController {
     private static final int DESIRED_DEVICE_FLAGS_MASK =
         Protocol.HOST_STATE_RADIO_CONFIG_VALID
             | Protocol.HOST_STATE_PTT_REQUESTED
@@ -19,9 +22,11 @@ class RadioModuleController {
             | Protocol.HOST_STATE_FILTER_HIGH
             | Protocol.HOST_STATE_FILTER_LOW;
 
-    private final Protocol.Sender sender;
+    private Protocol.Sender sender;
+    private Protocol.FirmwareVersion firmwareVersion;
     private final Protocol.HostDesiredState desiredState = Protocol.HostDesiredState.builder()
         .sequence(0)
+        .memoryId(-1)
         .flags(Protocol.HOST_STATE_HIGH_POWER | Protocol.HOST_STATE_RSSI_ENABLED)
         .bw(DRA818_25K)
         .freqTx(0.0f)
@@ -35,23 +40,42 @@ class RadioModuleController {
     private Protocol.DeviceState lastDeviceState;
     private boolean lastPhysPttDown = false;
     private boolean appliedStateInSync = false;
+    private boolean transportReady = false;
+    private byte vfoTxTone = 0;
+    private byte vfoRxTone = 0;
 
-    RadioModuleController(Protocol.Sender sender) {
+    synchronized void attachSender(Protocol.Sender sender) {
         this.sender = sender;
+        transportReady = false;
+    }
+
+    synchronized void markTransportReady() {
+        transportReady = true;
+        flushDesiredState();
+    }
+
+    synchronized void detachSender() {
+        sender = null;
+        transportReady = false;
+        lastDesiredStateSent = null;
+        lastDeviceState = null;
+        firmwareVersion = null;
+        appliedStateInSync = false;
+    }
+
+    synchronized void seedFirmwareVersion(Protocol.FirmwareVersion version) {
+        firmwareVersion = version;
+    }
+
+    synchronized void clearFirmwareVersion() {
+        firmwareVersion = null;
     }
 
     synchronized void seedFromDeviceState(Protocol.DeviceState state) {
         lastDeviceState = state;
         lastPhysPttDown = isPhysPttDown();
-        desiredState.setSequence(state.getAppliedSequence());
-        desiredState.setFlags(state.getFlags() & DESIRED_DEVICE_FLAGS_MASK
-            & ~(Protocol.HOST_STATE_PTT_REQUESTED | Protocol.HOST_STATE_RX_AUDIO_OPEN));
-        desiredState.setBw(state.getBw());
-        desiredState.setFreqTx(state.getFreqTx());
-        desiredState.setFreqRx(state.getFreqRx());
-        desiredState.setCtcssTx(state.getCtcssTx());
-        desiredState.setSquelch(state.getSquelch());
-        desiredState.setCtcssRx(state.getCtcssRx());
+        Protocol.HostDesiredState deviceState = desiredFromDeviceState(state);
+        copyDesiredState(deviceState);
         lastDesiredStateSent = desiredState.copy();
         appliedStateInSync = isDeviceStateInSyncWithDesired(state, lastDesiredStateSent);
     }
@@ -64,11 +88,11 @@ class RadioModuleController {
         setDesiredFlags(desiredState.getFlags() & ~Protocol.HOST_STATE_PTT_REQUESTED);
     }
 
-    synchronized void beginUpdate() {
+    public synchronized void beginUpdate() {
         updateDepth++;
     }
 
-    synchronized void endUpdate() {
+    public synchronized void endUpdate() {
         if (updateDepth == 0) {
             return;
         }
@@ -86,6 +110,10 @@ class RadioModuleController {
         setRadioConfigValidAndSend();
     }
 
+    public synchronized void setBandwidth(String bandwidth) {
+        setBandwidth("25kHz".equals(bandwidth) ? DRA818_25K : DRA818_12K5);
+    }
+
     synchronized void setTxFrequency(float txFrequency) {
         if (Float.compare(desiredState.getFreqTx(), txFrequency) == 0) {
             return;
@@ -99,6 +127,14 @@ class RadioModuleController {
             return;
         }
         desiredState.setFreqRx(rxFrequency);
+        setRadioConfigValidAndSend();
+    }
+
+    synchronized void setMemoryId(int memoryId) {
+        if (desiredState.getMemoryId() == memoryId) {
+            return;
+        }
+        desiredState.setMemoryId(memoryId);
         setRadioConfigValidAndSend();
     }
 
@@ -118,6 +154,14 @@ class RadioModuleController {
         setRadioConfigValidAndSend();
     }
 
+    public synchronized void setSquelch(int squelch) {
+        setSquelch((byte) squelch);
+    }
+
+    synchronized void seedDesiredSquelch(int squelch) {
+        desiredState.setSquelch((byte) squelch);
+    }
+
     synchronized void setRxTone(byte rxTone) {
         if (desiredState.getCtcssRx() == rxTone) {
             return;
@@ -126,12 +170,17 @@ class RadioModuleController {
         setRadioConfigValidAndSend();
     }
 
-    synchronized void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
+    public synchronized void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
         int nextFlags = desiredState.getFlags() & ~(Protocol.HOST_STATE_FILTER_PRE | Protocol.HOST_STATE_FILTER_HIGH | Protocol.HOST_STATE_FILTER_LOW);
         if (emphasis) nextFlags |= Protocol.HOST_STATE_FILTER_PRE;
         if (highpass) nextFlags |= Protocol.HOST_STATE_FILTER_HIGH;
         if (lowpass) nextFlags |= Protocol.HOST_STATE_FILTER_LOW;
         setDesiredFlags(nextFlags);
+    }
+
+    public synchronized void setVfoTones(byte txTone, byte rxTone) {
+        vfoTxTone = txTone;
+        vfoRxTone = rxTone;
     }
 
     synchronized void stop() {
@@ -146,7 +195,7 @@ class RadioModuleController {
         setDesiredFlags(desiredState.getFlags() & ~(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED));
     }
 
-    synchronized void setHighPower(boolean isHighPower) {
+    public synchronized void setHighPower(boolean isHighPower) {
         int nextFlags;
         if (isHighPower) {
             nextFlags = desiredState.getFlags() | Protocol.HOST_STATE_HIGH_POWER;
@@ -172,23 +221,11 @@ class RadioModuleController {
         appliedStateInSync = isDeviceStateInSyncWithDesired(state, lastDesiredStateSent);
     }
 
-    synchronized Protocol.DeviceState getLastDeviceState() {
-        return lastDeviceState;
-    }
-
-    synchronized Protocol.HostDesiredState getLastDesiredStateSent() {
-        return lastDesiredStateSent;
-    }
-
     synchronized boolean isAppliedStateInSync() {
         return appliedStateInSync;
     }
 
-    synchronized boolean hasPendingDesiredState() {
-        return lastDesiredStateSent != null && !appliedStateInSync;
-    }
-
-    synchronized boolean isHighPowerEnabled() {
+    public synchronized boolean isHighPowerEnabled() {
         return (desiredState.getFlags() & Protocol.HOST_STATE_HIGH_POWER) != 0;
     }
 
@@ -196,28 +233,84 @@ class RadioModuleController {
         return (desiredState.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED) != 0;
     }
 
-    synchronized byte getBandwidth() {
-        return lastDeviceState != null ? lastDeviceState.getBw() : DRA818_25K;
+    public synchronized int getDesiredSquelch() {
+        return desiredState.getSquelch() & 0xFF;
     }
 
-    synchronized float getTxFrequency() {
+    public synchronized String getBandwidthLabel() {
+        return desiredState.getBw() == DRA818_25K ? "25kHz" : "12.5kHz";
+    }
+
+    public synchronized boolean isPreEmphasisEnabled() {
+        return (desiredState.getFlags() & Protocol.HOST_STATE_FILTER_PRE) != 0;
+    }
+
+    public synchronized boolean isHighpassEnabled() {
+        return (desiredState.getFlags() & Protocol.HOST_STATE_FILTER_HIGH) != 0;
+    }
+
+    public synchronized boolean isLowpassEnabled() {
+        return (desiredState.getFlags() & Protocol.HOST_STATE_FILTER_LOW) != 0;
+    }
+
+    public synchronized int getFirmwareVersionNumber() {
+        return firmwareVersion != null ? firmwareVersion.getVer() : -1;
+    }
+
+    public synchronized Protocol.RfModuleType getRfModuleType() {
+        return firmwareVersion != null ? firmwareVersion.getModuleType() : null;
+    }
+
+    public synchronized boolean hasHighLowPowerSwitch() {
+        return firmwareVersion != null && firmwareVersion.isHasHl();
+    }
+
+    public synchronized boolean hasPhysPttButton() {
+        return firmwareVersion != null && firmwareVersion.isHasPhysPtt();
+    }
+
+    public synchronized float getMinRadioFreq() {
+        return firmwareVersion != null ? firmwareVersion.getMinRadioFreq() : 0.0f;
+    }
+
+    public synchronized float getMaxRadioFreq() {
+        return firmwareVersion != null ? firmwareVersion.getMaxRadioFreq() : 999.0f;
+    }
+
+    synchronized float getHalfBandwidthMhz() {
+        return (desiredState.getBw() == DRA818_25K ? 0.025f : 0.0125f) / 2.0f;
+    }
+
+    synchronized byte getVfoTxTone() {
+        return vfoTxTone;
+    }
+
+    synchronized byte getVfoRxTone() {
+        return vfoRxTone;
+    }
+
+    public synchronized boolean hasRadioConfig() {
+        return lastDeviceState != null && lastDeviceState.hasRadioConfig();
+    }
+
+    public synchronized int getMemoryId() {
+        return lastDeviceState != null ? lastDeviceState.getMemoryId() : -1;
+    }
+
+    public synchronized float getTxFrequency() {
         return lastDeviceState != null ? lastDeviceState.getFreqTx() : 0.0f;
     }
 
-    synchronized float getRxFrequency() {
+    public synchronized float getRxFrequency() {
         return lastDeviceState != null ? lastDeviceState.getFreqRx() : 0.0f;
     }
 
-    synchronized byte getTxTone() {
-        return lastDeviceState != null ? lastDeviceState.getCtcssTx() : 0;
+    public synchronized int getTxTone() {
+        return lastDeviceState != null ? lastDeviceState.getCtcssTx() & 0xFF : 0;
     }
 
-    synchronized byte getSquelch() {
-        return lastDeviceState != null ? lastDeviceState.getSquelch() : 0;
-    }
-
-    synchronized byte getRxTone() {
-        return lastDeviceState != null ? lastDeviceState.getCtcssRx() : 0;
+    public synchronized int getRxTone() {
+        return lastDeviceState != null ? lastDeviceState.getCtcssRx() & 0xFF : 0;
     }
 
     synchronized int getSMeter9Value() {
@@ -238,6 +331,37 @@ class RadioModuleController {
         return lastPhysPttDown != isPhysPttDown();
     }
 
+    synchronized void flushDesiredState() {
+        sendDesiredStateIfChanged();
+    }
+
+    private Protocol.HostDesiredState desiredFromDeviceState(Protocol.DeviceState state) {
+        return Protocol.HostDesiredState.builder()
+            .sequence(state.getAppliedSequence())
+            .memoryId(state.getMemoryId())
+            .flags(state.getFlags() & DESIRED_DEVICE_FLAGS_MASK
+                & ~(Protocol.HOST_STATE_PTT_REQUESTED | Protocol.HOST_STATE_RX_AUDIO_OPEN))
+            .bw(state.getBw())
+            .freqTx(state.getFreqTx())
+            .freqRx(state.getFreqRx())
+            .ctcssTx(state.getCtcssTx())
+            .squelch(state.getSquelch())
+            .ctcssRx(state.getCtcssRx())
+            .build();
+    }
+
+    private void copyDesiredState(Protocol.HostDesiredState state) {
+        desiredState.setSequence(state.getSequence());
+        desiredState.setMemoryId(state.getMemoryId());
+        desiredState.setFlags(state.getFlags());
+        desiredState.setBw(state.getBw());
+        desiredState.setFreqTx(state.getFreqTx());
+        desiredState.setFreqRx(state.getFreqRx());
+        desiredState.setCtcssTx(state.getCtcssTx());
+        desiredState.setSquelch(state.getSquelch());
+        desiredState.setCtcssRx(state.getCtcssRx());
+    }
+
     private boolean isDeviceStateInSyncWithDesired(Protocol.DeviceState deviceState, Protocol.HostDesiredState desiredState) {
         if (deviceState == null || desiredState == null || deviceState.getLastError() != 0) {
             return false;
@@ -252,6 +376,7 @@ class RadioModuleController {
             return true;
         }
         return deviceState.getBw() == desiredState.getBw()
+            && deviceState.getMemoryId() == desiredState.getMemoryId()
             && Float.compare(deviceState.getFreqTx(), desiredState.getFreqTx()) == 0
             && Float.compare(deviceState.getFreqRx(), desiredState.getFreqRx()) == 0
             && deviceState.getCtcssTx() == desiredState.getCtcssTx()
@@ -273,7 +398,7 @@ class RadioModuleController {
     }
 
     private void sendDesiredStateIfChanged() {
-        if (updateDepth == 0 && !desiredState.equals(lastDesiredStateSent)) {
+        if (updateDepth == 0 && sender != null && transportReady && !desiredState.equals(lastDesiredStateSent)) {
             sendDesiredState();
         }
     }

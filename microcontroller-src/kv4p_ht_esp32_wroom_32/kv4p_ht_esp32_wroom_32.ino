@@ -48,6 +48,7 @@ boolean rssiOn = true; // true if RSSI is enabled
 boolean audioOpen = false; // true when host wants RX Opus audio frames
 HostDesiredState desiredState = {
   .sequence = 0,
+  .memoryId = -1,
   .flags = HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED,
   .bw = DRA818_25K,
   .freq_tx = 0.0f,
@@ -65,6 +66,22 @@ bool hasPersistedRadioState = false;
 
 Debounce squelchDebounce(100);
 
+float moduleMinRadioFreq() {
+  return hw.rfModuleType == RF_SA818_UHF ? 400.0f : 134.0f;
+}
+
+float moduleMaxRadioFreq() {
+  return hw.rfModuleType == RF_SA818_UHF ? 480.0f : 174.0f;
+}
+
+float clampModuleRadioFreq(float freq) {
+  return min(max(freq, moduleMinRadioFreq()), moduleMaxRadioFreq());
+}
+
+bool isModuleRadioFreq(float freq) {
+  return freq >= moduleMinRadioFreq() && freq <= moduleMaxRadioFreq();
+}
+
 void loadPersistedRadioState() {
   prefs.begin("radio", true);
   hasPersistedRadioState = prefs.getBool("valid", false);
@@ -78,6 +95,12 @@ void loadPersistedRadioState() {
     desiredState.ctcss_tx = prefs.getUChar("ctcss_tx", 0);
     desiredState.squelch = prefs.getUChar("squelch", 0);
     desiredState.ctcss_rx = prefs.getUChar("ctcss_rx", 0);
+    desiredState.memoryId = prefs.getInt("memory_id", -1);
+    if (!isModuleRadioFreq(desiredState.freq_tx) || !isModuleRadioFreq(desiredState.freq_rx)) {
+      desiredState.freq_tx = clampModuleRadioFreq(desiredState.freq_tx);
+      desiredState.freq_rx = clampModuleRadioFreq(desiredState.freq_rx);
+      desiredState.memoryId = -1;
+    }
   }
   if (prefs.getBool("high", true)) {
     flags |= HOST_STATE_HIGH_POWER;
@@ -97,6 +120,7 @@ void loadPersistedRadioState() {
   desiredState.flags = flags;
   desiredState.sequence = 0;
   desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_RX_AUDIO_OPEN);
+  appliedState.memoryId = desiredState.memoryId;
   prefs.end();
 }
 
@@ -109,6 +133,7 @@ bool persistedRadioStateMatchesDesired() {
     && prefs.getUChar("ctcss_tx", 0) == desiredState.ctcss_tx
     && prefs.getUChar("squelch", 0) == desiredState.squelch
     && prefs.getUChar("ctcss_rx", 0) == desiredState.ctcss_rx
+    && prefs.getInt("memory_id", -1) == desiredState.memoryId
     && prefs.getBool("high", true) == ((desiredState.flags & HOST_STATE_HIGH_POWER) != 0)
     && prefs.getBool("rssi", true) == ((desiredState.flags & HOST_STATE_RSSI_ENABLED) != 0)
     && prefs.getBool("flt_pre", false) == ((desiredState.flags & HOST_STATE_FILTER_PRE) != 0)
@@ -130,6 +155,7 @@ void savePersistedRadioStateIfChanged() {
   prefs.putUChar("ctcss_tx", desiredState.ctcss_tx);
   prefs.putUChar("squelch", desiredState.squelch);
   prefs.putUChar("ctcss_rx", desiredState.ctcss_rx);
+  prefs.putInt("memory_id", desiredState.memoryId);
   prefs.putBool("high", (desiredState.flags & HOST_STATE_HIGH_POWER) != 0);
   prefs.putBool("rssi", (desiredState.flags & HOST_STATE_RSSI_ENABLED) != 0);
   prefs.putBool("flt_pre", (desiredState.flags & HOST_STATE_FILTER_PRE) != 0);
@@ -181,6 +207,7 @@ uint8_t deviceMode() {
 DeviceState currentDeviceState() {
   return {
     .appliedSequence = desiredState.sequence,
+    .memoryId = appliedState.memoryId,
     .flags = deviceStateFlags(),
     .bw = appliedState.bw,
     .freq_tx = appliedState.freq_tx,
@@ -206,7 +233,8 @@ bool radioConfigChanged() {
     || appliedState.freq_rx != desiredState.freq_rx
     || appliedState.ctcss_tx != desiredState.ctcss_tx
     || appliedState.squelch != desiredState.squelch
-    || appliedState.ctcss_rx != desiredState.ctcss_rx;
+    || appliedState.ctcss_rx != desiredState.ctcss_rx
+    || appliedState.memoryId != desiredState.memoryId;
 }
 
 void reconcileDesiredState(bool sendReport = true) {
@@ -240,6 +268,7 @@ void reconcileDesiredState(bool sendReport = true) {
     appliedState.ctcss_tx = desiredState.ctcss_tx;
     appliedState.squelch = desiredState.squelch;
     appliedState.ctcss_rx = desiredState.ctcss_rx;
+    appliedState.memoryId = desiredState.memoryId;
     appliedState.flags |= HOST_STATE_RADIO_CONFIG_VALID;
     radioConfigApplied = true;
   }
@@ -326,7 +355,7 @@ void setup() {
   if (radioModuleStatus == RADIO_MODULE_FOUND) {
     reconcileDesiredState(false);
   }
-  sendHello(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, getFirmwareFeatures(), currentDeviceState());
+  sendHello(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState());
   _LOGI("Setup is finished");
 }
 
