@@ -63,6 +63,7 @@ bool filtersApplied = false;
 uint8_t lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
 uint8_t latestRssi = 0;
 bool hasPersistedRadioState = false;
+bool deviceStateDirty = false;
 
 Debounce squelchDebounce(100);
 
@@ -224,6 +225,11 @@ DeviceState currentDeviceState() {
 
 void sendCurrentDeviceState() {
   sendDeviceState(currentDeviceState());
+  deviceStateDirty = false;
+}
+
+void markDeviceStateDirty() {
+  deviceStateDirty = true;
 }
 
 bool radioConfigChanged() {
@@ -280,7 +286,7 @@ void reconcileDesiredState(bool sendReport = true) {
   }
   savePersistedRadioStateIfChanged();
   if (sendReport) {
-    sendCurrentDeviceState();
+    markDeviceStateDirty();
   }
 }
 
@@ -427,7 +433,7 @@ void rssiLoop() {
           uint8_t rssi = (uint8_t)rssiInt;
           if (latestRssi != rssi) {
             latestRssi = rssi;
-            sendCurrentDeviceState();
+            markDeviceStateDirty();
           }
         }
       }
@@ -437,14 +443,29 @@ void rssiLoop() {
 }
 
 void deviceStateLoop() {
-  EVERY_N_MILLISECONDS(DEVICE_STATE_REPORT_INTERVAL_MS) {
+  bool sent = false;
+  if (deviceStateDirty) {
     sendCurrentDeviceState();
+    sent = true;
+  }
+  EVERY_N_MILLISECONDS(DEVICE_STATE_REPORT_INTERVAL_MS) {
+    if (!sent) {
+      sendCurrentDeviceState();
+    }
   }
   END_EVERY_N_MILLISECONDS();
 }
 
+void squelchLoop() {
+  bool nextSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
+  if (nextSquelched != squelched) {
+    squelched = nextSquelched;
+    markDeviceStateDirty();
+  }
+}
+
 void loop() {
-  squelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
+  squelchLoop();
   debugLoop();
   ledLoop();
   buttonsLoop();

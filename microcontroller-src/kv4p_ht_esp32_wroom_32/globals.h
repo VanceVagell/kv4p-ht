@@ -82,6 +82,7 @@ bool squelched = false;
 void setMode(Mode newMode);
 Mode rxIdleMode();
 void sendCurrentDeviceState();
+void markDeviceStateDirty();
 
 struct [[gnu::packed]] RGBColor {
   uint8_t red;

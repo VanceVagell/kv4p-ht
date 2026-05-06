@@ -131,6 +131,7 @@ public class RadioAudioService extends Service {
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
     public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
+    private static final long SCAN_SQUELCHED_ADVANCE_DELAY_MS = 250L;
 
     // === Used for the persistent notification ===
     private PowerManager.WakeLock wakeLock;
@@ -197,8 +198,9 @@ public class RadioAudioService extends Service {
     @Getter
     private @NonNull String activeFrequencyStr = "";
     private int activeMemoryId = -1;
-    private long scanSquelchedSinceMs = -1L;
     private int scanBaseSquelch = -1;
+    private Runnable pendingScanAdvance;
+    private int pendingScanAdvanceMemoryId = -1;
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
 
     // === Android Components ===
@@ -215,9 +217,6 @@ public class RadioAudioService extends Service {
     private boolean radioMissingNotified = false;
     private Runnable txTimeoutHandler;
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
-
-    // === Scan Timing ===
-    private static final float SEC_BETWEEN_SCANS = 0.5f;
 
     /**
      * Class used for the client Binder. This service always runs in the same process as its clients.
@@ -684,20 +683,40 @@ public class RadioAudioService extends Service {
 
     private void checkScanDueToSquelch() {
         if (getMode() != RadioMode.SCAN) {
-            scanSquelchedSinceMs = -1L;
+            cancelPendingScanAdvance();
             return;
         }
-        if (!radioModule.isSquelched()) {
-            scanSquelchedSinceMs = -1L;
+        if (radioModule.getMemoryId() == activeMemoryId && radioModule.isSquelched()) {
+            scheduleScanAdvance(activeMemoryId);
+        } else {
+            cancelPendingScanAdvance();
+        }
+    }
+
+    private void scheduleScanAdvance(int memoryId) {
+        if (pendingScanAdvance != null && pendingScanAdvanceMemoryId == memoryId) {
             return;
         }
-        long nowMs = System.currentTimeMillis();
-        if (scanSquelchedSinceMs < 0) {
-            scanSquelchedSinceMs = nowMs;
-        }
-        if (nowMs - scanSquelchedSinceMs >= (long) (SEC_BETWEEN_SCANS * 1000L)) {
-            scanSquelchedSinceMs = -1L;
-            nextScan();
+        cancelPendingScanAdvance();
+        pendingScanAdvanceMemoryId = memoryId;
+        pendingScanAdvance = () -> {
+            pendingScanAdvance = null;
+            pendingScanAdvanceMemoryId = -1;
+            if (getMode() == RadioMode.SCAN
+                && activeMemoryId == memoryId
+                && radioModule.getMemoryId() == memoryId
+                && radioModule.isSquelched()) {
+                nextScan();
+            }
+        };
+        handler.postDelayed(pendingScanAdvance, SCAN_SQUELCHED_ADVANCE_DELAY_MS);
+    }
+
+    private void cancelPendingScanAdvance() {
+        if (pendingScanAdvance != null) {
+            handler.removeCallbacks(pendingScanAdvance);
+            pendingScanAdvance = null;
+            pendingScanAdvanceMemoryId = -1;
         }
     }
 
@@ -1059,6 +1078,7 @@ public class RadioAudioService extends Service {
             return;
         }
         if (!scanning) {
+            cancelPendingScanAdvance();
             if (scanBaseSquelch >= 0 && scanBaseSquelch != radioModule.getDesiredSquelch()) {
                 radioModule.beginUpdate();
                 try {
@@ -1088,6 +1108,7 @@ public class RadioAudioService extends Service {
     }
 
     public void nextScan() {
+        cancelPendingScanAdvance();
         // Only proceed if actually in SCAN mode.
         if (getMode() != RadioMode.SCAN) {
             return;
@@ -1124,7 +1145,6 @@ public class RadioAudioService extends Service {
                 Log.d(TAG, "Memory with id " + candidate.memoryId + " had invalid frequency.");
             }
             if (!candidate.skipDuringScan && memoryFreqFloat >= getMinRadioFreq() && memoryFreqFloat <= getMaxRadioFreq()) {
-                scanSquelchedSinceMs = -1L;
                 // If squelch is off (0), use squelch=1 during scanning.
                 int desiredSquelch = scanBaseSquelch >= 0 ? scanBaseSquelch : radioModule.getDesiredSquelch();
                 radioModule.beginUpdate();
