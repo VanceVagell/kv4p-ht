@@ -481,11 +481,7 @@ public final class Protocol {
                 }
                 resetParser();
                 inFrame = true;
-            } else if (!inFrame) {
-                return;
-            } else if (dropFrame) {
-                return;
-            } else if (escape) {
+            } else if (inFrame && !dropFrame && escape) {
                 if (value == KISS_TFEND) {
                     appendByte((byte) KISS_FEND);
                 } else if (value == KISS_TFESC) {
@@ -495,9 +491,9 @@ public final class Protocol {
                     dropFrame = true;
                 }
                 escape = false;
-            } else if (value == KISS_FESC) {
+            } else if (inFrame && !dropFrame && value == KISS_FESC) {
                 escape = true;
-            } else {
+            } else if (inFrame && !dropFrame) {
                 appendByte(b);
             }
         }

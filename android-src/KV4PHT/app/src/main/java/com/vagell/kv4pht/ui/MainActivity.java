@@ -93,11 +93,9 @@ import com.vagell.kv4pht.radio.RadioModuleController;
 import com.vagell.kv4pht.radio.RadioMode;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -393,7 +391,11 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void initialDeviceStateReceived() {
-                    scheduleInitialRadioUiSync();
+                    runOnUiThread(() -> {
+                        initialRadioUiSynced = false;
+                        pendingInitialRadioUiSync = true;
+                        trySyncInitialRadioUi();
+                    });
                 }
 
                 @Override
@@ -1247,14 +1249,6 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
         }
-    }
-
-    private void scheduleInitialRadioUiSync() {
-        runOnUiThread(() -> {
-            initialRadioUiSynced = false;
-            pendingInitialRadioUiSync = true;
-            trySyncInitialRadioUi();
-        });
     }
 
     private void trySyncInitialRadioUi() {
