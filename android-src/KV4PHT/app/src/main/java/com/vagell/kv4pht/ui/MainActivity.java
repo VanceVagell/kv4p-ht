@@ -230,7 +230,7 @@ public class MainActivity extends AppCompatActivity {
                     memoriesAdapter.notifyDataSetChanged();
                     if (radioAudioService != null) {
                         radioAudioService.tuneToFreq(freq); // Stay on the same freq as the now-deleted memory
-                        tuneToFreqUi(freq, false);
+                        tuneToFreqUi(freq);
                     }
                 })));
             }
@@ -505,7 +505,7 @@ public class MainActivity extends AppCompatActivity {
                 public void forceTunedToFreq(String newFreqStr) {
                     // This is called when RadioAudioService is changing bands, and we need
                     // to reflect that in the UI.
-                    tuneToFreqUi(newFreqStr, true);
+                    tuneToFreqUi(newFreqStr);
                 }
 
                 @Override
@@ -1129,7 +1129,7 @@ public class MainActivity extends AppCompatActivity {
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (radioAudioService != null) {
                     radioAudioService.tuneToFreq(activeFrequencyField.getText().toString());
-                    tuneToFreqUi(radioAudioService.makeSafeHamFreq(activeFrequencyField.getText().toString()), false); // Fixes any invalid freq user may have entered.
+                    tuneToFreqUi(radioAudioService.makeSafeHamFreq(activeFrequencyField.getText().toString())); // Fixes any invalid freq user may have entered.
                 }
 
                 hideKeyboard();
@@ -1216,7 +1216,7 @@ public class MainActivity extends AppCompatActivity {
      * Updates the UI to represent that we've tuned to the given frequency. Does not actually
      * interact with the radio (use RadioAudioService for that).
      */
-    private void tuneToFreqUi(String frequencyStr, boolean wasForced) {
+    private void tuneToFreqUi(String frequencyStr) {
         activeFrequencyStr = radioAudioService.validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
@@ -1275,7 +1275,7 @@ public class MainActivity extends AppCompatActivity {
             viewModel.highlightMemory(memory);
             memoriesAdapter.notifyDataSetChanged();
         } else {
-            tuneToFreqUi(String.format(java.util.Locale.US, "%.4f", radioModule.getRxFrequency()), false);
+            tuneToFreqUi(String.format(java.util.Locale.US, "%.4f", radioModule.getRxFrequency()));
         }
         pendingInitialRadioUiSync = false;
         initialRadioUiSynced = true;
@@ -1285,7 +1285,7 @@ public class MainActivity extends AppCompatActivity {
     private ChannelMemory findMatchingMemoryForState() {
         RadioModuleController radioModule = radioAudioService.getRadioModule();
         List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
-        if (channelMemories == null || radioModule.getMemoryId() < 0 || radioAudioService == null) {
+        if (channelMemories == null || radioModule.getMemoryId() < 0) {
             return null;
         }
         for (ChannelMemory memory : channelMemories) {

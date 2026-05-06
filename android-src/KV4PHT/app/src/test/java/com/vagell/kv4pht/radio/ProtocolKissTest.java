@@ -3,6 +3,8 @@ package com.vagell.kv4pht.radio;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -184,16 +186,16 @@ public class ProtocolKissTest {
 
     @Test
     public void firmwareVersionParsesSingleFeaturesByte() {
-        java.nio.ByteBuffer payload = java.nio.ByteBuffer.allocate(20).order(java.nio.ByteOrder.LITTLE_ENDIAN);
-        payload.putShort((short) 16);
-        payload.put((byte) 'f');
-        payload.putInt(2048);
-        payload.putInt(1);
-        payload.putFloat(400.0f);
-        payload.putFloat(480.0f);
-        payload.put((byte) 0x03);
+        java.nio.ByteBuffer versionPayload = java.nio.ByteBuffer.allocate(20).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        versionPayload.putShort((short) 16);
+        versionPayload.put((byte) 'f');
+        versionPayload.putInt(2048);
+        versionPayload.putInt(1);
+        versionPayload.putFloat(400.0f);
+        versionPayload.putFloat(480.0f);
+        versionPayload.put((byte) 0x03);
 
-        java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(payload.array(), payload.array().length);
+        java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(versionPayload.array(), versionPayload.array().length);
 
         assertTrue(parsed.isPresent());
         assertEquals(16, parsed.get().getVer());
@@ -243,7 +245,7 @@ public class ProtocolKissTest {
         assertEquals(16, parsed.get().getVer());
         assertEquals(400.0f, parsed.get().getMinRadioFreq(), 0.0001f);
         assertEquals(480.0f, parsed.get().getMaxRadioFreq(), 0.0001f);
-        assertTrue(parsed.get().getDeviceState() != null);
+        assertNotNull(parsed.get().getDeviceState());
         assertEquals(9, parsed.get().getDeviceState().getAppliedSequence());
         assertEquals(42, parsed.get().getDeviceState().getMemoryId());
         assertEquals(123, parsed.get().getDeviceState().getLatestRssi());
@@ -251,7 +253,7 @@ public class ProtocolKissTest {
 
     @Test
     public void hostDesiredStateSerializesAsPackedFirmwareStruct() {
-        byte[] payload = Protocol.HostDesiredState.builder()
+        byte[] desiredStatePayload = Protocol.HostDesiredState.builder()
             .sequence(7)
             .memoryId(42)
             .flags(Protocol.HOST_STATE_RADIO_CONFIG_VALID | Protocol.HOST_STATE_RX_AUDIO_OPEN)
@@ -264,8 +266,8 @@ public class ProtocolKissTest {
             .build()
             .toBytes();
 
-        java.nio.ByteBuffer parsed = java.nio.ByteBuffer.wrap(payload).order(java.nio.ByteOrder.LITTLE_ENDIAN);
-        assertEquals(22, payload.length);
+        java.nio.ByteBuffer parsed = java.nio.ByteBuffer.wrap(desiredStatePayload).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(22, desiredStatePayload.length);
         assertEquals(7, parsed.getInt());
         assertEquals(42, parsed.getInt());
     }
@@ -300,10 +302,10 @@ public class ProtocolKissTest {
         assertEquals(1, sender.sentStates.size());
         Protocol.HostDesiredState sent = sender.sentStates.get(0);
         assertEquals(8, sent.getSequence());
-        assertTrue((sent.getFlags() & Protocol.HOST_STATE_RADIO_CONFIG_VALID) != 0);
-        assertTrue((sent.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN) != 0);
-        assertTrue((sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER) != 0);
-        assertTrue((sent.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED) != 0);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RADIO_CONFIG_VALID);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED);
         assertEquals(Protocol.DRA818_12K5, sent.getBw());
         assertEquals(42, sent.getMemoryId());
         assertEquals(144.3900f, sent.getFreqTx(), 0.0001f);
@@ -352,22 +354,22 @@ public class ProtocolKissTest {
 
     @Test
     public void deviceStateParsesPackedFirmwareStruct() {
-        java.nio.ByteBuffer payload = java.nio.ByteBuffer.allocate(26).order(java.nio.ByteOrder.LITTLE_ENDIAN);
-        payload.putInt(9);
-        payload.putInt(42);
-        payload.putShort((short) (Protocol.HOST_STATE_RADIO_CONFIG_VALID | Protocol.DEVICE_STATE_TX_ACTIVE));
-        payload.put(Protocol.DRA818_12K5);
-        payload.putFloat(144.3900f);
-        payload.putFloat(144.3900f);
-        payload.put((byte) 4);
-        payload.put((byte) 5);
-        payload.put((byte) 6);
-        payload.put((byte) 'f');
-        payload.put((byte) Protocol.DeviceMode.DEVICE_MODE_TX.getValue());
-        payload.put((byte) 0);
-        payload.put((byte) 123);
+        java.nio.ByteBuffer deviceStatePayload = java.nio.ByteBuffer.allocate(26).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        deviceStatePayload.putInt(9);
+        deviceStatePayload.putInt(42);
+        deviceStatePayload.putShort((short) (Protocol.HOST_STATE_RADIO_CONFIG_VALID | Protocol.DEVICE_STATE_TX_ACTIVE));
+        deviceStatePayload.put(Protocol.DRA818_12K5);
+        deviceStatePayload.putFloat(144.3900f);
+        deviceStatePayload.putFloat(144.3900f);
+        deviceStatePayload.put((byte) 4);
+        deviceStatePayload.put((byte) 5);
+        deviceStatePayload.put((byte) 6);
+        deviceStatePayload.put((byte) 'f');
+        deviceStatePayload.put((byte) Protocol.DeviceMode.DEVICE_MODE_TX.getValue());
+        deviceStatePayload.put((byte) 0);
+        deviceStatePayload.put((byte) 123);
 
-        java.util.Optional<Protocol.DeviceState> parsed = Protocol.DeviceState.from(payload.array(), payload.array().length);
+        java.util.Optional<Protocol.DeviceState> parsed = Protocol.DeviceState.from(deviceStatePayload.array(), deviceStatePayload.array().length);
 
         assertTrue(parsed.isPresent());
         assertEquals(9, parsed.get().getAppliedSequence());
