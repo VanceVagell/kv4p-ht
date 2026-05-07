@@ -370,11 +370,11 @@ public class ProtocolKissTest {
 
     @Test
     public void deviceStateRejectsWrongLengthsWithoutThrowing() {
-        byte[] payload = new byte[26];
+        byte[] deviceStatePayload = new byte[26];
 
-        assertFalse(Protocol.DeviceState.from(payload, 25).isPresent());
-        assertFalse(Protocol.DeviceState.from(payload, 27).isPresent());
-        assertFalse(Protocol.DeviceState.from(payload, null).isPresent());
+        assertFalse(Protocol.DeviceState.from(deviceStatePayload, 25).isPresent());
+        assertFalse(Protocol.DeviceState.from(deviceStatePayload, 27).isPresent());
+        assertFalse(Protocol.DeviceState.from(deviceStatePayload, null).isPresent());
     }
 
     @Test
