@@ -1059,7 +1059,7 @@ public class MainActivity extends AppCompatActivity {
                             endPttUi();
                         }
                     } else {
-                        if (audioRecord == null) {
+                        if (!isRecording) {
                             ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                             if (radioAudioService != null) {
                                 // If the user tries to transmit, stop scanning so we don't
