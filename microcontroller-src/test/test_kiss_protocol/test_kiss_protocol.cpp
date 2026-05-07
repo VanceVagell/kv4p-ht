@@ -3,6 +3,10 @@
 
 #include "protocol.h"
 
+static_assert(sizeof(HostDesiredState) == 22, "HostDesiredState wire size must match Android");
+static_assert(sizeof(DeviceState) == 26, "DeviceState wire size must match Android");
+static_assert(sizeof(Version) == 17, "Version wire size must match Android");
+
 struct CapturedCommand {
   bool called;
   RcvCommand command;
@@ -33,7 +37,17 @@ void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
 
 class FakeStream : public Stream {
 public:
-  FakeStream(const uint8_t *data, size_t len) : _data(data), _len(len), _index(0) {}
+  FakeStream() : _len(0), _index(0), _writeLen(0) {}
+
+  FakeStream(const uint8_t *data, size_t len) : FakeStream() {
+    append(data, len);
+  }
+
+  void append(const uint8_t *data, size_t len) {
+    TEST_ASSERT_LESS_OR_EQUAL(sizeof(_data) - _len, len);
+    memcpy(_data + _len, data, len);
+    _len += len;
+  }
 
   int available() override {
     return _len - _index;
@@ -55,14 +69,33 @@ public:
 
   void flush() override {}
 
-  size_t write(uint8_t) override {
+  size_t write(uint8_t b) override {
+    TEST_ASSERT_LESS_THAN(sizeof(_writeBuffer), _writeLen);
+    _writeBuffer[_writeLen++] = b;
     return 1;
   }
 
+  size_t write(const uint8_t *buffer, size_t size) override {
+    for (size_t i = 0; i < size; i++) {
+      write(buffer[i]);
+    }
+    return size;
+  }
+
+  const uint8_t *written() const {
+    return _writeBuffer;
+  }
+
+  size_t writtenLen() const {
+    return _writeLen;
+  }
+
 private:
-  const uint8_t *_data;
+  uint8_t _data[KISS_MAX_FRAME_SIZE + 64];
+  uint8_t _writeBuffer[(2 * (PROTO_MTU + KV4P_VENDOR_HEADER_LEN)) + 8];
   size_t _len;
   size_t _index;
+  size_t _writeLen;
 };
 
 static void resetCaptured() {
@@ -99,6 +132,75 @@ void test_data_frame_unescapes_and_dispatches_ax25() {
   TEST_ASSERT_EQUAL_HEX8(KISS_FEND, capturedAx25.payload[1]);
   TEST_ASSERT_EQUAL_HEX8(0x22, capturedAx25.payload[2]);
   TEST_ASSERT_EQUAL_HEX8(KISS_FESC, capturedAx25.payload[3]);
+}
+
+void test_multiple_complete_frames_in_one_buffer() {
+  resetCaptured();
+  const uint8_t frames[] = {
+    KISS_FEND, KISS_CMD_DATA, 0x11, 0x22, KISS_FEND,
+    KISS_FEND, KISS_CMD_SETHARDWARE,
+    'K', 'V', '4', 'P', KV4P_PROTOCOL_VERSION, COMMAND_HOST_DESIRED_STATE, 0x33, 0x44,
+    KISS_FEND
+  };
+
+  parseBytes(frames, sizeof(frames));
+
+  TEST_ASSERT_TRUE(capturedAx25.called);
+  TEST_ASSERT_EQUAL(2, capturedAx25.payloadLen);
+  TEST_ASSERT_EQUAL_HEX8(0x11, capturedAx25.payload[0]);
+  TEST_ASSERT_EQUAL_HEX8(0x22, capturedAx25.payload[1]);
+  TEST_ASSERT_TRUE(captured.called);
+  TEST_ASSERT_EQUAL(COMMAND_HOST_DESIRED_STATE, captured.command);
+  TEST_ASSERT_EQUAL(2, captured.payloadLen);
+  TEST_ASSERT_EQUAL_HEX8(0x33, captured.payload[0]);
+  TEST_ASSERT_EQUAL_HEX8(0x44, captured.payload[1]);
+}
+
+void test_split_frame_across_loop_calls() {
+  resetCaptured();
+  FakeStream stream;
+  KissParser parser(stream, &handleCommands, &handleAx25Data);
+  const uint8_t part1[] = { KISS_FEND, KISS_CMD_DATA, 0x11 };
+  const uint8_t part2[] = { 0x22, KISS_FEND };
+
+  stream.append(part1, sizeof(part1));
+  parser.loop();
+
+  TEST_ASSERT_FALSE(capturedAx25.called);
+
+  stream.append(part2, sizeof(part2));
+  while (stream.available() > 0) {
+    parser.loop();
+  }
+
+  TEST_ASSERT_TRUE(capturedAx25.called);
+  TEST_ASSERT_EQUAL(2, capturedAx25.payloadLen);
+  TEST_ASSERT_EQUAL_HEX8(0x11, capturedAx25.payload[0]);
+  TEST_ASSERT_EQUAL_HEX8(0x22, capturedAx25.payload[1]);
+}
+
+void test_non_zero_kiss_port_is_ignored() {
+  resetCaptured();
+  const uint8_t frame[] = {
+    KISS_FEND, (uint8_t)(0x10 | KISS_CMD_DATA), 0x11, 0x22, KISS_FEND
+  };
+
+  parseBytes(frame, sizeof(frame));
+
+  TEST_ASSERT_FALSE(captured.called);
+  TEST_ASSERT_FALSE(capturedAx25.called);
+}
+
+void test_unknown_kiss_command_is_ignored() {
+  resetCaptured();
+  const uint8_t frame[] = {
+    KISS_FEND, 0x02, 0x11, 0x22, KISS_FEND
+  };
+
+  parseBytes(frame, sizeof(frame));
+
+  TEST_ASSERT_FALSE(captured.called);
+  TEST_ASSERT_FALSE(capturedAx25.called);
 }
 
 void test_multiple_fend_bytes_are_ignored() {
@@ -153,25 +255,97 @@ void test_over_mtu_data_frame_is_dropped() {
   TEST_ASSERT_FALSE(captured.called);
 }
 
-void test_unknown_escape_drops_frame() {
+void test_unknown_escape_drops_frame_and_recovers() {
   resetCaptured();
-  const uint8_t frame[] = {
-    KISS_FEND, KISS_CMD_DATA, 0x11, KISS_FESC, 0x99, 0x22, KISS_FEND
+  const uint8_t frames[] = {
+    KISS_FEND, KISS_CMD_DATA, 0x11, KISS_FESC, 0x99, 0x22, KISS_FEND,
+    KISS_FEND, KISS_CMD_DATA, 0x33, 0x44, KISS_FEND
   };
+
+  parseBytes(frames, sizeof(frames));
+
+  TEST_ASSERT_FALSE(captured.called);
+  TEST_ASSERT_TRUE(capturedAx25.called);
+  TEST_ASSERT_EQUAL(2, capturedAx25.payloadLen);
+  TEST_ASSERT_EQUAL_HEX8(0x33, capturedAx25.payload[0]);
+  TEST_ASSERT_EQUAL_HEX8(0x44, capturedAx25.payload[1]);
+}
+
+void test_oversized_frame_is_dropped_and_recovers() {
+  resetCaptured();
+  uint8_t frame[KISS_MAX_FRAME_SIZE + 10];
+  frame[0] = KISS_FEND;
+  frame[1] = KISS_CMD_DATA;
+  memset(frame + 2, 0x55, KISS_MAX_FRAME_SIZE + 5);
+  frame[sizeof(frame) - 4] = KISS_FEND;
+  frame[sizeof(frame) - 3] = KISS_CMD_DATA;
+  frame[sizeof(frame) - 2] = 0x66;
+  frame[sizeof(frame) - 1] = KISS_FEND;
 
   parseBytes(frame, sizeof(frame));
 
   TEST_ASSERT_FALSE(captured.called);
+  TEST_ASSERT_TRUE(capturedAx25.called);
+  TEST_ASSERT_EQUAL(1, capturedAx25.payloadLen);
+  TEST_ASSERT_EQUAL_HEX8(0x66, capturedAx25.payload[0]);
 }
 
-void setup() {
+void test_send_kiss_data_frame_escapes_fend_and_fesc() {
+  FakeStream stream;
+  const uint8_t payload[] = { 0x11, KISS_FEND, 0x22, KISS_FESC };
+  const uint8_t expected[] = {
+    KISS_FEND, KISS_CMD_DATA,
+    0x11, KISS_FESC, KISS_TFEND, 0x22, KISS_FESC, KISS_TFESC,
+    KISS_FEND
+  };
+
+  sendKissDataFrame(stream, payload, sizeof(payload));
+
+  TEST_ASSERT_EQUAL(sizeof(expected), stream.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, stream.written(), sizeof(expected));
+}
+
+void test_send_kv4p_vendor_frame_escapes_payload() {
+  FakeStream stream;
+  const uint8_t payload[] = { 0x11, KISS_FEND, KISS_FESC };
+  const uint8_t expected[] = {
+    KISS_FEND, KISS_CMD_SETHARDWARE,
+    'K', 'V', '4', 'P', KV4P_PROTOCOL_VERSION, COMMAND_HOST_TX_AUDIO,
+    0x11, KISS_FESC, KISS_TFEND, KISS_FESC, KISS_TFESC,
+    KISS_FEND
+  };
+
+  sendKv4pVendorFrame(stream, COMMAND_HOST_TX_AUDIO, payload, sizeof(payload));
+
+  TEST_ASSERT_EQUAL(sizeof(expected), stream.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, stream.written(), sizeof(expected));
+}
+
+static int runKissProtocolTests() {
   UNITY_BEGIN();
   RUN_TEST(test_data_frame_unescapes_and_dispatches_ax25);
+  RUN_TEST(test_multiple_complete_frames_in_one_buffer);
+  RUN_TEST(test_split_frame_across_loop_calls);
+  RUN_TEST(test_non_zero_kiss_port_is_ignored);
+  RUN_TEST(test_unknown_kiss_command_is_ignored);
   RUN_TEST(test_multiple_fend_bytes_are_ignored);
   RUN_TEST(test_vendor_frame_validates_prefix_and_version);
   RUN_TEST(test_over_mtu_data_frame_is_dropped);
-  RUN_TEST(test_unknown_escape_drops_frame);
-  UNITY_END();
+  RUN_TEST(test_unknown_escape_drops_frame_and_recovers);
+  RUN_TEST(test_oversized_frame_is_dropped_and_recovers);
+  RUN_TEST(test_send_kiss_data_frame_escapes_fend_and_fesc);
+  RUN_TEST(test_send_kv4p_vendor_frame_escapes_payload);
+  return UNITY_END();
+}
+
+#ifdef PIO_NATIVE_TEST
+int main(int, char **) {
+  return runKissProtocolTests();
+}
+#else
+void setup() {
+  runKissProtocolTests();
 }
 
 void loop() {}
+#endif

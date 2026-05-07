@@ -297,10 +297,10 @@ public final class Protocol {
     @Data
     @Builder
     public static class FirmwareVersion {
-        private static final int BYTE_LEN = 20;
+        private static final int BYTE_LEN = 17;
         private final short ver;  // equivalent to uint16_t
         private final RadioStatus radioModuleStatus;  // equivalent to char
-        private final int windowSize; // equivalent to size_t
+        private final int windowSize; // equivalent to uint32_t
         private final RfModuleType moduleType;
         private final float minRadioFreq;
         private final float maxRadioFreq;
@@ -316,7 +316,7 @@ public final class Protocol {
                     short ver = b.getShort();
                     RadioStatus radioModuleStatus = RadioStatus.fromValue((char) b.get());
                     int windowSize = b.getInt();
-                    RfModuleType moduleType = RfModuleType.fromValue(b.getInt());
+                    RfModuleType moduleType = RfModuleType.fromValue(b.get() & 0xFF);
                     float minRadioFreq = b.getFloat();
                     float maxRadioFreq = b.getFloat();
                     int features = b.get() & 0xFF;
@@ -521,8 +521,6 @@ public final class Protocol {
                 }
             } else if (kissCommand == KISS_CMD_SETHARDWARE) {
                 processVendorFrame(payloadLen);
-            } else {
-                Log.w(TAG, "Unknown KISS cmd received from ESP32: 0x" + Integer.toHexString(kissCommand));
             }
         }
 

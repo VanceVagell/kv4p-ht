@@ -49,6 +49,8 @@ public class RadioModuleController {
     synchronized void attachSender(Protocol.Sender sender) {
         this.sender = sender;
         transportReady = false;
+        lastDesiredStateSent = desiredState.copy();
+        desiredStateRetries = 0;
     }
 
     synchronized void markTransportReady() {

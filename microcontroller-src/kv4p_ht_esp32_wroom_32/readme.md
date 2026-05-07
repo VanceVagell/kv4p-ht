@@ -104,8 +104,8 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 struct version {
   uint16_t     ver;               // 2 bytes
   char         radioModuleStatus; // 1 byte
-  size_t       windowSize;        // 4 bytes
-  uint32_t     rfModuleType;      // 4 bytes (enum)
+  uint32_t     windowSize;        // 4 bytes
+  uint8_t      rfModuleType;      // 1 byte (enum)
   float        minRadioFreq;      // 4 bytes
   float        maxRadioFreq;      // 4 bytes
   uint8_t      features;          // 1 byte (bitmask)
@@ -191,7 +191,7 @@ Firmware persists stable radio settings in NVS and restores them on startup befo
 
 ```c
 struct window_update {
-  size_t windowSize; // 4 bytes
+  uint32_t windowSize; // 4 bytes
 } __attribute__((__packed__));
 typedef struct window_update WindowUpdate;
 ```

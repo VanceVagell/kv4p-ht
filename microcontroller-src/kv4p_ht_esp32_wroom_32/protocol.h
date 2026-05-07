@@ -63,7 +63,7 @@ enum SndCommand {
 struct [[gnu::packed]] Version {
   uint16_t     ver;
   char         radioModuleStatus;
-  size_t       windowSize;
+  uint32_t     windowSize;
   RfModuleType rfModuleType;
   float        minRadioFreq;
   float        maxRadioFreq;
@@ -145,7 +145,7 @@ REQUIRE_TRIVIALLY_COPYABLE(Hello);
 
 // COMMAND_WINDOW_ACK parameters
 struct [[gnu::packed]] WindowUpdate {
-  size_t size; 
+  uint32_t size;
 };
 REQUIRE_TRIVIALLY_COPYABLE(WindowUpdate);
 
@@ -197,11 +197,11 @@ private:
   }
 };
 
-void sendKissFrame(uint8_t kissCommand, const uint8_t *payload, size_t len) {
+void sendKissFrame(Stream &out, uint8_t kissCommand, const uint8_t *payload, size_t len) {
   if (len > (PROTO_MTU + KV4P_VENDOR_HEADER_LEN)) {
     len = PROTO_MTU + KV4P_VENDOR_HEADER_LEN;
   }
-  KissBufferedWriter writer(Serial);
+  KissBufferedWriter writer(out);
   writer.begin(kissCommand);
   for (size_t i = 0; i < len; i++) {
     writer.writeEscaped(payload[i]);
@@ -209,24 +209,32 @@ void sendKissFrame(uint8_t kissCommand, const uint8_t *payload, size_t len) {
   writer.end();
 }
 
-void inline sendKissDataFrame(const uint8_t *ax25, size_t len) {
+void inline sendKissFrame(uint8_t kissCommand, const uint8_t *payload, size_t len) {
+  sendKissFrame(Serial, kissCommand, payload, len);
+}
+
+void inline sendKissDataFrame(Stream &out, const uint8_t *ax25, size_t len) {
   if (ax25 == NULL) {
     len = 0;
   }
   if (len > PROTO_MTU) {
     len = PROTO_MTU;
   }
-  sendKissFrame(KISS_CMD_DATA, ax25, len);
+  sendKissFrame(out, KISS_CMD_DATA, ax25, len);
 }
 
-void sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
+void inline sendKissDataFrame(const uint8_t *ax25, size_t len) {
+  sendKissDataFrame(Serial, ax25, len);
+}
+
+void sendKv4pVendorFrame(Stream &out, uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
   if (payload == NULL) {
     len = 0;
   }
   if (len > PROTO_MTU) {
     len = PROTO_MTU;
   }
-  KissBufferedWriter writer(Serial);
+  KissBufferedWriter writer(out);
   writer.begin(KISS_CMD_SETHARDWARE);
   for (size_t i = 0; i < sizeof(KV4P_VENDOR_PREFIX); i++) {
     writer.writeEscaped(KV4P_VENDOR_PREFIX[i]);
@@ -239,12 +247,16 @@ void sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len
   writer.end();
 }
 
+void inline sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
+  sendKv4pVendorFrame(Serial, kv4pCommand, payload, len);
+}
+
 void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
   Hello params = {
     .version = {
       .ver = ver,
       .radioModuleStatus = radioModuleStatus,
-      .windowSize = windowSize,
+      .windowSize = (uint32_t) windowSize,
       .rfModuleType = rfModuleType,
       .minRadioFreq = minRadioFreq,
       .maxRadioFreq = maxRadioFreq,
@@ -269,7 +281,7 @@ void inline sendAx25Packet(const uint8_t *data, size_t len) {
 
 void inline sendWindowAck(size_t size) {
   WindowUpdate params = {
-    .size = size,
+    .size = (uint32_t) size,
   };
   sendKv4pVendorFrame(COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
 }
