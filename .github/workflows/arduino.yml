@@ -26,7 +26,7 @@ jobs:
         run: pip install -U platformio
 
       - name: Build project
-        run: pio run -v
+        run: pio run -v -e esp32dev -e esp32dev-release
         working-directory: microcontroller-src
 
       - name: Run tests
