@@ -75,6 +75,7 @@ import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
 import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.radio.Protocol.KissParser;
@@ -188,6 +189,13 @@ public class RadioAudioService extends Service {
     private ScheduledFuture<?> beaconFuture;
     private int messageNumber = 0;
 
+    // === Protocol Handshake ===
+    private static final int HELLO_TIMEOUT_MS = 60000;
+    private int handshakeSeq = 0;
+    private int activeHandshakeId = 0;
+    private boolean waitingForHello = false;
+    private Runnable helloTimeoutRunnable;
+
     // === Radio State ===
     @Getter
     private @NonNull RadioMode mode = RadioMode.STARTUP;
@@ -209,7 +217,6 @@ public class RadioAudioService extends Service {
     @Setter
     @Getter
     private @NonNull RadioAudioServiceCallbacks callbacks = NO_OP_CALLBACKS;
-    private final ProtocolHandshake protocolHandshake = new ProtocolHandshake(this);
     private final Handler handler = new Handler(Looper.getMainLooper());
     private static final long CONNECT_RETRY_PERIOD_MS = 500L;
     private final ConnectionController connectionController =
@@ -511,7 +518,7 @@ public class RadioAudioService extends Service {
         super.onDestroy();
         tryToStopRadioModule();
         connectionController.stop();
-        protocolHandshake.onDestroy();
+        cancelHelloTimeout();
 
         // Clean up APRS beacon executor
         if (this.beaconScheduler != null && !beaconScheduler.isShutdown()) {
@@ -819,6 +826,8 @@ public class RadioAudioService extends Service {
     }
 
     private void closePortAndReset() {
+        waitingForHello = false;
+        cancelHelloTimeout();
         radioModule.detachSender();
         hostToEsp32 = null;
         if (usbIoManager != null) {
@@ -953,10 +962,9 @@ public class RadioAudioService extends Service {
         hostToEsp32 = new Protocol.Sender(usbIoManager);
         radioModule.attachSender(hostToEsp32);
         Log.i(TAG, connectLog("setupSerialConnection(): serial transport connected; starting handshake"));
-        protocolHandshake.start();
+        startProtocolHandshake();
     }
 
-    // Callback for ProtocolHandshake
     public void radioConnected() {
         Log.i(TAG, connectLog("radioConnected(): handshake complete; state=" + connectionStateSummary()));
         connectionController.markAttemptFinished();
@@ -966,6 +974,99 @@ public class RadioAudioService extends Service {
             wakeLock.acquire();
         }
         callbacks.radioConnected();
+    }
+
+    private void startProtocolHandshake() {
+        int handshakeId = ++handshakeSeq;
+        activeHandshakeId = handshakeId;
+        waitingForHello = true;
+        callbacks.radioModuleHandshake();
+        Log.i(TAG, handshakeLog(handshakeId, "start(): waiting for HELLO(version)"));
+        scheduleHelloTimeout(handshakeId);
+    }
+
+    private void scheduleHelloTimeout(int handshakeId) {
+        cancelHelloTimeout();
+        helloTimeoutRunnable = () -> {
+            if (!waitingForHello || activeHandshakeId != handshakeId) {
+                return;
+            }
+            waitingForHello = false;
+            Log.w(TAG, handshakeLog(handshakeId, "waitForHello(): timed out after " + HELLO_TIMEOUT_MS + "ms"));
+            setMode(RadioMode.BAD_FIRMWARE);
+            callbacks.missingFirmware();
+            connectionController.markAttemptFinished();
+        };
+        handler.postDelayed(helloTimeoutRunnable, HELLO_TIMEOUT_MS);
+    }
+
+    private void cancelHelloTimeout() {
+        if (helloTimeoutRunnable != null) {
+            handler.removeCallbacks(helloTimeoutRunnable);
+            helloTimeoutRunnable = null;
+        }
+    }
+
+    private void handleHelloReceived(Optional<Protocol.FirmwareVersion> version) {
+        int handshakeId;
+        if (waitingForHello) {
+            waitingForHello = false;
+            handshakeId = activeHandshakeId;
+            cancelHelloTimeout();
+            Log.d(TAG, handshakeLog(handshakeId, "HELLO received: " + version));
+        } else {
+            handshakeId = ++handshakeSeq;
+            activeHandshakeId = handshakeId;
+            Log.i(TAG, handshakeLog(handshakeId, "HELLO received outside active wait; validating firmware state"));
+        }
+        validateHello(handshakeId, version);
+    }
+
+    private void validateHello(int handshakeId, Optional<Protocol.FirmwareVersion> firmwareVersion) {
+        if (!firmwareVersion.isPresent()) {
+            Log.e(TAG, handshakeLog(handshakeId, "HELLO missing valid FirmwareVersion payload; firmware upgrade required"));
+            callbacks.outdatedFirmware(0);
+            setMode(RadioMode.BAD_FIRMWARE);
+            connectionController.markAttemptFinished();
+            return;
+        }
+
+        Protocol.FirmwareVersion version = firmwareVersion.get();
+        Log.d(TAG, handshakeLog(handshakeId, "version=" + version));
+        if (version.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+            callbacks.outdatedFirmware(version.getVer());
+            setMode(RadioMode.BAD_FIRMWARE);
+            connectionController.markAttemptFinished();
+            return;
+        }
+
+        handleFirmwareVersion(version);
+        if (Protocol.RadioStatus.RADIO_STATUS_NOT_FOUND.equals(version.getRadioModuleStatus())) {
+            Log.w(TAG, handshakeLog(handshakeId, "radio module not found"));
+            setMode(RadioMode.BAD_FIRMWARE);
+            callbacks.radioModuleNotFound();
+            connectionController.markAttemptFinished();
+            return;
+        }
+
+        getHostToEsp32().setFlowControlWindow(version.getWindowSize());
+        if (version.getDeviceState() != null) {
+            handleInitialDeviceState(version.getDeviceState());
+        }
+        markRadioTransportReady();
+        Log.i(TAG, handshakeLog(handshakeId, "HELLO version OK; proceeding with radio communication"));
+        setMode(RadioMode.RX);
+        openFirmwareAudio();
+        // Turn off scanning if it was on (e.g. if radio was unplugged briefly and reconnected)
+        setScanning(false);
+        radioConnected();
+    }
+
+    private String handshakeLog(int handshakeId, String message) {
+        return "handshake#" + handshakeId
+            + "/connect#" + getActiveUsbConnectAttemptId()
+            + " " + threadTag()
+            + " " + message;
     }
 
     // Called in many situations where radio connection is found to be broken
@@ -980,11 +1081,6 @@ public class RadioAudioService extends Service {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release(); // Don't keep screen on
         }
-    }
-
-    void onHandshakeCompleted() {
-        Log.d(TAG, connectLog("onHandshakeCompleted(): state=" + connectionStateSummary()));
-        connectionController.markAttemptFinished();
     }
 
     int getActiveUsbConnectAttemptId() {
@@ -1224,7 +1320,7 @@ public class RadioAudioService extends Service {
                 break;
 
             case COMMAND_HELLO:
-                protocolHandshake.onHelloReceived(Protocol.FirmwareVersion.from(param, len));
+                handleHelloReceived(Protocol.FirmwareVersion.from(param, len));
                 break;
 
             case COMMAND_RX_AUDIO:
