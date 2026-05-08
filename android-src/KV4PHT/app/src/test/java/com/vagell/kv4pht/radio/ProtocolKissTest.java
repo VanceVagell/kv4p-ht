@@ -713,7 +713,7 @@ public class ProtocolKissTest {
 
         @Override
         public void sendDesiredState(Protocol.HostDesiredState state) {
-            sentStates.add(state.copy());
+            sentStates.add(state);
         }
     }
 }

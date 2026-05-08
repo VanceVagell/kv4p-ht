@@ -12,6 +12,10 @@ import static com.vagell.kv4pht.radio.Protocol.DRA818_25K;
  * firmware.
  */
 public class RadioModuleController {
+    private interface DesiredStateChange {
+        Protocol.HostDesiredState apply(Protocol.HostDesiredState state);
+    }
+
     private static final int MAX_DESIRED_STATE_RETRIES = 3;
     private static final int DESIRED_DEVICE_FLAGS_MASK =
         Protocol.HOST_STATE_RADIO_CONFIG_VALID
@@ -25,7 +29,7 @@ public class RadioModuleController {
 
     private Protocol.Sender sender;
     private Protocol.FirmwareVersion firmwareVersion;
-    private final Protocol.HostDesiredState desiredState = Protocol.HostDesiredState.builder()
+    private Protocol.HostDesiredState desiredState = Protocol.HostDesiredState.builder()
         .sequence(0)
         .memoryId(-1)
         .flags(Protocol.HOST_STATE_HIGH_POWER | Protocol.HOST_STATE_RSSI_ENABLED)
@@ -49,7 +53,7 @@ public class RadioModuleController {
     synchronized void attachSender(Protocol.Sender sender) {
         this.sender = sender;
         transportReady = false;
-        lastDesiredStateSent = desiredState.copy();
+        lastDesiredStateSent = desiredState;
         desiredStateRetries = 0;
     }
 
@@ -79,19 +83,18 @@ public class RadioModuleController {
     synchronized void seedFromDeviceState(Protocol.DeviceState state) {
         lastDeviceState = state;
         lastPhysPttDown = isPhysPttDown();
-        Protocol.HostDesiredState deviceState = desiredFromDeviceState(state);
-        copyDesiredState(deviceState);
-        lastDesiredStateSent = desiredState.copy();
+        desiredState = desiredFromDeviceState(state);
+        lastDesiredStateSent = desiredState;
         appliedStateInSync = isDeviceStateInSyncWithDesired(state, lastDesiredStateSent);
         desiredStateRetries = 0;
     }
 
     synchronized void pttDown() {
-        setDesiredFlags(desiredState.getFlags() | Protocol.HOST_STATE_PTT_REQUESTED);
+        setDesiredFlag(Protocol.HOST_STATE_PTT_REQUESTED, true);
     }
 
     synchronized void pttUp() {
-        setDesiredFlags(desiredState.getFlags() & ~Protocol.HOST_STATE_PTT_REQUESTED);
+        setDesiredFlag(Protocol.HOST_STATE_PTT_REQUESTED, false);
     }
 
     public synchronized void beginUpdate() {
@@ -109,11 +112,7 @@ public class RadioModuleController {
     }
 
     synchronized void setBandwidth(byte bandwidth) {
-        if (desiredState.getBw() == bandwidth) {
-            return;
-        }
-        desiredState.setBw(bandwidth);
-        setRadioConfigValidAndSend();
+        updateRadioConfig(state -> state.withBw(bandwidth));
     }
 
     public synchronized void setBandwidth(String bandwidth) {
@@ -121,43 +120,23 @@ public class RadioModuleController {
     }
 
     synchronized void setTxFrequency(float txFrequency) {
-        if (Float.compare(desiredState.getFreqTx(), txFrequency) == 0) {
-            return;
-        }
-        desiredState.setFreqTx(txFrequency);
-        setRadioConfigValidAndSend();
+        updateRadioConfig(state -> state.withFreqTx(txFrequency));
     }
 
     synchronized void setRxFrequency(float rxFrequency) {
-        if (Float.compare(desiredState.getFreqRx(), rxFrequency) == 0) {
-            return;
-        }
-        desiredState.setFreqRx(rxFrequency);
-        setRadioConfigValidAndSend();
+        updateRadioConfig(state -> state.withFreqRx(rxFrequency));
     }
 
     synchronized void setMemoryId(int memoryId) {
-        if (desiredState.getMemoryId() == memoryId) {
-            return;
-        }
-        desiredState.setMemoryId(memoryId);
-        setRadioConfigValidAndSend();
+        updateRadioConfig(state -> state.withMemoryId(memoryId));
     }
 
     synchronized void setTxTone(byte txTone) {
-        if (desiredState.getCtcssTx() == txTone) {
-            return;
-        }
-        desiredState.setCtcssTx(txTone);
-        setRadioConfigValidAndSend();
+        updateRadioConfig(state -> state.withCtcssTx(txTone));
     }
 
     synchronized void setSquelch(byte squelch) {
-        if (desiredState.getSquelch() == squelch) {
-            return;
-        }
-        desiredState.setSquelch(squelch);
-        setRadioConfigValidAndSend();
+        updateRadioConfig(state -> state.withSquelch(squelch));
     }
 
     public synchronized void setSquelch(int squelch) {
@@ -165,15 +144,11 @@ public class RadioModuleController {
     }
 
     synchronized void seedDesiredSquelch(int squelch) {
-        desiredState.setSquelch((byte) squelch);
+        desiredState = desiredState.withSquelch((byte) squelch);
     }
 
     synchronized void setRxTone(byte rxTone) {
-        if (desiredState.getCtcssRx() == rxTone) {
-            return;
-        }
-        desiredState.setCtcssRx(rxTone);
-        setRadioConfigValidAndSend();
+        updateRadioConfig(state -> state.withCtcssRx(rxTone));
     }
 
     public synchronized void setFilters(boolean emphasis, boolean highpass, boolean lowpass) {
@@ -181,7 +156,8 @@ public class RadioModuleController {
         if (emphasis) nextFlags |= Protocol.HOST_STATE_FILTER_PRE;
         if (highpass) nextFlags |= Protocol.HOST_STATE_FILTER_HIGH;
         if (lowpass) nextFlags |= Protocol.HOST_STATE_FILTER_LOW;
-        setDesiredFlags(nextFlags);
+        int flags = nextFlags;
+        updateDesiredState(state -> state.withFlags(flags));
     }
 
     public synchronized void setVfoTones(byte txTone, byte rxTone) {
@@ -190,35 +166,23 @@ public class RadioModuleController {
     }
 
     synchronized void stop() {
-        setDesiredFlags(desiredState.getFlags() & ~(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED));
+        clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED);
     }
 
     synchronized void openAudio() {
-        setDesiredFlags(desiredState.getFlags() | Protocol.HOST_STATE_RX_AUDIO_OPEN);
+        setDesiredFlag(Protocol.HOST_STATE_RX_AUDIO_OPEN, true);
     }
 
     synchronized void closeAudio() {
-        setDesiredFlags(desiredState.getFlags() & ~(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED));
+        clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED);
     }
 
     public synchronized void setHighPower(boolean isHighPower) {
-        int nextFlags;
-        if (isHighPower) {
-            nextFlags = desiredState.getFlags() | Protocol.HOST_STATE_HIGH_POWER;
-        } else {
-            nextFlags = desiredState.getFlags() & ~Protocol.HOST_STATE_HIGH_POWER;
-        }
-        setDesiredFlags(nextFlags);
+        setDesiredFlag(Protocol.HOST_STATE_HIGH_POWER, isHighPower);
     }
 
     synchronized void setRssi(boolean on) {
-        int nextFlags;
-        if (on) {
-            nextFlags = desiredState.getFlags() | Protocol.HOST_STATE_RSSI_ENABLED;
-        } else {
-            nextFlags = desiredState.getFlags() & ~Protocol.HOST_STATE_RSSI_ENABLED;
-        }
-        setDesiredFlags(nextFlags);
+        setDesiredFlag(Protocol.HOST_STATE_RSSI_ENABLED, on);
     }
 
     synchronized void updateDeviceState(Protocol.DeviceState state) {
@@ -237,11 +201,11 @@ public class RadioModuleController {
     }
 
     public synchronized boolean isHighPowerEnabled() {
-        return (desiredState.getFlags() & Protocol.HOST_STATE_HIGH_POWER) != 0;
+        return hasDesiredFlag(Protocol.HOST_STATE_HIGH_POWER);
     }
 
     synchronized boolean isRssiEnabled() {
-        return (desiredState.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED) != 0;
+        return hasDesiredFlag(Protocol.HOST_STATE_RSSI_ENABLED);
     }
 
     public synchronized int getDesiredSquelch() {
@@ -253,15 +217,15 @@ public class RadioModuleController {
     }
 
     public synchronized boolean isPreEmphasisEnabled() {
-        return (desiredState.getFlags() & Protocol.HOST_STATE_FILTER_PRE) != 0;
+        return hasDesiredFlag(Protocol.HOST_STATE_FILTER_PRE);
     }
 
     public synchronized boolean isHighpassEnabled() {
-        return (desiredState.getFlags() & Protocol.HOST_STATE_FILTER_HIGH) != 0;
+        return hasDesiredFlag(Protocol.HOST_STATE_FILTER_HIGH);
     }
 
     public synchronized boolean isLowpassEnabled() {
-        return (desiredState.getFlags() & Protocol.HOST_STATE_FILTER_LOW) != 0;
+        return hasDesiredFlag(Protocol.HOST_STATE_FILTER_LOW);
     }
 
     public synchronized int getFirmwareVersionNumber() {
@@ -329,13 +293,11 @@ public class RadioModuleController {
     }
 
     synchronized boolean isPhysPttDown() {
-        return lastDeviceState != null
-            && (lastDeviceState.getFlags() & Protocol.DEVICE_STATE_PHYS_PTT_DOWN) != 0;
+        return hasDeviceFlag(Protocol.DEVICE_STATE_PHYS_PTT_DOWN);
     }
 
     synchronized boolean isSquelched() {
-        return lastDeviceState != null
-            && (lastDeviceState.getFlags() & Protocol.DEVICE_STATE_SQUELCHED) != 0;
+        return hasDeviceFlag(Protocol.DEVICE_STATE_SQUELCHED);
     }
 
     synchronized boolean didPhysPttChange() {
@@ -350,8 +312,7 @@ public class RadioModuleController {
         return Protocol.HostDesiredState.builder()
             .sequence(state.getAppliedSequence())
             .memoryId(state.getMemoryId())
-            .flags(state.getFlags() & DESIRED_DEVICE_FLAGS_MASK
-                & ~(Protocol.HOST_STATE_PTT_REQUESTED | Protocol.HOST_STATE_RX_AUDIO_OPEN))
+            .flags(state.getFlags() & DESIRED_DEVICE_FLAGS_MASK & ~(Protocol.HOST_STATE_PTT_REQUESTED | Protocol.HOST_STATE_RX_AUDIO_OPEN))
             .bw(state.getBw())
             .freqTx(state.getFreqTx())
             .freqRx(state.getFreqRx())
@@ -359,18 +320,6 @@ public class RadioModuleController {
             .squelch(state.getSquelch())
             .ctcssRx(state.getCtcssRx())
             .build();
-    }
-
-    private void copyDesiredState(Protocol.HostDesiredState state) {
-        desiredState.setSequence(state.getSequence());
-        desiredState.setMemoryId(state.getMemoryId());
-        desiredState.setFlags(state.getFlags());
-        desiredState.setBw(state.getBw());
-        desiredState.setFreqTx(state.getFreqTx());
-        desiredState.setFreqRx(state.getFreqRx());
-        desiredState.setCtcssTx(state.getCtcssTx());
-        desiredState.setSquelch(state.getSquelch());
-        desiredState.setCtcssRx(state.getCtcssRx());
     }
 
     private boolean isDeviceStateInSyncWithDesired(Protocol.DeviceState deviceState, Protocol.HostDesiredState desiredState) {
@@ -395,17 +344,35 @@ public class RadioModuleController {
             && deviceState.getCtcssRx() == desiredState.getCtcssRx();
     }
 
-    private void setRadioConfigValidAndSend() {
-        desiredState.setFlags(desiredState.getFlags() | Protocol.HOST_STATE_RADIO_CONFIG_VALID);
-        sendDesiredStateIfChanged();
+    private void updateRadioConfig(DesiredStateChange change) {
+        updateDesiredState(state -> {
+            Protocol.HostDesiredState next = change.apply(state);
+            return next.equals(state) ? state : next.withFlags(next.getFlags() | Protocol.HOST_STATE_RADIO_CONFIG_VALID);
+        });
     }
 
-    private void setDesiredFlags(int nextFlags) {
-        if (desiredState.getFlags() == nextFlags) {
-            return;
+    private void setDesiredFlag(int flag, boolean enabled) {
+        updateDesiredState(state -> state.withFlags(enabled ? state.getFlags() | flag : state.getFlags() & ~flag));
+    }
+
+    private void clearDesiredFlags(int flags) {
+        updateDesiredState(state -> state.withFlags(state.getFlags() & ~flags));
+    }
+
+    private void updateDesiredState(DesiredStateChange change) {
+        Protocol.HostDesiredState next = change.apply(desiredState);
+        if (!next.equals(desiredState)) {
+            desiredState = next;
+            sendDesiredStateIfChanged();
         }
-        desiredState.setFlags(nextFlags);
-        sendDesiredStateIfChanged();
+    }
+
+    private boolean hasDesiredFlag(int flag) {
+        return (desiredState.getFlags() & flag) != 0;
+    }
+
+    private boolean hasDeviceFlag(int flag) {
+        return lastDeviceState != null && (lastDeviceState.getFlags() & flag) != 0;
     }
 
     private void sendDesiredStateIfChanged() {
@@ -415,20 +382,15 @@ public class RadioModuleController {
     }
 
     private void sendDesiredState() {
-        desiredState.setSequence(desiredState.getSequence() + 1);
-        Protocol.HostDesiredState state = desiredState.copy();
-        lastDesiredStateSent = state;
+        desiredState = desiredState.withSequence(desiredState.getSequence() + 1);
+        lastDesiredStateSent = desiredState;
         desiredStateRetries = 0;
         appliedStateInSync = false;
-        sender.sendDesiredState(state);
+        sender.sendDesiredState(desiredState);
     }
 
     private void retryDesiredStateIfNeeded() {
-        if (sender == null
-            || !transportReady
-            || lastDesiredStateSent == null
-            || !desiredState.equals(lastDesiredStateSent)
-            || desiredStateRetries >= MAX_DESIRED_STATE_RETRIES) {
+        if (sender == null || !transportReady || !desiredState.equals(lastDesiredStateSent) || desiredStateRetries >= MAX_DESIRED_STATE_RETRIES) {
             return;
         }
         desiredStateRetries++;

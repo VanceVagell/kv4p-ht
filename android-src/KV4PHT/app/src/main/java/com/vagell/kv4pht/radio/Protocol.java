@@ -16,6 +16,8 @@ import android.util.Log;
 import lombok.Builder;
 import lombok.Data;
 import lombok.Getter;
+import lombok.Value;
+import lombok.With;
 
 public final class Protocol {
     private static final String TAG = Protocol.class.getSimpleName();
@@ -180,33 +182,20 @@ public final class Protocol {
         }
     }
 
-    @Data
+    @Value
     @Builder
+    @With
     public static class HostDesiredState {
         static final int BYTE_LEN = 22;
-        private int sequence;
-        private int memoryId;
-        private int flags;
-        private byte bw;
-        private float freqTx;
-        private float freqRx;
-        private byte ctcssTx;
-        private byte squelch;
-        private byte ctcssRx;
-
-        public HostDesiredState copy() {
-            return HostDesiredState.builder()
-                .sequence(sequence)
-                .memoryId(memoryId)
-                .flags(flags)
-                .bw(bw)
-                .freqTx(freqTx)
-                .freqRx(freqRx)
-                .ctcssTx(ctcssTx)
-                .squelch(squelch)
-                .ctcssRx(ctcssRx)
-                .build();
-        }
+        int sequence;
+        int memoryId;
+        int flags;
+        byte bw;
+        float freqTx;
+        float freqRx;
+        byte ctcssTx;
+        byte squelch;
+        byte ctcssRx;
 
         public byte[] toBytes() {
             ByteBuffer buffer = ByteBuffer.allocate(BYTE_LEN).order(ByteOrder.LITTLE_ENDIAN);
