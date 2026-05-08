@@ -411,7 +411,7 @@ void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
   if (ax25_len > 0 && ax25_len <= PROTO_MTU) {
     setMode(MODE_TX);
     digitalWrite(hw.pins.pinLed, HIGH);
-    neopixelColor(COLOR_TX);
+    pulseAprsTxLED();
     processTxAx25(ax25, ax25_len);
     setMode(rxIdleMode());
     esp_task_wdt_reset();
