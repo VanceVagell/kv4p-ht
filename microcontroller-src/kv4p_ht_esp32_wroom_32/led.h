@@ -26,8 +26,8 @@ const RGBColor COLOR_STOPPED = {0, 0, 0};
 const RGBColor COLOR_RX_SQL_CLOSED = {0, 0, 32};
 const RGBColor COLOR_RX_SQL_OPEN = {0, 32, 0};
 const RGBColor COLOR_TX = {16, 16, 0};
-const RGBColor COLOR_APRS_TX = {32, 0, 32};
-const RGBColor COLOR_APRS_RX = {0, 32, 32};
+const RGBColor COLOR_APRS_TX = {0, 32, 32};
+const RGBColor COLOR_APRS_RX = {32, 0, 32};
 const RGBColor COLOR_BLACK = {0, 0, 0};
 const uint32_t APRS_LED_PULSE_MS = 300;
 
