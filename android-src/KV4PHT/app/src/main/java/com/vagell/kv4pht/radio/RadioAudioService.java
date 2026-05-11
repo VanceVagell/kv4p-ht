@@ -1438,6 +1438,10 @@ public class RadioAudioService extends Service {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release(); // Don't keep screen on
         }
+        // Release any prewarmed BT SCO link so the headset doesn't sit in "call mode"
+        // indefinitely while the radio is unplugged.
+        cancelPendingScoTeardown();
+        tearDownBluetoothSco();
     }
 
     void onHandshakeCompleted() {
