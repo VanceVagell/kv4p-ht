@@ -455,6 +455,23 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> showModuleTxState(txActive));
                 }
 
+                private void showModuleTxState(boolean txActive) {
+                    int bandColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.band);
+                    int sMeterColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.primary);
+
+                    TextView activeBand = findViewById(R.id.activeBand);
+                    activeBand.setTextColor(bandColor);
+
+                    int[] sMeterIds = {
+                        R.id.sMeter1, R.id.sMeter2, R.id.sMeter3,
+                        R.id.sMeter4, R.id.sMeter5, R.id.sMeter6,
+                        R.id.sMeter7, R.id.sMeter8, R.id.sMeter9
+                    };
+                    for (int sMeterId : sMeterIds) {
+                        findViewById(sMeterId).setBackgroundColor(sMeterColor);
+                    }
+                }
+
                 @Override
                 public void chatError(String text) {
                     Snackbar snackbar = Snackbar.make(context, findViewById(R.id.mainTopLevelLayout), text, LENGTH_LONG)
@@ -1344,23 +1361,6 @@ public class MainActivity extends AppCompatActivity {
                 activeFrequencyStr = frequency;
             }
         });
-    }
-
-    private void showModuleTxState(boolean txActive) {
-        int bandColor = ContextCompat.getColor(this, txActive ? R.color.accent : R.color.band);
-        int sMeterColor = ContextCompat.getColor(this, txActive ? R.color.accent : R.color.primary);
-
-        TextView activeBand = findViewById(R.id.activeBand);
-        activeBand.setTextColor(bandColor);
-
-        int[] sMeterIds = {
-            R.id.sMeter1, R.id.sMeter2, R.id.sMeter3,
-            R.id.sMeter4, R.id.sMeter5, R.id.sMeter6,
-            R.id.sMeter7, R.id.sMeter8, R.id.sMeter9
-        };
-        for (int sMeterId : sMeterIds) {
-            findViewById(sMeterId).setBackgroundColor(sMeterColor);
-        }
     }
 
     public enum BandType {
