@@ -1259,7 +1259,7 @@ public class MainActivity extends AppCompatActivity {
         }
         for (int i = 0; i < channelMemories.size(); i++) {
             if (channelMemories.get(i).memoryId == memoryId) {
-                activeFrequencyStr = radioAudioService.validateFrequency(channelMemories.get(i).frequency);
+                activeFrequencyStr = radioAudioService != null ? radioAudioService.validateFrequency(channelMemories.get(i).frequency) : channelMemories.get(i).frequency;
                 activeMemoryId = memoryId;
 
                 showMemoryName(channelMemories.get(i).name);
