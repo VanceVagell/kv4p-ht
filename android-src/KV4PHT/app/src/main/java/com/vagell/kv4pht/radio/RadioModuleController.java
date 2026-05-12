@@ -300,6 +300,10 @@ public class RadioModuleController {
         return hasDeviceFlag(Protocol.DEVICE_STATE_SQUELCHED);
     }
 
+    synchronized boolean isDeviceTxActive() {
+        return lastDeviceState != null && Protocol.DeviceMode.DEVICE_MODE_TX.equals(lastDeviceState.getMode());
+    }
+
     synchronized boolean didPhysPttChange() {
         return lastPhysPttDown != isPhysPttDown();
     }

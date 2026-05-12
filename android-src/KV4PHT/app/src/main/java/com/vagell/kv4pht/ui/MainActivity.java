@@ -451,6 +451,11 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
+                public void moduleTxStateChanged(boolean txActive) {
+                    runOnUiThread(() -> showModuleTxState(txActive));
+                }
+
+                @Override
                 public void chatError(String text) {
                     Snackbar snackbar = Snackbar.make(context, findViewById(R.id.mainTopLevelLayout), text, LENGTH_LONG)
                             .setBackgroundTint(Color.rgb(140, 20, 0))
@@ -893,6 +898,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
+        hideKeyboard();
 
         final APRSMessage aprsMessage = new APRSMessage();
         aprsMessage.type = APRSMessage.MESSAGE_TYPE;
@@ -910,7 +916,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        findViewById(R.id.textChatInput).requestFocus();
     }
 
     private void updateRecordingVisualization(int waitMs, float txVolume) {
@@ -1208,9 +1213,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void hideKeyboard() {
+        View focus = getCurrentFocus();
+        View tokenView = focus != null ? focus : findViewById(R.id.mainTopLevelLayout);
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (null != imm) {
-            imm.hideSoftInputFromWindow(findViewById(R.id.mainTopLevelLayout).getWindowToken(), 0);
+            imm.hideSoftInputFromWindow(tokenView.getWindowToken(), 0);
         }
     }
 
@@ -1337,6 +1344,23 @@ public class MainActivity extends AppCompatActivity {
                 activeFrequencyStr = frequency;
             }
         });
+    }
+
+    private void showModuleTxState(boolean txActive) {
+        int bandColor = ContextCompat.getColor(this, txActive ? R.color.accent : R.color.band);
+        int sMeterColor = ContextCompat.getColor(this, txActive ? R.color.accent : R.color.primary);
+
+        TextView activeBand = findViewById(R.id.activeBand);
+        activeBand.setTextColor(bandColor);
+
+        int[] sMeterIds = {
+            R.id.sMeter1, R.id.sMeter2, R.id.sMeter3,
+            R.id.sMeter4, R.id.sMeter5, R.id.sMeter6,
+            R.id.sMeter7, R.id.sMeter8, R.id.sMeter9
+        };
+        for (int sMeterId : sMeterIds) {
+            findViewById(sMeterId).setBackgroundColor(sMeterColor);
+        }
     }
 
     public enum BandType {

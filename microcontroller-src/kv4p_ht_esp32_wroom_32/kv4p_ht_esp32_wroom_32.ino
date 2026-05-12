@@ -410,10 +410,11 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
 void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
   if (ax25_len > 0 && ax25_len <= PROTO_MTU) {
     setMode(MODE_TX);
-    digitalWrite(hw.pins.pinLed, HIGH);
+    sendCurrentDeviceState();
     pulseAprsTxLED();
     processTxAx25(ax25, ax25_len);
     setMode(rxIdleMode());
+    sendCurrentDeviceState();
     esp_task_wdt_reset();
   }
 }

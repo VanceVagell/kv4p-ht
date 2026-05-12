@@ -252,6 +252,7 @@ public class RadioAudioService extends Service {
         default void missingFirmware() {}
         default void txStarted() {}
         default void txEnded() {}
+        default void moduleTxStateChanged(boolean txActive) {}
         default void chatError(String text) {}
         default void sMeterUpdate(int value) {}
         default void aprsBeaconing(boolean beaconing, int accuracy) {}
@@ -1370,6 +1371,7 @@ public class RadioAudioService extends Service {
     private void handleDeviceState(Protocol.DeviceState state) {
         Log.d(TAG, "Device state: " + state);
         radioModule.updateDeviceState(state);
+        callbacks.moduleTxStateChanged(radioModule.isDeviceTxActive());
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
             txAllowed = isTxAllowed(radioModule.getTxFrequency());
         }
