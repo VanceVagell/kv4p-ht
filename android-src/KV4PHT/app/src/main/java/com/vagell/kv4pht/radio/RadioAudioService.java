@@ -1475,8 +1475,8 @@ public class RadioAudioService extends Service {
      */
     @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
     public void sendPositionBeacon() {
-        if (!txAllowed || getMode() != RadioMode.RX) {
-            Log.d(TAG, "Skipping position beacon: tx not allowed or not in RX mode.");
+        if (!isRadioConnected() || !txAllowed || getMode() != RadioMode.RX) {
+            Log.d(TAG, "Skipping position beacon: radio disconnected, tx not allowed, or not in RX mode.");
             return;
         }
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
