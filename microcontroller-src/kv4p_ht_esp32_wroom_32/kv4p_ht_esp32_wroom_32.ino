@@ -295,6 +295,7 @@ void setMode(Mode newMode) {
     return;
   }
   mode = newMode;
+  markDeviceStateDirty();
   switch (mode) {
     case MODE_STOPPED:
       _LOGI("MODE_STOPPED");
