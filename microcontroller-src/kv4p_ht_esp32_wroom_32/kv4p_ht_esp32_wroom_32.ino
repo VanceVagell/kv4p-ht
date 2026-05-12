@@ -243,6 +243,12 @@ bool radioConfigChanged() {
     || appliedState.memoryId != desiredState.memoryId;
 }
 
+void drainRadioSerial() {
+  while (Serial2.available()) {
+    Serial2.read();
+  }
+}
+
 void reconcileDesiredState(bool sendReport = true) {
   lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
   bool wantHigh = desiredState.flags & HOST_STATE_HIGH_POWER;
@@ -255,6 +261,7 @@ void reconcileDesiredState(bool sendReport = true) {
   uint16_t filterFlags = desiredFilterFlags();
   uint16_t appliedFilterFlags = appliedState.flags & (HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW);
   if (!filtersApplied || filterFlags != appliedFilterFlags) {
+    drainRadioSerial();
     while (!sa818.filters((filterFlags & HOST_STATE_FILTER_PRE), (filterFlags & HOST_STATE_FILTER_HIGH), (filterFlags & HOST_STATE_FILTER_LOW))) {
       lastDeviceStateError = DEVICE_STATE_ERROR_FILTERS_FAILED;
       esp_task_wdt_reset();
@@ -264,6 +271,7 @@ void reconcileDesiredState(bool sendReport = true) {
   }
 
   if ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) && radioConfigChanged()) {
+    drainRadioSerial();
     while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, desiredState.squelch, desiredState.ctcss_rx)) {
       lastDeviceStateError = DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED;
       esp_task_wdt_reset();
