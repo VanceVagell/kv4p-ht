@@ -1369,7 +1369,6 @@ public class RadioAudioService extends Service {
     }
 
     private void handleDeviceState(Protocol.DeviceState state) {
-        Log.d(TAG, "Device state: " + state);
         radioModule.updateDeviceState(state);
         callbacks.moduleTxStateChanged(radioModule.isDeviceTxActive());
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {

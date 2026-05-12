@@ -24,7 +24,12 @@ public final class OpusUtils {
 
         @SneakyThrows
         public int decode(byte[] opusData, int len, float[] floatData)  {
-            int decodedSamples = decoder.decode(opusData, 0, len, pcmShorts, 0, frameSize, false);
+            int decodedSamples;
+            try {
+                decodedSamples = decoder.decode(opusData, 0, len, pcmShorts, 0, frameSize, false);
+            } catch (Exception e) {
+                decodedSamples = 0;
+            }
             // Convert 16-bit PCM to float (-1.0 to 1.0)
             for (int i = 0; i < decodedSamples; i++) {
                 floatData[i] = pcmShorts[i] / 32768.0f;
