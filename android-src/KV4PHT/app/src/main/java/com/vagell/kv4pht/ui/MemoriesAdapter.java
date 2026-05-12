@@ -34,12 +34,19 @@ import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.MemoryViewHolder> {
 
     public List<ChannelMemory> memoriesList;
+    private final List<ChannelMemory> allMemoriesList;
     private MemoryListener memoryListener;
+    private String groupFilter = null;
+    private boolean bandFilterEnabled = false;
+    private float minRadioFreq = 0.0f;
+    private float maxRadioFreq = 999.0f;
 
     public interface MemoryListener {
         void onMemoryClick(ChannelMemory memory);
@@ -49,6 +56,7 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
 
     public MemoriesAdapter(MemoryListener listener) {
         this.memoriesList = new ArrayList<>();
+        this.allMemoriesList = new ArrayList<>();
         this.memoryListener = listener;
     }
 
@@ -60,7 +68,78 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
     }
 
     public void setMemoriesList(List<ChannelMemory> memoriesList) {
-        this.memoriesList = memoriesList;
+        this.allMemoriesList.clear();
+        if (memoriesList != null) {
+            this.allMemoriesList.addAll(memoriesList);
+        }
+        applyFilters();
+    }
+
+    public void setGroupFilter(String groupFilter) {
+        this.groupFilter = groupFilter;
+        applyFilters();
+    }
+
+    public void clearBandFilter() {
+        this.bandFilterEnabled = false;
+        applyFilters();
+    }
+
+    public void setBandFilter(float minRadioFreq, float maxRadioFreq) {
+        this.bandFilterEnabled = true;
+        this.minRadioFreq = minRadioFreq;
+        this.maxRadioFreq = maxRadioFreq;
+        applyFilters();
+    }
+
+    private void applyFilters() {
+        memoriesList = new ArrayList<>();
+        for (ChannelMemory memory : allMemoriesList) {
+            if (groupFilter != null && !groupFilter.equals(memory.group)) {
+                continue;
+            }
+            if (bandFilterEnabled && !memoryFitsBand(memory)) {
+                continue;
+            }
+            memoriesList.add(memory);
+        }
+    }
+
+    private boolean memoryFitsBand(ChannelMemory memory) {
+        try {
+            float rxFreq = Float.parseFloat(memory.frequency);
+            float txFreq = txFrequency(memory);
+            return frequencyFitsBand(rxFreq) && frequencyFitsBand(txFreq);
+        } catch (NumberFormatException e) {
+            return true;
+        }
+    }
+
+    private boolean frequencyFitsBand(float frequency) {
+        return frequency >= minRadioFreq && frequency <= maxRadioFreq;
+    }
+
+    private float txFrequency(ChannelMemory memory) {
+        float txFreq = Float.parseFloat(memory.frequency);
+        if (memory.offset == ChannelMemory.OFFSET_UP) {
+            txFreq += memory.offsetKhz / 1000f;
+        } else if (memory.offset == ChannelMemory.OFFSET_DOWN) {
+            txFreq -= memory.offsetKhz / 1000f;
+        }
+        return txFreq;
+    }
+
+    public List<String> visibleGroups() {
+        Set<String> groups = new LinkedHashSet<>();
+        for (ChannelMemory memory : allMemoriesList) {
+            if (bandFilterEnabled && !memoryFitsBand(memory)) {
+                continue;
+            }
+            if (memory.group != null && memory.group.trim().length() > 0) {
+                groups.add(memory.group);
+            }
+        }
+        return new ArrayList<>(groups);
     }
 
     @Override

@@ -248,14 +248,6 @@ public class MainActivity extends AppCompatActivity {
         viewModel.getChannelMemories().observe(this, new Observer<List<ChannelMemory>>() {
             @Override
             public void onChanged(List<ChannelMemory> channelMemories) {
-                // Update the adapter's data
-                if (selectedMemoryGroup != null) {
-                    for (int i = 0; i < channelMemories.size(); i++) {
-                        if (!channelMemories.get(i).group.equals(selectedMemoryGroup)) {
-                            channelMemories.remove(i--);
-                        }
-                    }
-                }
                 memoriesAdapter.setMemoriesList(channelMemories);
                 memoriesAdapter.notifyDataSetChanged();
                 trySyncInitialRadioUi();
@@ -322,6 +314,7 @@ public class MainActivity extends AppCompatActivity {
                 public void radioMissing() {
                     showBand(BandType.BAND_UNKNOWN);
                     sMeterUpdate(0); // No rx when no radio
+                    resetActiveRadioUi();
                     showUSBSnackbar();
                     findViewById(R.id.pttButton).setClickable(false);
                 }
@@ -342,6 +335,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         showBand(BandType.BAND_UNKNOWN);
                     }
+                    runOnUiThread(MainActivity.this::updateMemoryBandFilter);
                 }
 
                 @Override
@@ -1342,6 +1336,26 @@ public class MainActivity extends AppCompatActivity {
         return Math.abs(left - right) < 0.0002f;
     }
 
+    private void updateMemoryBandFilter() {
+        if (memoriesAdapter == null) {
+            return;
+        }
+        if (radioAudioService == null || RadioAudioService.RadioModuleType.UNKNOWN.equals(radioAudioService.getRadioType())) {
+            memoriesAdapter.clearBandFilter();
+        } else {
+            memoriesAdapter.setBandFilter(radioAudioService.getMinRadioFreq(), radioAudioService.getMaxRadioFreq());
+        }
+        memoriesAdapter.notifyDataSetChanged();
+    }
+
+    private void resetActiveRadioUi() {
+        activeMemoryId = -1;
+        TextView activeMemoryName = findViewById(R.id.activeMemoryName);
+        EditText activeFrequency = findViewById(R.id.activeFrequency);
+        activeMemoryName.setText(getString(R.string.welcome_to_display));
+        activeFrequency.setText(getString(R.string.kv4p_ht));
+    }
+
     private void showMemoryName(String name) {
         runOnUiThread(new Runnable() {
             @Override
@@ -1733,38 +1747,25 @@ public class MainActivity extends AppCompatActivity {
         PopupMenu groupsMenu = new PopupMenu(themedContext, view);
         groupsMenu.inflate(R.menu.groups_menu);
 
-        threadPoolExecutor.execute(new Runnable() {
+        for (String groupName : memoriesAdapter.visibleGroups()) {
+            groupsMenu.getMenu().add(groupName);
+        }
+
+        groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
-            public void run() {
-                List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
-                for (int i = 0; i < memoryGroups.size(); i++) {
-                    String groupName = memoryGroups.get(i);
-                    if (groupName != null && groupName.trim().length() > 0) {
-                        groupsMenu.getMenu().add(memoryGroups.get(i));
-                    }
-                }
-
-                groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-                    @Override
-                    public boolean onMenuItemClick(MenuItem item) {
-                        selectMemoryGroup(item.getTitle().toString());
-                        return true;
-                    }
-                });
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        groupsMenu.show();
-                    }
-                });
+            public boolean onMenuItemClick(MenuItem item) {
+                selectMemoryGroup(item.getTitle().toString());
+                return true;
             }
         });
+
+        groupsMenu.show();
     }
 
     private void selectMemoryGroup(String groupName) {
         this.selectedMemoryGroup = groupName.equals(getString(R.string.all_memories)) ? null : groupName;
-        viewModel.loadDataAsync(() -> {});
+        memoriesAdapter.setGroupFilter(selectedMemoryGroup);
+        memoriesAdapter.notifyDataSetChanged();
         // Add drop-down arrow to end of selected group to suggest it's tappable
         TextView groupSelector = findViewById(R.id.groupSelector);
         groupSelector.setText(groupName + " ▼");
