@@ -448,8 +448,13 @@ public class RadioAudioService extends Service {
         // Build an ongoing notification
         Notification notification = buildForegroundNotification();
 
-        // Promote to foreground
-        startForeground(SERVICE_ID, notification);
+        try {
+            startForeground(SERVICE_ID, notification);
+        } catch (SecurityException e) {
+            Log.e(TAG, "Unable to start foreground radio service.", e);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
 
         // Make the service sticky so it is restarted if the process dies
         return START_STICKY;
