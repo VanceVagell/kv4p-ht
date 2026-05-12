@@ -95,13 +95,10 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
     private void applyFilters() {
         memoriesList = new ArrayList<>();
         for (ChannelMemory memory : allMemoriesList) {
-            if (groupFilter != null && !groupFilter.equals(memory.group)) {
-                continue;
+            if ((groupFilter == null || groupFilter.equals(memory.group))
+                    && (!bandFilterEnabled || memoryFitsBand(memory))) {
+                memoriesList.add(memory);
             }
-            if (bandFilterEnabled && !memoryFitsBand(memory)) {
-                continue;
-            }
-            memoriesList.add(memory);
         }
     }
 
@@ -135,7 +132,7 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
             if (bandFilterEnabled && !memoryFitsBand(memory)) {
                 continue;
             }
-            if (memory.group != null && memory.group.trim().length() > 0) {
+            if (memory.group != null && !memory.group.trim().isEmpty()) {
                 groups.add(memory.group);
             }
         }

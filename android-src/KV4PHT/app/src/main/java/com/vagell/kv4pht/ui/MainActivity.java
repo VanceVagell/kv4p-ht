@@ -1348,6 +1348,7 @@ public class MainActivity extends AppCompatActivity {
         memoriesAdapter.notifyDataSetChanged();
     }
 
+    @SuppressWarnings("java:S3398")
     private void resetActiveRadioUi() {
         activeMemoryId = -1;
         TextView activeMemoryName = findViewById(R.id.activeMemoryName);
