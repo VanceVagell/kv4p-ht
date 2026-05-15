@@ -47,20 +47,6 @@ public final class Protocol {
     private Protocol() {
     }
 
-    private static int boundedPayloadLen(byte[] payload, int len) {
-        if (payload == null || len <= 0) {
-            return 0;
-        }
-        return Math.min(len, Math.min(payload.length, PROTO_MTU));
-    }
-
-    private static int boundedPayloadLen(ByteBuffer payload, int offset, int len) {
-        if (payload == null || offset < 0 || len <= 0 || payload.limit() < offset) {
-            return 0;
-        }
-        return Math.min(len, Math.min(payload.limit() - offset, PROTO_MTU));
-    }
-
     private static ByteBuffer littleEndianView(ByteBuffer buffer) {
         return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN);
     }
@@ -418,6 +404,20 @@ public final class Protocol {
                 usbIoManager.writeAsync(Arrays.copyOf(kissEncodeBuffer, frameSize));
                 flowControlWindow.addAndGet(-frameSize);
             }
+        }
+
+        private int boundedPayloadLen(byte[] payload, int len) {
+            if (payload == null || len <= 0) {
+                return 0;
+            }
+            return Math.min(len, Math.min(payload.length, PROTO_MTU));
+        }
+
+        private int boundedPayloadLen(ByteBuffer payload, int offset, int len) {
+            if (payload == null || offset < 0 || len <= 0 || payload.limit() < offset) {
+                return 0;
+            }
+            return Math.min(len, Math.min(payload.limit() - offset, PROTO_MTU));
         }
         
         // Waits until it can send (windowSize > 0)

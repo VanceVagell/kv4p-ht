@@ -830,34 +830,6 @@ public class MainActivity extends AppCompatActivity {
         callsignSnackbar.show();
     }
 
-    private void showBeaconingOnSnackbar(int accuracy) {
-        if (null != usbSnackbar && usbSnackbar.isShown()) { // No radio connected, that's more important.
-            return;
-        }
-
-        String accuracyStr = (accuracy == RadioAudioService.APRS_POSITION_EXACT) ? getString(R.string.exact) : getString(R.string.approx);
-        CharSequence snackbarMsg = getString(R.string.position_beacon_message_1) + accuracyStr + getString(R.string.position_beacon_message_2);
-        Snackbar beaconingSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, LENGTH_LONG)
-                .setAction("Settings", new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        startSettingsActivity();
-                    }
-                })
-                .setBackgroundTint(getResources().getColor(R.color.primary))
-                .setTextColor(getResources().getColor(R.color.medium_gray))
-                .setActionTextColor(getResources().getColor(R.color.black))
-                .setAnchorView(findViewById(R.id.bottomNavigationView));
-
-        // Make the text of the snackbar larger.
-        TextView snackbarActionTextView = (TextView) beaconingSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
-        snackbarActionTextView.setTextSize(20);
-        TextView snackbarTextView = (TextView) beaconingSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
-        snackbarTextView.setTextSize(20);
-
-        beaconingSnackbar.show();
-    }
-
     public void sendButtonOverlayClicked(View view) {
         if (callsign == null || callsign.length() == 0) {
             showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
