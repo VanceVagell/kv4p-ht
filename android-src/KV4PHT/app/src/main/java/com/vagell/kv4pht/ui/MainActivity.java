@@ -449,6 +449,10 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> showModuleTxState(txActive));
                 }
 
+                /**
+                 * Shows firmware-reported TX activity even when Android did not initiate PTT,
+                 * for example while firmware is transmitting an APRS packet.
+                 */
                 private void showModuleTxState(boolean txActive) {
                     int bandColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.band);
                     int sMeterColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.primary);
@@ -926,6 +930,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Restores the previously selected memory group filter after settings are loaded.
+     */
     private void applyGroupSetting(Map<String, String> settings) {
         String group = settings.get(AppSetting.SETTING_LAST_GROUP);
         if (group != null && !group.isEmpty()) {
@@ -946,6 +953,9 @@ public class MainActivity extends AppCompatActivity {
         radioAudioService.updateTxLimitsForBand();
     }
 
+    /**
+     * Applies the saved microphone gain preference to the bound radio service.
+     */
     private void applyMicGainSetting(Map<String, String> settings) {
         if (radioAudioService == null) return;
         String gain = settings.get(AppSetting.SETTING_MIC_GAIN_BOOST);
@@ -1223,6 +1233,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Reconciles the visible frequency/memory selection with the first DeviceState reported by firmware.
+     * If memories are not loaded yet, this leaves the sync pending and is retried by the memories observer.
+     */
     private void trySyncInitialRadioUi() {
         if (initialRadioUiSynced || !pendingInitialRadioUiSync || radioAudioService == null) {
             return;
@@ -1247,6 +1261,10 @@ public class MainActivity extends AppCompatActivity {
         initialRadioUiSynced = true;
     }
 
+    /**
+     * Finds the stored memory that corresponds to firmware's current memory ID and radio settings.
+     * Returns null when firmware is in VFO/simplex mode or the stored memory no longer matches.
+     */
     @Nullable
     private ChannelMemory findMatchingMemoryForState() {
         RadioModuleController radioModule = radioAudioService.getRadioModule();
@@ -1262,6 +1280,9 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    /**
+     * Checks whether a stored memory still describes the radio configuration reported by firmware.
+     */
     private boolean memoryMatchesDeviceState(ChannelMemory memory) {
         try {
             RadioModuleController radioModule = radioAudioService.getRadioModule();
@@ -1276,6 +1297,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Calculates the transmit frequency for a memory, including repeater offset.
+     */
     private float calculateMemoryTxFrequency(ChannelMemory memory) {
         float txFreq = Float.parseFloat(memory.frequency);
         if (memory.offset == ChannelMemory.OFFSET_UP) {
@@ -1286,10 +1310,17 @@ public class MainActivity extends AppCompatActivity {
         return Float.parseFloat(radioAudioService.validateFrequency(Float.toString(txFreq)));
     }
 
+    /**
+     * Compares MHz values while tolerating small float formatting/rounding differences.
+     */
     private boolean closeEnough(float left, float right) {
         return Math.abs(left - right) < 0.0002f;
     }
 
+    /**
+     * Filters visible memories to the connected module's supported frequency range.
+     * When no module is connected, all memories remain visible so users can still edit/delete them.
+     */
     private void updateMemoryBandFilter() {
         if (memoriesAdapter == null) {
             return;
@@ -1302,6 +1333,9 @@ public class MainActivity extends AppCompatActivity {
         memoriesAdapter.notifyDataSetChanged();
     }
 
+    /**
+     * Restores the idle welcome text shown when no radio state is available, such as after disconnect.
+     */
     @SuppressWarnings("java:S3398")
     private void resetActiveRadioUi() {
         activeMemoryId = -1;
@@ -1862,6 +1896,9 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, REQUEST_SETTINGS);
     }
 
+    /**
+     * Applies settings screen radio changes as one desired-state update to avoid intermediate firmware writes.
+     */
     private void applyRadioSettingsResult(Intent data) {
         radioAudioService.getRadioModule().beginUpdate();
         try {
