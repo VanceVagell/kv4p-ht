@@ -104,24 +104,28 @@ public class Parser {
 	 * @return APRSPacket
 	 * @throws Exception
 	 */
-	public static APRSPacket parseAX25(byte[] packet) throws Exception {
-	    int pos = 0;
-	    String dest = new Callsign(packet, pos).toString();
-	    pos += 7;
-	    String source = new Callsign(packet, pos).toString();
-	    pos += 7;
-	    ArrayList<Digipeater> digis = new ArrayList<Digipeater>();
-	    while ((packet[pos - 1] & 1) == 0) {
-		    Digipeater d =new Digipeater(packet, pos);
-		    digis.add(d);
-		    pos += 7;
+		public static APRSPacket parseAX25(byte[] packet) throws Exception {
+		    return parseAX25(packet, 0, packet.length);
 	    }
-	    if (packet[pos] != 0x03 || packet[pos+1] != -16 /*0xf0*/)
-		    throw new IllegalArgumentException("control + pid must be 0x03 0xF0!");
-	    pos += 2;
-	    String body = new String(packet, pos, packet.length - pos);
-	    return parseBody(source, dest, digis, body);
-    }
+
+		public static APRSPacket parseAX25(byte[] packet, int offset, int len) throws Exception {
+		    int pos = 0;
+		    String dest = new Callsign(packet, offset + pos).toString();
+		    pos += 7;
+		    String source = new Callsign(packet, offset + pos).toString();
+		    pos += 7;
+		    ArrayList<Digipeater> digis = new ArrayList<Digipeater>();
+		    while ((packet[offset + pos - 1] & 1) == 0) {
+			    Digipeater d =new Digipeater(packet, offset + pos);
+			    digis.add(d);
+			    pos += 7;
+		    }
+		    if (packet[offset + pos] != 0x03 || packet[offset + pos + 1] != -16 /*0xf0*/)
+			    throw new IllegalArgumentException("control + pid must be 0x03 0xF0!");
+		    pos += 2;
+		    String body = new String(packet, offset + pos, len - pos);
+		    return parseBody(source, dest, digis, body);
+	    }
 
 	/**
 	 * 

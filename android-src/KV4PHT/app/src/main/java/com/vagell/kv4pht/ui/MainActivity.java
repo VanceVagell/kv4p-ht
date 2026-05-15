@@ -486,17 +486,6 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void aprsBeaconing(boolean beaconing, int accuracy) {
-                    // If beaconing just started, let user know in case they didn't want this
-                    // or forgot they turned it on. And warn them if they haven't set their callsign.
-                    if (beaconing && (null == callsign || callsign.trim().length() == 0)) {
-                        showCallsignSnackbar(getString(R.string.set_your_callsign_to_beacon_your_position));
-                    } else if (beaconing) {
-                        showBeaconingOnSnackbar(accuracy);
-                    }
-                }
-
-                @Override
                 public void sentAprsBeacon(double latitude, double longitude) {
                     // Show a mock-up of the beacon we sent, in our own chat log
                     APRSMessage myBeacon = new APRSMessage();
@@ -517,13 +506,6 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void unknownLocation() {
                     showSimpleSnackbar("Can't find your location, no beacon sent");
-                }
-
-                @Override
-                public void forceTunedToFreq(String newFreqStr) {
-                    // This is called when RadioAudioService is changing bands, and we need
-                    // to reflect that in the UI.
-                    tuneToFreqUi(newFreqStr);
                 }
 
                 @Override

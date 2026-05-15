@@ -2,7 +2,6 @@ package com.vagell.kv4pht.radio;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -10,6 +9,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import androidx.annotation.NonNull;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
 import android.util.Log;
@@ -38,6 +38,7 @@ public final class Protocol {
     static final byte[] KV4P_VENDOR_PREFIX = new byte[]{'K', 'V', '4', 'P'};
     static final int KV4P_VENDOR_HEADER_LEN = KV4P_VENDOR_PREFIX.length + 2; // "KV4P" + version + kv4pCommand
     static final int KISS_MAX_FRAME_SIZE = PROTO_MTU + 1 + KV4P_VENDOR_HEADER_LEN;
+    static final int KISS_MAX_ENCODED_FRAME_SIZE = 3 + (2 * (PROTO_MTU + KV4P_VENDOR_HEADER_LEN));
 
     public static final byte DRA818_25K = 0x01;
     public static final byte DRA818_12K5 = 0x00;
@@ -53,45 +54,15 @@ public final class Protocol {
         return Math.min(len, Math.min(payload.length, PROTO_MTU));
     }
 
-    static byte[] buildKissFrame(int kissCommand, byte[] payload) {
-        return buildKissFrame(kissCommand, payload, payload != null ? payload.length : 0);
-    }
-
-    static byte[] buildKissFrame(int kissCommand, byte[] payload, int len) {
-        int payloadLen = boundedPayloadLen(payload, len);
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream(payloadLen + 3);
-        buffer.write(KISS_FEND);
-        buffer.write(kissCommand & 0xFF);
-        for (int i = 0; i < payloadLen; i++) {
-            int b = payload[i] & 0xFF;
-            if (b == KISS_FEND) {
-                buffer.write(KISS_FESC);
-                buffer.write(KISS_TFEND);
-            } else if (b == KISS_FESC) {
-                buffer.write(KISS_FESC);
-                buffer.write(KISS_TFESC);
-            } else {
-                buffer.write(b);
-            }
+    private static int boundedPayloadLen(ByteBuffer payload, int offset, int len) {
+        if (payload == null || offset < 0 || len <= 0 || payload.limit() < offset) {
+            return 0;
         }
-        buffer.write(KISS_FEND);
-        return buffer.toByteArray();
+        return Math.min(len, Math.min(payload.limit() - offset, PROTO_MTU));
     }
 
-    static byte[] buildKv4pVendorPayload(int kv4pCommand, byte[] param) {
-        return buildKv4pVendorPayload(kv4pCommand, param, param != null ? param.length : 0);
-    }
-
-    static byte[] buildKv4pVendorPayload(int kv4pCommand, byte[] param, int len) {
-        int paramLen = boundedPayloadLen(param, len);
-        ByteBuffer payload = ByteBuffer.allocate(KV4P_VENDOR_HEADER_LEN + paramLen);
-        payload.put(KV4P_VENDOR_PREFIX);
-        payload.put((byte) KV4P_PROTOCOL_VERSION);
-        payload.put((byte) kv4pCommand);
-        if (paramLen > 0) {
-            payload.put(param, 0, paramLen);
-        }
-        return payload.array();
+    private static ByteBuffer littleEndianView(ByteBuffer buffer) {
+        return buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN);
     }
 
     @Getter
@@ -117,12 +88,13 @@ public final class Protocol {
         COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
         COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
         COMMAND_DEVICE_STATE(0x0B);
+        private static final RcvCommand[] VALUES = values();
         private final int value;
         RcvCommand(int value) {
             this.value = value;
         }
         public static RcvCommand fromValue(int value) {
-            for (RcvCommand type : RcvCommand.values()) {
+            for (RcvCommand type : VALUES) {
                 if (type.getValue() == value) {
                     return type;
                 }
@@ -150,7 +122,7 @@ public final class Protocol {
         }
     }
 
-    static final int HOST_STATE_RADIO_CONFIG_VALID = 1 << 0;
+    static final int HOST_STATE_RADIO_CONFIG_VALID = 1;
     static final int HOST_STATE_PTT_REQUESTED = 1 << 1;
     static final int HOST_STATE_RX_AUDIO_OPEN = 1 << 2;
     static final int HOST_STATE_HIGH_POWER = 1 << 3;
@@ -199,6 +171,11 @@ public final class Protocol {
 
         public byte[] toBytes() {
             ByteBuffer buffer = ByteBuffer.allocate(BYTE_LEN).order(ByteOrder.LITTLE_ENDIAN);
+            writeTo(buffer);
+            return buffer.array();
+        }
+
+        void writeTo(ByteBuffer buffer) {
             buffer.putInt(sequence);
             buffer.putInt(memoryId);
             buffer.putShort((short) flags);
@@ -208,7 +185,6 @@ public final class Protocol {
             buffer.put(ctcssTx);
             buffer.put(squelch);
             buffer.put(ctcssRx);
-            return buffer.array();
         }
     }
 
@@ -234,28 +210,24 @@ public final class Protocol {
             return (flags & HOST_STATE_RADIO_CONFIG_VALID) != 0;
         }
 
-        public static Optional<DeviceState> from(final byte[] param, Integer len) {
-            return from(param, 0, len);
-        }
-        public static Optional<DeviceState> from(final byte[] param, int offset, Integer len) {
-            return Optional.ofNullable(param)
-                .filter(p -> len != null && len == BYTE_LEN && offset >= 0 && p.length >= offset + len)
-                .map(p -> ByteBuffer.wrap(p, offset, len))
-                .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
+        public static Optional<DeviceState> from(final ByteBuffer buffer, int offset, Integer len) {
+            return Optional.ofNullable(buffer)
+                .filter(b -> len != null && len == BYTE_LEN && offset >= 0 && b.limit() >= offset + len)
+                .map(Protocol::littleEndianView)
                 .map(b -> DeviceState.builder()
-                    .appliedSequence(b.getInt())
-                    .memoryId(b.getInt())
-                    .flags(b.getShort() & 0xFFFF)
-                    .bw(b.get())
-                    .freqTx(b.getFloat())
-                    .freqRx(b.getFloat())
-                    .ctcssTx(b.get())
-                    .squelch(b.get())
-                    .ctcssRx(b.get())
-                    .radioModuleStatus(RadioStatus.fromValue((char) b.get()))
-                    .mode(DeviceMode.fromValue(b.get() & 0xFF))
-                    .lastError(b.get() & 0xFF)
-                    .latestRssi(b.get() & 0xFF)
+                    .appliedSequence(b.getInt(offset))
+                    .memoryId(b.getInt(offset + 4))
+                    .flags(b.getShort(offset + 8) & 0xFFFF)
+                    .bw(b.get(offset + 10))
+                    .freqTx(b.getFloat(offset + 11))
+                    .freqRx(b.getFloat(offset + 15))
+                    .ctcssTx(b.get(offset + 19))
+                    .squelch(b.get(offset + 20))
+                    .ctcssRx(b.get(offset + 21))
+                    .radioModuleStatus(RadioStatus.fromValue((char) b.get(offset + 22)))
+                    .mode(DeviceMode.fromValue(b.get(offset + 23) & 0xFF))
+                    .lastError(b.get(offset + 24) & 0xFF)
+                    .latestRssi(b.get(offset + 25) & 0xFF)
                     .build());
         }
     }
@@ -295,34 +267,21 @@ public final class Protocol {
         private final float maxRadioFreq;
         private final boolean hasHl;
         private final boolean hasPhysPtt;
-        private final DeviceState deviceState;
-        public static Optional<FirmwareVersion> from(final byte[] param, Integer len) {
-            return Optional.ofNullable(param)
-                .filter(p -> len != null && len >= BYTE_LEN && p.length >= len)
-                .map(ByteBuffer::wrap)
-                .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
+        public static Optional<FirmwareVersion> from(final ByteBuffer buffer, int offset, Integer len) {
+            return Optional.ofNullable(buffer)
+                .filter(b -> len != null && len == BYTE_LEN && offset >= 0 && b.limit() >= offset + len)
+                .map(Protocol::littleEndianView)
                 .map(b -> {
-                    short ver = b.getShort();
-                    RadioStatus radioModuleStatus = RadioStatus.fromValue((char) b.get());
-                    int windowSize = b.getInt();
-                    RfModuleType moduleType = RfModuleType.fromValue(b.get() & 0xFF);
-                    float minRadioFreq = b.getFloat();
-                    float maxRadioFreq = b.getFloat();
-                    int features = b.get() & 0xFF;
-                    DeviceState deviceState = null;
-                    if (len >= BYTE_LEN + DeviceState.BYTE_LEN) {
-                        deviceState = DeviceState.from(param, BYTE_LEN, DeviceState.BYTE_LEN).orElse(null);
-                    }
+                    int features = b.get(offset + 16) & 0xFF;
                     return FirmwareVersion.builder()
-                        .ver(ver)
-                        .radioModuleStatus(radioModuleStatus)
-                        .windowSize(windowSize)
-                        .moduleType(moduleType)
-                        .minRadioFreq(minRadioFreq)
-                        .maxRadioFreq(maxRadioFreq)
+                        .ver(b.getShort(offset))
+                        .radioModuleStatus(RadioStatus.fromValue((char) b.get(offset + 2)))
+                        .windowSize(b.getInt(offset + 3))
+                        .moduleType(RfModuleType.fromValue(b.get(offset + 7) & 0xFF))
+                        .minRadioFreq(b.getFloat(offset + 8))
+                        .maxRadioFreq(b.getFloat(offset + 12))
                         .hasHl((features & 0x01) != 0)
                         .hasPhysPtt((features & 0x02) != 0)
-                        .deviceState(deviceState)
                         .build();
                 });
         }
@@ -330,14 +289,31 @@ public final class Protocol {
 
     @Data
     @Builder
+    public static class Hello {
+        private static final int BYTE_LEN = FirmwareVersion.BYTE_LEN + DeviceState.BYTE_LEN;
+        private final FirmwareVersion version;
+        private final DeviceState deviceState;
+        public static Optional<Hello> from(final ByteBuffer buffer, int offset, Integer len) {
+            return Optional.ofNullable(buffer)
+                .filter(b -> len != null && len == BYTE_LEN && offset >= 0 && b.limit() >= offset + len)
+                .flatMap(b -> FirmwareVersion.from(b, offset, FirmwareVersion.BYTE_LEN)
+                    .flatMap(version -> DeviceState.from(b, offset + FirmwareVersion.BYTE_LEN, DeviceState.BYTE_LEN)
+                        .map(deviceState -> Hello.builder()
+                            .version(version)
+                            .deviceState(deviceState)
+                            .build())));
+        }
+    }
+
+    @Data
+    @Builder
     public static class WindowUpdate {
         private final int size;
-        public static Optional<WindowUpdate> from(final byte[] param, Integer len) {
-            return Optional.ofNullable(param)
-                .filter(p -> len != null && len == 4 && p.length >= len)
-                .map(ByteBuffer::wrap)
-                .map(b -> b.order(ByteOrder.LITTLE_ENDIAN))
-                .map(b -> WindowUpdate.builder().size(b.getInt()).build());
+        public static Optional<WindowUpdate> from(final ByteBuffer buffer, int offset, Integer len) {
+            return Optional.ofNullable(buffer)
+                .filter(b -> len != null && len == 4 && offset >= 0 && b.limit() >= offset + len)
+                .map(Protocol::littleEndianView)
+                .map(b -> WindowUpdate.builder().size(b.getInt(offset)).build());
         }
     }
 
@@ -347,38 +323,26 @@ public final class Protocol {
         private final SerialInputOutputManager usbIoManager;
         private final Lock lock = new ReentrantLock();
         private final Condition canSendCondition = lock.newCondition();
+        private final byte[] kissEncodeBuffer = new byte[KISS_MAX_ENCODED_FRAME_SIZE];
+        private final ByteBuffer desiredStateBuffer =
+            ByteBuffer.allocate(HostDesiredState.BYTE_LEN).order(ByteOrder.LITTLE_ENDIAN);
 
         public Sender(SerialInputOutputManager usbIoManager) {
             this.usbIoManager = usbIoManager;
         }
 
-        private void sendKissFrame(int kissCommand, byte[] payload) {
-            sendKissFrame(kissCommand, payload, payload != null ? payload.length : 0);
+        private synchronized void sendKissFrame(int kissCommand, byte[] payload, int len) {
+            int frameSize = encodeKissFrame(kissCommand, payload, len);
+            writeEncodedFrame(frameSize);
         }
 
-        private void sendKissFrame(int kissCommand, byte[] payload, int len) {
-            byte[] frame = Protocol.buildKissFrame(kissCommand, payload, len);
-            int frameSize = frame.length;
-            waitUntilCanSend(frameSize);
-            usbIoManager.writeAsync(frame);
-            flowControlWindow.addAndGet(-frameSize);
-        }
-
-        private void sendKv4pVendorFrame(SndCommand commandType, byte[] param) {
-            sendKv4pVendorFrame(commandType, param, param != null ? param.length : 0);
-        }
-
-        private void sendKv4pVendorFrame(SndCommand commandType, byte[] param, int len) {
-            sendKissFrame(KISS_CMD_SETHARDWARE, buildKv4pVendorPayload(commandType.getValue(), param, len));
+        private synchronized void sendKv4pVendorFrame(SndCommand commandType, byte[] param, int len) {
+            int frameSize = encodeKv4pVendorFrame(commandType.getValue(), param, len);
+            writeEncodedFrame(frameSize);
         }
 
         private void sendKissDataFrame(byte[] ax25Bytes) {
-            byte[] payload = ax25Bytes == null ? new byte[0] : Arrays.copyOf(ax25Bytes, Math.min(ax25Bytes.length, PROTO_MTU));
-            sendKissFrame(KISS_CMD_DATA, payload);
-        }
-
-        public void txAudio(byte[] audio) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO, audio);
+            sendKissFrame(KISS_CMD_DATA, ax25Bytes, ax25Bytes != null ? ax25Bytes.length : 0);
         }
 
         public void txAudio(byte[] audio, int len) {
@@ -388,21 +352,90 @@ public final class Protocol {
         public void txAx25(byte[] ax25Bytes) {
             sendKissDataFrame(ax25Bytes);
         }
+
+        private int encodeKissFrame(int kissCommand, byte[] payload, int len) {
+            int payloadLen = boundedPayloadLen(payload, len);
+            int pos = beginKissFrame(kissCommand);
+            for (int i = 0; i < payloadLen; i++) {
+                pos = putEscaped(pos, payload[i] & 0xFF);
+            }
+            return endKissFrame(pos);
+        }
+
+        private int encodeKv4pVendorFrame(int kv4pCommand, byte[] payload, int len) {
+            int payloadLen = boundedPayloadLen(payload, len);
+            int pos = beginKv4pVendorFrame(kv4pCommand);
+            for (int i = 0; i < payloadLen; i++) {
+                pos = putEscaped(pos, payload[i] & 0xFF);
+            }
+            return endKissFrame(pos);
+        }
+
+        private int encodeKv4pVendorFrame(int kv4pCommand, ByteBuffer payload, int offset, int len) {
+            int payloadLen = boundedPayloadLen(payload, offset, len);
+            int pos = beginKv4pVendorFrame(kv4pCommand);
+            for (int i = 0; i < payloadLen; i++) {
+                pos = putEscaped(pos, payload.get(offset + i) & 0xFF);
+            }
+            return endKissFrame(pos);
+        }
+
+        private int beginKv4pVendorFrame(int kv4pCommand) {
+            int pos = beginKissFrame(KISS_CMD_SETHARDWARE);
+            for (byte prefixByte : KV4P_VENDOR_PREFIX) {
+                pos = putEscaped(pos, prefixByte & 0xFF);
+            }
+            pos = putEscaped(pos, KV4P_PROTOCOL_VERSION);
+            return putEscaped(pos, kv4pCommand);
+        }
+
+        private int beginKissFrame(int kissCommand) {
+            kissEncodeBuffer[0] = (byte) KISS_FEND;
+            kissEncodeBuffer[1] = (byte) (kissCommand & 0xFF);
+            return 2;
+        }
+
+        private int putEscaped(int pos, int value) {
+            if (value == KISS_FEND) {
+                kissEncodeBuffer[pos++] = (byte) KISS_FESC;
+                kissEncodeBuffer[pos++] = (byte) KISS_TFEND;
+            } else if (value == KISS_FESC) {
+                kissEncodeBuffer[pos++] = (byte) KISS_FESC;
+                kissEncodeBuffer[pos++] = (byte) KISS_TFESC;
+            } else {
+                kissEncodeBuffer[pos++] = (byte) value;
+            }
+            return pos;
+        }
+
+        private int endKissFrame(int pos) {
+            kissEncodeBuffer[pos++] = (byte) KISS_FEND;
+            return pos;
+        }
+
+        private void writeEncodedFrame(int frameSize) {
+            if (waitUntilCanSend(frameSize)) {
+                usbIoManager.writeAsync(Arrays.copyOf(kissEncodeBuffer, frameSize));
+                flowControlWindow.addAndGet(-frameSize);
+            }
+        }
         
         // Waits until it can send (windowSize > 0)
-        private void waitUntilCanSend(int size) {
+        private boolean waitUntilCanSend(int size) {
             lock.lock();
             try {
-                while (flowControlWindow.get() <= size) {
+                while (flowControlWindow.get() < size) {
                     try {
-                        canSendCondition.await();  // Wait until signaled that windowSize > 0
+                        canSendCondition.await();  // Waits until the flow-control window has enough space for this encoded frame.
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
+                        return false;
                     }
                 }
             } finally {
                 lock.unlock();
             }
+            return true;
         }
 
         public void setFlowControlWindow(int size) {
@@ -425,33 +458,36 @@ public final class Protocol {
             }
         }
 
-        public void sendDesiredState(HostDesiredState state) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_DESIRED_STATE, state.toBytes());
+        public synchronized void sendDesiredState(@NonNull HostDesiredState state) {
+            desiredStateBuffer.clear();
+            state.writeTo(desiredStateBuffer);
+            desiredStateBuffer.flip();
+            int frameSize = encodeKv4pVendorFrame(SndCommand.COMMAND_HOST_DESIRED_STATE.getValue(), desiredStateBuffer, 0, HostDesiredState.BYTE_LEN);
+            writeEncodedFrame(frameSize);
         }
     }
 
     @FunctionalInterface
-    public interface TriConsumer<T, U, V> {
-        void accept(T t, U u, V v);
+    public interface CommandBufferConsumer {
+        void accept(RcvCommand command, ByteBuffer buffer, int offset, int len);
     }
 
     @FunctionalInterface
-    public interface PayloadConsumer {
-        void accept(byte[] payload, Integer len);
+    public interface BufferConsumer {
+        void accept(ByteBuffer buffer, int offset, int len);
     }
 
     public static class KissParser {
 
-        private final byte[] frame = new byte[KISS_MAX_FRAME_SIZE];
-        private final byte[] commandParams = new byte[PROTO_MTU];
+        private final ByteBuffer frameBuffer = ByteBuffer.allocate(KISS_MAX_FRAME_SIZE).order(ByteOrder.LITTLE_ENDIAN);
         private int frameLen = 0;
         private boolean escape = false;
         private boolean dropFrame = false;
         private boolean inFrame = false;
-        private final TriConsumer<RcvCommand, byte[], Integer> onCommand;
-        private final PayloadConsumer onAx25;
+        private final CommandBufferConsumer onCommand;
+        private final BufferConsumer onAx25;
 
-        public KissParser(TriConsumer<RcvCommand, byte[], Integer> onCommand, PayloadConsumer onAx25) {
+        public KissParser(CommandBufferConsumer onCommand, BufferConsumer onAx25) {
             this.onCommand = onCommand;
             this.onAx25 = onAx25;
         }
@@ -492,11 +528,12 @@ public final class Protocol {
                 dropFrame = true;
                 return;
             }
-            frame[frameLen++] = b;
+            frameBuffer.put(frameLen++, b);
         }
 
         private void processFrame() {
-            int kissCommandByte = frame[0] & 0xFF;
+            prepareFrameBuffer();
+            int kissCommandByte = frameBuffer.get(0) & 0xFF;
             int kissPort = kissCommandByte >> 4;
             int kissCommand = kissCommandByte & 0x0F;
             int payloadLen = frameLen - 1;
@@ -506,7 +543,7 @@ public final class Protocol {
             }
             if (kissCommand == KISS_CMD_DATA) {
                 if (payloadLen > 0 && payloadLen <= PROTO_MTU) {
-                    onAx25.accept(Arrays.copyOfRange(frame, 1, frameLen), payloadLen);
+                    onAx25.accept(frameBuffer, 1, payloadLen);
                 }
             } else if (kissCommand == KISS_CMD_SETHARDWARE) {
                 processVendorFrame(payloadLen);
@@ -519,18 +556,18 @@ public final class Protocol {
             }
             int payloadOffset = 1;
             for (int i = 0; i < KV4P_VENDOR_PREFIX.length; i++) {
-                if (frame[payloadOffset + i] != KV4P_VENDOR_PREFIX[i]) {
+                if (frameBuffer.get(payloadOffset + i) != KV4P_VENDOR_PREFIX[i]) {
                     return;
                 }
             }
-            if ((frame[payloadOffset + 4] & 0xFF) != KV4P_PROTOCOL_VERSION) {
+            if ((frameBuffer.get(payloadOffset + 4) & 0xFF) != KV4P_PROTOCOL_VERSION) {
                 return;
             }
 
-            int command = frame[payloadOffset + 5] & 0xFF;
+            int command = frameBuffer.get(payloadOffset + 5) & 0xFF;
             int commandPayloadOffset = payloadOffset + KV4P_VENDOR_HEADER_LEN;
             int commandPayloadLen = payloadLen - KV4P_VENDOR_HEADER_LEN;
-            if (commandPayloadLen > commandParams.length) {
+            if (commandPayloadLen > PROTO_MTU) {
                 return;
             }
             RcvCommand cmd = RcvCommand.fromValue(command);
@@ -538,12 +575,19 @@ public final class Protocol {
                 Log.w(TAG, "Unknown KV4P vendor cmd received from ESP32: 0x" + Integer.toHexString(command) + " paramLen=" + commandPayloadLen);
                 return;
             }
-            System.arraycopy(frame, commandPayloadOffset, commandParams, 0, commandPayloadLen);
-            onCommand.accept(cmd, commandParams, commandPayloadLen);
+            onCommand.accept(cmd, frameBuffer, commandPayloadOffset, commandPayloadLen);
+        }
+
+        private void prepareFrameBuffer() {
+            frameBuffer.clear();
+            frameBuffer.limit(frameLen);
+            frameBuffer.order(ByteOrder.LITTLE_ENDIAN);
         }
 
         private void resetParser() {
             frameLen = 0;
+            frameBuffer.clear();
+            frameBuffer.order(ByteOrder.LITTLE_ENDIAN);
             escape = false;
             dropFrame = false;
             inFrame = false;

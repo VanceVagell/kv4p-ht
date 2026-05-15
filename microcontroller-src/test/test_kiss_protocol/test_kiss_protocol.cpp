@@ -6,6 +6,7 @@
 static_assert(sizeof(HostDesiredState) == 22, "HostDesiredState wire size must match Android");
 static_assert(sizeof(DeviceState) == 26, "DeviceState wire size must match Android");
 static_assert(sizeof(Version) == 17, "Version wire size must match Android");
+static_assert(sizeof(Hello) == 43, "Hello wire size must match Android");
 
 struct CapturedCommand {
   bool called;

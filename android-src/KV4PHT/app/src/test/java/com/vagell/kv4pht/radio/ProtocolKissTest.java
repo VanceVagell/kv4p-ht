@@ -8,8 +8,15 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import androidx.annotation.NonNull;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ProtocolKissTest {
     private boolean called;
@@ -21,6 +28,54 @@ public class ProtocolKissTest {
     private int ax25CallCount;
     private byte[] ax25Payload;
     private int ax25PayloadLen;
+
+    private static byte[] buildKissFrame(int kissCommand, byte[] payload) {
+        return buildKissFrame(kissCommand, payload, payload != null ? payload.length : 0);
+    }
+
+    private static byte[] buildKissFrame(int kissCommand, byte[] payload, int len) {
+        int payloadLen = boundedPayloadLen(payload, len);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream(payloadLen + 3);
+        buffer.write(Protocol.KISS_FEND);
+        buffer.write(kissCommand & 0xFF);
+        for (int i = 0; i < payloadLen; i++) {
+            int b = payload[i] & 0xFF;
+            if (b == Protocol.KISS_FEND) {
+                buffer.write(Protocol.KISS_FESC);
+                buffer.write(Protocol.KISS_TFEND);
+            } else if (b == Protocol.KISS_FESC) {
+                buffer.write(Protocol.KISS_FESC);
+                buffer.write(Protocol.KISS_TFESC);
+            } else {
+                buffer.write(b);
+            }
+        }
+        buffer.write(Protocol.KISS_FEND);
+        return buffer.toByteArray();
+    }
+
+    private static byte[] buildKv4pVendorPayload(int kv4pCommand, byte[] param) {
+        return buildKv4pVendorPayload(kv4pCommand, param, param != null ? param.length : 0);
+    }
+
+    private static byte[] buildKv4pVendorPayload(int kv4pCommand, byte[] param, int len) {
+        int paramLen = boundedPayloadLen(param, len);
+        ByteBuffer payload = ByteBuffer.allocate(Protocol.KV4P_VENDOR_HEADER_LEN + paramLen);
+        payload.put(Protocol.KV4P_VENDOR_PREFIX);
+        payload.put((byte) Protocol.KV4P_PROTOCOL_VERSION);
+        payload.put((byte) kv4pCommand);
+        if (paramLen > 0) {
+            payload.put(param, 0, paramLen);
+        }
+        return payload.array();
+    }
+
+    private static int boundedPayloadLen(byte[] payload, int len) {
+        if (payload == null || len <= 0) {
+            return 0;
+        }
+        return Math.min(len, Math.min(payload.length, Protocol.PROTO_MTU));
+    }
 
     @Before
     public void setUp() {
@@ -37,7 +92,7 @@ public class ProtocolKissTest {
 
     @Test
     public void encoderEscapesFendAndFesc() {
-        byte[] frame = Protocol.buildKissFrame(
+        byte[] frame = buildKissFrame(
             Protocol.KISS_CMD_DATA,
             new byte[]{0x11, (byte) Protocol.KISS_FEND, 0x22, (byte) Protocol.KISS_FESC});
 
@@ -56,7 +111,7 @@ public class ProtocolKissTest {
 
     @Test
     public void encoderUsesOnlyProvidedPayloadLength() {
-        byte[] frame = Protocol.buildKissFrame(
+        byte[] frame = buildKissFrame(
             Protocol.KISS_CMD_DATA,
             new byte[]{0x11, 0x22, (byte) Protocol.KISS_FEND, (byte) Protocol.KISS_FESC},
             2);
@@ -94,10 +149,10 @@ public class ProtocolKissTest {
     @Test
     public void parserHandlesMultipleFramesInOneProcessBytesCall() {
         byte[] dataPayload = new byte[]{0x11, 0x22};
-        byte[] vendorPayload = Protocol.buildKv4pVendorPayload(
+        byte[] vendorPayload = buildKv4pVendorPayload(
             Protocol.RcvCommand.COMMAND_RX_AUDIO.getValue(), new byte[]{0x33, 0x44});
-        byte[] dataFrame = Protocol.buildKissFrame(Protocol.KISS_CMD_DATA, dataPayload);
-        byte[] vendorFrame = Protocol.buildKissFrame(Protocol.KISS_CMD_SETHARDWARE, vendorPayload);
+        byte[] dataFrame = buildKissFrame(Protocol.KISS_CMD_DATA, dataPayload);
+        byte[] vendorFrame = buildKissFrame(Protocol.KISS_CMD_SETHARDWARE, vendorPayload);
         byte[] combined = new byte[dataFrame.length + vendorFrame.length];
         System.arraycopy(dataFrame, 0, combined, 0, dataFrame.length);
         System.arraycopy(vendorFrame, 0, combined, dataFrame.length, vendorFrame.length);
@@ -128,7 +183,7 @@ public class ProtocolKissTest {
 
     @Test
     public void parserIgnoresNonZeroKissPort() {
-        newParser().processBytes(Protocol.buildKissFrame(
+        newParser().processBytes(buildKissFrame(
             0x10 | Protocol.KISS_CMD_DATA, new byte[]{0x11, 0x22}));
 
         assertFalse(ax25Called);
@@ -137,7 +192,7 @@ public class ProtocolKissTest {
 
     @Test
     public void parserIgnoresUnknownKissCommand() {
-        newParser().processBytes(Protocol.buildKissFrame(0x02, new byte[]{0x11, 0x22}));
+        newParser().processBytes(buildKissFrame(0x02, new byte[]{0x11, 0x22}));
 
         assertFalse(ax25Called);
         assertFalse(called);
@@ -164,14 +219,14 @@ public class ProtocolKissTest {
     @Test
     public void parserValidatesVendorPrefixAndVersion() {
         Protocol.KissParser parser = newParser();
-        parser.processBytes(Protocol.buildKissFrame(
+        parser.processBytes(buildKissFrame(
             Protocol.KISS_CMD_SETHARDWARE,
             new byte[]{'B', 'A', 'D', '!', Protocol.KV4P_PROTOCOL_VERSION, (byte) Protocol.RcvCommand.COMMAND_HELLO.getValue()}));
 
         assertFalse(called);
 
         parser = newParser();
-        parser.processBytes(Protocol.buildKissFrame(
+        parser.processBytes(buildKissFrame(
             Protocol.KISS_CMD_SETHARDWARE,
             new byte[]{'K', 'V', '4', 'P', 0x02, (byte) Protocol.RcvCommand.COMMAND_HELLO.getValue()}));
 
@@ -201,9 +256,9 @@ public class ProtocolKissTest {
         oversized[1] = Protocol.KISS_CMD_SETHARDWARE;
         java.util.Arrays.fill(oversized, 2, oversized.length - 1, (byte) 0x55);
         oversized[oversized.length - 1] = (byte) Protocol.KISS_FEND;
-        byte[] valid = Protocol.buildKissFrame(
+        byte[] valid = buildKissFrame(
             Protocol.KISS_CMD_SETHARDWARE,
-            Protocol.buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_HELLO.getValue(), new byte[]{0x01}));
+            buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_HELLO.getValue(), new byte[]{0x01}));
         byte[] combined = new byte[oversized.length + valid.length];
         System.arraycopy(oversized, 0, combined, 0, oversized.length);
         System.arraycopy(valid, 0, combined, oversized.length, valid.length);
@@ -246,9 +301,9 @@ public class ProtocolKissTest {
     @Test
     public void vendorFrameRoundTripsCommandPayloadWithoutTopLevelLength() {
         byte[] commandPayload = new byte[]{0x01, 0x02, 0x03};
-        byte[] frame = Protocol.buildKissFrame(
+        byte[] frame = buildKissFrame(
             Protocol.KISS_CMD_SETHARDWARE,
-            Protocol.buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_DEVICE_STATE.getValue(), commandPayload));
+            buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_DEVICE_STATE.getValue(), commandPayload));
 
         newParser().processBytes(frame);
 
@@ -261,9 +316,9 @@ public class ProtocolKissTest {
     @Test
     public void rxAudioVendorFrameUnescapesAndDispatchesPayload() {
         byte[] audioPayload = new byte[]{0x11, (byte) Protocol.KISS_FEND, 0x22, (byte) Protocol.KISS_FESC};
-        byte[] frame = Protocol.buildKissFrame(
+        byte[] frame = buildKissFrame(
             Protocol.KISS_CMD_SETHARDWARE,
-            Protocol.buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_RX_AUDIO.getValue(), audioPayload));
+            buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_RX_AUDIO.getValue(), audioPayload));
 
         newParser().processBytes(frame);
 
@@ -284,7 +339,7 @@ public class ProtocolKissTest {
         versionPayload.putFloat(480.0f);
         versionPayload.put((byte) 0x03);
 
-        java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(versionPayload.array(), versionPayload.array().length);
+        java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(versionPayload, 0, versionPayload.array().length);
 
         assertTrue(parsed.isPresent());
         assertEquals(16, parsed.get().getVer());
@@ -294,11 +349,10 @@ public class ProtocolKissTest {
         assertEquals(480.0f, parsed.get().getMaxRadioFreq(), 0.0001f);
         assertTrue(parsed.get().isHasHl());
         assertTrue(parsed.get().isHasPhysPtt());
-        assertNull(parsed.get().getDeviceState());
     }
 
     @Test
-    public void helloCarriesFirmwareVersionAndInitialDeviceStatePayload() {
+    public void helloCarriesVersionAndInitialDeviceStatePayload() {
         java.nio.ByteBuffer helloPayload = java.nio.ByteBuffer.allocate(43).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         helloPayload.putShort((short) 16);
         helloPayload.put((byte) 'f');
@@ -320,20 +374,21 @@ public class ProtocolKissTest {
         helloPayload.put((byte) Protocol.DeviceMode.DEVICE_MODE_STOPPED.getValue());
         helloPayload.put((byte) 0);
         helloPayload.put((byte) 123);
-        byte[] frame = Protocol.buildKissFrame(
+        byte[] frame = buildKissFrame(
             Protocol.KISS_CMD_SETHARDWARE,
-            Protocol.buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_HELLO.getValue(), helloPayload.array()));
+            buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_HELLO.getValue(), helloPayload.array()));
 
         newParser().processBytes(frame);
 
         assertTrue(called);
         assertEquals(Protocol.RcvCommand.COMMAND_HELLO, command);
         assertEquals(helloPayload.array().length, payloadLen);
-        java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(payload, payloadLen);
+        java.util.Optional<Protocol.Hello> parsed =
+            Protocol.Hello.from(ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN), 0, payloadLen);
         assertTrue(parsed.isPresent());
-        assertEquals(16, parsed.get().getVer());
-        assertEquals(400.0f, parsed.get().getMinRadioFreq(), 0.0001f);
-        assertEquals(480.0f, parsed.get().getMaxRadioFreq(), 0.0001f);
+        assertEquals(16, parsed.get().getVersion().getVer());
+        assertEquals(400.0f, parsed.get().getVersion().getMinRadioFreq(), 0.0001f);
+        assertEquals(480.0f, parsed.get().getVersion().getMaxRadioFreq(), 0.0001f);
         assertNotNull(parsed.get().getDeviceState());
         assertEquals(9, parsed.get().getDeviceState().getAppliedSequence());
         assertEquals(42, parsed.get().getDeviceState().getMemoryId());
@@ -371,14 +426,15 @@ public class ProtocolKissTest {
     @Test
     public void deviceStateRejectsWrongLengthsWithoutThrowing() {
         byte[] deviceStatePayload = new byte[26];
+        ByteBuffer deviceStateBuffer = ByteBuffer.wrap(deviceStatePayload).order(ByteOrder.LITTLE_ENDIAN);
 
-        assertFalse(Protocol.DeviceState.from(deviceStatePayload, 25).isPresent());
-        assertFalse(Protocol.DeviceState.from(deviceStatePayload, 27).isPresent());
-        assertFalse(Protocol.DeviceState.from(deviceStatePayload, null).isPresent());
+        assertFalse(Protocol.DeviceState.from(deviceStateBuffer, 0, 25).isPresent());
+        assertFalse(Protocol.DeviceState.from(deviceStateBuffer, 0, 27).isPresent());
+        assertFalse(Protocol.DeviceState.from(deviceStateBuffer, 0, null).isPresent());
     }
 
     @Test
-    public void firmwareVersionParsesVersionOnlyAndVersionWithDeviceState() {
+    public void helloRequiresVersionAndDeviceState() {
         java.nio.ByteBuffer versionOnly = java.nio.ByteBuffer.allocate(17).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         versionOnly.putShort((short) 16);
         versionOnly.put((byte) 'f');
@@ -388,11 +444,8 @@ public class ProtocolKissTest {
         versionOnly.putFloat(480.0f);
         versionOnly.put((byte) 0x03);
 
-        java.util.Optional<Protocol.FirmwareVersion> parsedVersionOnly =
-            Protocol.FirmwareVersion.from(versionOnly.array(), versionOnly.array().length);
-
-        assertTrue(parsedVersionOnly.isPresent());
-        assertNull(parsedVersionOnly.get().getDeviceState());
+        assertTrue(Protocol.FirmwareVersion.from(versionOnly, 0, versionOnly.array().length).isPresent());
+        assertFalse(Protocol.Hello.from(versionOnly, 0, versionOnly.array().length).isPresent());
 
         java.nio.ByteBuffer withDeviceState = java.nio.ByteBuffer.allocate(43).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         withDeviceState.put(versionOnly.array());
@@ -410,10 +463,11 @@ public class ProtocolKissTest {
         withDeviceState.put((byte) 0);
         withDeviceState.put((byte) 123);
 
-        java.util.Optional<Protocol.FirmwareVersion> parsedWithDeviceState =
-            Protocol.FirmwareVersion.from(withDeviceState.array(), withDeviceState.array().length);
+        java.util.Optional<Protocol.Hello> parsedWithDeviceState =
+            Protocol.Hello.from(withDeviceState, 0, withDeviceState.array().length);
 
         assertTrue(parsedWithDeviceState.isPresent());
+        assertEquals(16, parsedWithDeviceState.get().getVersion().getVer());
         assertNotNull(parsedWithDeviceState.get().getDeviceState());
         assertEquals(42, parsedWithDeviceState.get().getDeviceState().getMemoryId());
     }
@@ -649,7 +703,7 @@ public class ProtocolKissTest {
         deviceStatePayload.put((byte) 0);
         deviceStatePayload.put((byte) 123);
 
-        java.util.Optional<Protocol.DeviceState> parsed = Protocol.DeviceState.from(deviceStatePayload.array(), deviceStatePayload.array().length);
+        java.util.Optional<Protocol.DeviceState> parsed = Protocol.DeviceState.from(deviceStatePayload, 0, deviceStatePayload.array().length);
 
         assertTrue(parsed.isPresent());
         assertEquals(9, parsed.get().getAppliedSequence());
@@ -660,7 +714,44 @@ public class ProtocolKissTest {
     }
 
     @Test
-    public void firmwareVersionRejectsMismatchedLengthWithoutThrowing() {
+    public void structParsersTreatDefaultOrderBuffersAsLittleEndian() {
+        ByteBuffer deviceStatePayload = ByteBuffer.allocate(26).order(ByteOrder.LITTLE_ENDIAN);
+        deviceStatePayload.putInt(9);
+        deviceStatePayload.putInt(42);
+        deviceStatePayload.putShort((short) Protocol.HOST_STATE_RADIO_CONFIG_VALID);
+        deviceStatePayload.put(Protocol.DRA818_12K5);
+        deviceStatePayload.putFloat(144.3900f);
+        deviceStatePayload.putFloat(146.5200f);
+        deviceStatePayload.put((byte) 4);
+        deviceStatePayload.put((byte) 5);
+        deviceStatePayload.put((byte) 6);
+        deviceStatePayload.put((byte) 'f');
+        deviceStatePayload.put((byte) Protocol.DeviceMode.DEVICE_MODE_RX.getValue());
+        deviceStatePayload.put((byte) 0);
+        deviceStatePayload.put((byte) 123);
+
+        ByteBuffer defaultOrderDeviceState = ByteBuffer.wrap(deviceStatePayload.array());
+        java.util.Optional<Protocol.DeviceState> parsedDeviceState =
+            Protocol.DeviceState.from(defaultOrderDeviceState, 0, deviceStatePayload.array().length);
+
+        assertTrue(parsedDeviceState.isPresent());
+        assertEquals(9, parsedDeviceState.get().getAppliedSequence());
+        assertEquals(42, parsedDeviceState.get().getMemoryId());
+        assertEquals(144.3900f, parsedDeviceState.get().getFreqTx(), 0.0001f);
+        assertEquals(146.5200f, parsedDeviceState.get().getFreqRx(), 0.0001f);
+
+        ByteBuffer windowUpdatePayload = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
+        windowUpdatePayload.putInt(2048);
+
+        java.util.Optional<Protocol.WindowUpdate> parsedWindowUpdate =
+            Protocol.WindowUpdate.from(ByteBuffer.wrap(windowUpdatePayload.array()), 0, windowUpdatePayload.array().length);
+
+        assertTrue(parsedWindowUpdate.isPresent());
+        assertEquals(2048, parsedWindowUpdate.get().getSize());
+    }
+
+    @Test
+    public void helloRejectsMismatchedLengthWithoutThrowing() {
         byte[] shortPayload = new byte[]{
             0x10, 0x00,
             'f',
@@ -668,21 +759,21 @@ public class ProtocolKissTest {
             0x01, 0x00, 0x00, 0x00,
         };
 
-        assertFalse(Protocol.FirmwareVersion.from(shortPayload, 12).isPresent());
+        assertFalse(Protocol.Hello.from(ByteBuffer.wrap(shortPayload).order(ByteOrder.LITTLE_ENDIAN), 0, 12).isPresent());
     }
 
     private Protocol.KissParser newParser() {
-        return new Protocol.KissParser((cmd, param, len) -> {
+        return new Protocol.KissParser((cmd, param, offset, len) -> {
             called = true;
             commandCallCount++;
             command = cmd;
             payloadLen = len;
-            payload = java.util.Arrays.copyOf(param, len);
-        }, (param, len) -> {
+            payload = java.util.Arrays.copyOfRange(param.array(), offset, offset + len);
+        }, (param, offset, len) -> {
             ax25Called = true;
             ax25CallCount++;
             ax25PayloadLen = len;
-            ax25Payload = java.util.Arrays.copyOf(param, len);
+            ax25Payload = java.util.Arrays.copyOfRange(param.array(), offset, offset + len);
         });
     }
 
@@ -705,14 +796,14 @@ public class ProtocolKissTest {
     }
 
     private static class CapturingSender extends Protocol.Sender {
-        private final java.util.List<Protocol.HostDesiredState> sentStates = new java.util.ArrayList<>();
+        private final List<Protocol.HostDesiredState> sentStates = new ArrayList<>();
 
         CapturingSender() {
             super(null);
         }
 
         @Override
-        public void sendDesiredState(Protocol.HostDesiredState state) {
+        public void sendDesiredState(@NonNull Protocol.HostDesiredState state) {
             sentStates.add(state);
         }
     }

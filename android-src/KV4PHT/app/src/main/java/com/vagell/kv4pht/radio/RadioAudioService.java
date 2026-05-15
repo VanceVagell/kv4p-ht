@@ -33,7 +33,6 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
-import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.os.Binder;
 import android.os.Build;
@@ -42,24 +41,18 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.provider.MediaStore;
 import android.util.Log;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.RequiresPermission;
 import androidx.core.app.NotificationCompat;
-import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
-import com.google.android.gms.location.Priority;
-import com.google.android.gms.tasks.CancellationToken;
-import lombok.Getter;
-import lombok.Setter;
-
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.CancellationToken;
 import com.google.android.gms.tasks.CancellationTokenSource;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
@@ -76,19 +69,26 @@ import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
-import com.vagell.kv4pht.javAX25.ax25.Arrays;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import com.vagell.kv4pht.radio.Protocol.KissParser;
 import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
 import com.vagell.kv4pht.ui.ToneHelper;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Background service that manages the connection to the ESP32 (to control the radio), and
@@ -255,10 +255,8 @@ public class RadioAudioService extends Service {
         default void moduleTxStateChanged(boolean txActive) {}
         default void chatError(String text) {}
         default void sMeterUpdate(int value) {}
-        default void aprsBeaconing(boolean beaconing, int accuracy) {}
         default void sentAprsBeacon(double latitude, double longitude) {}
         default void unknownLocation() {}
-        default void forceTunedToFreq(String newFreqStr) {}
         default void forcedPttStart() {}
         default void forcedPttEnd() {}
         default void setRadioType(RadioModuleType ratioType) {}
@@ -274,12 +272,12 @@ public class RadioAudioService extends Service {
         }
 
         // Retrieve necessary parameters from the intent.
-        callsign = bundle.getString("callsign");
+        callsign = Optional.ofNullable(bundle.getString("callsign")).orElse("");
         if (bundle.containsKey("squelch")) {
             radioModule.seedDesiredSquelch(bundle.getInt("squelch"));
         }
         activeMemoryId = bundle.getInt("activeMemoryId");
-        activeFrequencyStr = bundle.getString("activeFrequencyStr");
+        activeFrequencyStr = Optional.ofNullable(bundle.getString("activeFrequencyStr")).orElse("");
         return binder;
     }
 
@@ -440,7 +438,7 @@ public class RadioAudioService extends Service {
             Intent stopIntent = new Intent(ACTION_SERVICE_STOPPING);
             stopIntent.setPackage(getPackageName());
             sendBroadcast(stopIntent);
-            stopForeground(true);
+            stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -540,7 +538,7 @@ public class RadioAudioService extends Service {
             try {
                 serialPort.close();
             } catch (IOException e) {
-                // Ignore, closing anyways.
+                // Ignore, closing anyway.
             }
             serialPort = null;
         }
@@ -555,7 +553,7 @@ public class RadioAudioService extends Service {
             wakeLock.release();
         }
         wakeLock = null;
-        stopForeground(true);
+        stopForeground(STOP_FOREGROUND_REMOVE);
     }
 
     private void tryToStopRadioModule() {
@@ -1013,32 +1011,33 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private void handleHelloReceived(Optional<Protocol.FirmwareVersion> version) {
+    private void handleHelloReceived(Optional<Protocol.Hello> hello) {
         int handshakeId;
         if (waitingForHello) {
             waitingForHello = false;
             handshakeId = activeHandshakeId;
             cancelHelloTimeout();
-            Log.d(TAG, handshakeLog(handshakeId, "HELLO received: " + version));
+            Log.d(TAG, handshakeLog(handshakeId, "HELLO received: " + hello));
         } else {
             handshakeId = ++handshakeSeq;
             activeHandshakeId = handshakeId;
             Log.i(TAG, handshakeLog(handshakeId, "HELLO received outside active wait; validating firmware state"));
         }
-        validateHello(handshakeId, version);
+        validateHello(handshakeId, hello);
     }
 
-    private void validateHello(int handshakeId, Optional<Protocol.FirmwareVersion> firmwareVersion) {
-        if (!firmwareVersion.isPresent()) {
-            Log.e(TAG, handshakeLog(handshakeId, "HELLO missing valid FirmwareVersion payload; firmware upgrade required"));
+    private void validateHello(int handshakeId, Optional<Protocol.Hello> hello) {
+        if (!hello.isPresent()) {
+            Log.e(TAG, handshakeLog(handshakeId, "HELLO missing valid Hello payload; firmware upgrade required"));
             callbacks.outdatedFirmware(0);
             setMode(RadioMode.BAD_FIRMWARE);
             connectionController.markAttemptFinished();
             return;
         }
 
-        Protocol.FirmwareVersion version = firmwareVersion.get();
-        Log.d(TAG, handshakeLog(handshakeId, "version=" + version));
+        Protocol.Hello helloPayload = hello.get();
+        Protocol.FirmwareVersion version = helloPayload.getVersion();
+        Log.d(TAG, handshakeLog(handshakeId, "hello=" + helloPayload));
         if (version.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
             callbacks.outdatedFirmware(version.getVer());
             setMode(RadioMode.BAD_FIRMWARE);
@@ -1046,7 +1045,7 @@ public class RadioAudioService extends Service {
             return;
         }
 
-        handleFirmwareVersion(version);
+        handleHello(helloPayload);
         if (Protocol.RadioStatus.RADIO_STATUS_NOT_FOUND.equals(version.getRadioModuleStatus())) {
             Log.w(TAG, handshakeLog(handshakeId, "radio module not found"));
             setMode(RadioMode.BAD_FIRMWARE);
@@ -1056,9 +1055,7 @@ public class RadioAudioService extends Service {
         }
 
         getHostToEsp32().setFlowControlWindow(version.getWindowSize());
-        if (version.getDeviceState() != null) {
-            handleInitialDeviceState(version.getDeviceState());
-        }
+        handleInitialDeviceState(helloPayload.getDeviceState());
         markRadioTransportReady();
         Log.i(TAG, handshakeLog(handshakeId, "HELLO version OK; proceeding with radio communication"));
         setMode(RadioMode.RX);
@@ -1127,8 +1124,8 @@ public class RadioAudioService extends Service {
         callbacks.setRadioType(RadioModuleType.UNKNOWN);
     }
 
-    public void handleFirmwareVersion(Protocol.FirmwareVersion version) {
-        radioModule.seedFirmwareVersion(version);
+    public void handleHello(Protocol.Hello hello) {
+        radioModule.seedFirmwareVersion(hello.getVersion());
         callbacks.setRadioType(getRadioType());
         updateTxLimitsForBand();
     }
@@ -1303,43 +1300,43 @@ public class RadioAudioService extends Service {
      * @param len   The length of the parameters.
      */
     @SuppressWarnings({"java:S6541"})
-    private void handleParsedCommand(final RcvCommand cmd, final byte[] param, final Integer len) {
+    private void handleParsedCommand(final RcvCommand cmd, final ByteBuffer param, final int offset, final int len) {
         switch (cmd) {
             case COMMAND_DEBUG_INFO:
-                Log.i(FIRMWARE_TAG, firmwareString(param, len));
+                Log.i(FIRMWARE_TAG, firmwareString(param, offset, len));
                 break;
 
             case COMMAND_DEBUG_DEBUG:
-                Log.d(FIRMWARE_TAG, firmwareString(param, len));
+                Log.d(FIRMWARE_TAG, firmwareString(param, offset, len));
                 break;
 
             case COMMAND_DEBUG_ERROR:
-                Log.e(FIRMWARE_TAG, firmwareString(param, len));
+                Log.e(FIRMWARE_TAG, firmwareString(param, offset, len));
                 break;
 
             case COMMAND_DEBUG_WARN:
-                Log.w(FIRMWARE_TAG, firmwareString(param, len));
+                Log.w(FIRMWARE_TAG, firmwareString(param, offset, len));
                 break;
 
             case COMMAND_DEBUG_TRACE:
-                Log.v(FIRMWARE_TAG, firmwareString(param, len));
+                Log.v(FIRMWARE_TAG, firmwareString(param, offset, len));
                 break;
 
             case COMMAND_HELLO:
-                handleHelloReceived(Protocol.FirmwareVersion.from(param, len));
+                handleHelloReceived(Protocol.Hello.from(param, offset, len));
                 break;
 
             case COMMAND_RX_AUDIO:
-                handleRxAudio(param, len);
+                handleRxAudio(param, offset, len);
                 break;
 
             case COMMAND_WINDOW_UPDATE:
-                WindowUpdate.from(param, len).ifPresent(windowAck ->
+                WindowUpdate.from(param, offset, len).ifPresent(windowAck ->
                     hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
                 break;
 
             case COMMAND_DEVICE_STATE:
-                Protocol.DeviceState.from(param, len).ifPresent(this::handleDeviceState);
+                Protocol.DeviceState.from(param, offset, len).ifPresent(this::handleDeviceState);
                 break;
 
             default:
@@ -1347,16 +1344,18 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private String firmwareString(byte[] param, Integer len) {
-        int safeLen = param == null || len == null ? 0 : Math.min(len, param.length);
-        return new String(param, 0, safeLen, StandardCharsets.UTF_8);
+    private String firmwareString(ByteBuffer param, int offset, int len) {
+        if (param == null || !param.hasArray() || offset < 0 || len <= 0 || param.limit() < offset + len) {
+            return "";
+        }
+        return new String(param.array(), offset, len, StandardCharsets.UTF_8);
     }
 
-    private void handleEsp32Ax25Packet(final byte[] param, final Integer len) {
-        if (param == null || len == null || len < 1) {
+    private void handleEsp32Ax25Packet(final ByteBuffer param, final int offset, final int len) {
+        if (param == null || !param.hasArray() || len < 1 || offset < 0 || param.limit() < offset + len) {
             return;
         }
-        handleAx25Packet(len == param.length ? param : java.util.Arrays.copyOf(param, len));
+        handleAx25Packet(param.array(), offset, len);
     }
 
     void handleInitialDeviceState(Protocol.DeviceState state) {
@@ -1405,8 +1404,11 @@ public class RadioAudioService extends Service {
      * @param param The byte array containing the audio data.
      * @param len   The length of the audio data in bytes.
      */
-    private void handleRxAudio(final byte[] param, final Integer len) {
-        int decoded = opusDecoder.decode(param, len, pcmFloat);
+    private void handleRxAudio(final ByteBuffer param, final int offset, final int len) {
+        if (param == null || !param.hasArray() || offset < 0 || len <= 0 || param.limit() < offset + len) {
+            return;
+        }
+        int decoded = opusDecoder.decode(param.array(), offset, len, pcmFloat);
 
         if ((getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) && audioTrack != null) {
             AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -1446,9 +1448,9 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private void handleAx25Packet(byte[] packet) {
+    private void handleAx25Packet(byte[] packet, int offset, int len) {
         try {
-            APRSPacket aprsPacket = Parser.parseAX25(packet);
+            APRSPacket aprsPacket = Parser.parseAX25(packet, offset, len);
             InformationField info = aprsPacket.getPayload();
             // Check if the packet is an APRS message type
             if (info.getDataTypeIdentifier() == ':') {
@@ -1603,25 +1605,11 @@ public class RadioAudioService extends Service {
     }
 
     /**
-     * Sets the high power mode for the radio.
-     * This will send the new state to the ESP32 if it is connected.
-     *
-     * @param highPower true to enable high power mode, false to disable it.
-     */
-    public void setHighPower(boolean highPower) {
-        radioModule.setHighPower(highPower);
-    }
-
-    public boolean isHighPower() {
-        return radioModule.isHighPowerEnabled();
-    }
-
-    /**
      * Sets whether radio module should poll RSSI. We need to be able to turn this off
      * because in v1.x versions of the PCB there's cross-talk between the Serial2 trace and
      * the audio trace, which breaks APRS decoding (and any other digital mode we might add).
-     * See https://github.com/VanceVagell/kv4p-ht/issues/310 for context.
-     *
+     * See <a href="https://github.com/VanceVagell/kv4p-ht/issues/310">...</a> for context.
+     * <p>
      * This will send the new state to the ESP32 if it is connected.
      *
      * @param on true to enable RSSI, false to disable it.

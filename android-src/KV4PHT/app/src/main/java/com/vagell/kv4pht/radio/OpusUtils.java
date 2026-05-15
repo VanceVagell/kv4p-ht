@@ -23,10 +23,10 @@ public final class OpusUtils {
         }
 
         @SneakyThrows
-        public int decode(byte[] opusData, int len, float[] floatData)  {
+        public int decode(byte[] opusData, int offset, int len, float[] floatData)  {
             int decodedSamples;
             try {
-                decodedSamples = decoder.decode(opusData, 0, len, pcmShorts, 0, frameSize, false);
+                decodedSamples = decoder.decode(opusData, offset, len, pcmShorts, 0, frameSize, false);
             } catch (Exception e) {
                 decodedSamples = 0;
             }
@@ -61,4 +61,3 @@ public final class OpusUtils {
         }
     }
 }
-
