@@ -64,8 +64,6 @@ public class RadioModuleController {
     private boolean lastPhysPttDown = false;
     private boolean appliedStateInSync = false;
     private boolean transportReady = false;
-    private byte vfoTxTone = 0;
-    private byte vfoRxTone = 0;
     private int desiredStateRetries = 0;
 
     synchronized void attachSender(Protocol.Sender sender) {
@@ -178,11 +176,6 @@ public class RadioModuleController {
         updateDesiredState(state -> state.withFlags(flags));
     }
 
-    public synchronized void setVfoTones(byte txTone, byte rxTone) {
-        vfoTxTone = txTone;
-        vfoRxTone = rxTone;
-    }
-
     synchronized void stop() {
         clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED);
     }
@@ -272,14 +265,6 @@ public class RadioModuleController {
 
     synchronized float getHalfBandwidthMhz() {
         return (desiredState.getBw() == DRA818_25K ? 0.025f : 0.0125f) / 2.0f;
-    }
-
-    synchronized byte getVfoTxTone() {
-        return vfoTxTone;
-    }
-
-    synchronized byte getVfoRxTone() {
-        return vfoRxTone;
     }
 
     public synchronized boolean hasRadioConfig() {

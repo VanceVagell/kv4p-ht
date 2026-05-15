@@ -614,7 +614,6 @@ public class RadioAudioService extends Service {
         radioModule.beginUpdate();
         try {
             radioModule.setMemoryId(-1);
-            radioModule.setVfoTones((byte) 0, (byte) 0);
             radioModule.setTxFrequency(freq);
             radioModule.setRxFrequency(freq);
             radioModule.setTxTone((byte) 0);
