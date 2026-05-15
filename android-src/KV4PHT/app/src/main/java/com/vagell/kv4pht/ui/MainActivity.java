@@ -1234,8 +1234,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Reconciles the visible frequency/memory selection with the first DeviceState reported by firmware.
-     * If memories are not loaded yet, this leaves the sync pending and is retried by the memories observer.
+     * Seeds the UI from firmware's reported DeviceState after connect.
+     *
+     * Radio settings now live in module NVS, so Android uses the firmware state as the source of truth
+     * instead of restoring app settings. This may no-op if radio config or memories are not loaded yet;
+     * in that case the sync stays pending and is retried later.
      */
     private void trySyncInitialRadioUi() {
         if (initialRadioUiSynced || !pendingInitialRadioUiSync || radioAudioService == null) {
