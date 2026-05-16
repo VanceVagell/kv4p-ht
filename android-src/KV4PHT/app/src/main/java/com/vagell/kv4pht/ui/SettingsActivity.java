@@ -42,11 +42,9 @@ import com.vagell.kv4pht.data.AppSetting;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
-import java.util.function.IntConsumer;
 import java.util.stream.Collectors;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -54,6 +52,12 @@ public class SettingsActivity extends AppCompatActivity {
     private MainViewModel viewModel = null;
     private boolean hasHighLowPowerSwitch = false;
     private int firmwareVersion = -1;
+    public static final String EXTRA_RF_POWER_HIGH = "rfPowerHigh";
+    public static final String EXTRA_BANDWIDTH = "bandwidth";
+    public static final String EXTRA_SQUELCH = "squelch";
+    public static final String EXTRA_FILTER_PRE = "filterPre";
+    public static final String EXTRA_FILTER_HIGH = "filterHigh";
+    public static final String EXTRA_FILTER_LOW = "filterLow";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -145,13 +149,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    private void setSliderIfPresent(Map<String, String> settings, String key, int viewId) {
-        if (settings.containsKey(key)) {
-            this.<Slider>findViewById(viewId)
-                .setValue(Float.parseFloat(Optional.ofNullable(settings.get(key)).orElse("0")));
-        }
-    }
-
     private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId) {
         setDropdownIfPresent(settings, key, viewId, "");
     }
@@ -163,11 +160,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    private void setDropdownWithDefault(Map<String, String> settings, String key, int viewId, String defaultValue) {
-        this.<AutoCompleteTextView>findViewById(viewId)
-            .setText(settings.getOrDefault(key, defaultValue), false);
-    }
-
     private void populateOriginalValues(Runnable callback) {
         threadPoolExecutor.execute(() -> {
             final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
@@ -175,27 +167,34 @@ public class SettingsActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 String mhz = getString(R.string.mhz);
                 setTextIfPresent(settings, AppSetting.SETTING_CALLSIGN, R.id.callsignTextInputEditText);
-                setSliderIfPresent(settings, AppSetting.SETTING_SQUELCH, R.id.squelchSlider);
-                setSwitchIfPresent(settings, AppSetting.SETTING_EMPHASIS, R.id.emphasisSwitch);
-                setSwitchIfPresent(settings, AppSetting.SETTING_HIGHPASS, R.id.highpassSwitch);
-                setSwitchIfPresent(settings, AppSetting.SETTING_LOWPASS, R.id.lowpassSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_STICKY_PTT, R.id.stickyPTTSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
-                setDropdownIfPresent(settings, AppSetting.SETTING_BANDWIDTH, R.id.bandwidthTextView);
+                setRadioSettingsFromIntent();
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_70_CM_TX_FREQ, R.id.min70cmFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_70_CM_TX_FREQ, R.id.max70cmFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIC_GAIN_BOOST, R.id.micGainBoostTextView);
-                if (hasHighLowPowerSwitch) {
-                    setDropdownWithDefault(settings, AppSetting.SETTING_RF_POWER, R.id.rfPowerTextView,
-                        getResources().getStringArray(R.array.rf_power_options)[0]);
-                }
                 callback.run();
             });
         });
+    }
+
+    private void setRadioSettingsFromIntent() {
+        this.<Slider>findViewById(R.id.squelchSlider).setValue(getIntent().getIntExtra(EXTRA_SQUELCH, 0));
+        this.<Switch>findViewById(R.id.emphasisSwitch).setChecked(getIntent().getBooleanExtra(EXTRA_FILTER_PRE, false));
+        this.<Switch>findViewById(R.id.highpassSwitch).setChecked(getIntent().getBooleanExtra(EXTRA_FILTER_HIGH, false));
+        this.<Switch>findViewById(R.id.lowpassSwitch).setChecked(getIntent().getBooleanExtra(EXTRA_FILTER_LOW, false));
+        this.<AutoCompleteTextView>findViewById(R.id.bandwidthTextView)
+            .setText(getIntent().getStringExtra(EXTRA_BANDWIDTH) != null ? getIntent().getStringExtra(EXTRA_BANDWIDTH) : getString(R.string.wide), false);
+
+        String[] powerOptions = getResources().getStringArray(R.array.rf_power_options);
+        if (powerOptions.length > 0) {
+            this.<AutoCompleteTextView>findViewById(R.id.rfPowerTextView)
+                .setText(powerOptions[getIntent().getBooleanExtra(EXTRA_RF_POWER_HIGH, true) ? 0 : Math.min(1, powerOptions.length - 1)], false);
+        }
     }
 
     public void closedCaptionsButtonClicked(View view) {
@@ -217,8 +216,21 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     public void doneButtonClicked(View view) {
-        setResult(Activity.RESULT_OK);
+        Intent data = new Intent()
+            .putExtra(EXTRA_RF_POWER_HIGH, isHighPowerSelected())
+            .putExtra(EXTRA_BANDWIDTH, this.<AutoCompleteTextView>findViewById(R.id.bandwidthTextView).getText().toString().trim())
+            .putExtra(EXTRA_SQUELCH, (int) this.<Slider>findViewById(R.id.squelchSlider).getValue())
+            .putExtra(EXTRA_FILTER_PRE, this.<Switch>findViewById(R.id.emphasisSwitch).isChecked())
+            .putExtra(EXTRA_FILTER_HIGH, this.<Switch>findViewById(R.id.highpassSwitch).isChecked())
+            .putExtra(EXTRA_FILTER_LOW, this.<Switch>findViewById(R.id.lowpassSwitch).isChecked());
+        setResult(Activity.RESULT_OK, data);
         finish();
+    }
+
+    private boolean isHighPowerSelected() {
+        String[] powerOptions = getResources().getStringArray(R.array.rf_power_options);
+        String selected = this.<AutoCompleteTextView>findViewById(R.id.rfPowerTextView).getText().toString().trim();
+        return powerOptions.length == 0 || selected.equals(powerOptions[0]);
     }
 
     private void attachTextView(int viewId, Consumer<String> onTextChanged) {
@@ -244,25 +256,14 @@ public class SettingsActivity extends AppCompatActivity {
         ((Switch) findViewById(id)).setOnCheckedChangeListener((buttonView, isChecked) -> onChange.accept(isChecked));
     }
 
-    private void attachSlider(int viewId, IntConsumer onValueChanged) {
-        Slider slider = findViewById(viewId);
-        slider.addOnChangeListener((s, value, fromUser) -> onValueChanged.accept((int) value));
-    }
-
     private void attachListeners() {
         attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
         attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
-        attachTextView(R.id.bandwidthTextView, this::setBandwidth);
         attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text)));
         attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text)));
         attachTextView(R.id.min70cmFreqTextView, text -> setMin70cmTxFreq(extractPrefix(text)));
         attachTextView(R.id.max70cmFreqTextView, text -> setMax70cmTxFreq(extractPrefix(text)));
         attachTextView(R.id.micGainBoostTextView, this::setMicGainBoost);
-        attachTextView(R.id.rfPowerTextView, this::setRfPower);
-        attachSlider(R.id.squelchSlider, this::setSquelch);
-        attachSwitch(R.id.emphasisSwitch, this::setEmphasisFilter);
-        attachSwitch(R.id.highpassSwitch, this::setHighpassFilter);
-        attachSwitch(R.id.lowpassSwitch, this::setLowpassFilter);
         attachSwitch(R.id.stickyPTTSwitch, this::setStickyPTT);
         attachSwitch(R.id.noAnimationsSwitch, this::setNoAnimations);
         attachSwitch(R.id.aprsPositionSwitch, this::setAprsBeaconPosition);
@@ -278,10 +279,6 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setAprsPositionAccuracy(String accuracy) {
         saveAppSettingAsync(AppSetting.SETTING_APRS_POSITION_ACCURACY, accuracy);
-    }
-
-    private void setBandwidth(String bandwidth) {
-        saveAppSettingAsync(AppSetting.SETTING_BANDWIDTH, bandwidth);
     }
 
     private void setMin2mTxFreq(String freq) {
@@ -304,28 +301,8 @@ public class SettingsActivity extends AppCompatActivity {
         saveAppSettingAsync(AppSetting.SETTING_MIC_GAIN_BOOST, level);
     }
 
-    private void setRfPower(String rfPower) {
-        saveAppSettingAsync(AppSetting.SETTING_RF_POWER, rfPower);
-    }
-
     private void setCallsign(String callsign) {
         saveAppSettingAsync(AppSetting.SETTING_CALLSIGN, callsign);
-    }
-
-    private void setSquelch(int squelch) {
-        saveAppSettingAsync(AppSetting.SETTING_SQUELCH, Integer.toString(squelch));
-    }
-
-    private void setEmphasisFilter(boolean enabled) {
-        saveAppSettingAsync(AppSetting.SETTING_EMPHASIS, Boolean.toString(enabled));
-    }
-
-    private void setHighpassFilter(boolean enabled) {
-        saveAppSettingAsync(AppSetting.SETTING_HIGHPASS, Boolean.toString(enabled));
-    }
-
-    private void setLowpassFilter(boolean enabled) {
-        saveAppSettingAsync(AppSetting.SETTING_LOWPASS, Boolean.toString(enabled));
     }
 
     private void setStickyPTT(boolean enabled) {

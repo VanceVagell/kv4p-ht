@@ -35,7 +35,9 @@ public:
       if (len > PROTO_MTU) {
         len = PROTO_MTU;
       }
-      sendAudio((uint8_t*)data, len);
+      if (mode == MODE_RX) {
+        sendAudio((uint8_t*)data, len);
+      }
       return len;
     }
     return len;
@@ -67,8 +69,8 @@ private:
 
 static void onAfskPacketDecoded(const uint8_t *frame, size_t len) {
   if (frame && len > 0) {
-    // Decoder ID 0 = ESP32 demodulator path.
-    sendAx25Packet(0, frame, len);
+    pulseAprsRxLED();
+    sendAx25Packet(frame, len);
   }
 }
 
@@ -128,6 +130,9 @@ inline void setUpADCAttenuator() {
 }
 
 void initI2SRx() {
+  if (rxStreamConfigured) {
+    return;
+  }
   injectADCBias();
   setUpADCAttenuator();
   //AudioToolsLogger.begin(debugPrinter, AudioToolsLogLevel::Debug);
@@ -171,7 +176,7 @@ void endI2SRx() {
 }
   
 void rxAudioLoop() {
-  if (mode == MODE_RX) {
+  if (mode == MODE_RX || mode == MODE_STOPPED) {
     mute.setActive(squelched);
     rxCopier.copy();
     esp_task_wdt_reset();

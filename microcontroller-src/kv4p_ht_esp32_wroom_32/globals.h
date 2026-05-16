@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/adc.h>
 
 // RF module types
-enum RfModuleType {
+enum RfModuleType : uint8_t {
   RF_SA818_VHF = 0,
   RF_SA818_UHF = 1,
 };
@@ -80,6 +80,9 @@ bool squelched = false;
 
 // Forward declarations
 void setMode(Mode newMode);
+Mode rxIdleMode();
+void sendCurrentDeviceState();
+void markDeviceStateDirty();
 
 struct [[gnu::packed]] RGBColor {
   uint8_t red;

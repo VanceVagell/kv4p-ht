@@ -38,7 +38,7 @@ void inline buttonsLoop() {
     bool debouncedPttState = pttDebounce.debounce(digitalRead(hw.pins.pinPttPhys1) == LOW || digitalRead(hw.pins.pinPttPhys2) == LOW);
     if (debouncedPttState != isPhysPttDown) {
       isPhysPttDown = debouncedPttState;
-      sendPhysPttState(isPhysPttDown);
+      markDeviceStateDirty();
     }
   }
 }
