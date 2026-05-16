@@ -44,13 +44,15 @@ public class RadioModuleController {
             | Protocol.HOST_STATE_FILTER_PRE
             | Protocol.HOST_STATE_FILTER_HIGH
             | Protocol.HOST_STATE_FILTER_LOW;
+    private static final int DEFAULT_DESIRED_FLAGS =
+        Protocol.HOST_STATE_HIGH_POWER | Protocol.HOST_STATE_RSSI_ENABLED;
 
     private Protocol.Sender sender;
     private Protocol.FirmwareVersion firmwareVersion;
     private Protocol.HostDesiredState desiredState = Protocol.HostDesiredState.builder()
         .sequence(0)
         .memoryId(-1)
-        .flags(Protocol.HOST_STATE_HIGH_POWER | Protocol.HOST_STATE_RSSI_ENABLED)
+        .flags(DEFAULT_DESIRED_FLAGS)
         .bw(DRA818_25K)
         .freqTx(0.0f)
         .freqRx(0.0f)
@@ -316,6 +318,19 @@ public class RadioModuleController {
     }
 
     private Protocol.HostDesiredState desiredFromDeviceState(Protocol.DeviceState state) {
+        if (!state.hasRadioConfig()) {
+            return Protocol.HostDesiredState.builder()
+                .sequence(state.getAppliedSequence())
+                .memoryId(-1)
+                .flags(DEFAULT_DESIRED_FLAGS)
+                .bw(DRA818_25K)
+                .freqTx(0.0f)
+                .freqRx(0.0f)
+                .ctcssTx((byte) 0)
+                .squelch((byte) 0)
+                .ctcssRx((byte) 0)
+                .build();
+        }
         return Protocol.HostDesiredState.builder()
             .sequence(state.getAppliedSequence())
             .memoryId(state.getMemoryId())

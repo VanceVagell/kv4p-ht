@@ -704,6 +704,52 @@ public class ProtocolKissTest {
     }
 
     @Test
+    public void seedFromDeviceStateWithoutRadioConfigKeepsControllerDefaults() {
+        CapturingSender sender = new CapturingSender();
+        RadioModuleController controller = new RadioModuleController();
+        controller.attachSender(sender);
+        controller.setMemoryId(99);
+        controller.setBandwidth(Protocol.DRA818_12K5);
+        controller.setTxFrequency(446.0f);
+        controller.setRxFrequency(445.5f);
+        controller.setTxTone((byte) 4);
+        controller.setSquelch(5);
+        controller.setRxTone((byte) 6);
+        Protocol.DeviceState emptyNvsState = Protocol.DeviceState.builder()
+            .appliedSequence(7)
+            .memoryId(0)
+            .flags(0)
+            .bw(Protocol.DRA818_12K5)
+            .freqTx(0.0f)
+            .freqRx(0.0f)
+            .ctcssTx((byte) 0)
+            .squelch((byte) 0)
+            .ctcssRx((byte) 0)
+            .radioModuleStatus(Protocol.RadioStatus.RADIO_STATUS_FOUND)
+            .mode(Protocol.DeviceMode.DEVICE_MODE_STOPPED)
+            .lastError(0)
+            .latestRssi(0)
+            .build();
+
+        controller.seedFromDeviceState(emptyNvsState);
+        controller.markTransportReady();
+        controller.setHighPower(false);
+
+        assertEquals(1, sender.sentStates.size());
+        Protocol.HostDesiredState sent = sender.sentStates.get(0);
+        assertEquals(Protocol.DRA818_25K, sent.getBw());
+        assertEquals(-1, sent.getMemoryId());
+        assertEquals(0.0f, sent.getFreqTx(), 0.0001f);
+        assertEquals(0.0f, sent.getFreqRx(), 0.0001f);
+        assertEquals(0, sent.getCtcssTx());
+        assertEquals(0, sent.getSquelch());
+        assertEquals(0, sent.getCtcssRx());
+        assertEquals(0, sent.getFlags() & Protocol.HOST_STATE_RADIO_CONFIG_VALID);
+        assertEquals(0, sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED);
+    }
+
+    @Test
     public void deviceStateParsesPackedFirmwareStruct() {
         java.nio.ByteBuffer deviceStatePayload = java.nio.ByteBuffer.allocate(26).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         deviceStatePayload.putInt(9);
