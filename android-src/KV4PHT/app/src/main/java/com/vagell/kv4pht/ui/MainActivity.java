@@ -1827,6 +1827,11 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 break;
+            case REQUEST_FIND_REPEATERS:
+                if (resultCode == Activity.RESULT_OK) {
+                    viewModel.loadDataAsync(() -> runOnUiThread(() -> memoriesAdapter.notifyDataSetChanged()));
+                }
+                break;
             default:
                 Log.d("DEBUG", "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
         }
