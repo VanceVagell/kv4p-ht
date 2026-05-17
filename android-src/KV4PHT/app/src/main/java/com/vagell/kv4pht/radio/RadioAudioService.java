@@ -596,6 +596,11 @@ public class RadioAudioService extends Service {
         return  (freq >= (minTxFreq + halfBandwidth)) && (freq <= (maxTxFreq - halfBandwidth));
     }
 
+    private void updateTxAllowed(float txFrequency) {
+        txAllowed = isTxAllowed(txFrequency);
+        radioModule.setTxAllowed(txAllowed);
+    }
+
     public void tuneToFreq(String frequencyStr) {
         if (mode == RadioMode.STARTUP) {
             return; // Not fully loaded and initialized yet, don't tune.
@@ -618,10 +623,10 @@ public class RadioAudioService extends Service {
             radioModule.setRxFrequency(freq);
             radioModule.setTxTone((byte) 0);
             radioModule.setRxTone((byte) 0);
+            updateTxAllowed(freq);
         } finally {
             radioModule.endUpdate();
         }
-        txAllowed = isTxAllowed(freq);
     }
 
     public String makeSafeHamFreq(String strFreq) {
@@ -670,10 +675,10 @@ public class RadioAudioService extends Service {
             radioModule.setRxFrequency(Float.parseFloat(makeSafeHamFreq(activeFrequencyStr)));
             radioModule.setTxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.txTone)));
             radioModule.setRxTone((byte) Math.max(0, ToneHelper.getToneIndex(memory.rxTone)));
+            updateTxAllowed(txFreq);
         } finally {
             radioModule.endUpdate();
         }
-        txAllowed = isTxAllowed(txFreq);
         updateForegroundNotification(memory.name + " (" + memory.frequency + " MHz)");
     }
 
@@ -1143,7 +1148,7 @@ public class RadioAudioService extends Service {
         Log.d(TAG, "Min tx freq: " + minTxFreq);
         Log.d(TAG, "Max tx freq: " + maxTxFreq);
         float txFrequency = radioModule.getTxFrequency() > 0 ? radioModule.getTxFrequency() : parseActiveFrequencyOrZero();
-        txAllowed = isTxAllowed(txFrequency);
+        updateTxAllowed(txFrequency);
         Log.d(TAG, String.format("Tx allowed: %b (%s)", txAllowed, txFrequency));
     }
 
@@ -1375,7 +1380,7 @@ public class RadioAudioService extends Service {
         radioModule.updateDeviceState(state);
         callbacks.moduleTxStateChanged(radioModule.isDeviceTxActive());
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
-            txAllowed = isTxAllowed(radioModule.getTxFrequency());
+            updateTxAllowed(radioModule.getTxFrequency());
         }
         if (getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
             callbacks.sMeterUpdate(radioModule.getSMeter9Value());
