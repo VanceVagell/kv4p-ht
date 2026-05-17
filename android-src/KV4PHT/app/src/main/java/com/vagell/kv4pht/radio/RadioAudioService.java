@@ -199,8 +199,6 @@ public class RadioAudioService extends Service {
     // === Radio State ===
     @Getter
     private @NonNull RadioMode mode = RadioMode.STARTUP;
-    @Getter
-    private boolean txAllowed = true;
     @Setter
     private @NonNull String callsign = "";
     @Getter
@@ -591,14 +589,17 @@ public class RadioAudioService extends Service {
      * @param freq The frequency to check, in MHz.
      * @return true if the frequency is within the allowed transmission range, false otherwise.
      */
-    private boolean isTxAllowed(float freq) {
+    private boolean canTransmitOnFrequency(float freq) {
         final float halfBandwidth = radioModule.getHalfBandwidthMhz();
         return  (freq >= (minTxFreq + halfBandwidth)) && (freq <= (maxTxFreq - halfBandwidth));
     }
 
     private void updateTxAllowed(float txFrequency) {
-        txAllowed = isTxAllowed(txFrequency);
-        radioModule.setTxAllowed(txAllowed);
+        radioModule.setTxAllowed(canTransmitOnFrequency(txFrequency));
+    }
+
+    public boolean isTxAllowed() {
+        return radioModule.isTxAllowed();
     }
 
     public void tuneToFreq(String frequencyStr) {
@@ -784,7 +785,7 @@ public class RadioAudioService extends Service {
             radioMissing();
             return;
         }
-        if (mode == RadioMode.RX && txAllowed) {
+        if (mode == RadioMode.RX && isTxAllowed()) {
             setMode(RadioMode.TX);
             callbacks.sMeterUpdate(0);
             setTxRunAwayTimer();
@@ -1149,7 +1150,7 @@ public class RadioAudioService extends Service {
         Log.d(TAG, "Max tx freq: " + maxTxFreq);
         float txFrequency = radioModule.getTxFrequency() > 0 ? radioModule.getTxFrequency() : parseActiveFrequencyOrZero();
         updateTxAllowed(txFrequency);
-        Log.d(TAG, String.format("Tx allowed: %b (%s)", txAllowed, txFrequency));
+        Log.d(TAG, String.format("Tx allowed: %b (%s)", isTxAllowed(), txFrequency));
     }
 
     private float parseActiveFrequencyOrZero() {
@@ -1389,7 +1390,7 @@ public class RadioAudioService extends Service {
         if (radioModule.didPhysPttChange()) {
             boolean physPttDown = radioModule.isPhysPttDown();
             if (physPttDown) {
-                if (getMode() == RadioMode.RX && txAllowed) {
+                if (getMode() == RadioMode.RX && isTxAllowed()) {
                     startPtt();
                     callbacks.forcedPttStart();
                 }
@@ -1486,7 +1487,7 @@ public class RadioAudioService extends Service {
      */
     @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
     public void sendPositionBeacon() {
-        if (!isRadioConnected() || !txAllowed || getMode() != RadioMode.RX) {
+        if (!isRadioConnected() || !isTxAllowed() || getMode() != RadioMode.RX) {
             Log.d(TAG, "Skipping position beacon: radio disconnected, tx not allowed, or not in RX mode.");
             return;
         }
@@ -1587,7 +1588,7 @@ public class RadioAudioService extends Service {
      * @param ax25Packet The AX.25 packet to send.
      */
     private void txAX25Packet(Packet ax25Packet) {
-        if (!txAllowed) {
+        if (!isTxAllowed()) {
             Log.e(TAG, "Tried to send an AX.25 packet when tx is not allowed, did not send.");
             return;
         }
