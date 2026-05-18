@@ -58,11 +58,11 @@ HostDesiredState desiredState = {
   .ctcss_rx = 0,
 };
 HostDesiredState appliedState = {};
+HostDesiredState persistedState = {};
 bool radioConfigApplied = false;
 bool filtersApplied = false;
 uint8_t lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
 uint8_t latestRssi = 0;
-bool hasPersistedRadioState = false;
 bool deviceStateDirty = false;
 
 Debounce squelchDebounce(100);
@@ -75,6 +75,10 @@ float moduleMaxRadioFreq() {
   return hw.rfModuleType == RF_SA818_UHF ? 480.0f : 174.0f;
 }
 
+float moduleDefaultRadioFreq() {
+  return hw.rfModuleType == RF_SA818_UHF ? 435.0f : 144.0f;
+}
+
 float clampModuleRadioFreq(float freq) {
   return min(max(freq, moduleMinRadioFreq()), moduleMaxRadioFreq());
 }
@@ -85,23 +89,20 @@ bool isModuleRadioFreq(float freq) {
 
 void loadPersistedRadioState() {
   prefs.begin("radio", true);
-  hasPersistedRadioState = prefs.getBool("valid", false);
   uint16_t flags = desiredState.flags;
-  flags &= ~(HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW);
-  if (hasPersistedRadioState) {
-    flags |= HOST_STATE_RADIO_CONFIG_VALID;
-    desiredState.bw = prefs.getUChar("bw", DRA818_25K);
-    desiredState.freq_tx = prefs.getFloat("freq_tx", 0.0f);
-    desiredState.freq_rx = prefs.getFloat("freq_rx", 0.0f);
-    desiredState.ctcss_tx = prefs.getUChar("ctcss_tx", 0);
-    desiredState.squelch = prefs.getUChar("squelch", 0);
-    desiredState.ctcss_rx = prefs.getUChar("ctcss_rx", 0);
-    desiredState.memoryId = prefs.getInt("memory_id", -1);
-    if (!isModuleRadioFreq(desiredState.freq_tx) || !isModuleRadioFreq(desiredState.freq_rx)) {
-      desiredState.freq_tx = clampModuleRadioFreq(desiredState.freq_tx);
-      desiredState.freq_rx = clampModuleRadioFreq(desiredState.freq_rx);
-      desiredState.memoryId = -1;
-    }
+  flags &= ~(HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW | HOST_STATE_TX_ALLOWED);
+  flags |= HOST_STATE_RADIO_CONFIG_VALID;
+  desiredState.bw = prefs.getUChar("bw", DRA818_25K);
+  desiredState.freq_tx = prefs.getFloat("freq_tx", moduleDefaultRadioFreq());
+  desiredState.freq_rx = prefs.getFloat("freq_rx", moduleDefaultRadioFreq());
+  desiredState.ctcss_tx = prefs.getUChar("ctcss_tx", 0);
+  desiredState.squelch = prefs.getUChar("squelch", 0);
+  desiredState.ctcss_rx = prefs.getUChar("ctcss_rx", 0);
+  desiredState.memoryId = prefs.getInt("memory_id", -1);
+  if (!isModuleRadioFreq(desiredState.freq_tx) || !isModuleRadioFreq(desiredState.freq_rx)) {
+    desiredState.freq_tx = clampModuleRadioFreq(desiredState.freq_tx);
+    desiredState.freq_rx = clampModuleRadioFreq(desiredState.freq_rx);
+    desiredState.memoryId = -1;
   }
   if (prefs.getBool("high", true)) {
     flags |= HOST_STATE_HIGH_POWER;
@@ -118,30 +119,30 @@ void loadPersistedRadioState() {
   if (prefs.getBool("flt_low", false)) {
     flags |= HOST_STATE_FILTER_LOW;
   }
+  if (prefs.getBool("tx_allowed", false)) {
+    flags |= HOST_STATE_TX_ALLOWED;
+  }
   desiredState.flags = flags;
   desiredState.sequence = 0;
   desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_RX_AUDIO_OPEN);
   appliedState.memoryId = desiredState.memoryId;
+  persistedState = desiredState;
   prefs.end();
 }
 
+uint16_t persistedStateFlags(uint16_t flags) {
+  return flags & (HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW | HOST_STATE_TX_ALLOWED);
+}
+
 bool persistedRadioStateMatchesDesired() {
-  prefs.begin("radio", true);
-  bool matches = prefs.getBool("valid", false) == ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) != 0)
-    && prefs.getUChar("bw", DRA818_25K) == desiredState.bw
-    && prefs.getFloat("freq_tx", 0.0f) == desiredState.freq_tx
-    && prefs.getFloat("freq_rx", 0.0f) == desiredState.freq_rx
-    && prefs.getUChar("ctcss_tx", 0) == desiredState.ctcss_tx
-    && prefs.getUChar("squelch", 0) == desiredState.squelch
-    && prefs.getUChar("ctcss_rx", 0) == desiredState.ctcss_rx
-    && prefs.getInt("memory_id", -1) == desiredState.memoryId
-    && prefs.getBool("high", true) == ((desiredState.flags & HOST_STATE_HIGH_POWER) != 0)
-    && prefs.getBool("rssi", true) == ((desiredState.flags & HOST_STATE_RSSI_ENABLED) != 0)
-    && prefs.getBool("flt_pre", false) == ((desiredState.flags & HOST_STATE_FILTER_PRE) != 0)
-    && prefs.getBool("flt_high", false) == ((desiredState.flags & HOST_STATE_FILTER_HIGH) != 0)
-    && prefs.getBool("flt_low", false) == ((desiredState.flags & HOST_STATE_FILTER_LOW) != 0);
-  prefs.end();
-  return matches;
+  return persistedState.bw == desiredState.bw
+    && persistedState.freq_tx == desiredState.freq_tx
+    && persistedState.freq_rx == desiredState.freq_rx
+    && persistedState.ctcss_tx == desiredState.ctcss_tx
+    && persistedState.squelch == desiredState.squelch
+    && persistedState.ctcss_rx == desiredState.ctcss_rx
+    && persistedState.memoryId == desiredState.memoryId
+    && persistedStateFlags(persistedState.flags) == persistedStateFlags(desiredState.flags);
 }
 
 void savePersistedRadioStateIfChanged() {
@@ -149,7 +150,6 @@ void savePersistedRadioStateIfChanged() {
     return;
   }
   prefs.begin("radio", false);
-  prefs.putBool("valid", (desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) != 0);
   prefs.putUChar("bw", desiredState.bw);
   prefs.putFloat("freq_tx", desiredState.freq_tx);
   prefs.putFloat("freq_rx", desiredState.freq_rx);
@@ -162,7 +162,9 @@ void savePersistedRadioStateIfChanged() {
   prefs.putBool("flt_pre", (desiredState.flags & HOST_STATE_FILTER_PRE) != 0);
   prefs.putBool("flt_high", (desiredState.flags & HOST_STATE_FILTER_HIGH) != 0);
   prefs.putBool("flt_low", (desiredState.flags & HOST_STATE_FILTER_LOW) != 0);
+  prefs.putBool("tx_allowed", (desiredState.flags & HOST_STATE_TX_ALLOWED) != 0);
   prefs.end();
+  persistedState = desiredState;
 }
 
 uint8_t getFirmwareFeatures() {
@@ -177,6 +179,10 @@ Mode rxIdleMode() {
 
 uint16_t desiredFilterFlags() {
   return desiredState.flags & (HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW);
+}
+
+bool txAllowedByHost() {
+  return desiredState.flags & HOST_STATE_TX_ALLOWED;
 }
 
 uint16_t deviceStateFlags() {
@@ -287,7 +293,7 @@ void reconcileDesiredState(bool sendReport = true) {
     radioConfigApplied = true;
   }
 
-  if (desiredState.flags & HOST_STATE_PTT_REQUESTED) {
+  if ((desiredState.flags & HOST_STATE_PTT_REQUESTED) && txAllowedByHost()) {
     setMode(MODE_TX);
   } else {
     setMode(rxIdleMode());
@@ -417,7 +423,7 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
 }
 
 void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
-  if (ax25_len > 0 && ax25_len <= PROTO_MTU) {
+  if (ax25_len > 0 && ax25_len <= PROTO_MTU && txAllowedByHost()) {
     setMode(MODE_TX);
     sendCurrentDeviceState();
     pulseAprsTxLED();
