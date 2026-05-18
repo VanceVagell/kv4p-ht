@@ -32,3 +32,11 @@ jobs:
       - name: Run tests
         run: pio test -v
         working-directory: microcontroller-src
+
+      - name: Upload firmware binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-binaries
+          path: |
+            microcontroller-src/.pio/build/esp32dev/firmware.bin
+            microcontroller-src/.pio/build/esp32dev-release/firmware.bin        
