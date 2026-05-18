@@ -486,7 +486,12 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void sMeterUpdate(int value) {
-                    updateSMeter(value);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            updateSMeter(value);
+                        }
+                    });
                 }
 
                 @Override
