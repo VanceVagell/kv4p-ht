@@ -1842,12 +1842,14 @@ public class MainActivity extends AppCompatActivity {
                         // Tune to the edited memory to force any changes to be applied (e.g. new tone
                         // or frequency).
                         List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
-                        for (int i = 0; i < channelMemories.size(); i++) {
-                            if (channelMemories.get(i).memoryId == editedMemoryId) {
-                                viewModel.highlightMemory(channelMemories.get(i));
+                        if (channelMemories != null) {
+                            for (int i = 0; i < channelMemories.size(); i++) {
+                                if (channelMemories.get(i).memoryId == editedMemoryId) {
+                                    viewModel.highlightMemory(channelMemories.get(i));
 
-                                if (radioAudioService != null) {
-                                    radioAudioService.tuneToMemory(channelMemories.get(i));
+                                    if (radioAudioService != null) {
+                                        radioAudioService.tuneToMemory(channelMemories.get(i));
+                                    }
                                 }
                             }
                         }

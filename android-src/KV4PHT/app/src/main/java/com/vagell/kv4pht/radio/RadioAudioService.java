@@ -26,6 +26,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
@@ -448,11 +449,14 @@ public class RadioAudioService extends Service {
             return START_NOT_STICKY;
         }
 
-        // Build an ongoing notification
         Notification notification = buildForegroundNotification();
 
         try {
-            startForeground(SERVICE_ID, notification);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(SERVICE_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            } else {
+                startForeground(SERVICE_ID, notification);
+            }
         } catch (SecurityException e) {
             Log.e(TAG, "Unable to start foreground radio service.", e);
             stopSelf();
@@ -1163,6 +1167,9 @@ public class RadioAudioService extends Service {
     }
 
     private float parseActiveFrequencyOrZero() {
+        if (activeFrequencyStr == null) {
+            return 0.0f;
+        }
         try {
             return Float.parseFloat(activeFrequencyStr);
         } catch (NumberFormatException e) {
