@@ -31,7 +31,7 @@ import com.vagell.kv4pht.data.migrations.*;
  * Singleton Room database for kv4p HT application.
  */
 @Database(
-    version = 6,
+    version = 7,
     entities = {AppSetting.class, ChannelMemory.class, APRSMessage.class}
 )
 @SuppressWarnings("java:S6548")

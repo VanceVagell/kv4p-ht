@@ -31,8 +31,8 @@ public class WeatherField extends APRSData {
         return bd.doubleValue();
     }
     
-    
-    /** 
+
+    /**
      * @return String
      */
     @Override
@@ -47,6 +47,8 @@ public class WeatherField extends APRSData {
         sb.append("Rain since 00:00:\t" + this.rainSinceMidnight + "\n");
         sb.append("Humidity:\t" + this.humidity + "\n");
         sb.append("Pressure:\t" + this.pressure + "\n");
+        sb.append("Luminosity:\t" + this.luminosity + "\n");
+        sb.append("Snowfall:\t" + this.snowfallLast24Hours + "\n");
         return sb.toString();
     }
 
