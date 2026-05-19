@@ -1478,8 +1478,11 @@ public class RadioAudioService extends Service {
                         aprsPacket.getSourceCall() + " messaged you",
                         msg.getMessageBody(),
                         INTENT_OPEN_CHAT);
-                    // Send acknowledgment after a delay
-                    handler.postDelayed(() -> sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), msg.getMessageNumber()), 1000);
+                    String msgNum = msg.getMessageNumber();
+                    if (null != msgNum && !msgNum.trim().isEmpty()) { // APRS spec says only ack if msg num provided
+                        // Send acknowledgment after a delay
+                        handler.postDelayed(() -> sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), msgNum), 1000);
+                    }
                 }
             }
             // Notify callbacks about the received packet
@@ -1592,7 +1595,7 @@ public class RadioAudioService extends Service {
         );
         try {
             final PositionField posField = new PositionField(("=" + myPos.toCompressedString()).getBytes(), "", 1);
-            final APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", DEFAULT_DIGIPEATERS, posField.getRawBytes());
+            final APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
             txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
             callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), activeFrequencyStr, wasSwitch);
@@ -1608,8 +1611,7 @@ public class RadioAudioService extends Service {
      * @param remoteMessageNum  The message number to acknowledge.
      */
     public void sendAckMessage(String to, String remoteMessageNum) {
-        MessagePacket msgPacket = new MessagePacket(to, "ack" + remoteMessageNum, remoteMessageNum);
-        APRSPacket aprsPacket = new APRSPacket(callsign, to, DEFAULT_DIGIPEATERS, msgPacket.getRawBytes());
+        APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, MessagePacket.createMessagePayload(to, "ack" + remoteMessageNum, null));
         txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
     }
 
@@ -1629,12 +1631,11 @@ public class RadioAudioService extends Service {
             return -1;
         }
         // Create message and digipeater path
-        MessagePacket msgPacket = new MessagePacket(targetCallsign, outText, String.valueOf(messageNumber++));
         if (messageNumber > APRS_MAX_MESSAGE_NUM) {
             messageNumber = 0;
         }
         try {
-            APRSPacket aprsPacket = new APRSPacket(callsign, targetCallsign, DEFAULT_DIGIPEATERS, msgPacket.getRawBytes());
+            APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, MessagePacket.createMessagePayload(targetCallsign, outText, String.valueOf(messageNumber++)));
             Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
             txAX25Packet(ax25Packet);
         } catch (IllegalArgumentException e) {
