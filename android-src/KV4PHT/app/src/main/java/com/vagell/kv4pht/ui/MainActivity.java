@@ -486,7 +486,12 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void sMeterUpdate(int value) {
-                    updateSMeter(value);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            updateSMeter(value);
+                        }
+                    });
                 }
 
                 @Override
@@ -1825,6 +1830,11 @@ public class MainActivity extends AppCompatActivity {
                     if (radioAudioService != null) {
                         radioAudioService.renegotiateAfterFlashing();
                     }
+                }
+                break;
+            case REQUEST_FIND_REPEATERS:
+                if (resultCode == Activity.RESULT_OK) {
+                    viewModel.loadDataAsync(() -> runOnUiThread(() -> memoriesAdapter.notifyDataSetChanged()));
                 }
                 break;
             default:

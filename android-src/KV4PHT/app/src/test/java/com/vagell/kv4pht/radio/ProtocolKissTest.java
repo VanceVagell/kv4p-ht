@@ -733,7 +733,7 @@ public class ProtocolKissTest {
 
         controller.seedFromDeviceState(emptyNvsState);
         controller.markTransportReady();
-        controller.setHighPower(false);
+        controller.openAudio();
 
         assertEquals(1, sender.sentStates.size());
         Protocol.HostDesiredState sent = sender.sentStates.get(0);
@@ -745,8 +745,25 @@ public class ProtocolKissTest {
         assertEquals(0, sent.getSquelch());
         assertEquals(0, sent.getCtcssRx());
         assertEquals(0, sent.getFlags() & Protocol.HOST_STATE_RADIO_CONFIG_VALID);
-        assertEquals(0, sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER);
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+        assertEquals(0, sent.getFlags() & Protocol.HOST_STATE_TX_ALLOWED);
+    }
+
+    @Test
+    public void radioModuleControllerCanSetTxAllowed() {
+        CapturingSender sender = new CapturingSender();
+        RadioModuleController controller = new RadioModuleController();
+        controller.attachSender(sender);
+        controller.markTransportReady();
+
+        controller.setTxAllowed(true);
+
+        assertEquals(1, sender.sentStates.size());
+        Protocol.HostDesiredState sent = sender.sentStates.get(0);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_TX_ALLOWED);
+        assertTrue(controller.isTxAllowed());
     }
 
     @Test

@@ -119,6 +119,7 @@ public final class Protocol {
     static final int DEVICE_STATE_PHYS_PTT_DOWN = 1 << 8;
     static final int DEVICE_STATE_TX_ACTIVE = 1 << 9;
     static final int DEVICE_STATE_SQUELCHED = 1 << 10;
+    static final int HOST_STATE_TX_ALLOWED = 1 << 11;
 
     @Getter
     public enum DeviceMode {
