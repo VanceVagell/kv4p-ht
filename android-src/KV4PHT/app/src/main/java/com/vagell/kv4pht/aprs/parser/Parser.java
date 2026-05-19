@@ -245,7 +245,16 @@ public class Parser {
 //				packet.setType(APRSTypes.T_USERDEF);
     			break;
     		case '}': // 3rd-party
-//				packet.setType(APRSTypes.T_THIRDPARTY);
+    			try {
+    				String innerBody = body.substring(1);
+    				APRSPacket innerPacket = Parser.parse(innerBody);
+    				innerPacket.getDigipeaters().add(new Digipeater(source));
+    				ThirdPartyField thirdPartyField = new ThirdPartyField(msgBody, innerPacket);
+    				infoField.addAprsData(APRSTypes.T_THIRDPARTY, thirdPartyField);
+    				cursor = msgBody.length;
+    			} catch (Exception e) {
+    				packet.setHasFault(true);
+    			}
     			break;
 
     		default:

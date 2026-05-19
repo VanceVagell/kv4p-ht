@@ -26,6 +26,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -75,7 +76,7 @@ public class APRSPacket implements Serializable {
         receivedTimestamp = new Date(System.currentTimeMillis());
         this.sourceCall = source.toUpperCase();
         this.destinationCall = destination.toUpperCase();
-		this.digipeaters = Optional.ofNullable(digipeaters).orElse(List.of(new Digipeater("TCPIP*")));
+		this.digipeaters = new ArrayList<>(Optional.ofNullable(digipeaters).orElse(List.of(new Digipeater("TCPIP*"))));
         this.dti = (char) payload[0];
         this.payload = new InformationField(payload);
     }
@@ -120,6 +121,10 @@ public class APRSPacket implements Serializable {
             .map(Digipeater::getCallsign)
             .findFirst()
             .orElse(null);
+    }
+
+    public List<Digipeater> getDigipeaters() {
+        return digipeaters;
     }
 
     public String getDigiString() {
