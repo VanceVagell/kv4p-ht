@@ -213,7 +213,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (radioAudioService != null) {
                     radioAudioService.tuneToMemory(memory);
-                    tuneToMemoryUi(memory.memoryId);
                 }
 
                 // Highlight the tapped memory, unhighlight all the others.
@@ -228,7 +227,6 @@ public class MainActivity extends AppCompatActivity {
                     memoriesAdapter.notifyDataSetChanged();
                     if (radioAudioService != null) {
                         radioAudioService.tuneToFreq(freq); // Stay on the same freq as the now-deleted memory
-                        tuneToFreqUi(freq);
                     }
                 })));
             }
@@ -374,8 +372,18 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
+                public void startingAprsBeacon(String frequencyStr) {
+                    runOnUiThread(() -> showSimpleSnackbar(getString(R.string.beaconing_aprs_on, frequencyStr)));
+                }
+
+                @Override
                 public void scannedToMemory(int memoryId) {
                     tuneToMemoryUi(memoryId);
+                }
+
+                @Override
+                public void tunedToFreq(String frequencyStr) {
+                    runOnUiThread(() -> tuneToFreqUi(frequencyStr));
                 }
 
                 @Override
@@ -495,7 +503,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void sentAprsBeacon(double latitude, double longitude) {
+                public void sentAprsBeacon(double latitude, double longitude, String frequencyStr, boolean wasSwitch) {
                     // Show a mock-up of the beacon we sent, in our own chat log
                     APRSMessage myBeacon = new APRSMessage();
                     myBeacon.type = APRSMessage.POSITION_TYPE;
@@ -507,9 +515,6 @@ public class MainActivity extends AppCompatActivity {
                         viewModel.getAppDb().aprsMessageDao().insertAll(myBeacon);
                         viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
                     });
-
-                    // Show a quick snackbar letting the user know we beaconed (so they can stop it if this is surprising)
-                    showSimpleSnackbar("Transmitted APRS beacon on this frequency");
                 }
 
                 @Override
@@ -984,12 +989,17 @@ public class MainActivity extends AppCompatActivity {
     private void applyAprsSettings(Map<String, String> settings) {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
+        String beaconFreq = settings.get(AppSetting.SETTING_APRS_BEACON_FREQUENCY);
 
         if (accuracy != null && radioAudioService != null) {
             threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
                 accuracy.equals(getString(R.string.exact)) ?
                     RadioAudioService.APRS_POSITION_EXACT :
                     RadioAudioService.APRS_POSITION_APPROX));
+        }
+
+        if (beaconFreq != null && radioAudioService != null) {
+            threadPoolExecutor.execute(() -> radioAudioService.setAprsBeaconFrequency(beaconFreq));
         }
 
         if (radioAudioService != null && beacon != null) {
@@ -1116,7 +1126,6 @@ public class MainActivity extends AppCompatActivity {
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (radioAudioService != null) {
                     radioAudioService.tuneToFreq(activeFrequencyField.getText().toString());
-                    tuneToFreqUi(radioAudioService.makeSafeHamFreq(activeFrequencyField.getText().toString())); // Fixes any invalid freq user may have entered.
                 }
 
                 hideKeyboard();
@@ -1810,8 +1819,6 @@ public class MainActivity extends AppCompatActivity {
                                 if (radioAudioService != null) {
                                     radioAudioService.tuneToMemory(channelMemories.get(i));
                                 }
-
-                                tuneToMemoryUi(channelMemories.get(i).memoryId);
                             }
                         }
                     }));

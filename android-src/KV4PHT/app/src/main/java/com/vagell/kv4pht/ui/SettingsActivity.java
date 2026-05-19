@@ -73,6 +73,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateMaxFrequencies();
         populateMicGainOptions();
         populateAprsOptions();
+        populateAprsFrequencies();
         populateRadioOptions();
         populateVersions();
     }
@@ -108,6 +109,19 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateAprsOptions() {
         setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
+    }
+
+    private void populateAprsFrequencies() {
+        setDropdownOptions(R.id.aprsBeaconFreqTextView, List.of(
+            getString(R.string.current),
+            getString(R.string.freq_144_3900),
+            getString(R.string.freq_144_5750),
+            getString(R.string.freq_144_6400),
+            getString(R.string.freq_144_6600),
+            getString(R.string.freq_144_8000),
+            getString(R.string.freq_145_1750),
+            getString(R.string.freq_145_8250)
+        ));
     }
 
     private void populateRadioOptions() {
@@ -150,7 +164,13 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId) {
-        setDropdownIfPresent(settings, key, viewId, "");
+        if (settings.containsKey(key)) {
+            String value = settings.get(key);
+            if ("Current".equals(value)) {
+                value = getString(R.string.current);
+            }
+            this.<AutoCompleteTextView>findViewById(viewId).setText(value, false);
+        }
     }
 
     private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId, String suffix) {
@@ -170,6 +190,11 @@ public class SettingsActivity extends AppCompatActivity {
                 setSwitchIfPresent(settings, AppSetting.SETTING_STICKY_PTT, R.id.stickyPTTSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
+                if (settings.containsKey(AppSetting.SETTING_APRS_BEACON_FREQUENCY)) {
+                    setDropdownIfPresent(settings, AppSetting.SETTING_APRS_BEACON_FREQUENCY, R.id.aprsBeaconFreqTextView);
+                } else {
+                    this.<AutoCompleteTextView>findViewById(R.id.aprsBeaconFreqTextView).setText(getString(R.string.current), false);
+                }
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
                 setRadioSettingsFromIntent();
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
@@ -267,6 +292,7 @@ public class SettingsActivity extends AppCompatActivity {
         attachSwitch(R.id.stickyPTTSwitch, this::setStickyPTT);
         attachSwitch(R.id.noAnimationsSwitch, this::setNoAnimations);
         attachSwitch(R.id.aprsPositionSwitch, this::setAprsBeaconPosition);
+        attachTextView(R.id.aprsBeaconFreqTextView, this::setAprsBeaconFrequency);
     }
 
     private void saveAppSettingAsync(String key, String value) {
@@ -275,6 +301,13 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setAprsBeaconPosition(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_APRS_BEACON_POSITION, Boolean.toString(enabled));
+    }
+
+    private void setAprsBeaconFrequency(String frequency) {
+        if (frequency.equals(getString(R.string.current))) {
+            frequency = "Current";
+        }
+        saveAppSettingAsync(AppSetting.SETTING_APRS_BEACON_FREQUENCY, frequency);
     }
 
     private void setAprsPositionAccuracy(String accuracy) {

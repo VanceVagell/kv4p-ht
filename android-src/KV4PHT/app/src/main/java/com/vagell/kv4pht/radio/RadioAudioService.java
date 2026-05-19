@@ -182,6 +182,7 @@ public class RadioAudioService extends Service {
 
     // === APRS State ===
     private boolean aprsBeaconPosition = false;
+    private String aprsBeaconFrequency = "Current";
     @Getter
     @Setter
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
@@ -244,7 +245,9 @@ public class RadioAudioService extends Service {
         default void radioModuleNotFound() {}
         default void audioTrackCreated() {}
         default void packetReceived(APRSPacket aprsPacket) {}
+        default void startingAprsBeacon(String frequencyStr) {}
         default void scannedToMemory(int memoryId) {}
+        default void tunedToFreq(String frequencyStr) {}
         default void outdatedFirmware(int firmwareVer) {}
         default void initialDeviceStateReceived() {}
         default void missingFirmware() {}
@@ -253,7 +256,7 @@ public class RadioAudioService extends Service {
         default void moduleTxStateChanged(boolean txActive) {}
         default void chatError(String text) {}
         default void sMeterUpdate(int value) {}
-        default void sentAprsBeacon(double latitude, double longitude) {}
+        default void sentAprsBeacon(double latitude, double longitude, String frequencyStr, boolean wasSwitch) {}
         default void unknownLocation() {}
         default void forcedPttStart() {}
         default void forcedPttEnd() {}
@@ -292,6 +295,10 @@ public class RadioAudioService extends Service {
                 stopBeaconScheduler();
             }
         }
+    }
+
+    public void setAprsBeaconFrequency(String frequency) {
+        this.aprsBeaconFrequency = frequency;
     }
 
     public boolean getAprsBeaconPosition() {
@@ -617,6 +624,7 @@ public class RadioAudioService extends Service {
         }
         activeFrequencyStr = frequencyStr;
         activeMemoryId = -1; // Reset active memory ID since we're tuning to a frequency, not a memory.
+        callbacks.tunedToFreq(activeFrequencyStr);
         radioModule.beginUpdate();
         try {
             radioModule.setMemoryId(-1);
@@ -681,6 +689,7 @@ public class RadioAudioService extends Service {
             radioModule.endUpdate();
         }
         updateForegroundNotification(memory.name + " (" + memory.frequency + " MHz)");
+        callbacks.scannedToMemory(memory.memoryId);
     }
 
     private String getTxFreq(String txFreq, int offset, int khz) {
@@ -1487,10 +1496,25 @@ public class RadioAudioService extends Service {
      */
     @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
     public void sendPositionBeacon() {
-        if (!isRadioConnected() || !isTxAllowed() || getMode() != RadioMode.RX) {
-            Log.d(TAG, "Skipping position beacon: radio disconnected, tx not allowed, or not in RX mode.");
+        boolean isScanning = getMode() == RadioMode.SCAN;
+        boolean isRx = getMode() == RadioMode.RX;
+        boolean isCurrent = "Current".equals(aprsBeaconFrequency);
+
+        if (!isRadioConnected() || !isTxAllowed()) {
+            Log.d(TAG, "Skipping position beacon: radio disconnected or tx not allowed.");
             return;
         }
+
+        if (isScanning && isCurrent) {
+            Log.d(TAG, "Skipping position beacon: scanning and set to 'Current' frequency.");
+            return;
+        }
+
+        if (!isRx && !isScanning) {
+            Log.d(TAG, "Skipping position beacon: not in RX or SCAN mode.");
+            return;
+        }
+
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
             Log.d(TAG, "Can't get GPS position: missing Google Play Services.");
             callbacks.unknownLocation();
@@ -1501,11 +1525,50 @@ public class RadioAudioService extends Service {
         locationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token)
             .addOnSuccessListener(location -> {
                 if (location != null) {
-                    sendPositionBeacon(location.getLatitude(), location.getLongitude());
+                    performPositionBeacon(location.getLatitude(), location.getLongitude());
                 } else {
                     callbacks.unknownLocation();
                 }
             }).addOnFailureListener(e -> callbacks.unknownLocation());
+    }
+
+    private void performPositionBeacon(final double latitude, final double longitude) {
+        if ("Current".equals(aprsBeaconFrequency)) {
+            callbacks.startingAprsBeacon(activeFrequencyStr);
+            sendPositionBeacon(latitude, longitude, false);
+            return;
+        }
+
+        // Frequency switch logic
+        final boolean wasScanning = getMode() == RadioMode.SCAN;
+        final int originalMemoryId = activeMemoryId;
+        final String originalFrequencyStr = activeFrequencyStr;
+
+        callbacks.startingAprsBeacon(aprsBeaconFrequency);
+
+        if (wasScanning) {
+            setScanning(false, false);
+        }
+
+        tuneToFreq(aprsBeaconFrequency);
+
+        // Give it a moment to tune and stabilize
+        handler.postDelayed(() -> {
+            sendPositionBeacon(latitude, longitude, true);
+
+            // Wait for transmission to finish before restoring
+            handler.postDelayed(() -> {
+                if (wasScanning) {
+                    setScanning(true);
+                } else {
+                    if (originalMemoryId != -1) {
+                        tuneToMemory(originalMemoryId);
+                    } else {
+                        tuneToFreq(originalFrequencyStr);
+                    }
+                }
+            }, 3000); // 3 seconds for TX
+        }, 500); // 500ms for tuning
     }
 
     /**
@@ -1514,8 +1577,9 @@ public class RadioAudioService extends Service {
      *
      * @param latitude  The latitude to beacon.
      * @param longitude The longitude to beacon.
+     * @param wasSwitch True if we switched frequencies for this beacon.
      */
-    private void sendPositionBeacon(final double latitude, final double longitude) {
+    private void sendPositionBeacon(final double latitude, final double longitude, final boolean wasSwitch) {
         if (getMode() != RadioMode.RX) {
             Log.d(TAG, "Skipping position beacon because not in RX mode");
             return;
@@ -1531,7 +1595,7 @@ public class RadioAudioService extends Service {
             final APRSPacket aprsPacket = new APRSPacket(callsign, "BEACON", DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
             txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
-            callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude());
+            callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), activeFrequencyStr, wasSwitch);
         } catch (Exception e) {
             Log.w(TAG, "Exception while trying to beacon APRS location.", e);
         }

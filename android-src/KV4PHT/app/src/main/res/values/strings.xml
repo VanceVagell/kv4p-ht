@@ -98,6 +98,16 @@
     <string name="position_beacon_message_2">" position on active frequency"</string>
     <string name="settings">Settings</string>
     <string name="beacon_my_position">Beacon my position</string>
+    <string name="beacon_to_frequency">Beacon to frequency</string>
+    <string name="beaconing_aprs_on">Beaconing APRS on %1$s...</string>
+    <string name="current">Current</string>
+    <string name="freq_144_3900" translatable="false">144.3900</string>
+    <string name="freq_144_5750" translatable="false">144.5750</string>
+    <string name="freq_144_6400" translatable="false">144.6400</string>
+    <string name="freq_144_6600" translatable="false">144.6600</string>
+    <string name="freq_144_8000" translatable="false">144.8000</string>
+    <string name="freq_145_1750" translatable="false">145.1750</string>
+    <string name="freq_145_8250" translatable="false">145.8250</string>
     <string name="wide" translatable="false">25kHz</string>
     <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>
