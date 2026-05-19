@@ -45,8 +45,9 @@
     <string name="more_display">More</string>
     <string name="send_aprs_position_beacond_display">Send APRS position beacon</string>
     <string name="write_up_to_67_chars">Write up to 67 chars...</string>
-    <string name="callsign_or_cq">Callsign or CQ</string>
+    <string name="aprs_to_placeholder">Callsign</string>
     <string name="cq" translatable="false">CQ</string>
+    <string name="aprs_relay_via">via</string>
     <string name="visualization_of_current_transmit_audio_volume" translatable="false">Visualization of current transmit audio volume</string>
     <string name="squelch">Squelch</string>
     <string name="filters">Filters</string>

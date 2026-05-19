@@ -154,6 +154,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         View ackIcon;
         TextView textViewObjName;
         TextView textViewRelayCallsign;
+        TextView textViewRelayViaLabel;
 
         public APRSViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -176,6 +177,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             ackIcon = itemView.findViewById(R.id.msgAck);
             textViewObjName = itemView.findViewById(R.id.objName);
             textViewRelayCallsign = itemView.findViewById(R.id.relayCallsign);
+            textViewRelayViaLabel = itemView.findViewById(R.id.relayViaLabel);
         }
 
         public void setFromCallsign(String fromCallsign) {
@@ -304,9 +306,11 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             }
             if (null == relayCallsign) {
                 textViewRelayCallsign.setVisibility(View.GONE);
+                textViewRelayViaLabel.setVisibility(View.GONE);
             } else {
                 textViewRelayCallsign.setVisibility(View.VISIBLE);
-                textViewRelayCallsign.setText("via " + relayCallsign);
+                textViewRelayCallsign.setText(relayCallsign);
+                textViewRelayViaLabel.setVisibility(View.VISIBLE);
             }
         }
     }

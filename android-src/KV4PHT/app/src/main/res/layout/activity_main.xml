@@ -388,6 +388,7 @@
                         android:text="@string/to_display"
                         android:textColor="@color/primary"
                         android:textSize="20dp"
+                        android:paddingRight="8dp"
                         android:layout_weight="0"/>
 
                     <EditText
@@ -401,8 +402,8 @@
                         android:minLines="1"
                         android:background="@android:color/transparent"
                         android:textColorHint="@color/primary_deselected"
-                        android:hint="@string/callsign_or_cq"
-                        android:text="@string/cq"
+                        android:hint="@string/aprs_to_placeholder"
+                        android:text=""
                         android:imeOptions="actionDone">
                     </EditText>
 
