@@ -654,6 +654,34 @@ public class MainActivity extends AppCompatActivity {
 
         APRSMessage aprsMessage = new APRSMessage();
         InformationField infoField = aprsPacket.getPayload();
+
+        // Handle third-party relayed packets
+        String relayCallsign = null;
+        com.vagell.kv4pht.aprs.parser.ThirdPartyField thirdPartyField = (com.vagell.kv4pht.aprs.parser.ThirdPartyField) infoField.getAprsData(APRSTypes.T_THIRDPARTY);
+        if (thirdPartyField != null) {
+            relayCallsign = aprsPacket.getSourceCall();
+            com.vagell.kv4pht.aprs.parser.APRSPacket innerPacket = thirdPartyField.getInnerPacket();
+            if (innerPacket == null || innerPacket.hasFault()) {
+                aprsMessage.type = APRSMessage.UNKNOWN_TYPE;
+                aprsMessage.fromCallsign = aprsPacket.getSourceCall();
+                aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
+                aprsMessage.relayCallsign = relayCallsign;
+                try {
+                    aprsMessage.comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
+                } catch (Exception e) { }
+                threadPoolExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
+                        viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
+                    }
+                });
+                return;
+            }
+            aprsPacket = innerPacket;
+            infoField = innerPacket.getPayload();
+        }
+
         WeatherField weatherField = (WeatherField) infoField.getAprsData(APRSTypes.T_WX);
         PositionField positionField = (PositionField) infoField.getAprsData(APRSTypes.T_POSITION);
         ObjectField objectField = (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT);
@@ -737,6 +765,8 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Exception e) { }
             }
         }
+
+        aprsMessage.relayCallsign = relayCallsign;
 
         threadPoolExecutor.execute(new Runnable() {
             @Override

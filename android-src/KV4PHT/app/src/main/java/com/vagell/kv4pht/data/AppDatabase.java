@@ -47,6 +47,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final Migration MIGRATION_3_4 = new MigrationFrom3To4();
     public static final Migration MIGRATION_4_5 = new MigrationFrom4To5();
     public static final Migration MIGRATION_5_6 = new MigrationFrom5To6();
+    public static final Migration MIGRATION_6_7 = new MigrationFrom6To7();
 
     @SuppressWarnings({"java:S3077", "java:S3008"})
     private static volatile AppDatabase INSTANCE;
@@ -77,7 +78,8 @@ public abstract class AppDatabase extends RoomDatabase {
                 MIGRATION_2_3,
                 MIGRATION_3_4,
                 MIGRATION_4_5,
-                MIGRATION_5_6
+                MIGRATION_5_6,
+                MIGRATION_6_7
             )
             // WARNING: This will delete all user data if migration is missing.
             // Remove or guard this call in production.

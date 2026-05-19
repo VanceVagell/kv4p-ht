@@ -50,6 +50,16 @@
             android:textSize="16sp"
             android:layout_marginRight="4dp" />
 
+        <TextView
+            android:id="@+id/relayCallsign"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="via CALL"
+            android:textColor="@android:color/darker_gray"
+            android:textSize="16sp"
+            android:layout_marginRight="4dp"
+            android:visibility="gone"/>
+
 
         <ImageButton
             android:id="@+id/senderPositionButton"
