@@ -44,9 +44,10 @@ public class RadioModuleController {
             | Protocol.HOST_STATE_FILTER_PRE
             | Protocol.HOST_STATE_FILTER_HIGH
             | Protocol.HOST_STATE_FILTER_LOW
-            | Protocol.HOST_STATE_TX_ALLOWED;
+            | Protocol.HOST_STATE_TX_ALLOWED
+            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS;
     private static final int DEFAULT_DESIRED_FLAGS =
-        Protocol.HOST_STATE_HIGH_POWER | Protocol.HOST_STATE_RSSI_ENABLED;
+        Protocol.HOST_STATE_HIGH_POWER | Protocol.HOST_STATE_RSSI_ENABLED | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS;
 
     private Protocol.Sender sender;
     private Protocol.FirmwareVersion firmwareVersion;
@@ -103,7 +104,7 @@ public class RadioModuleController {
         lastDeviceState = state;
         lastPhysPttDown = isPhysPttDown();
         desiredState = desiredFromDeviceState(state);
-        lastDesiredStateSent = desiredState;
+        lastDesiredStateSent = desiredState.withFlags(desiredState.getFlags() & ~Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
         appliedStateInSync = isDeviceStateInSyncWithDesired(state, lastDesiredStateSent);
         desiredStateRetries = 0;
     }
@@ -180,15 +181,21 @@ public class RadioModuleController {
     }
 
     synchronized void stop() {
-        clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED);
+        clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN
+            | Protocol.HOST_STATE_PTT_REQUESTED
+            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
     }
 
     synchronized void openAudio() {
-        setDesiredFlag(Protocol.HOST_STATE_RX_AUDIO_OPEN, true);
+        updateDesiredState(state -> state.withFlags(state.getFlags()
+            | Protocol.HOST_STATE_RX_AUDIO_OPEN
+            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS));
     }
 
     synchronized void closeAudio() {
-        clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_PTT_REQUESTED);
+        clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN
+            | Protocol.HOST_STATE_PTT_REQUESTED
+            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
     }
 
     public synchronized void setHighPower(boolean isHighPower) {
@@ -343,7 +350,8 @@ public class RadioModuleController {
         return Protocol.HostDesiredState.builder()
             .sequence(state.getAppliedSequence())
             .memoryId(state.getMemoryId())
-            .flags(state.getFlags() & DESIRED_DEVICE_FLAGS_MASK & ~(Protocol.HOST_STATE_PTT_REQUESTED | Protocol.HOST_STATE_RX_AUDIO_OPEN))
+            .flags((state.getFlags() & DESIRED_DEVICE_FLAGS_MASK & ~(Protocol.HOST_STATE_PTT_REQUESTED | Protocol.HOST_STATE_RX_AUDIO_OPEN))
+                | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS)
             .bw(state.getBw())
             .freqTx(state.getFreqTx())
             .freqRx(state.getFreqRx())
