@@ -151,11 +151,14 @@ typedef struct host_desired_state HostDesiredState;
 #define HOST_STATE_FILTER_HIGH        (1 << 6)
 #define HOST_STATE_FILTER_LOW         (1 << 7)
 #define HOST_STATE_TX_ALLOWED          (1 << 11)
+#define HOST_STATE_ENABLE_STATUS_REPORTS (1 << 12)
 ```
 
 Android sends the full desired-state snapshot whenever one field changes. Firmware applies changed radio/filter/control fields, derives its mode, and marks device state dirty so `deviceStateLoop()` can report the result with `COMMAND_DEVICE_STATE`.
 
 `HOST_STATE_TX_ALLOWED` is a persisted host-controlled safety flag that defaults off. Firmware only accepts transmit requests, including KISS DATA AX.25 frames and host PTT requests, while this flag is set.
+
+`HOST_STATE_ENABLE_STATUS_REPORTS` is a non-persisted session flag that defaults off. kv4p HT Android sets it after HELLO so firmware sends `COMMAND_DEVICE_STATE`; generic KISS TNC hosts can leave it off to receive only standard KISS DATA frames.
 
 Android treats `DeviceState.appliedSequence` as the acknowledgement for the latest desired-state snapshot. If received device state does not match the last sent desired snapshot, Android may retry the exact same `HostDesiredState` with the same `sequence`. Retries are bounded; they are not new logical state changes and must not increment `sequence`.
 
@@ -183,13 +186,14 @@ typedef struct device_state DeviceState;
 #define DEVICE_STATE_TX_ACTIVE     (1 << 9)
 #define DEVICE_STATE_SQUELCHED     (1 << 10)
 #define DEVICE_STATE_TX_ALLOWED     HOST_STATE_TX_ALLOWED
+#define DEVICE_STATE_ENABLE_STATUS_REPORTS HOST_STATE_ENABLE_STATUS_REPORTS
 ```
 
-Firmware sends `COMMAND_DEVICE_STATE` from `deviceStateLoop()`. State producers such as desired-state reconciliation, RSSI changes, squelch changes, and physical PTT changes set a dirty flag instead of writing serial frames directly. The next loop pass flushes dirty state, so change reports are effectively immediate but still async and coalesced through one sender. Firmware also sends `COMMAND_DEVICE_STATE` every 500 ms as a heartbeat/state refresh. RSSI/S-meter data is reported through `latestRssi`; there is no separate S-meter report command.
+When `HOST_STATE_ENABLE_STATUS_REPORTS` is set, firmware sends `COMMAND_DEVICE_STATE` from `deviceStateLoop()`. State producers such as desired-state reconciliation, RSSI changes, squelch changes, and physical PTT changes set a dirty flag instead of writing serial frames directly. The next loop pass flushes dirty state, so change reports are effectively immediate but still async and coalesced through one sender. Firmware also sends `COMMAND_DEVICE_STATE` every 500 ms as a heartbeat/state refresh while status reports are enabled. RSSI/S-meter data is reported through `latestRssi`; there is no separate S-meter report command.
 
 Scanning remains Android-owned because Android owns the memory list, memory groups, skip-during-scan flags, offsets, and UI selection. Firmware reports the current squelch state with `DEVICE_STATE_SQUELCHED`; Android uses that received state to decide when to advance to the next memory.
 
-Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: memory id, bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, filter flags, and TX allowed. If NVS is empty, firmware loads safe defaults, marks radio config valid, and starts with TX disabled until the host sends an allowed TX frequency. If persisted TX/RX frequencies are outside the configured RF module's range, firmware clamps them into range and clears `memoryId` to `-1` before applying radio config. Transient state is not restored: sequence, PTT requested, and RX audio open always start clear.
+Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: memory id, bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, filter flags, and TX allowed. If NVS is empty, firmware loads safe defaults, marks radio config valid, and starts with TX disabled until the host sends an allowed TX frequency. If persisted TX/RX frequencies are outside the configured RF module's range, firmware clamps them into range and clears `memoryId` to `-1` before applying radio config. Transient state is not restored: sequence, PTT requested, RX audio open, and status-report enablement always start clear.
 
 ### `COMMAND_WINDOW_UPDATE` Parameters **(ESP32 → Android)**
 

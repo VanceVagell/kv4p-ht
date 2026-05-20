@@ -514,15 +514,22 @@ public class ProtocolKissTest {
 
         controller.seedFromDeviceState(initialState);
         controller.markTransportReady();
-        controller.openAudio();
 
         assertEquals(1, sender.sentStates.size());
-        Protocol.HostDesiredState sent = sender.sentStates.get(0);
-        assertEquals(8, sent.getSequence());
+        Protocol.HostDesiredState statusRequest = sender.sentStates.get(0);
+        assertNotEquals(0, statusRequest.getFlags() & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
+        assertEquals(0, statusRequest.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+
+        controller.openAudio();
+
+        assertEquals(2, sender.sentStates.size());
+        Protocol.HostDesiredState sent = sender.sentStates.get(1);
+        assertEquals(9, sent.getSequence());
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RADIO_CONFIG_VALID);
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER);
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
         assertEquals(Protocol.DRA818_12K5, sent.getBw());
         assertEquals(42, sent.getMemoryId());
         assertEquals(144.3900f, sent.getFreqTx(), 0.0001f);
@@ -557,14 +564,18 @@ public class ProtocolKissTest {
 
         controller.seedFromDeviceState(initialState);
         controller.markTransportReady();
-        controller.openAudio();
 
         assertEquals(1, sender.sentStates.size());
-        Protocol.HostDesiredState firstSend = sender.sentStates.get(0);
-        controller.updateDeviceState(initialState);
+        assertNotEquals(0, sender.sentStates.get(0).getFlags() & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
+
+        controller.openAudio();
 
         assertEquals(2, sender.sentStates.size());
-        Protocol.HostDesiredState retry = sender.sentStates.get(1);
+        Protocol.HostDesiredState firstSend = sender.sentStates.get(1);
+        controller.updateDeviceState(initialState);
+
+        assertEquals(3, sender.sentStates.size());
+        Protocol.HostDesiredState retry = sender.sentStates.get(2);
         assertEquals(firstSend.getSequence(), retry.getSequence());
         assertEquals(firstSend, retry);
     }
@@ -696,11 +707,12 @@ public class ProtocolKissTest {
         controller.markTransportReady();
         controller.setSquelch(2);
 
-        assertEquals(1, sender.sentStates.size());
-        int flags = sender.sentStates.get(0).getFlags();
+        assertEquals(2, sender.sentStates.size());
+        int flags = sender.sentStates.get(1).getFlags();
         assertEquals(0, flags & Protocol.HOST_STATE_PTT_REQUESTED);
         assertEquals(0, flags & Protocol.HOST_STATE_RX_AUDIO_OPEN);
         assertNotEquals(0, flags & Protocol.HOST_STATE_HIGH_POWER);
+        assertNotEquals(0, flags & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
     }
 
     @Test
@@ -733,10 +745,15 @@ public class ProtocolKissTest {
 
         controller.seedFromDeviceState(emptyNvsState);
         controller.markTransportReady();
-        controller.openAudio();
 
         assertEquals(1, sender.sentStates.size());
-        Protocol.HostDesiredState sent = sender.sentStates.get(0);
+        assertNotEquals(0, sender.sentStates.get(0).getFlags() & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
+        assertEquals(0, sender.sentStates.get(0).getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+
+        controller.openAudio();
+
+        assertEquals(2, sender.sentStates.size());
+        Protocol.HostDesiredState sent = sender.sentStates.get(1);
         assertEquals(Protocol.DRA818_25K, sent.getBw());
         assertEquals(-1, sent.getMemoryId());
         assertEquals(0.0f, sent.getFreqTx(), 0.0001f);
@@ -748,6 +765,7 @@ public class ProtocolKissTest {
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_HIGH_POWER);
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RSSI_ENABLED);
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+        assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
         assertEquals(0, sent.getFlags() & Protocol.HOST_STATE_TX_ALLOWED);
     }
 
@@ -764,6 +782,29 @@ public class ProtocolKissTest {
         Protocol.HostDesiredState sent = sender.sentStates.get(0);
         assertNotEquals(0, sent.getFlags() & Protocol.HOST_STATE_TX_ALLOWED);
         assertTrue(controller.isTxAllowed());
+    }
+
+    @Test
+    public void closeAudioDisablesStatusReportsUntilAudioReopens() {
+        CapturingSender sender = new CapturingSender();
+        RadioModuleController controller = new RadioModuleController();
+        controller.attachSender(sender);
+        controller.markTransportReady();
+
+        controller.closeAudio();
+
+        assertEquals(1, sender.sentStates.size());
+        Protocol.HostDesiredState closed = sender.sentStates.get(0);
+        assertEquals(0, closed.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+        assertEquals(0, closed.getFlags() & Protocol.HOST_STATE_PTT_REQUESTED);
+        assertEquals(0, closed.getFlags() & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
+
+        controller.openAudio();
+
+        assertEquals(2, sender.sentStates.size());
+        Protocol.HostDesiredState opened = sender.sentStates.get(1);
+        assertNotEquals(0, opened.getFlags() & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+        assertNotEquals(0, opened.getFlags() & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
     }
 
     @Test
