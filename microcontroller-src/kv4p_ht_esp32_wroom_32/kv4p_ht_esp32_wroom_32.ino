@@ -67,6 +67,9 @@ bool deviceStateDirty = false;
 
 Debounce squelchDebounce(100);
 
+// True if the host is using the kv4p HT specific commands (not just KISS TNC)
+bool kv4pHostConnected = false;
+
 float moduleMinRadioFreq() {
   return hw.rfModuleType == RF_SA818_UHF ? 400.0f : 134.0f;
 }
@@ -405,6 +408,11 @@ void initRadio(bool isHigh) {
 }
 
 void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
+  // If we got a command, we know this is a kv4p HT aware host (not just using us as KISS TNC).
+  if (!kv4pHostConnected) {
+    kv4pHostConnected = true;
+  }
+
   switch (command) {
     case COMMAND_HOST_TX_AUDIO:
       if (mode == MODE_TX) {
@@ -459,6 +467,11 @@ void rssiLoop() {
 }
 
 void deviceStateLoop() {
+  // Only send device state to kv4p HT aware hosts (not hosts only using us as KISS TNC)
+  if (!kv4pHostConnected) {
+    return;
+  }
+
   bool sent = false;
   if (deviceStateDirty) {
     sendCurrentDeviceState();
