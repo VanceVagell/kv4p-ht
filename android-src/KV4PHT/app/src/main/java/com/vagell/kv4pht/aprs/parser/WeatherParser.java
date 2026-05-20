@@ -36,9 +36,9 @@ import java.util.regex.Pattern;
 public class WeatherParser {
     private static final Pattern dataPattern = Pattern
             .compile(".*(\\d{3})/(\\d{3})g(\\d{3})t(.{3})r(\\d{3})p(\\d{3})P(\\d{3})h(\\d{2})b(\\d{5})[\\.e].*");
-    private static final Pattern windPattern = Pattern.compile(".*(\\d{3})/(\\d{3}).*.");
+    private static final Pattern windPattern = Pattern.compile("(?:^|_)(\\d{3})/(\\d{3})");
     private static final Pattern gustPattern = Pattern.compile(".*g(\\d{3}).*.");
-    private static final Pattern tempPattern = Pattern.compile(".*t([-\\d]{3}).*");
+    private static final Pattern tempPattern = Pattern.compile(".*t(-?\\d{2,3}).*");
     private static final Pattern rainPattern = Pattern.compile(".*r(\\d{3}).*");
     private static final Pattern rain24Pattern = Pattern.compile(".*p(\\d{3}).*");
     private static final Pattern rainMidnightPattern = Pattern.compile(".*P(\\d{3}).*");
@@ -46,82 +46,118 @@ public class WeatherParser {
     private static final Pattern pressurePattern = Pattern.compile(".*b(\\d{5}).*");
     private static final Pattern luminosityLowPattern = Pattern.compile(".*L(\\d{3}).*");
     private static final Pattern luminosityHighPattern = Pattern.compile(".*l(\\d{3}).*");
+    private static final Pattern snowPattern = Pattern.compile(".*s(\\d{3}).*");
 
-    
-    /** 
-     * @param msgBody
-     * @param cursor
-     * @return WeatherField
-     * @throws Exception
-     */
-    public static WeatherField parseWeatherData(byte[] msgBody, int cursor) throws Exception {
+
+    public static WeatherField parseWeatherData(byte[] msgBody, int cursor) {
         WeatherField wf = new WeatherField();
         String wxReport = new String(msgBody, cursor, msgBody.length - cursor);
-        wf.setLastCursorPosition(cursor += 36);
         wf.setType(APRSTypes.T_WX);
-        Matcher matcher = dataPattern.matcher(wxReport);
-        if (matcher.matches()) {
+
+        Matcher matcher = windPattern.matcher(wxReport);
+        if (matcher.find()) {
             try {
                 wf.setWindDirection(Integer.parseInt(matcher.group(1)));
                 wf.setWindSpeed(Integer.parseInt(matcher.group(2)));
-                wf.setWindGust(Integer.parseInt(matcher.group(3)));
-                wf.setTemp(Integer.parseInt(matcher.group(4)));
-                wf.setRainLastHour(Double.parseDouble(matcher.group(5)) / 100);
-                wf.setRainLast24Hours(Double.parseDouble(matcher.group(6)) / 100);
-                wf.setRainSinceMidnight(Double.parseDouble(matcher.group(7)) / 100);
-                wf.setHumidity(Double.parseDouble(matcher.group(8)));
-                wf.setPressure(Double.parseDouble(matcher.group(9)));
             } catch (NumberFormatException nfe) {
-                System.err.println("Got a weather packet with bogus data");
-            } catch (IllegalStateException ese) {
-                System.err.println("something failed in our matching expression");  
-            }
-        } else {
-            // we need to pick out the matches one by one
-            matcher = windPattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setWindDirection(Integer.parseInt(matcher.group(1)));
-                wf.setWindSpeed(Integer.parseInt(matcher.group(2)));
-            }
-            matcher = gustPattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setWindGust(Integer.parseInt(matcher.group(1)));
-            }
-            matcher = tempPattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setTemp(Integer.parseInt(matcher.group(1)));
-            }
-            matcher = rainPattern.matcher(wxReport);
-            matcher.find();
-            if (matcher.matches()) {
-                wf.setRainLastHour(Double.parseDouble(matcher.group(1)) / 100);
-            }
-            matcher = rain24Pattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setRainLast24Hours(Double.parseDouble(matcher.group(1)) / 100);
-            }
-            matcher = rainMidnightPattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setRainSinceMidnight(Double.parseDouble(matcher.group(1)) / 100);
-            }
-            matcher = humidityPattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setHumidity(Double.parseDouble(matcher.group(1)));
-            }
-            matcher = pressurePattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setPressure(Double.parseDouble(matcher.group(1)));
-            }
-            matcher = luminosityLowPattern.matcher(wxReport);
-            if (matcher.matches()) {
-                wf.setLuminosity(Integer.parseInt(matcher.group(1)));
-            }
-            matcher = luminosityHighPattern.matcher(wxReport);
-            matcher.find();
-            if (matcher.matches()) {
-                wf.setLuminosity(Integer.parseInt(matcher.group(1)) + 1000);
+                // ignore
             }
         }
+
+        matcher = gustPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setWindGust(Integer.parseInt(matcher.group(1)));
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = tempPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setTemp(Integer.parseInt(matcher.group(1)));
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = rainPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setRainLastHour(Double.parseDouble(matcher.group(1)) / 100.0);
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = rainMidnightPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setRainSinceMidnight(Double.parseDouble(matcher.group(1)) / 100.0);
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = rain24Pattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setRainLast24Hours(Double.parseDouble(matcher.group(1)) / 100.0);
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = humidityPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                double hum = Double.parseDouble(matcher.group(1));
+                if (hum == 0) hum = 100;
+                wf.setHumidity(hum);
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = pressurePattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setPressure(Double.parseDouble(matcher.group(1)) / 10.0);
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = luminosityLowPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setLuminosity(Integer.parseInt(matcher.group(1)));
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = luminosityHighPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setLuminosity(Integer.parseInt(matcher.group(1)) + 1000);
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        matcher = snowPattern.matcher(wxReport);
+        if (matcher.find()) {
+            try {
+                wf.setSnowfallLast24Hours(Double.parseDouble(matcher.group(1)));
+            } catch (NumberFormatException nfe) {
+                // ignore
+            }
+        }
+
+        // Weather data consumes the remainder of the packet
+        wf.setLastCursorPosition(msgBody.length);
         return wf;
     }
 }

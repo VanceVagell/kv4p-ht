@@ -20,6 +20,8 @@
  */
 package com.vagell.kv4pht.aprs.parser;
 
+import java.nio.charset.StandardCharsets;
+
 public class MessagePacket extends InformationField {
 	private static final long serialVersionUID = 1L;
     private String messageBody;
@@ -69,6 +71,42 @@ public class MessagePacket extends InformationField {
     	if ( messageBody.equals("ack") ) isAck = true;
     	if ( messageBody.equals("rej") ) isRej = true;
     	super.setDataTypeIdentifier(':');
+    }
+
+    /**
+     * Generates an APRS message payload with an optional message ID.
+     * @param recipient The callsign of the person you are messaging (e.g., "N1AA")
+     * @param messageText The body of your message
+     * @param messageId The message number (1-5 chars) for requesting an ACK. Pass null to omit.
+     * @return The payload ready to be passed to APRSPacket
+     */
+    public static byte[] createMessagePayload(String recipient, String messageText, String messageId) {
+        // 1. Pad the recipient callsign to exactly 9 characters (left-justified)
+        String paddedRecipient = String.format("%-9s", recipient);
+
+        // 2. Format the message ID suffix (if provided)
+        String idSuffix = "";
+        if (messageId != null && !messageId.trim().isEmpty()) {
+            messageId = messageId.trim();
+            // Enforce the spec's 5-character maximum for the ID
+            if (messageId.length() > 5) {
+                messageId = messageId.substring(0, 5);
+            }
+            idSuffix = "{" + messageId;
+        }
+
+        // 3. Enforce overall length limits (Standard APRS text + ID should be <= 67 chars)
+        // We subtract the length of the ID suffix to ensure we leave room for it
+        int maxTextLength = 67 - idSuffix.length();
+        if (messageText.length() > maxTextLength) {
+            messageText = messageText.substring(0, maxTextLength);
+        }
+
+        // 4. Construct the exact APRS payload string
+        String payloadString = ":" + paddedRecipient + ":" + messageText + idSuffix;
+
+        // 5. Return as ASCII bytes
+        return payloadString.getBytes(StandardCharsets.US_ASCII);
     }
     
     /**

@@ -117,6 +117,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             case APRSMessage.UNKNOWN_TYPE: // Ditto
                 break;
         }
+        holder.setRelayCallsign(aprsMessage.relayCallsign);
 
         // Handle taps on the message's position icon
         final View positionButton = holder.itemView.findViewById(R.id.senderPositionButton);
@@ -152,6 +153,8 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         TextView textViewMsgBody;
         View ackIcon;
         TextView textViewObjName;
+        TextView textViewRelayCallsign;
+        TextView textViewRelayViaLabel;
 
         public APRSViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -173,6 +176,8 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             textViewMsgBody = itemView.findViewById(R.id.messageBody);
             ackIcon = itemView.findViewById(R.id.msgAck);
             textViewObjName = itemView.findViewById(R.id.objName);
+            textViewRelayCallsign = itemView.findViewById(R.id.relayCallsign);
+            textViewRelayViaLabel = itemView.findViewById(R.id.relayViaLabel);
         }
 
         public void setFromCallsign(String fromCallsign) {
@@ -293,6 +298,20 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
                 return;
             }
             textViewObjName.setText(objName);
+        }
+
+        public void setRelayCallsign(String relayCallsign) {
+            if (null == textViewRelayCallsign) {
+                return;
+            }
+            if (null == relayCallsign) {
+                textViewRelayCallsign.setVisibility(View.GONE);
+                textViewRelayViaLabel.setVisibility(View.GONE);
+            } else {
+                textViewRelayCallsign.setVisibility(View.VISIBLE);
+                textViewRelayCallsign.setText(relayCallsign);
+                textViewRelayViaLabel.setVisibility(View.VISIBLE);
+            }
         }
     }
 }

@@ -86,14 +86,13 @@ import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
+import com.vagell.kv4pht.radio.RadioModuleController;
 import com.vagell.kv4pht.radio.RadioMode;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -126,7 +125,6 @@ public class MainActivity extends AppCompatActivity {
 
     // Radio params and related settings
     private String activeFrequencyStr = "0.0000";
-    private int squelch = 0;
     private String callsign = null;
     private boolean stickyPTT = false;
     private boolean disableAnimations = false;
@@ -158,8 +156,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean radioAudioServiceBound = false;
     private final AtomicBoolean bindingInProgress = new AtomicBoolean(false);
 
-    // The firmware version of the kv4p HT radio device that's attached, or -1 if unknown.
-    private int firmwareVersion = -1;
+    private boolean pendingInitialRadioUiSync = false;
+    private boolean initialRadioUiSynced = false;
 
     // This receiver will listen for a broadcast from the RadioAudioService when it's shutting down
     // (this is so that when the user swipes-away the kv4p HT notification, the app closes).
@@ -201,8 +199,7 @@ public class MainActivity extends AppCompatActivity {
                     setScanningUi(false);
                 }
                 if (radioAudioService != null) {
-                    radioAudioService.tuneToMemory(memory, squelch, false);
-                    tuneToMemoryUi(memory.memoryId);
+                    radioAudioService.tuneToMemory(memory);
                 }
 
                 // Highlight the tapped memory, unhighlight all the others.
@@ -216,8 +213,7 @@ public class MainActivity extends AppCompatActivity {
                 viewModel.deleteMemoryAsync(memory, () -> viewModel.loadDataAsync(() -> runOnUiThread(() -> {
                     memoriesAdapter.notifyDataSetChanged();
                     if (radioAudioService != null) {
-                        radioAudioService.tuneToFreq(freq, squelch, false); // Stay on the same freq as the now-deleted memory
-                        tuneToFreqUi(freq, false);
+                        radioAudioService.tuneToFreq(freq); // Stay on the same freq as the now-deleted memory
                     }
                 })));
             }
@@ -237,16 +233,9 @@ public class MainActivity extends AppCompatActivity {
         viewModel.getChannelMemories().observe(this, new Observer<List<ChannelMemory>>() {
             @Override
             public void onChanged(List<ChannelMemory> channelMemories) {
-                // Update the adapter's data
-                if (selectedMemoryGroup != null) {
-                    for (int i = 0; i < channelMemories.size(); i++) {
-                        if (!channelMemories.get(i).group.equals(selectedMemoryGroup)) {
-                            channelMemories.remove(i--);
-                        }
-                    }
-                }
                 memoriesAdapter.setMemoriesList(channelMemories);
                 memoriesAdapter.notifyDataSetChanged();
+                trySyncInitialRadioUi();
             }
         });
 
@@ -310,6 +299,7 @@ public class MainActivity extends AppCompatActivity {
                 public void radioMissing() {
                     showBand(BandType.BAND_UNKNOWN);
                     sMeterUpdate(0); // No rx when no radio
+                    resetActiveRadioUi();
                     showUSBSnackbar();
                     findViewById(R.id.pttButton).setClickable(false);
                 }
@@ -330,6 +320,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         showBand(BandType.BAND_UNKNOWN);
                     }
+                    runOnUiThread(MainActivity.this::updateMemoryBandFilter);
                 }
 
                 @Override
@@ -368,8 +359,18 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
+                public void startingAprsBeacon(String frequencyStr) {
+                    runOnUiThread(() -> showSimpleSnackbar(getString(R.string.beaconing_aprs_on, frequencyStr)));
+                }
+
+                @Override
                 public void scannedToMemory(int memoryId) {
                     tuneToMemoryUi(memoryId);
+                }
+
+                @Override
+                public void tunedToFreq(String frequencyStr) {
+                    runOnUiThread(() -> tuneToFreqUi(frequencyStr));
                 }
 
                 @Override
@@ -378,8 +379,12 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void firmwareVersionReceived(int firmwareVer) {
-                    context.firmwareVersion = firmwareVer;
+                public void initialDeviceStateReceived() {
+                    runOnUiThread(() -> {
+                        initialRadioUiSynced = false;
+                        pendingInitialRadioUiSync = true;
+                        trySyncInitialRadioUi();
+                    });
                 }
 
                 @Override
@@ -435,6 +440,32 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
+                public void moduleTxStateChanged(boolean txActive) {
+                    runOnUiThread(() -> showModuleTxState(txActive));
+                }
+
+                /**
+                 * Shows firmware-reported TX activity even when Android did not initiate PTT,
+                 * for example while firmware is transmitting an APRS packet.
+                 */
+                private void showModuleTxState(boolean txActive) {
+                    int bandColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.band);
+                    int sMeterColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.primary);
+
+                    TextView activeBand = findViewById(R.id.activeBand);
+                    activeBand.setTextColor(bandColor);
+
+                    int[] sMeterIds = {
+                        R.id.sMeter1, R.id.sMeter2, R.id.sMeter3,
+                        R.id.sMeter4, R.id.sMeter5, R.id.sMeter6,
+                        R.id.sMeter7, R.id.sMeter8, R.id.sMeter9
+                    };
+                    for (int sMeterId : sMeterIds) {
+                        findViewById(sMeterId).setBackgroundColor(sMeterColor);
+                    }
+                }
+
+                @Override
                 public void chatError(String text) {
                     Snackbar snackbar = Snackbar.make(context, findViewById(R.id.mainTopLevelLayout), text, LENGTH_LONG)
                             .setBackgroundTint(Color.rgb(140, 20, 0))
@@ -450,22 +481,16 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void sMeterUpdate(int value) {
-                    updateSMeter(value);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            updateSMeter(value);
+                        }
+                    });
                 }
 
                 @Override
-                public void aprsBeaconing(boolean beaconing, int accuracy) {
-                    // If beaconing just started, let user know in case they didn't want this
-                    // or forgot they turned it on. And warn them if they haven't set their callsign.
-                    if (beaconing && (null == callsign || callsign.trim().length() == 0)) {
-                        showCallsignSnackbar(getString(R.string.set_your_callsign_to_beacon_your_position));
-                    } else if (beaconing) {
-                        showBeaconingOnSnackbar(accuracy);
-                    }
-                }
-
-                @Override
-                public void sentAprsBeacon(double latitude, double longitude) {
+                public void sentAprsBeacon(double latitude, double longitude, String frequencyStr, boolean wasSwitch) {
                     // Show a mock-up of the beacon we sent, in our own chat log
                     APRSMessage myBeacon = new APRSMessage();
                     myBeacon.type = APRSMessage.POSITION_TYPE;
@@ -477,21 +502,11 @@ public class MainActivity extends AppCompatActivity {
                         viewModel.getAppDb().aprsMessageDao().insertAll(myBeacon);
                         viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
                     });
-
-                    // Show a quick snackbar letting the user know we beaconed (so they can stop it if this is surprising)
-                    showSimpleSnackbar("Transmitted APRS beacon on this frequency");
                 }
 
                 @Override
                 public void unknownLocation() {
                     showSimpleSnackbar("Can't find your location, no beacon sent");
-                }
-
-                @Override
-                public void forceTunedToFreq(String newFreqStr) {
-                    // This is called when RadioAudioService is changing bands, and we need
-                    // to reflect that in the UI.
-                    tuneToFreqUi(newFreqStr, true);
                 }
 
                 @Override
@@ -568,7 +583,6 @@ public class MainActivity extends AppCompatActivity {
             if (Boolean.TRUE.equals(allGranted)) {
                 final Intent svc = new Intent(this, RadioAudioService.class)
                     .putExtra(AppSetting.SETTING_CALLSIGN, callsign)
-                    .putExtra(AppSetting.SETTING_SQUELCH, squelch)
                     .putExtra("activeMemoryId", activeMemoryId)
                     .putExtra("activeFrequencyStr", activeFrequencyStr);
                 startForegroundService(svc);
@@ -631,6 +645,34 @@ public class MainActivity extends AppCompatActivity {
 
         APRSMessage aprsMessage = new APRSMessage();
         InformationField infoField = aprsPacket.getPayload();
+
+        // Handle third-party relayed packets
+        String relayCallsign = null;
+        com.vagell.kv4pht.aprs.parser.ThirdPartyField thirdPartyField = (com.vagell.kv4pht.aprs.parser.ThirdPartyField) infoField.getAprsData(APRSTypes.T_THIRDPARTY);
+        if (thirdPartyField != null) {
+            relayCallsign = aprsPacket.getSourceCall();
+            com.vagell.kv4pht.aprs.parser.APRSPacket innerPacket = thirdPartyField.getInnerPacket();
+            if (innerPacket == null || innerPacket.hasFault()) {
+                aprsMessage.type = APRSMessage.UNKNOWN_TYPE;
+                aprsMessage.fromCallsign = aprsPacket.getSourceCall();
+                aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
+                aprsMessage.relayCallsign = relayCallsign;
+                try {
+                    aprsMessage.comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
+                } catch (Exception e) { }
+                threadPoolExecutor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
+                        viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
+                    }
+                });
+                return;
+            }
+            aprsPacket = innerPacket;
+            infoField = innerPacket.getPayload();
+        }
+
         WeatherField weatherField = (WeatherField) infoField.getAprsData(APRSTypes.T_WX);
         PositionField positionField = (PositionField) infoField.getAprsData(APRSTypes.T_POSITION);
         ObjectField objectField = (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT);
@@ -714,6 +756,8 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Exception e) { }
             }
         }
+
+        aprsMessage.relayCallsign = relayCallsign;
 
         threadPoolExecutor.execute(new Runnable() {
             @Override
@@ -821,34 +865,6 @@ public class MainActivity extends AppCompatActivity {
         callsignSnackbar.show();
     }
 
-    private void showBeaconingOnSnackbar(int accuracy) {
-        if (null != usbSnackbar && usbSnackbar.isShown()) { // No radio connected, that's more important.
-            return;
-        }
-
-        String accuracyStr = (accuracy == RadioAudioService.APRS_POSITION_EXACT) ? getString(R.string.exact) : getString(R.string.approx);
-        CharSequence snackbarMsg = getString(R.string.position_beacon_message_1) + accuracyStr + getString(R.string.position_beacon_message_2);
-        Snackbar beaconingSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, LENGTH_LONG)
-                .setAction("Settings", new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        startSettingsActivity();
-                    }
-                })
-                .setBackgroundTint(getResources().getColor(R.color.primary))
-                .setTextColor(getResources().getColor(R.color.medium_gray))
-                .setActionTextColor(getResources().getColor(R.color.black))
-                .setAnchorView(findViewById(R.id.bottomNavigationView));
-
-        // Make the text of the snackbar larger.
-        TextView snackbarActionTextView = (TextView) beaconingSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
-        snackbarActionTextView.setTextSize(20);
-        TextView snackbarTextView = (TextView) beaconingSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
-        snackbarTextView.setTextSize(20);
-
-        beaconingSnackbar.show();
-    }
-
     public void sendButtonOverlayClicked(View view) {
         if (callsign == null || callsign.length() == 0) {
             showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
@@ -882,6 +898,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
+        hideKeyboard();
 
         final APRSMessage aprsMessage = new APRSMessage();
         aprsMessage.type = APRSMessage.MESSAGE_TYPE;
@@ -899,7 +916,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        findViewById(R.id.textChatInput).requestFocus();
     }
 
     private void updateRecordingVisualization(int waitMs, float txVolume) {
@@ -925,25 +941,14 @@ public class MainActivity extends AppCompatActivity {
             final Map<String, String> settings = viewModel.getAppDb().appSettingDao().getAll().stream()
                 .collect(Collectors.toMap(AppSetting::getName, AppSetting::getValue));
             runOnUiThread(() -> {
-                applyRfPowerSetting(settings);
-                applySquelchSettings(settings);
                 applyCallSignSetting(settings);
-                applyGroupAndMemorySettings(settings);
+                applyGroupSetting(settings);
                 applyTxFreqLimitsSettings(settings);
-                applyBandwidthAndGainSettings(settings);
-                applyFiltersSettings(settings);
+                applyMicGainSetting(settings);
                 applyAccessibilitySettings(settings);
                 applyAprsSettings(settings);
             });
         });
-    }
-
-    private void applyRfPowerSetting(Map<String, String> settings) {
-        List<String> powerOptions = Arrays.asList(getResources().getStringArray(R.array.rf_power_options));
-        String power = settings.getOrDefault(AppSetting.SETTING_RF_POWER, powerOptions.get(0));
-        if (radioAudioService != null) {
-            radioAudioService.setHighPower(powerOptions.indexOf(power) == 0);
-        }
     }
 
     private void applyCallSignSetting(Map<String, String> settings) {
@@ -956,24 +961,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void applyGroupAndMemorySettings(Map<String, String> settings) {
+    /**
+     * Restores the previously selected memory group filter after settings are loaded.
+     */
+    private void applyGroupSetting(Map<String, String> settings) {
         String group = settings.get(AppSetting.SETTING_LAST_GROUP);
         if (group != null && !group.isEmpty()) {
             selectMemoryGroup(group);
-        }
-        String lastMemoryIdStr = settings.get(AppSetting.SETTING_LAST_MEMORY_ID);
-        String lastFreq = settings.getOrDefault(AppSetting.SETTING_LAST_FREQ, "0.0000");
-        activeMemoryId = (lastMemoryIdStr != null && !lastMemoryIdStr.equals("-1")) ? Integer.parseInt(lastMemoryIdStr) : -1;
-        activeFrequencyStr = (activeMemoryId == -1) ? lastFreq : null;
-        if (radioAudioService != null) {
-            if (activeMemoryId > -1) {
-                radioAudioService.setActiveMemoryId(activeMemoryId);
-                radioAudioService.tuneToMemory(activeMemoryId, squelch, radioAudioService.getMode() == RadioMode.RX);
-                tuneToMemoryUi(activeMemoryId);
-            } else {
-                radioAudioService.tuneToFreq(activeFrequencyStr, squelch, radioAudioService.getMode() == RadioMode.RX);
-                tuneToFreqUi(activeFrequencyStr, radioAudioService.getMode() == RadioMode.RX);
-            }
         }
     }
 
@@ -987,38 +981,16 @@ public class MainActivity extends AppCompatActivity {
         if (max2m != null) radioAudioService.setMax2mTxFreq(Integer.parseInt(max2m));
         if (min70 != null) radioAudioService.setMin70cmTxFreq(Integer.parseInt(min70));
         if (max70 != null) radioAudioService.setMax70cmTxFreq(Integer.parseInt(max70));
-        radioAudioService.updateFrequencyLimitsForBand();
+        radioAudioService.updateTxLimitsForBand();
     }
 
-    private void applyBandwidthAndGainSettings(Map<String, String> settings) {
+    /**
+     * Applies the saved microphone gain preference to the bound radio service.
+     */
+    private void applyMicGainSetting(Map<String, String> settings) {
         if (radioAudioService == null) return;
-        String bandwidth = settings.get(AppSetting.SETTING_BANDWIDTH);
         String gain = settings.get(AppSetting.SETTING_MIC_GAIN_BOOST);
-        if (bandwidth != null) radioAudioService.setBandwidth(bandwidth);
         if (gain != null) radioAudioService.setMicGainBoost(gain);
-    }
-
-    private void applySquelchSettings(Map<String, String> settings) {
-        String squelchStr = settings.get(AppSetting.SETTING_SQUELCH);
-        if (squelchStr == null) return;
-        squelch = Integer.parseInt(squelchStr);
-        if (radioAudioService != null) {
-            radioAudioService.setSquelch(squelch);
-        }
-    }
-
-    private void applyFiltersSettings(Map<String, String> settings) {
-        boolean emphasis = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_EMPHASIS, "false"));
-        boolean highpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_HIGHPASS, "false"));
-        boolean lowpass = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_LOWPASS, "false"));
-        if (radioAudioService != null && radioAudioService.isRadioConnected()) {
-            threadPoolExecutor.execute(() -> {
-                if (radioAudioService.getMode() != RadioMode.STARTUP && radioAudioService.getMode() != RadioMode.SCAN) {
-                    radioAudioService.setMode(RadioMode.RX);
-                    radioAudioService.setFilters(emphasis, highpass, lowpass);
-                }
-            });
-        }
     }
 
     private void applyAccessibilitySettings(Map<String, String> settings) {
@@ -1045,12 +1017,18 @@ public class MainActivity extends AppCompatActivity {
     private void applyAprsSettings(Map<String, String> settings) {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
+        String beaconFreq = settings.get(AppSetting.SETTING_APRS_BEACON_FREQUENCY);
+        String aprsIcon = settings.get(AppSetting.SETTING_APRS_ICON);
 
         if (accuracy != null && radioAudioService != null) {
             threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
                 accuracy.equals(getString(R.string.exact)) ?
                     RadioAudioService.APRS_POSITION_EXACT :
                     RadioAudioService.APRS_POSITION_APPROX));
+        }
+
+        if (beaconFreq != null && radioAudioService != null) {
+            threadPoolExecutor.execute(() -> radioAudioService.setAprsBeaconFrequency(beaconFreq));
         }
 
         if (radioAudioService != null && beacon != null) {
@@ -1064,6 +1042,10 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 threadPoolExecutor.execute(action);
             }
+        }
+
+        if (radioAudioService != null && aprsIcon != null) {
+            radioAudioService.setAprsPositionIcon(SettingsActivity.getAPRSIconFromSettingChoice(getResources(), aprsIcon));
         }
     }
 
@@ -1174,8 +1156,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (radioAudioService != null) {
-                    radioAudioService.tuneToFreq(activeFrequencyField.getText().toString(), squelch, false);
-                    tuneToFreqUi(radioAudioService.makeSafeHamFreq(activeFrequencyField.getText().toString()), false); // Fixes any invalid freq user may have entered.
+                    radioAudioService.tuneToFreq(activeFrequencyField.getText().toString());
                 }
 
                 hideKeyboard();
@@ -1252,9 +1233,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void hideKeyboard() {
+        View focus = getCurrentFocus();
+        View tokenView = focus != null ? focus : findViewById(R.id.mainTopLevelLayout);
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (null != imm) {
-            imm.hideSoftInputFromWindow(findViewById(R.id.mainTopLevelLayout).getWindowToken(), 0);
+            imm.hideSoftInputFromWindow(tokenView.getWindowToken(), 0);
         }
     }
 
@@ -1262,8 +1245,7 @@ public class MainActivity extends AppCompatActivity {
      * Updates the UI to represent that we've tuned to the given frequency. Does not actually
      * interact with the radio (use RadioAudioService for that).
      */
-    private void tuneToFreqUi(String frequencyStr, boolean wasForced) {
-        final Context ctx = this;
+    private void tuneToFreqUi(String frequencyStr) {
         activeFrequencyStr = radioAudioService.validateFrequency(frequencyStr);
         activeMemoryId = -1;
 
@@ -1273,36 +1255,6 @@ public class MainActivity extends AppCompatActivity {
         // Unhighlight all memory rows, since this is a simplex frequency.
         viewModel.highlightMemory(null);
         memoriesAdapter.notifyDataSetChanged();
-
-        // Save most recent freq so we can restore it on app restart
-        if (wasForced) { // wasForced means user didn't actually type in the frequency (we shouldn't save it)
-            return;
-        }
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                synchronized(ctx) { // Avoid 2 threads checking if something is set / setting it at once.
-                    AppSetting lastFreqSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_FREQ);
-                    if (lastFreqSetting != null) {
-                        lastFreqSetting.value = frequencyStr;
-                        viewModel.getAppDb().appSettingDao().update(lastFreqSetting);
-                    } else {
-                        lastFreqSetting = new AppSetting(AppSetting.SETTING_LAST_FREQ, frequencyStr);
-                        viewModel.getAppDb().appSettingDao().insertAll(lastFreqSetting);
-                    }
-
-                    // And clear out any saved memory ID, so we restore to a simplex freq on restart.
-                    AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_MEMORY_ID);
-                    if (lastMemoryIdSetting != null) {
-                        lastMemoryIdSetting.value = "-1";
-                        viewModel.getAppDb().appSettingDao().update(lastMemoryIdSetting);
-                    } else {
-                        lastMemoryIdSetting = new AppSetting(AppSetting.SETTING_LAST_MEMORY_ID, "-1");
-                        viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
-                    }
-                }
-            }
-        });
     }
 
     /**
@@ -1316,31 +1268,129 @@ public class MainActivity extends AppCompatActivity {
         }
         for (int i = 0; i < channelMemories.size(); i++) {
             if (channelMemories.get(i).memoryId == memoryId) {
-                activeFrequencyStr = radioAudioService.validateFrequency(channelMemories.get(i).frequency);
+                activeFrequencyStr = radioAudioService != null ? radioAudioService.validateFrequency(channelMemories.get(i).frequency) : channelMemories.get(i).frequency;
                 activeMemoryId = memoryId;
 
                 showMemoryName(channelMemories.get(i).name);
                 showFrequency(activeFrequencyStr);
-
-                // Save most recent memory so we can restore it on app restart
-                // Could be null if user is just listening to scan in another app, etc.
-                try {
-                    threadPoolExecutor.execute(() -> {
-                        AppSetting lastMemoryIdSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_MEMORY_ID);
-                        if (lastMemoryIdSetting != null) {
-                            lastMemoryIdSetting.value = "" + memoryId;
-                            viewModel.getAppDb().appSettingDao().update(lastMemoryIdSetting);
-                        } else {
-                            lastMemoryIdSetting = new AppSetting(AppSetting.SETTING_LAST_MEMORY_ID, "" + memoryId);
-                            viewModel.getAppDb().appSettingDao().insertAll(lastMemoryIdSetting);
-                        }
-                    });
-                } catch (RejectedExecutionException ignored) {
-                    Log.d("DEBUG", "Skipping last-memory persistence because MainActivity is tearing down.");
-                }
                 return;
             }
         }
+    }
+
+    /**
+     * Seeds the UI from firmware's reported DeviceState after connect.
+     *
+     * Radio settings now live in module NVS, so Android uses the firmware state as the source of truth
+     * instead of restoring app settings. This may no-op if radio config or memories are not loaded yet;
+     * in that case the sync stays pending and is retried later.
+     */
+    private void trySyncInitialRadioUi() {
+        if (initialRadioUiSynced || !pendingInitialRadioUiSync || radioAudioService == null) {
+            return;
+        }
+        RadioModuleController radioModule = radioAudioService.getRadioModule();
+        if (!radioModule.hasRadioConfig()) {
+            return;
+        }
+        if (radioModule.getMemoryId() >= 0 && viewModel.getChannelMemories().getValue() == null) {
+            return;
+        }
+
+        ChannelMemory memory = findMatchingMemoryForState();
+        if (memory != null) {
+            tuneToMemoryUi(memory.memoryId);
+            viewModel.highlightMemory(memory);
+            memoriesAdapter.notifyDataSetChanged();
+        } else {
+            tuneToFreqUi(String.format(java.util.Locale.US, "%.4f", radioModule.getRxFrequency()));
+        }
+        pendingInitialRadioUiSync = false;
+        initialRadioUiSynced = true;
+    }
+
+    /**
+     * Finds the stored memory that corresponds to firmware's current memory ID and radio settings.
+     * Returns null when firmware is in VFO/simplex mode or the stored memory no longer matches.
+     */
+    @Nullable
+    private ChannelMemory findMatchingMemoryForState() {
+        RadioModuleController radioModule = radioAudioService.getRadioModule();
+        List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
+        if (channelMemories == null || radioModule.getMemoryId() < 0) {
+            return null;
+        }
+        for (ChannelMemory memory : channelMemories) {
+            if (memory.memoryId == radioModule.getMemoryId() && memoryMatchesDeviceState(memory)) {
+                return memory;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Checks whether a stored memory still describes the radio configuration reported by firmware.
+     */
+    private boolean memoryMatchesDeviceState(ChannelMemory memory) {
+        try {
+            RadioModuleController radioModule = radioAudioService.getRadioModule();
+            float rxFreq = Float.parseFloat(radioAudioService.validateFrequency(memory.frequency));
+            float txFreq = calculateMemoryTxFrequency(memory);
+            return closeEnough(txFreq, radioModule.getTxFrequency())
+                && closeEnough(rxFreq, radioModule.getRxFrequency())
+                && Math.max(0, ToneHelper.getToneIndex(memory.txTone)) == radioModule.getTxTone()
+                && Math.max(0, ToneHelper.getToneIndex(memory.rxTone)) == radioModule.getRxTone();
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Calculates the transmit frequency for a memory, including repeater offset.
+     */
+    private float calculateMemoryTxFrequency(ChannelMemory memory) {
+        float txFreq = Float.parseFloat(memory.frequency);
+        if (memory.offset == ChannelMemory.OFFSET_UP) {
+            txFreq += memory.offsetKhz / 1000f;
+        } else if (memory.offset == ChannelMemory.OFFSET_DOWN) {
+            txFreq -= memory.offsetKhz / 1000f;
+        }
+        return Float.parseFloat(radioAudioService.validateFrequency(Float.toString(txFreq)));
+    }
+
+    /**
+     * Compares MHz values while tolerating small float formatting/rounding differences.
+     */
+    private boolean closeEnough(float left, float right) {
+        return Math.abs(left - right) < 0.0002f;
+    }
+
+    /**
+     * Filters visible memories to the connected module's supported frequency range.
+     * When no module is connected, all memories remain visible so users can still edit/delete them.
+     */
+    private void updateMemoryBandFilter() {
+        if (memoriesAdapter == null) {
+            return;
+        }
+        if (radioAudioService == null || RadioAudioService.RadioModuleType.UNKNOWN.equals(radioAudioService.getRadioType())) {
+            memoriesAdapter.clearBandFilter();
+        } else {
+            memoriesAdapter.setBandFilter(radioAudioService.getMinRadioFreq(), radioAudioService.getMaxRadioFreq());
+        }
+        memoriesAdapter.notifyDataSetChanged();
+    }
+
+    /**
+     * Restores the idle welcome text shown when no radio state is available, such as after disconnect.
+     */
+    @SuppressWarnings("java:S3398")
+    private void resetActiveRadioUi() {
+        activeMemoryId = -1;
+        TextView activeMemoryName = findViewById(R.id.activeMemoryName);
+        EditText activeFrequency = findViewById(R.id.activeFrequency);
+        activeMemoryName.setText(getString(R.string.welcome_to_display));
+        activeFrequency.setText(getString(R.string.kv4p_ht));
     }
 
     private void showMemoryName(String name) {
@@ -1614,10 +1664,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-            // If squelch was off before we started scanning, turn it off again
-            if (squelch == 0) {
-                tuneToMemoryUi(activeMemoryId);
-            }
         } else { // Start scanning
             runOnUiThread(new Runnable() {
                 @Override
@@ -1643,38 +1689,25 @@ public class MainActivity extends AppCompatActivity {
         PopupMenu groupsMenu = new PopupMenu(themedContext, view);
         groupsMenu.inflate(R.menu.groups_menu);
 
-        threadPoolExecutor.execute(new Runnable() {
+        for (String groupName : memoriesAdapter.visibleGroups()) {
+            groupsMenu.getMenu().add(groupName);
+        }
+
+        groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
-            public void run() {
-                List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
-                for (int i = 0; i < memoryGroups.size(); i++) {
-                    String groupName = memoryGroups.get(i);
-                    if (groupName != null && groupName.trim().length() > 0) {
-                        groupsMenu.getMenu().add(memoryGroups.get(i));
-                    }
-                }
-
-                groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-                    @Override
-                    public boolean onMenuItemClick(MenuItem item) {
-                        selectMemoryGroup(item.getTitle().toString());
-                        return true;
-                    }
-                });
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        groupsMenu.show();
-                    }
-                });
+            public boolean onMenuItemClick(MenuItem item) {
+                selectMemoryGroup(item.getTitle().toString());
+                return true;
             }
         });
+
+        groupsMenu.show();
     }
 
     private void selectMemoryGroup(String groupName) {
         this.selectedMemoryGroup = groupName.equals(getString(R.string.all_memories)) ? null : groupName;
-        viewModel.loadDataAsync(() -> {});
+        memoriesAdapter.setGroupFilter(selectedMemoryGroup);
+        memoriesAdapter.notifyDataSetChanged();
         // Add drop-down arrow to end of selected group to suggest it's tappable
         TextView groupSelector = findViewById(R.id.groupSelector);
         groupSelector.setText(groupName + " ▼");
@@ -1715,23 +1748,24 @@ public class MainActivity extends AppCompatActivity {
                         // Tune to the edited memory to force any changes to be applied (e.g. new tone
                         // or frequency).
                         List<ChannelMemory> channelMemories = viewModel.getChannelMemories().getValue();
-                        for (int i = 0; i < channelMemories.size(); i++) {
-                            if (channelMemories.get(i).memoryId == editedMemoryId) {
-                                viewModel.highlightMemory(channelMemories.get(i));
+                        if (channelMemories != null) {
+                            for (int i = 0; i < channelMemories.size(); i++) {
+                                if (channelMemories.get(i).memoryId == editedMemoryId) {
+                                    viewModel.highlightMemory(channelMemories.get(i));
 
-                                if (radioAudioService != null) {
-                                    // Force retune so changed memory fields (e.g. offset/tones) are applied
-                                    // even when memoryId and squelch did not change.
-                                    radioAudioService.tuneToMemory(channelMemories.get(i), squelch, true);
+                                    if (radioAudioService != null) {
+                                        radioAudioService.tuneToMemory(channelMemories.get(i));
+                                    }
                                 }
-
-                                tuneToMemoryUi(channelMemories.get(i).memoryId);
                             }
                         }
                     }));
                 }
                 break;
             case REQUEST_SETTINGS:
+                if (resultCode == Activity.RESULT_OK && data != null && radioAudioService != null) {
+                    applyRadioSettingsResult(data);
+                }
                 viewModel.loadDataAsync(this::applySettings);
                 break;
             case REQUEST_FIRMWARE:
@@ -1741,6 +1775,11 @@ public class MainActivity extends AppCompatActivity {
                     if (radioAudioService != null) {
                         radioAudioService.renegotiateAfterFlashing();
                     }
+                }
+                break;
+            case REQUEST_FIND_REPEATERS:
+                if (resultCode == Activity.RESULT_OK) {
+                    viewModel.loadDataAsync(() -> runOnUiThread(() -> memoriesAdapter.notifyDataSetChanged()));
                 }
                 break;
             default:
@@ -1804,9 +1843,38 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("requestCode", REQUEST_SETTINGS);
         if (radioAudioService != null && radioAudioService.isRadioConnected()) {
             intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
-            intent.putExtra("firmwareVersion", firmwareVersion);
+            intent.putExtra("firmwareVersion", radioAudioService.getRadioModule().getFirmwareVersionNumber());
+            intent.putExtra(SettingsActivity.EXTRA_RF_POWER_HIGH, radioAudioService.getRadioModule().isHighPowerEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_BANDWIDTH, radioAudioService.getRadioModule().getBandwidthLabel());
+            intent.putExtra(SettingsActivity.EXTRA_SQUELCH, radioAudioService.getRadioModule().getDesiredSquelch());
+            intent.putExtra(SettingsActivity.EXTRA_FILTER_PRE, radioAudioService.getRadioModule().isPreEmphasisEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_FILTER_HIGH, radioAudioService.getRadioModule().isHighpassEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_FILTER_LOW, radioAudioService.getRadioModule().isLowpassEnabled());
         }
         startActivityForResult(intent, REQUEST_SETTINGS);
+    }
+
+    /**
+     * Applies settings screen radio changes as one desired-state update to avoid intermediate firmware writes.
+     */
+    private void applyRadioSettingsResult(Intent data) {
+        radioAudioService.getRadioModule().beginUpdate();
+        try {
+            radioAudioService.getRadioModule().setHighPower(data.getBooleanExtra(SettingsActivity.EXTRA_RF_POWER_HIGH, true));
+            radioAudioService.getRadioModule().setBandwidth(data.getStringExtra(SettingsActivity.EXTRA_BANDWIDTH));
+            radioAudioService.getRadioModule().setSquelch(data.getIntExtra(SettingsActivity.EXTRA_SQUELCH, radioAudioService.getRadioModule().getDesiredSquelch()));
+            radioAudioService.getRadioModule().setFilters(
+                data.getBooleanExtra(SettingsActivity.EXTRA_FILTER_PRE, false),
+                data.getBooleanExtra(SettingsActivity.EXTRA_FILTER_HIGH, false),
+                data.getBooleanExtra(SettingsActivity.EXTRA_FILTER_LOW, false));
+        } finally {
+            radioAudioService.getRadioModule().endUpdate();
+        }
+
+        // This simple setting is needed by RadioAudioService, but doesn't need to be sent to the module.
+        radioAudioService.setAprsPositionIcon(
+                SettingsActivity.getAPRSIconFromSettingChoice(
+                        getResources(), data.getStringExtra(SettingsActivity.EXTRA_APRS_ICON)));
     }
 
     public void moreClicked(View view) {

@@ -45,8 +45,9 @@
     <string name="more_display">More</string>
     <string name="send_aprs_position_beacond_display">Send APRS position beacon</string>
     <string name="write_up_to_67_chars">Write up to 67 chars...</string>
-    <string name="callsign_or_cq">Callsign or CQ</string>
+    <string name="aprs_to_placeholder">Callsign</string>
     <string name="cq" translatable="false">CQ</string>
+    <string name="aprs_relay_via">via</string>
     <string name="visualization_of_current_transmit_audio_volume" translatable="false">Visualization of current transmit audio volume</string>
     <string name="squelch">Squelch</string>
     <string name="filters">Filters</string>
@@ -98,6 +99,33 @@
     <string name="position_beacon_message_2">" position on active frequency"</string>
     <string name="settings">Settings</string>
     <string name="beacon_my_position">Beacon my position</string>
+    <string name="beacon_to_frequency">Beacon to frequency</string>
+    <string name="beaconing_aprs_on">Beaconing APRS on %1$s...</string>
+    <string name="current">Current</string>
+    <string name="freq_144_3900" translatable="false">144.3900</string>
+    <string name="freq_144_5750" translatable="false">144.5750</string>
+    <string name="freq_144_6400" translatable="false">144.6400</string>
+    <string name="freq_144_6600" translatable="false">144.6600</string>
+    <string name="freq_144_8000" translatable="false">144.8000</string>
+    <string name="freq_145_1750" translatable="false">145.1750</string>
+    <string name="freq_145_8250" translatable="false">145.8250</string>
+    <string name="aprs_my_position_icon">My position icon</string>
+    <string name="aprs_icon_phone">Phone</string>
+    <string name="aprs_icon_person">Person</string>
+    <string name="aprs_icon_house">House</string>
+    <string name="aprs_icon_bicycle">Bicycle</string>
+    <string name="aprs_icon_car">Car</string>
+    <string name="aprs_icon_jeep">Jeep</string>
+    <string name="aprs_icon_truck">Truck</string>
+    <string name="aprs_icon_motorcycle">Motorcycle</string>
+    <string name="aprs_icon_van">Van</string>
+    <string name="aprs_icon_rv">RV</string>
+    <string name="aprs_icon_18_wheeler">18-wheeler</string>
+    <string name="aprs_icon_glider">Glider</string>
+    <string name="aprs_icon_small_aircraft">Small aircraft</string>
+    <string name="aprs_icon_helicopter">Helicopter</string>
+    <string name="aprs_icon_sailboat">Sailboat</string>
+    <string name="aprs_icon_motorboat">Motorboat</string>
     <string name="wide" translatable="false">25kHz</string>
     <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>

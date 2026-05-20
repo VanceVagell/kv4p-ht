@@ -59,8 +59,8 @@ public class InformationField implements Serializable {
        	case '@' :
         	case '=' :
         	case '\'':
-        	case ':' : this.canMessage = true;
-            default: this.canMessage = false;
+        	case ':' : this.canMessage = true; break;
+            default: this.canMessage = false; break;
         }
     }
     

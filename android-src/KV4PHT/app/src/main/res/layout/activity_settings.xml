@@ -107,7 +107,7 @@
                         android:textSize="18sp"
                         android:layout_gravity="center_vertical"
                         android:layout_weight="1"
-                        android:labelFor="@id/aprsPositionAccuracyTextView"/>
+                        android:labelFor="@id/rfPowerTextView"/>
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="wrap_content"
@@ -281,6 +281,46 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/jost"
+                        android:text="@string/beacon_to_frequency"
+                        android:textColor="@color/primary"
+                        android:textSize="18dp"
+                        android:layout_gravity="center_vertical"
+                        android:layout_weight="1"
+                        android:labelFor="@id/aprsBeaconFreqTextView"/>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:padding="0dp"
+                        android:layout_weight="0"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:hintTextColor="@color/primary_deselected"
+                        app:boxStrokeColor="@color/primary"
+                        android:textColorHint="@color/primary_deselected">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/aprsBeaconFreqTextView"
+                            android:layout_width="160dp"
+                            android:layout_height="wrap_content"
+                            android:padding="0dp"
+                            android:layout_weight="1"
+                            android:inputType="none"
+                            android:text="@string/current"
+                            android:textSize="20dp"
+                            android:textColor="@color/primary"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
                     <TextView
@@ -314,6 +354,49 @@
                             android:text="@string/exact"
                             android:textSize="20dp"
                             android:textColor="@color/primary"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/jost"
+                        android:text="@string/aprs_my_position_icon"
+                        android:textColor="@color/primary"
+                        android:textSize="18dp"
+                        android:layout_gravity="center_vertical"
+                        android:layout_weight="1"
+                        android:labelFor="@id/aprsIconTextView"/>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:padding="0dp"
+                        android:layout_weight="0"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        app:hintTextColor="@color/primary_deselected"
+                        app:boxStrokeColor="@color/primary"
+                        android:textColorHint="@color/primary_deselected">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/aprsIconTextView"
+                            android:layout_width="160dp"
+                            android:layout_height="wrap_content"
+                            android:padding="0dp"
+                            android:layout_weight="1"
+                            android:inputType="none"
+                            android:text="@string/aprs_icon_phone"
+                            android:textSize="20dp"
+                            android:textColor="@color/primary"
+                            android:gravity="start|center_vertical"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:singleLine="true" />
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
 

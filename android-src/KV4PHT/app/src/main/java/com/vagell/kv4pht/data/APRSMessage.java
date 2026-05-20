@@ -99,4 +99,7 @@ public class APRSMessage {
 
     @ColumnInfo(name = "wind_dir")
     public String windDir;
+
+    @ColumnInfo(name = "relay_callsign")
+    public String relayCallsign;
 }
