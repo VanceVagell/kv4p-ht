@@ -1020,6 +1020,7 @@ public class MainActivity extends AppCompatActivity {
         String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
         String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
         String beaconFreq = settings.get(AppSetting.SETTING_APRS_BEACON_FREQUENCY);
+        String aprsIcon = settings.get(AppSetting.SETTING_APRS_ICON);
 
         if (accuracy != null && radioAudioService != null) {
             threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
@@ -1043,6 +1044,10 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 threadPoolExecutor.execute(action);
             }
+        }
+
+        if (radioAudioService != null && aprsIcon != null) {
+            radioAudioService.setAprsPositionIcon(SettingsActivity.getAPRSIconFromSettingChoice(getResources(), aprsIcon));
         }
     }
 
@@ -1964,6 +1969,11 @@ public class MainActivity extends AppCompatActivity {
         } finally {
             radioAudioService.getRadioModule().endUpdate();
         }
+
+        // This simple setting is needed by RadioAudioService, but doesn't need to be sent to the module.
+        radioAudioService.setAprsPositionIcon(
+                SettingsActivity.getAPRSIconFromSettingChoice(
+                        getResources(), data.getStringExtra(SettingsActivity.EXTRA_APRS_ICON)));
     }
 
     public void moreClicked(View view) {

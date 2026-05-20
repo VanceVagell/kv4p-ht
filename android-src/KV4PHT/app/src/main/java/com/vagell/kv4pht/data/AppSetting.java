@@ -36,6 +36,7 @@ public class AppSetting {
     public static final String SETTING_APRS_POSITION_ACCURACY = "aprsPositionAccuracy";
     public static final String SETTING_APRS_BEACON_POSITION = "aprsBeaconPosition";
     public static final String SETTING_APRS_BEACON_FREQUENCY = "aprsBeaconFrequency";
+    public static final String SETTING_APRS_ICON = "aprsIcon";
     public static final String SETTING_CALLSIGN = "callsign";
     public static final String SETTING_STICKY_PTT = "stickyPTT";
 

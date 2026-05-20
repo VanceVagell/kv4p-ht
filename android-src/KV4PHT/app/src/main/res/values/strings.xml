@@ -109,6 +109,23 @@
     <string name="freq_144_8000" translatable="false">144.8000</string>
     <string name="freq_145_1750" translatable="false">145.1750</string>
     <string name="freq_145_8250" translatable="false">145.8250</string>
+    <string name="aprs_my_position_icon">My position icon</string>
+    <string name="aprs_icon_phone">Phone</string>
+    <string name="aprs_icon_person">Person</string>
+    <string name="aprs_icon_house">House</string>
+    <string name="aprs_icon_bicycle">Bicycle</string>
+    <string name="aprs_icon_car">Car</string>
+    <string name="aprs_icon_jeep">Jeep</string>
+    <string name="aprs_icon_truck">Truck</string>
+    <string name="aprs_icon_motorcycle">Motorcycle</string>
+    <string name="aprs_icon_van">Van</string>
+    <string name="aprs_icon_rv">RV</string>
+    <string name="aprs_icon_18_wheeler">18-wheeler</string>
+    <string name="aprs_icon_glider">Glider</string>
+    <string name="aprs_icon_small_aircraft">Small aircraft</string>
+    <string name="aprs_icon_helicopter">Helicopter</string>
+    <string name="aprs_icon_sailboat">Sailboat</string>
+    <string name="aprs_icon_motorboat">Motorboat</string>
     <string name="wide" translatable="false">25kHz</string>
     <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>

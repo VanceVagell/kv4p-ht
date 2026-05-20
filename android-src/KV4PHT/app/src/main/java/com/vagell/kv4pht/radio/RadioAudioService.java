@@ -60,6 +60,7 @@ import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.aprs.parser.APRSIconType;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.APRSTypes;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
@@ -153,6 +154,9 @@ public class RadioAudioService extends Service {
     private float minTxFreq = min2mTxFreq;
     @Setter
     private float maxTxFreq = max2mTxFreq;
+
+    @Setter
+    private APRSIconType aprsPositionIcon = APRSIconType.T_PHONE;
 
     public enum RadioModuleType {UNKNOWN, VHF, UHF}
 
@@ -1598,8 +1602,8 @@ public class RadioAudioService extends Service {
         final boolean isApprox = aprsPositionAccuracy == APRS_POSITION_APPROX;
         final Position myPos = new Position(
             isApprox ? Math.round(latitude * 100.0) / 100.0 : latitude,
-            isApprox ? Math.round(longitude * 100.0) / 100.0 : longitude
-        );
+            isApprox ? Math.round(longitude * 100.0) / 100.0 : longitude,
+            0, '/', aprsPositionIcon.getCode());
         try {
             final PositionField posField = new PositionField(("=" + myPos.toCompressedString()).getBytes(), "", 1);
             final APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, posField.getRawBytes());
