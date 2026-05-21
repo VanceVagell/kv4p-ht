@@ -1557,11 +1557,12 @@ public class RadioAudioService extends Service {
         final boolean wasScanning = getMode() == RadioMode.SCAN;
         final int originalMemoryId = activeMemoryId;
         final String originalFrequencyStr = activeFrequencyStr;
+        final int savedScanBaseSquelch = scanBaseSquelch;
 
         callbacks.startingAprsBeacon(aprsBeaconFrequency);
 
         if (wasScanning) {
-            setScanning(false, false);
+            cancelPendingScanAdvance();
         }
 
         tuneToFreq(aprsBeaconFrequency);
@@ -1573,7 +1574,10 @@ public class RadioAudioService extends Service {
             // Wait for transmission to finish before restoring
             handler.postDelayed(() -> {
                 if (wasScanning) {
-                    setScanning(true);
+                    activeMemoryId = originalMemoryId;
+                    scanBaseSquelch = savedScanBaseSquelch;
+                    setMode(RadioMode.SCAN);
+                    nextScan();
                 } else {
                     if (originalMemoryId != -1) {
                         tuneToMemory(originalMemoryId);
