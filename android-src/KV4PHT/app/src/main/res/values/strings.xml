@@ -126,6 +126,7 @@
     <string name="aprs_icon_helicopter">Helicopter</string>
     <string name="aprs_icon_sailboat">Sailboat</string>
     <string name="aprs_icon_motorboat">Motorboat</string>
+    <string name="digipeat_packets">Digipeat packets</string>
     <string name="wide" translatable="false">25kHz</string>
     <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>

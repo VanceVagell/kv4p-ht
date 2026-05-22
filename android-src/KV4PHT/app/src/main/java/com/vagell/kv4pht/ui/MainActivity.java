@@ -1049,6 +1049,11 @@ public class MainActivity extends AppCompatActivity {
         if (radioAudioService != null && aprsIcon != null) {
             radioAudioService.setAprsPositionIcon(SettingsActivity.getAPRSIconFromSettingChoice(getResources(), aprsIcon));
         }
+
+        String digipeat = settings.get(AppSetting.SETTING_DIGIPEAT_PACKETS);
+        if (digipeat != null && radioAudioService != null) {
+            radioAudioService.setDigipeatPackets(Boolean.parseBoolean(digipeat));
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")

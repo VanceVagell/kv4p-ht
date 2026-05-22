@@ -222,6 +222,7 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_ICON, R.id.aprsIconTextView);
+                setSwitchIfPresent(settings, AppSetting.SETTING_DIGIPEAT_PACKETS, R.id.digipeatPacketsSwitch);
                 setRadioSettingsFromIntent();
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
@@ -320,6 +321,7 @@ public class SettingsActivity extends AppCompatActivity {
         attachSwitch(R.id.noAnimationsSwitch, this::setNoAnimations);
         attachSwitch(R.id.aprsPositionSwitch, this::setAprsBeaconPosition);
         attachTextView(R.id.aprsBeaconFreqTextView, this::setAprsBeaconFrequency);
+        attachSwitch(R.id.digipeatPacketsSwitch, this::setDigipeatPackets);
     }
 
     private void saveAppSettingAsync(String key, String value) {
@@ -375,6 +377,10 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setNoAnimations(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_DISABLE_ANIMATIONS, Boolean.toString(enabled));
+    }
+
+    private void setDigipeatPackets(boolean enabled) {
+        saveAppSettingAsync(AppSetting.SETTING_DIGIPEAT_PACKETS, Boolean.toString(enabled));
     }
 
     public static APRSIconType getAPRSIconFromSettingChoice(Resources resources, String choice) {
