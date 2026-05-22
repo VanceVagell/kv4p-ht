@@ -69,8 +69,6 @@ import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
-import com.vagell.kv4pht.data.APRSMessageDao;
-import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
@@ -133,8 +131,8 @@ public class RadioAudioService extends Service {
     public static final int APRS_POSITION_APPROX = 1;
     public static final int APRS_BEACON_MINS = 5;
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
-    private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
-    private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
+    public static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
+    public static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
     public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1-1"), new Digipeater("WIDE2-1"));
     private static final long SCAN_SQUELCHED_ADVANCE_DELAY_MS = 250L;
 
@@ -232,7 +230,6 @@ public class RadioAudioService extends Service {
     private boolean radioMissingNotified = false;
     private Runnable txTimeoutHandler;
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
-    private APRSMessageDao aprsMessageDao;
 
     /**
      * Class used for the client Binder. This service always runs in the same process as its clients.
@@ -416,7 +413,6 @@ public class RadioAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        aprsMessageDao = AppDatabase.getInstance(this).aprsMessageDao();
 
         // Keep CPU on while service is running so we can play and process audio
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -1486,7 +1482,6 @@ public class RadioAudioService extends Service {
     private void handleAx25Packet(byte[] packet, int offset, int len) {
         try {
             APRSPacket aprsPacket = Parser.parseAX25(packet, offset, len);
-            InformationField info = aprsPacket.getPayload();
 
             // Deduplicate against recent digipeats (including our own retransmissions)
             String dedupKey = computeDigipeatDedupKey(aprsPacket);
@@ -1499,46 +1494,6 @@ public class RadioAudioService extends Service {
                 maybeDigipeat(aprsPacket, dedupKey);
             }
 
-            // Check if the packet is an APRS message type
-            if (info.getDataTypeIdentifier() == ':') {
-                MessagePacket msg = new MessagePacket(info.getRawBytes(), aprsPacket.getDestinationCall());
-                
-                // Deduplicate incoming APRS messages with sequence numbers against recent history
-                if (!msg.isAck()) {
-                    String msgNumStr = msg.getMessageNumber();
-                    if (msgNumStr != null && !msgNumStr.trim().isEmpty() && aprsMessageDao != null) {
-                        try {
-                            int msgNum = Integer.parseInt(msgNumStr.trim());
-                            if (aprsMessageDao.isRecentDuplicate(
-                                    aprsPacket.getSourceCall(),
-                                    msg.getMessageBody(),
-                                    msgNum)) {
-                                Log.d(TAG, "Discarding duplicate APRS message from " +
-                                        aprsPacket.getSourceCall() + " with msgNum " + msgNum);
-                                return;
-                            }
-                        } catch (NumberFormatException e) {
-                            Log.d(TAG, "Warning: Bad message number in APRS message, ignoring dedupe check: '" + msgNumStr + "'");
-                        }
-                    }
-                }
-                
-                String target = msg.getTargetCallsign().trim().toUpperCase();
-                // Handle messages addressed to the current callsign
-                if (!msg.isAck() && target.equals(callsign.toUpperCase())) {
-                    callbacks.showNotification(
-                        MESSAGE_NOTIFICATION_CHANNEL_ID,
-                        MESSAGE_NOTIFICATION_TO_YOU_ID,
-                        aprsPacket.getSourceCall() + " messaged you",
-                        msg.getMessageBody(),
-                        INTENT_OPEN_CHAT);
-                    String msgNum = msg.getMessageNumber();
-                    if (null != msgNum && !msgNum.trim().isEmpty()) { // APRS spec says only ack if msg num provided
-                        // Send acknowledgment after a delay
-                        handler.postDelayed(() -> sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), msgNum), 1000);
-                    }
-                }
-            }
             // Notify callbacks about the received packet
             callbacks.packetReceived(aprsPacket);
         } catch (Exception e) {
