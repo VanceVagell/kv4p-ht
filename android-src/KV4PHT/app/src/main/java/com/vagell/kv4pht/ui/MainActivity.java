@@ -1354,6 +1354,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             tuneToFreqUi(String.format(java.util.Locale.US, "%.4f", radioModule.getRxFrequency()));
         }
+        radioAudioService.updateNotificationFromCurrentState();
         pendingInitialRadioUiSync = false;
         initialRadioUiSynced = true;
     }

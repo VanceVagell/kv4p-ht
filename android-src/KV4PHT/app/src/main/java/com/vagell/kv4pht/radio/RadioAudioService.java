@@ -64,7 +64,6 @@ import com.vagell.kv4pht.aprs.parser.APRSIconType;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.APRSTypes;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
-import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
@@ -86,6 +85,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -536,6 +536,43 @@ public class RadioAudioService extends Service {
         this.channelMemoriesLiveData = channelMemoriesLiveData;
     }
 
+    /**
+     * Updates the foreground notification with the current radio state (frequency or memory).
+     * This is useful to call after initial connection or when memory definitions change.
+     */
+    public void updateNotificationFromCurrentState() {
+        String text = null;
+        if (activeMemoryId > -1) {
+            List<ChannelMemory> memories = null;
+            if (channelMemoriesLiveData != null) {
+                memories = channelMemoriesLiveData.getValue();
+            }
+            if (memories != null) {
+                for (ChannelMemory memory : memories) {
+                    if (memory.memoryId == activeMemoryId) {
+                        text = memory.name + " (" + memory.frequency + " MHz)";
+                        break;
+                    }
+                }
+            }
+
+            if (text == null && !activeFrequencyStr.isEmpty()) {
+                text = "Memory " + activeMemoryId + " (" + activeFrequencyStr + " MHz)";
+            }
+        } else if (!activeFrequencyStr.isEmpty()) {
+            try {
+                float freq = Float.parseFloat(activeFrequencyStr);
+                text = "Simplex " + formatFreq(freq) + " MHz";
+            } catch (NumberFormatException e) {
+                text = "Simplex " + activeFrequencyStr + " MHz";
+            }
+        }
+
+        if (text != null) {
+            updateForegroundNotification(text);
+        }
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -631,7 +668,7 @@ public class RadioAudioService extends Service {
         float freq;
         try {
             freq = Float.parseFloat(makeSafeHamFreq(frequencyStr));
-            updateForegroundNotification("Simplex " + frequencyStr + " MHz");
+            updateForegroundNotification("Simplex " + String.format(Locale.US, "%.4f", freq) + " MHz");
         } catch (NumberFormatException e) {
             Log.w(TAG, "Invalid frequency string: " + frequencyStr, e);
             return;
@@ -1396,6 +1433,7 @@ public class RadioAudioService extends Service {
             activeMemoryId = state.getMemoryId();
         }
         handleDeviceState(state);
+        updateNotificationFromCurrentState();
         callbacks.initialDeviceStateReceived();
     }
 
