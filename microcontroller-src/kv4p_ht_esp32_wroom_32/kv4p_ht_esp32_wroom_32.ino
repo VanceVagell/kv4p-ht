@@ -29,7 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "utils.h"
 #include "board.h"
 
-const uint16_t FIRMWARE_VER = 16;
+const uint16_t FIRMWARE_VER = 17;
 
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint32_t DEVICE_STATE_REPORT_INTERVAL_MS = 500;
