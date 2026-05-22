@@ -55,7 +55,7 @@
     <string name="aprs_icon_helicopter">直升机</string>
     <string name="aprs_icon_sailboat">帆船</string>
     <string name="aprs_icon_motorboat">摩托艇</string>
-    <string name="digipeat_packets">中继数据包</string>
+    <string name="digipeat_packets">中继</string>
     <string name="squelch">静噪等级</string>
     <string name="filters">滤波器</string>
     <string name="accessibility">无障碍</string>
