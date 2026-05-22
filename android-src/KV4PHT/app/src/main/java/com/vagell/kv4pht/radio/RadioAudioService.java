@@ -1739,7 +1739,7 @@ public class RadioAudioService extends Service {
         Digipeater firstUnused = digis.get(firstUnusedIndex);
         String digiCall = firstUnused.getCallsign();
         String baseCall = APRSPacket.getBaseCall(digiCall);
-        String ssidStr = APRSPacket.getSsid(digiCall);
+        String ssidStr = APRSPacket.getSsid(firstUnused.toString());
         int ssid = -1;
         try {
             ssid = Integer.parseInt(ssidStr);
