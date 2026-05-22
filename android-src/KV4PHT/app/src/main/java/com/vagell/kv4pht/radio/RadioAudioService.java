@@ -135,7 +135,7 @@ public class RadioAudioService extends Service {
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
     private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
     private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
-    public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
+    public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1-1"), new Digipeater("WIDE2-1"));
     private static final long SCAN_SQUELCHED_ADVANCE_DELAY_MS = 250L;
 
     // === Used for the persistent notification ===
