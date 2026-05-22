@@ -42,4 +42,13 @@ public interface APRSMessageDao {
 
     @Update
     void update(APRSMessage aprsMessage);
+
+    @Query("SELECT EXISTS(" +
+           "  SELECT 1 FROM (" +
+           "    SELECT * FROM aprs_messages ORDER BY id DESC LIMIT 100" +
+           "  ) WHERE from_callsign = :fromCallsign " +
+           "    AND msg_body = :msgBody " +
+           "    AND message_num = :msgNum" +
+           ")")
+    boolean isRecentDuplicate(String fromCallsign, String msgBody, int msgNum);
 }

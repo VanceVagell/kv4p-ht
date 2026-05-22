@@ -69,6 +69,8 @@ import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
+import com.vagell.kv4pht.data.APRSMessageDao;
+import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
@@ -228,6 +230,7 @@ public class RadioAudioService extends Service {
     private boolean radioMissingNotified = false;
     private Runnable txTimeoutHandler;
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
+    private APRSMessageDao aprsMessageDao;
 
     /**
      * Class used for the client Binder. This service always runs in the same process as its clients.
@@ -407,6 +410,7 @@ public class RadioAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        aprsMessageDao = AppDatabase.getInstance(this).aprsMessageDao();
 
         // Keep CPU on while service is running so we can play and process audio
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -1480,6 +1484,27 @@ public class RadioAudioService extends Service {
             // Check if the packet is an APRS message type
             if (info.getDataTypeIdentifier() == ':') {
                 MessagePacket msg = new MessagePacket(info.getRawBytes(), aprsPacket.getDestinationCall());
+                
+                // Deduplicate incoming APRS messages with sequence numbers against recent history
+                if (!msg.isAck()) {
+                    String msgNumStr = msg.getMessageNumber();
+                    if (msgNumStr != null && !msgNumStr.trim().isEmpty() && aprsMessageDao != null) {
+                        try {
+                            int msgNum = Integer.parseInt(msgNumStr.trim());
+                            if (aprsMessageDao.isRecentDuplicate(
+                                    aprsPacket.getSourceCall(),
+                                    msg.getMessageBody(),
+                                    msgNum)) {
+                                Log.d(TAG, "Discarding duplicate APRS message from " +
+                                        aprsPacket.getSourceCall() + " with msgNum " + msgNum);
+                                return;
+                            }
+                        } catch (NumberFormatException e) {
+                            Log.d(TAG, "Warning: Bad message number in APRS message, ignoring dedupe check: '" + msgNumStr + "'");
+                        }
+                    }
+                }
+                
                 String target = msg.getTargetCallsign().trim().toUpperCase();
                 // Handle messages addressed to the current callsign
                 if (!msg.isAck() && target.equals(callsign.toUpperCase())) {
