@@ -1748,9 +1748,12 @@ public class RadioAudioService extends Service {
         }
 
         boolean isOurCall = baseCall.equalsIgnoreCase(APRSPacket.getBaseCall(callsign));
-        boolean isWideAlias = baseCall.toUpperCase().startsWith("WIDE") && ssid >= 1 && ssid <= 2;
 
-        if (!isOurCall && !isWideAlias) {
+        // We check for WIDE1 with additional repeats left. WIDE1 is for local fill-in digipeaters, like us.
+        // We don't want to digipeat WIDE2 because that's for things like mountain-top digipeaters.
+        boolean isWide1Alias = baseCall.equalsIgnoreCase("WIDE1") && ssid >= 1 && ssid <= 2;
+
+        if (!isOurCall && !isWide1Alias) {
             return;
         }
 
@@ -1760,7 +1763,7 @@ public class RadioAudioService extends Service {
             Digipeater marked = new Digipeater(digiCall);
             marked.setUsed(true);
             newDigis.set(firstUnusedIndex, marked);
-        } else if (isWideAlias) {
+        } else if (isWide1Alias) {
             if (ssid == 1) {
                 Digipeater ourDigi = new Digipeater(callsign);
                 ourDigi.setUsed(true);
