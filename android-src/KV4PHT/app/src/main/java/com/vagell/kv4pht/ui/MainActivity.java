@@ -94,7 +94,6 @@ import com.vagell.kv4pht.radio.RadioMode;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -776,10 +775,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                if (!shouldShowAprsMessageInChat(aprsMessage.toCallsign)) {
-                    Log.d("DEBUG", "Ignoring APRS message addressed to: " + aprsMessage.toCallsign);
-                    return;
-                }
             }
         } else if (infoField.getDataTypeIdentifier() == ';') { // APRS "object"
             aprsMessage.type = APRSMessage.OBJECT_TYPE;
@@ -837,18 +832,6 @@ public class MainActivity extends AppCompatActivity {
                 viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
             }
         });
-    }
-
-    private boolean shouldShowAprsMessageInChat(String toCallsign) {
-        String target = toCallsign == null ? "" : toCallsign.trim().toUpperCase(Locale.US);
-        String myCallsign = callsign == null ? "" : callsign.trim().toUpperCase(Locale.US);
-
-        return target.equals(myCallsign)
-                || target.equals("CQ")
-                || target.equals("ALL")
-                || target.equals("QST")
-                || target.startsWith("BLN1")
-                || target.startsWith("NWS");
     }
 
     private enum ScreenType {
