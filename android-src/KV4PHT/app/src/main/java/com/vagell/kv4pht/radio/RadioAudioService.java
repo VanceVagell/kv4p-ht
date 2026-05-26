@@ -116,15 +116,17 @@ public class RadioAudioService extends Service {
     private static final int[] ESP32_PRODUCT_IDS = {60000, 29987};
 
     // === Audio Constants ===
-    public static final int AUDIO_SAMPLE_RATE = 48000;
+    public static final int AUDIO_SAMPLE_RATE = 8000;
     private static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO;
-    private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
-    public static final int OPUS_FRAME_SIZE = 1920; // 40ms at 48kHz
+    private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
+    public static final int VOICE_FRAME_SAMPLES = 160; // 20ms at 8kHz
+    public static final int VOICE_FRAME_BYTES = VOICE_FRAME_SAMPLES;
     private static final int RX_AUDIO_MIN_BUFFER_SIZE =
-            AudioTrack.getMinBufferSize(
+            Math.max(AudioTrack.getMinBufferSize(
                     AUDIO_SAMPLE_RATE,
                     RX_AUDIO_CHANNEL_CONFIG,
-                    RX_AUDIO_FORMAT);
+                    RX_AUDIO_FORMAT),
+                    VOICE_FRAME_SAMPLES * 2);
 
     // === APRS Constants ===
     public static final int APRS_POSITION_EXACT = 0;
@@ -160,16 +162,12 @@ public class RadioAudioService extends Service {
 
     public enum RadioModuleType {UNKNOWN, VHF, UHF}
 
-    // === Audio / Opus Handling ===
-    private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
+    // === Audio / G.711 µ-law Handling ===
+    private final short[] pcm16 = new short[VOICE_FRAME_SAMPLES];
     private AudioTrack audioTrack;
     private float audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
-    private final OpusUtils.OpusDecoderWrapper opusDecoder =
-        new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
-    private final OpusUtils.OpusEncoderWrapper opusEncoder =
-        new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
-    private final byte[] txAudioFrame = new byte[Protocol.PROTO_MTU];
+    private final byte[] txAudioFrame = new byte[VOICE_FRAME_BYTES];
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -1332,25 +1330,31 @@ public class RadioAudioService extends Service {
         Log.d(TAG, "Warning: All memories are skipDuringScan, no next memory found to scan to.");
     }
 
-    private float[] applyMicGain(float[] audioBuffer) {
+    private short[] applyMicGain(short[] audioBuffer, int samples) {
         if (micGainBoost == MicGainBoost.NONE) {
             return audioBuffer; // No gain, just return original
         }
-        float[] newAudioBuffer = new float[audioBuffer.length];
-        for (int i = 0; i < audioBuffer.length; i++) {
-            newAudioBuffer[i] = audioBuffer[i] * micGainBoost.getGain();
+        float gain = micGainBoost.getGain();
+        for (int i = 0; i < samples; i++) {
+            int sample = Math.round(audioBuffer[i] * gain);
+            if (sample > Short.MAX_VALUE) {
+                sample = Short.MAX_VALUE;
+            } else if (sample < Short.MIN_VALUE) {
+                sample = Short.MIN_VALUE;
+            }
+            audioBuffer[i] = (short) sample;
         }
-        return newAudioBuffer;
+        return audioBuffer;
     }
 
-    public void sendAudioToESP32(float[] samples, boolean dataMode) {
+    public void sendAudioToESP32(short[] samples, boolean dataMode) {
         if (hostToEsp32 == null) {
             return; // If connection is lost, just drop the audio frame.
         }
         if (!dataMode) {
-            samples = applyMicGain(samples);
+            samples = applyMicGain(samples, VOICE_FRAME_SAMPLES);
         }
-        int encodedLength = opusEncoder.encode(samples, txAudioFrame);
+        int encodedLength = G711Ulaw.encode(samples, 0, txAudioFrame, 0, VOICE_FRAME_SAMPLES);
         hostToEsp32.txAudio(txAudioFrame, encodedLength);
     }
 
@@ -1477,11 +1481,12 @@ public class RadioAudioService extends Service {
         if (param == null || !param.hasArray() || offset < 0 || len <= 0 || param.limit() < offset + len) {
             return;
         }
-        int decoded = opusDecoder.decode(param.array(), offset, len, pcmFloat);
+        int samples = Math.min(len, VOICE_FRAME_SAMPLES);
+        int decoded = G711Ulaw.decode(param.array(), offset, pcm16, 0, samples);
 
         if ((getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) && audioTrack != null) {
             AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
+            audioTrack.write(pcm16, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
             audioManager.requestAudioFocus(audioFocusRequest);
             ensureAudioPlaying();
         }

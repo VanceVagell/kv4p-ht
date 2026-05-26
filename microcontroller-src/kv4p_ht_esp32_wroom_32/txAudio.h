@@ -19,17 +19,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include <AudioTools.h>
-#include <AudioTools/AudioCodecs/CodecOpus.h>
+#include <AudioTools/AudioCodecs/CodecG7xx.h>
 #include <esp_task_wdt.h>
 #include <AfskModulator.h>
 #include "globals.h"
 #include "protocol.h"
+#include "voiceResampler.h"
 
 bool txStreamConfigured = false;
 I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
-OpusAudioDecoder txDec;
-EncodedAudioStream txOut(&out, &txDec); 
+AudioInfo txVoiceWirePcmInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
+G711_ULAWDecoder txDec;
+VoiceUpsampleOutput txUpsample(out);
+EncodedAudioStream txOut(&txUpsample, &txDec); 
 
 // Tx runaway detection stuff
 uint32_t txStartTime = -1;
@@ -66,13 +69,10 @@ void initI2STx() {
   config.auto_clear = false;
   config.signal_type = PDM;
   out.begin(config);
-  // configure OPUS additinal parameters
-  txDec.setAudioInfo(txInfo);
-  auto &decoderConfig = txDec.config();
-  decoderConfig.max_buffer_write_size = PROTO_MTU;
-  txDec.begin(decoderConfig);
-  // Open output
-  txOut.begin(txInfo);
+  txDec.setAudioInfo(txVoiceWirePcmInfo);
+  txDec.begin();
+  txUpsample.begin();
+  txOut.begin(txVoiceWirePcmInfo);
   i2s_zero_dma_buffer(I2S_NUM_0);
   txStreamConfigured = true;
 }
@@ -85,17 +85,24 @@ void endI2STx() {
     // Forcing the pin to high-Z prevents this.
     pinMode(hw.pins.pinAudioOut, INPUT); 
     txOut.end();
+    txUpsample.end();
     out.end();
   }
   txStreamConfigured = false;
 }
 
 void processTxAudio(uint8_t *src, size_t len) {
+  if (!src || len == 0 || !txStreamConfigured) {
+    return;
+  }
   size_t totalWritten = 0;
   while (totalWritten < len) {
-      size_t written = txOut.write(src + totalWritten, len - totalWritten);
-      totalWritten += written;
-      esp_task_wdt_reset();
+    size_t written = txOut.write(src + totalWritten, len - totalWritten);
+    if (written == 0) {
+      break;
+    }
+    totalWritten += written;
+    esp_task_wdt_reset();
   }
 }
 

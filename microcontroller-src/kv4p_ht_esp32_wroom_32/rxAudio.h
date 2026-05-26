@@ -19,13 +19,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include <AudioTools.h>
-#include <AudioTools/AudioCodecs/CodecOpus.h>
+#include <AudioTools/AudioCodecs/CodecG7xx.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 #include <AfskDemodulator.h>
 #include "globals.h"
 #include "protocol.h"
 #include "debug.h"
+#include "voiceResampler.h"
 
 // Custom Output to Forward Encoded Data to Serial
 class SerialOutput : public AudioOutput {
@@ -110,11 +111,14 @@ private:
 bool rxStreamConfigured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE, 1, 16);
-OpusAudioEncoder rxEnc;
+AudioInfo voiceWirePcmInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
+G711_ULAWEncoder rxEnc;
 SerialOutput rxAudioOutput;
 EncodedAudioStream rxOut(&rxAudioOutput, &rxEnc);
+VoiceDownsampleConverter rxDownsample;
 AudioEffectStream effects(in);  
-StreamCopy rxCopier(rxOut, effects);
+ConverterStream<int16_t> rxDownsampledEffects(effects, rxDownsample);
+StreamCopy rxCopier(rxOut, rxDownsampledEffects, VOICE_FRAME_SAMPLES_48K * sizeof(int16_t));
 Boost mute(0.0);
 Boost gain(16.0);
 DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
@@ -144,14 +148,8 @@ void initI2SRx() {
   config.adc_pin = hw.pins.pinAudioIn;
   config.sample_rate = AUDIO_SAMPLE_RATE * 1.02; // 2% over sample rate to avoid buffer underruns
   in.begin(config);
-  rxEnc.setAudioInfo(rxInfo);
-  // configure OPUS additinal parameters
-  auto &encoderConfig = rxEnc.config();
-  encoderConfig.application = OPUS_APPLICATION_AUDIO;
-  encoderConfig.frame_sizes_ms_x2 = OPUS_FRAMESIZE_40_MS;
-  encoderConfig.vbr = 1;
-  encoderConfig.max_bandwidth = OPUS_BANDWIDTH_NARROWBAND;
-  rxEnc.begin(encoderConfig);
+  rxEnc.setAudioInfo(voiceWirePcmInfo);
+  rxEnc.begin();
   // effects
   effects.clear();
   afskTapEffect.setActive(true);
@@ -161,7 +159,10 @@ void initI2SRx() {
   effects.addEffect(mute);
   effects.begin(rxInfo);
   // open output
-  rxOut.begin(rxInfo);
+  rxDownsample.begin();
+  rxOut.begin(voiceWirePcmInfo);
+  rxCopier.setMinCopySize(sizeof(int16_t));
+  rxCopier.setCheckAvailable(false);
   rxStreamConfigured = true;
 }
 

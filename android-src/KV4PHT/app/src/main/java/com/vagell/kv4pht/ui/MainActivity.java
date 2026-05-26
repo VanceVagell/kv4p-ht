@@ -112,8 +112,10 @@ public class MainActivity extends AppCompatActivity {
     private AudioRecord audioRecord;
     private boolean isRecording = false;
     private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    private int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat);
+    private int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
+    private int minBufferSize = Math.max(
+        AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat),
+        RadioAudioService.VOICE_FRAME_SAMPLES * 2);
 
     private Thread recordingThread;
 
@@ -1624,10 +1626,10 @@ public class MainActivity extends AppCompatActivity {
         float audioChunkSampleTotal = 0.0f; // Accumulate across buffers
         int accumulatedSamples = 0; // Track count of samples
         int samplesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
-        float[] audioBuffer = new float[RadioAudioService.OPUS_FRAME_SIZE];
+        short[] audioBuffer = new short[RadioAudioService.VOICE_FRAME_SAMPLES];
         while (isRecording) {
-            int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
-            if (samples == RadioAudioService.OPUS_FRAME_SIZE) {
+            int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.VOICE_FRAME_SAMPLES, AudioRecord.READ_BLOCKING);
+            if (samples == RadioAudioService.VOICE_FRAME_SAMPLES) {
                 if (null == radioAudioService || !radioAudioService.isRadioConnected()) {
                     Log.d("DEBUG", "Error: Could not contact radio in processAudioStream() while recording.");
                     runOnUiThread(new Runnable() {
@@ -1641,7 +1643,7 @@ public class MainActivity extends AppCompatActivity {
                 radioAudioService.sendAudioToESP32(audioBuffer, false);
                 // Accumulate samples across buffers
                 for (int i = 0; i < samples; i++) {
-                    audioChunkSampleTotal += Math.abs(audioBuffer[i]) * 8.0f;
+                    audioChunkSampleTotal += Math.abs(audioBuffer[i] / 32768.0f) * 8.0f;
                     accumulatedSamples++;
                     // If we have enough samples, update visualization
                     if (accumulatedSamples >= samplesPerAnimFrame) {
