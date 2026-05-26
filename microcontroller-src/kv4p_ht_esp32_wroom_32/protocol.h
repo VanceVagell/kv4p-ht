@@ -41,7 +41,7 @@ static constexpr uint8_t KV4P_VENDOR_PREFIX[] = {'K', 'V', '4', 'P'};
 // Incoming commands (Android -> ESP32)
 enum RcvCommand {
   COMMAND_RCV_UNKNOWN    = 0x00,
-  COMMAND_HOST_TX_AUDIO  = 0x07, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
+  COMMAND_HOST_TX_AUDIO  = 0x0C, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
   COMMAND_HOST_DESIRED_STATE = 0x0D, // [COMMAND_HOST_DESIRED_STATE(HostDesiredState)]
 };
 
@@ -54,7 +54,7 @@ enum SndCommand {
   COMMAND_DEBUG_DEBUG    = 0x04, // [COMMAND_DEBUG_DEBUG(char[])]
   COMMAND_DEBUG_TRACE    = 0x05, // [COMMAND_DEBUG_TRACE(char[])]
   COMMAND_HELLO          = 0x06, // [COMMAND_HELLO(Hello)]
-  COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
+  COMMAND_RX_AUDIO       = 0x0C, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_WINDOW_UPDATE  = 0x09,
   COMMAND_DEVICE_STATE   = 0x0B, // [COMMAND_DEVICE_STATE(DeviceState)]
 };
@@ -217,6 +217,21 @@ void inline sendKissFrame(uint8_t kissCommand, const uint8_t *payload, size_t le
   sendKissFrame(Serial, kissCommand, payload, len);
 }
 
+typedef bool (*ProtocolStreamConnectedCallback)();
+
+Stream *protocolSecondaryStream = nullptr;
+ProtocolStreamConnectedCallback protocolSecondaryConnected = nullptr;
+
+void setProtocolSecondaryStream(Stream &stream, ProtocolStreamConnectedCallback connected) {
+  protocolSecondaryStream = &stream;
+  protocolSecondaryConnected = connected;
+}
+
+bool protocolHasSecondaryStream() {
+  return protocolSecondaryStream != nullptr
+    && (protocolSecondaryConnected == nullptr || protocolSecondaryConnected());
+}
+
 void inline sendKissDataFrame(Stream &out, const uint8_t *ax25, size_t len) {
   if (ax25 == NULL) {
     len = 0;
@@ -229,6 +244,9 @@ void inline sendKissDataFrame(Stream &out, const uint8_t *ax25, size_t len) {
 
 void inline sendKissDataFrame(const uint8_t *ax25, size_t len) {
   sendKissDataFrame(Serial, ax25, len);
+  if (protocolHasSecondaryStream()) {
+    sendKissDataFrame(*protocolSecondaryStream, ax25, len);
+  }
 }
 
 void sendKv4pVendorFrame(Stream &out, uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
@@ -253,9 +271,12 @@ void sendKv4pVendorFrame(Stream &out, uint8_t kv4pCommand, const uint8_t *payloa
 
 void inline sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
   sendKv4pVendorFrame(Serial, kv4pCommand, payload, len);
+  if (protocolHasSecondaryStream()) {
+    sendKv4pVendorFrame(*protocolSecondaryStream, kv4pCommand, payload, len);
+  }
 }
 
-void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
+void inline sendHello(Stream &out, uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
   Hello params = {
     .version = {
       .ver = ver,
@@ -268,7 +289,14 @@ void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, R
     },
     .deviceState = deviceState,
   };
-  sendKv4pVendorFrame(COMMAND_HELLO, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(out, COMMAND_HELLO, (uint8_t*) &params, sizeof(params));
+}
+
+void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
+  sendHello(Serial, ver, radioModuleStatus, windowSize, rfModuleType, minRadioFreq, maxRadioFreq, features, deviceState);
+  if (protocolHasSecondaryStream()) {
+    sendHello(*protocolSecondaryStream, ver, radioModuleStatus, windowSize, rfModuleType, minRadioFreq, maxRadioFreq, features, deviceState);
+  }
 }
 
 void inline sendDeviceState(const DeviceState &state) {
@@ -283,11 +311,15 @@ void inline sendAx25Packet(const uint8_t *data, size_t len) {
   sendKissDataFrame(data, len);
 }
 
-void inline sendWindowAck(size_t size) {
+void inline sendWindowAck(Stream &out, size_t size) {
   WindowUpdate params = {
     .size = (uint32_t) size,
   };
-  sendKv4pVendorFrame(COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(out, COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
+}
+
+void inline sendWindowAck(size_t size) {
+  sendWindowAck(Serial, size);
 }
 
 typedef void (*CommandCallback)(RcvCommand command, uint8_t *params, size_t param_len);
@@ -323,7 +355,7 @@ private:
       _encodedFrameLen++;
       if (_frameLen > 0 && !_dropFrame) {
         processFrame();
-        sendWindowAck(_encodedFrameLen);
+        sendWindowAck(_serial, _encodedFrameLen);
         resetParser();
         _inFrame = true;
         _encodedFrameLen = 1;
@@ -405,6 +437,10 @@ private:
     _escape = false;
     _dropFrame = false;
     _inFrame = false;
+  }
+public:
+  void reset() {
+    resetParser();
   }
 };
 

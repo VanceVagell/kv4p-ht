@@ -71,9 +71,11 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 
 ## Incoming KV4P Vendor Commands (Android → ESP32)
 
+Audio command ID `0x07` was used by the historical Opus voice stream. Current firmware uses `0x0C` for 4-bit ADPCM audio so hosts can keep compatibility code for both the old Opus stream and the current ADPCM stream.
+
 | Command Code | Name                    | Description                                                    |
 | ------------ | ----------------------- | -------------------------------------------------------------- |
-| `0x07`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx 4-bit ADPCM audio data (payload required, flow-controlled) |
+| `0x0C`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx 4-bit ADPCM audio data (payload required, flow-controlled) |
 | `0x0D`       | `COMMAND_HOST_DESIRED_STATE` | Desired radio/control state snapshot                     |
 
 ## Outgoing KISS Frame Types (ESP32 → Android)
@@ -85,6 +87,8 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 
 ## Outgoing KV4P Vendor Commands (ESP32 → Android)
 
+Audio command ID `0x07` was used by the historical Opus voice stream. Current firmware uses `0x0C` for 4-bit ADPCM audio so hosts can keep compatibility code for both the old Opus stream and the current ADPCM stream.
+
 | Command Code | Name                    | Description                                 |
 | ------------ | ----------------------- | ------------------------------------------- |
 | `0x01`       | `COMMAND_DEBUG_INFO`    | Sends debug info message                    |
@@ -93,7 +97,7 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 | `0x04`       | `COMMAND_DEBUG_DEBUG`   | Sends debug debug-level message             |
 | `0x05`       | `COMMAND_DEBUG_TRACE`   | Sends debug trace message                   |
 | `0x06`       | `COMMAND_HELLO`         | Hello handshake message with version/status and initial device state |
-| `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx 4-bit ADPCM audio data (payload required) |
+| `0x0C`       | `COMMAND_RX_AUDIO`      | Sends Rx 4-bit ADPCM audio data (payload required) |
 | `0x09`       | `COMMAND_WINDOW_UPDATE` | Updates available receive window            |
 | `0x0B`       | `COMMAND_DEVICE_STATE`  | Applied radio/control state snapshot         |
 

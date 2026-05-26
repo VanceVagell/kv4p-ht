@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <Arduino.h>
+#include <BluetoothSerial.h>
 #include <DRA818.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
@@ -34,10 +35,18 @@ const uint16_t FIRMWARE_VER = 17;
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint32_t DEVICE_STATE_REPORT_INTERVAL_MS = 500;
 const uint16_t USB_BUFFER_SIZE = 1024*2;
+const char BLUETOOTH_DEVICE_NAME[] = "kv4p-ht";
 
 DRA818 sa818_vhf(&Serial2, SA818_VHF);
 DRA818 sa818_uhf(&Serial2, SA818_UHF);
 DRA818 &sa818 = sa818_vhf;
+BluetoothSerial SerialBT;
+bool bluetoothProtocolConnected = false;
+KissParser bluetoothParser(SerialBT, &handleCommands, &handleAx25Data);
+
+bool bluetoothProtocolStreamConnected() {
+  return bluetoothProtocolConnected && SerialBT.hasClient();
+}
 
 // Were we able to communicate with the radio module during setup()?
 const char RADIO_MODULE_NOT_FOUND = 'x';
@@ -351,6 +360,8 @@ void setup() {
   Serial.println("Use `logcat` or a kv4p decoder to view readable logs.");
   Serial.println("More info: https://github.com/VanceVagell/kv4p-ht/blob/main/microcontroller-src/kv4p_ht_esp32_wroom_32/readme.md");
   Serial.println("==============================");
+  SerialBT.begin(BLUETOOTH_DEVICE_NAME);
+  setProtocolSecondaryStream(SerialBT, bluetoothProtocolStreamConnected);
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
@@ -479,6 +490,22 @@ void deviceStateLoop() {
   END_EVERY_N_MILLISECONDS();
 }
 
+void bluetoothLoop() {
+  bool connected = SerialBT.hasClient();
+  if (connected && !bluetoothProtocolConnected) {
+    bluetoothProtocolConnected = true;
+    bluetoothParser.reset();
+    sendHello(SerialBT, FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState());
+  } else if (!connected && bluetoothProtocolConnected) {
+    bluetoothProtocolConnected = false;
+    bluetoothParser.reset();
+  }
+
+  if (bluetoothProtocolConnected) {
+    bluetoothParser.loop();
+  }
+}
+
 void squelchLoop() {
   bool nextSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
   if (nextSquelched != squelched) {
@@ -493,6 +520,7 @@ void loop() {
   ledLoop();
   buttonsLoop();
   protocolLoop();
+  bluetoothLoop();
   rxAudioLoop();
   txAudioLoop();
   rssiLoop();

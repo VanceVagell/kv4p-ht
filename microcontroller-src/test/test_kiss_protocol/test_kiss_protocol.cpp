@@ -25,6 +25,8 @@ static_assert(sizeof(HostDesiredState) == 22, "HostDesiredState wire size must m
 static_assert(sizeof(DeviceState) == 26, "DeviceState wire size must match Android");
 static_assert(sizeof(Version) == 17, "Version wire size must match Android");
 static_assert(sizeof(Hello) == 43, "Hello wire size must match Android");
+static_assert(COMMAND_HOST_TX_AUDIO == 0x0C, "Host TX audio command id must match Android");
+static_assert(COMMAND_RX_AUDIO == 0x0C, "RX audio command id must match Android");
 
 struct CapturedCommand {
   bool called;
@@ -35,6 +37,7 @@ struct CapturedCommand {
 
 static CapturedCommand captured;
 static CapturedCommand capturedAx25;
+static bool secondaryConnected = false;
 
 void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
   captured.called = true;
@@ -52,6 +55,10 @@ void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
   if (ax25_len > 0) {
     memcpy(capturedAx25.payload, ax25, ax25_len);
   }
+}
+
+bool isSecondaryConnected() {
+  return secondaryConnected;
 }
 
 class FakeStream : public Stream {
@@ -324,6 +331,24 @@ void test_send_kiss_data_frame_escapes_fend_and_fesc() {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, stream.written(), sizeof(expected));
 }
 
+void test_send_kiss_data_frame_broadcasts_to_connected_secondary_stream() {
+  FakeStream secondary;
+  secondaryConnected = true;
+  setProtocolSecondaryStream(secondary, isSecondaryConnected);
+
+  const uint8_t payload[] = { 0x11, 0x22 };
+  const uint8_t expected[] = {
+    KISS_FEND, KISS_CMD_DATA, 0x11, 0x22, KISS_FEND
+  };
+
+  sendKissDataFrame(payload, sizeof(payload));
+
+  TEST_ASSERT_EQUAL(sizeof(expected), secondary.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, secondary.written(), sizeof(expected));
+
+  secondaryConnected = false;
+}
+
 void test_send_kv4p_vendor_frame_escapes_payload() {
   FakeStream stream;
   const uint8_t payload[] = { 0x11, KISS_FEND, KISS_FESC };
@@ -340,6 +365,29 @@ void test_send_kv4p_vendor_frame_escapes_payload() {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, stream.written(), sizeof(expected));
 }
 
+void test_parser_ack_is_written_to_input_stream() {
+  resetCaptured();
+  const uint8_t frame[] = {
+    KISS_FEND, KISS_CMD_DATA, 0x11, KISS_FEND
+  };
+  FakeStream stream(frame, sizeof(frame));
+  KissParser parser(stream, &handleCommands, &handleAx25Data);
+  const uint8_t expectedAck[] = {
+    KISS_FEND, KISS_CMD_SETHARDWARE,
+    'K', 'V', '4', 'P', KV4P_PROTOCOL_VERSION, COMMAND_WINDOW_UPDATE,
+    0x04, 0x00, 0x00, 0x00,
+    KISS_FEND
+  };
+
+  while (stream.available() > 0) {
+    parser.loop();
+  }
+
+  TEST_ASSERT_TRUE(capturedAx25.called);
+  TEST_ASSERT_EQUAL(sizeof(expectedAck), stream.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAck, stream.written(), sizeof(expectedAck));
+}
+
 static int runKissProtocolTests() {
   UNITY_BEGIN();
   RUN_TEST(test_data_frame_unescapes_and_dispatches_ax25);
@@ -353,7 +401,9 @@ static int runKissProtocolTests() {
   RUN_TEST(test_unknown_escape_drops_frame_and_recovers);
   RUN_TEST(test_oversized_frame_is_dropped_and_recovers);
   RUN_TEST(test_send_kiss_data_frame_escapes_fend_and_fesc);
+  RUN_TEST(test_send_kiss_data_frame_broadcasts_to_connected_secondary_stream);
   RUN_TEST(test_send_kv4p_vendor_frame_escapes_payload);
+  RUN_TEST(test_parser_ack_is_written_to_input_stream);
   return UNITY_END();
 }
 
