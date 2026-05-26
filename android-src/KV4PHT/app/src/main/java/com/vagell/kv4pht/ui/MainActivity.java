@@ -774,6 +774,7 @@ public class MainActivity extends AppCompatActivity {
                         }, 1000);
                     }
                 }
+
             }
         } else if (infoField.getDataTypeIdentifier() == ';') { // APRS "object"
             aprsMessage.type = APRSMessage.OBJECT_TYPE;
@@ -930,7 +931,7 @@ public class MainActivity extends AppCompatActivity {
 
         String targetCallsign = ((EditText) findViewById(R.id.textChatTo)).getText().toString().trim();
         if (targetCallsign.length() == 0) {
-            targetCallsign = "CQ";
+            targetCallsign = "BLN1CQ";
         } else {
             targetCallsign = targetCallsign.toUpperCase();
         }
