@@ -19,7 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include <AudioTools.h>
-#include <AudioTools/AudioCodecs/CodecG7xx.h>
+#include <AudioTools/AudioCodecs/CodecADPCM.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 #include <AfskDemodulator.h>
@@ -28,7 +28,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "debug.h"
 #include "voiceResampler.h"
 
-// Custom Output to Forward Encoded Data to Serial
 class SerialOutput : public AudioOutput {
 public:
   size_t write(const uint8_t *data, size_t len) override {
@@ -111,10 +110,10 @@ private:
 bool rxStreamConfigured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE, 1, 16);
-AudioInfo voiceWirePcmInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
-G711_ULAWEncoder rxEnc;
+AudioInfo rxVoiceInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
 SerialOutput rxAudioOutput;
-EncodedAudioStream rxOut(&rxAudioOutput, &rxEnc);
+ADPCMEncoder rxAdpcmEncoder(AV_CODEC_ID_ADPCM_IMA_WAV, VOICE_FRAME_BYTES);
+EncodedAudioStream rxOut(&rxAudioOutput, &rxAdpcmEncoder);
 VoiceDownsampleConverter rxDownsample;
 AudioEffectStream effects(in);  
 ConverterStream<int16_t> rxDownsampledEffects(effects, rxDownsample);
@@ -146,10 +145,8 @@ void initI2SRx() {
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = hw.pins.pinAudioIn;
-  config.sample_rate = AUDIO_SAMPLE_RATE * 1.02; // 2% over sample rate to avoid buffer underruns
+  config.sample_rate = AUDIO_SAMPLE_RATE * 1.00; // 2% over sample rate to avoid buffer underruns
   in.begin(config);
-  rxEnc.setAudioInfo(voiceWirePcmInfo);
-  rxEnc.begin();
   // effects
   effects.clear();
   afskTapEffect.setActive(true);
@@ -160,7 +157,7 @@ void initI2SRx() {
   effects.begin(rxInfo);
   // open output
   rxDownsample.begin();
-  rxOut.begin(voiceWirePcmInfo);
+  rxOut.begin(rxVoiceInfo);
   rxCopier.setMinCopySize(sizeof(int16_t));
   rxCopier.setCheckAvailable(false);
   rxStreamConfigured = true;

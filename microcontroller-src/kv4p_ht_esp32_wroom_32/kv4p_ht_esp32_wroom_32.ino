@@ -45,7 +45,7 @@ const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
 boolean rssiOn = true; // true if RSSI is enabled
-boolean audioOpen = false; // true when host wants RX G.711 µ-law audio frames
+boolean audioOpen = false; // true when host wants RX 4-bit ADPCM audio frames
 HostDesiredState desiredState = {
   .sequence = 0,
   .memoryId = -1,

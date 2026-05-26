@@ -18,11 +18,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include <Arduino.h>
+#include <math.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 #include "globals.h"
-#include <esp_dsp.h>
+#include <AfskDemodulator.h>
 
 #ifndef PIO_NATIVE_TEST
 #include <AudioTools.h>
@@ -30,37 +31,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define VOICE_DSP_ALIGN16 __attribute__((aligned(16)))
 
-static constexpr int16_t VOICE_DECIMATOR_TAPS = 96;
-static constexpr int16_t VOICE_DECIMATOR_COEFF_SHIFT = 15;
-static constexpr int16_t VOICE_DECIMATOR_S16_SHIFT = 0;
-static constexpr float VOICE_DECIMATOR_GAIN = 0.5f;
+static constexpr int16_t VOICE_DECIMATOR_TAPS = 65;
+static constexpr int16_t VOICE_DECIMATOR_STATE_LEN = VOICE_DECIMATOR_TAPS + 4;
+static constexpr float VOICE_DECIMATOR_CUTOFF_HZ = 6800.0f;
 
-// 96-tap Hamming-windowed sinc, fc=3400 Hz at fs=48000 Hz, 0.5 DC gain.
-// Coefficients are Q15. For dsps_fird_s16, ESP-DSP applies (shift - 15),
-// so Q15 coefficients use shift=0 to produce a signed PCM16 result.
-static constexpr int16_t voiceFloatToQ15(float coeff) {
-  return (coeff * VOICE_DECIMATOR_GAIN) >= 0.999969482421875f ? 32767 :
-         (coeff * VOICE_DECIMATOR_GAIN) <= -1.0f ? -32768 :
-         (int16_t)((coeff * VOICE_DECIMATOR_GAIN) * (float)(1 << VOICE_DECIMATOR_COEFF_SHIFT) +
-                   ((coeff * VOICE_DECIMATOR_GAIN) >= 0.0f ? 0.5f : -0.5f));
+inline void voiceDesignDecimatorCoeffs(float *coeffs) {
+  afsk::dsp::afsk_design_lowpass_hamming(coeffs, VOICE_DECIMATOR_TAPS, VOICE_DECIMATOR_CUTOFF_HZ, AUDIO_SAMPLE_RATE);
 }
 
-static int16_t voiceDecimatorCoeffs[VOICE_DECIMATOR_TAPS] VOICE_DSP_ALIGN16 = {
-  voiceFloatToQ15(0.0003967285f), voiceFloatToQ15(0.0005187988f), voiceFloatToQ15(0.0005798340f), voiceFloatToQ15(0.0005187988f), voiceFloatToQ15(0.0003356934f), voiceFloatToQ15(0.0000610352f), voiceFloatToQ15(-0.0003356934f), voiceFloatToQ15(-0.0007324219f),
-  voiceFloatToQ15(-0.0010986328f), voiceFloatToQ15(-0.0013122559f), voiceFloatToQ15(-0.0012512207f), voiceFloatToQ15(-0.0008850098f), voiceFloatToQ15(-0.0001831055f), voiceFloatToQ15(0.0007629395f), voiceFloatToQ15(0.0018005371f), voiceFloatToQ15(0.0026550293f),
-  voiceFloatToQ15(0.0031433105f), voiceFloatToQ15(0.0030212402f), voiceFloatToQ15(0.0021362305f), voiceFloatToQ15(0.0005187988f), voiceFloatToQ15(-0.0015869141f), voiceFloatToQ15(-0.0038146973f), voiceFloatToQ15(-0.0057067871f), voiceFloatToQ15(-0.0066833496f),
-  voiceFloatToQ15(-0.0063781738f), voiceFloatToQ15(-0.0045471191f), voiceFloatToQ15(-0.0012817383f), voiceFloatToQ15(0.0029296875f), voiceFloatToQ15(0.0073852539f), voiceFloatToQ15(0.0111083984f), voiceFloatToQ15(0.0131225586f), voiceFloatToQ15(0.0126342773f),
-  voiceFloatToQ15(0.0092163086f), voiceFloatToQ15(0.0029907227f), voiceFloatToQ15(-0.0052795410f), voiceFloatToQ15(-0.0142822266f), voiceFloatToQ15(-0.0221557617f), voiceFloatToQ15(-0.0270080566f), voiceFloatToQ15(-0.0270080566f), voiceFloatToQ15(-0.0207824707f),
-  voiceFloatToQ15(-0.0078125000f), voiceFloatToQ15(0.0115356445f), voiceFloatToQ15(0.0358276367f), voiceFloatToQ15(0.0628356934f), voiceFloatToQ15(0.0896606445f), voiceFloatToQ15(0.1132812500f), voiceFloatToQ15(0.1308593750f), voiceFloatToQ15(0.1403503418f),
-  voiceFloatToQ15(0.1402282715f), voiceFloatToQ15(0.1308593750f), voiceFloatToQ15(0.1132812500f), voiceFloatToQ15(0.0896606445f), voiceFloatToQ15(0.0628356934f), voiceFloatToQ15(0.0358276367f), voiceFloatToQ15(0.0115356445f), voiceFloatToQ15(-0.0078125000f),
-  voiceFloatToQ15(-0.0207824707f), voiceFloatToQ15(-0.0270080566f), voiceFloatToQ15(-0.0270080566f), voiceFloatToQ15(-0.0221557617f), voiceFloatToQ15(-0.0142822266f), voiceFloatToQ15(-0.0052795410f), voiceFloatToQ15(0.0029907227f), voiceFloatToQ15(0.0092163086f),
-  voiceFloatToQ15(0.0126342773f), voiceFloatToQ15(0.0131225586f), voiceFloatToQ15(0.0111083984f), voiceFloatToQ15(0.0073852539f), voiceFloatToQ15(0.0029296875f), voiceFloatToQ15(-0.0012817383f), voiceFloatToQ15(-0.0045471191f), voiceFloatToQ15(-0.0063781738f),
-  voiceFloatToQ15(-0.0066833496f), voiceFloatToQ15(-0.0057067871f), voiceFloatToQ15(-0.0038146973f), voiceFloatToQ15(-0.0015869141f), voiceFloatToQ15(0.0005187988f), voiceFloatToQ15(0.0021362305f), voiceFloatToQ15(0.0030212402f), voiceFloatToQ15(0.0031433105f),
-  voiceFloatToQ15(0.0026550293f), voiceFloatToQ15(0.0018005371f), voiceFloatToQ15(0.0007629395f), voiceFloatToQ15(-0.0001831055f), voiceFloatToQ15(-0.0008850098f), voiceFloatToQ15(-0.0012512207f), voiceFloatToQ15(-0.0013122559f), voiceFloatToQ15(-0.0010986328f),
-  voiceFloatToQ15(-0.0007324219f), voiceFloatToQ15(-0.0003356934f), voiceFloatToQ15(0.0000610352f), voiceFloatToQ15(0.0003356934f), voiceFloatToQ15(0.0005187988f), voiceFloatToQ15(0.0005798340f), voiceFloatToQ15(0.0005187988f), voiceFloatToQ15(0.0003967285f),
-};
-
-inline size_t upsample8kTo48kLinear(const int16_t *input, size_t inputSamples, int16_t *output, size_t outputCapacity) {
+inline size_t upsampleWireTo48kLinear(const int16_t *input, size_t inputSamples, int16_t *output, size_t outputCapacity) {
   size_t needed = inputSamples * VOICE_RESAMPLE_RATIO;
   if (outputCapacity < needed) {
     return 0;
@@ -79,9 +58,9 @@ inline size_t upsample8kTo48kLinear(const int16_t *input, size_t inputSamples, i
 class VoiceFirDecimator {
 public:
   bool begin() {
-    memset(delay, 0, sizeof(delay));
-    return dsps_fird_init_s16(&fir, voiceDecimatorCoeffs, delay, VOICE_DECIMATOR_TAPS,
-                              VOICE_RESAMPLE_RATIO, 0, VOICE_DECIMATOR_S16_SHIFT) == ESP_OK;
+    voiceDesignDecimatorCoeffs(coeffs);
+    fir.initDecim(coeffs, VOICE_DECIMATOR_TAPS, coeffs, delay, VOICE_DECIMATOR_STATE_LEN, VOICE_RESAMPLE_RATIO);
+    return fir.len == VOICE_DECIMATOR_TAPS;
   }
 
   size_t process(const int16_t *input, size_t inputSamples, int16_t *output, size_t outputCapacity) {
@@ -89,16 +68,35 @@ public:
     if (outputSamples > outputCapacity) {
       outputSamples = outputCapacity;
     }
-    int32_t written = dsps_fird_s16(&fir, input, output, (int32_t)outputSamples);
+    for (size_t i = 0; i < inputSamples; i++) {
+      inputFloat[i] = (float)input[i];
+    }
+    int32_t written = dsps_fird_f32(&fir.fir, inputFloat, outputFloat, (int32_t)outputSamples);
     if (written < 0) {
       return 0;
+    }
+    for (int32_t i = 0; i < written; i++) {
+      output[i] = clampFloatToInt16(outputFloat[i]);
     }
     return (size_t)written;
   }
 
 private:
-  int16_t delay[VOICE_DECIMATOR_TAPS] VOICE_DSP_ALIGN16;
-  fir_s16_t fir = {};
+  static int16_t clampFloatToInt16(float sample) {
+    if (sample > 32767.0f) {
+      return 32767;
+    }
+    if (sample < -32768.0f) {
+      return -32768;
+    }
+    return (int16_t)lroundf(sample);
+  }
+
+  afsk::dsp::Esp32Fir fir;
+  float coeffs[VOICE_DECIMATOR_TAPS] VOICE_DSP_ALIGN16;
+  float delay[VOICE_DECIMATOR_STATE_LEN] VOICE_DSP_ALIGN16;
+  float inputFloat[VOICE_FRAME_SAMPLES_48K] VOICE_DSP_ALIGN16;
+  float outputFloat[VOICE_FRAME_SAMPLES_WIRE] VOICE_DSP_ALIGN16;
 };
 
 #ifndef PIO_NATIVE_TEST
@@ -140,9 +138,9 @@ private:
   bool hasPendingByte = false;
 
   size_t decimateFrame(uint8_t *dst) {
-    int16_t *pcm8k = (int16_t *)dst;
-    size_t samples8k = decimator.process(capture48k, VOICE_FRAME_SAMPLES_48K, pcm8k, VOICE_FRAME_SAMPLES_8K);
-    return samples8k * sizeof(int16_t);
+    int16_t *pcmWire = (int16_t *)dst;
+    size_t samplesWire = decimator.process(capture48k, VOICE_FRAME_SAMPLES_48K, pcmWire, VOICE_FRAME_SAMPLES_WIRE);
+    return samplesWire * sizeof(int16_t);
   }
 };
 
@@ -170,9 +168,9 @@ public:
         hasPendingByte = true;
         continue;
       }
-      pcm8k[inputSamples++] = (int16_t)((uint16_t)b << 8 | pendingByte);
+      pcmWire[inputSamples++] = (int16_t)((uint16_t)b << 8 | pendingByte);
       hasPendingByte = false;
-      if (inputSamples == VOICE_FRAME_SAMPLES_8K) {
+      if (inputSamples == VOICE_FRAME_SAMPLES_WIRE) {
         flushFrame();
       }
     }
@@ -181,14 +179,14 @@ public:
 
 private:
   Print *out;
-  int16_t pcm8k[VOICE_FRAME_SAMPLES_8K] VOICE_DSP_ALIGN16;
+  int16_t pcmWire[VOICE_FRAME_SAMPLES_WIRE] VOICE_DSP_ALIGN16;
   int16_t pcm48k[VOICE_FRAME_SAMPLES_48K] VOICE_DSP_ALIGN16;
   size_t inputSamples = 0;
   uint8_t pendingByte = 0;
   bool hasPendingByte = false;
 
   void flushFrame() {
-    size_t samples48k = upsample8kTo48kLinear(pcm8k, inputSamples, pcm48k, VOICE_FRAME_SAMPLES_48K);
+    size_t samples48k = upsampleWireTo48kLinear(pcmWire, inputSamples, pcm48k, VOICE_FRAME_SAMPLES_48K);
     if (out && samples48k > 0) {
       out->write((uint8_t *)pcm48k, samples48k * sizeof(int16_t));
     }

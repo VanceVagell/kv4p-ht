@@ -16,7 +16,7 @@ The KV4P-HT protocol defines the communication interface between the microcontro
   * Firmware replies with `COMMAND_DEVICE_STATE` snapshots describing applied state.
   * Firmware coalesces state changes through a dirty flag; `deviceStateLoop()` is the single state-report sender.
   * Android retries an unacknowledged desired-state snapshot by resending the same sequence.
-  * Live voice audio uses 8 kHz G.711 µ-law payloads.
+  * Live voice audio uses 16 kHz 4-bit ADPCM payloads.
   * Legacy one-shot control commands were removed.
  
 * **Historical 2.1 changelog:**
@@ -73,7 +73,7 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 
 | Command Code | Name                    | Description                                                    |
 | ------------ | ----------------------- | -------------------------------------------------------------- |
-| `0x07`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx G.711 µ-law audio data (payload required, flow-controlled) |
+| `0x07`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx 4-bit ADPCM audio data (payload required, flow-controlled) |
 | `0x0D`       | `COMMAND_HOST_DESIRED_STATE` | Desired radio/control state snapshot                     |
 
 ## Outgoing KISS Frame Types (ESP32 → Android)
@@ -93,7 +93,7 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 | `0x04`       | `COMMAND_DEBUG_DEBUG`   | Sends debug debug-level message             |
 | `0x05`       | `COMMAND_DEBUG_TRACE`   | Sends debug trace message                   |
 | `0x06`       | `COMMAND_HELLO`         | Hello handshake message with version/status and initial device state |
-| `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx G.711 µ-law audio data (payload required) |
+| `0x07`       | `COMMAND_RX_AUDIO`      | Sends Rx 4-bit ADPCM audio data (payload required) |
 | `0x09`       | `COMMAND_WINDOW_UPDATE` | Updates available receive window            |
 | `0x0B`       | `COMMAND_DEVICE_STATE`  | Applied radio/control state snapshot         |
 

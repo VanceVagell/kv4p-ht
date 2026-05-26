@@ -116,11 +116,11 @@ public class RadioAudioService extends Service {
     private static final int[] ESP32_PRODUCT_IDS = {60000, 29987};
 
     // === Audio Constants ===
-    public static final int AUDIO_SAMPLE_RATE = 8000;
+    public static final int AUDIO_SAMPLE_RATE = 16000;
     private static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO;
     private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
-    public static final int VOICE_FRAME_SAMPLES = 160; // 20ms at 8kHz
-    public static final int VOICE_FRAME_BYTES = VOICE_FRAME_SAMPLES;
+    public static final int VOICE_FRAME_SAMPLES = 249; // One 128-byte mono IMA ADPCM block at 16kHz
+    public static final int VOICE_FRAME_BYTES = ImaAdpcm.encodedSize(VOICE_FRAME_SAMPLES);
     private static final int RX_AUDIO_MIN_BUFFER_SIZE =
             Math.max(AudioTrack.getMinBufferSize(
                     AUDIO_SAMPLE_RATE,
@@ -162,7 +162,7 @@ public class RadioAudioService extends Service {
 
     public enum RadioModuleType {UNKNOWN, VHF, UHF}
 
-    // === Audio / G.711 µ-law Handling ===
+    // === Audio / 4-bit IMA ADPCM Handling ===
     private final short[] pcm16 = new short[VOICE_FRAME_SAMPLES];
     private AudioTrack audioTrack;
     private float audioTrackVolume = 0.0f;
@@ -1354,7 +1354,7 @@ public class RadioAudioService extends Service {
         if (!dataMode) {
             samples = applyMicGain(samples, VOICE_FRAME_SAMPLES);
         }
-        int encodedLength = G711Ulaw.encode(samples, 0, txAudioFrame, 0, VOICE_FRAME_SAMPLES);
+        int encodedLength = ImaAdpcm.encodeBlock(samples, 0, VOICE_FRAME_SAMPLES, txAudioFrame, 0);
         hostToEsp32.txAudio(txAudioFrame, encodedLength);
     }
 
@@ -1481,8 +1481,7 @@ public class RadioAudioService extends Service {
         if (param == null || !param.hasArray() || offset < 0 || len <= 0 || param.limit() < offset + len) {
             return;
         }
-        int samples = Math.min(len, VOICE_FRAME_SAMPLES);
-        int decoded = G711Ulaw.decode(param.array(), offset, pcm16, 0, samples);
+        int decoded = ImaAdpcm.decodeBlock(param.array(), offset, len, pcm16, 0, VOICE_FRAME_SAMPLES);
 
         if ((getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) && audioTrack != null) {
             AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);

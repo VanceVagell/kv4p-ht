@@ -19,7 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include <AudioTools.h>
-#include <AudioTools/AudioCodecs/CodecG7xx.h>
+#include <AudioTools/AudioCodecs/CodecADPCM.h>
 #include <esp_task_wdt.h>
 #include <AfskModulator.h>
 #include "globals.h"
@@ -29,10 +29,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 bool txStreamConfigured = false;
 I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
-AudioInfo txVoiceWirePcmInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
-G711_ULAWDecoder txDec;
+AudioInfo txVoiceInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
 VoiceUpsampleOutput txUpsample(out);
-EncodedAudioStream txOut(&txUpsample, &txDec); 
+ADPCMDecoder txAdpcmDecoder(AV_CODEC_ID_ADPCM_IMA_WAV, VOICE_FRAME_BYTES);
+EncodedAudioStream txDecodeStream(&txUpsample, &txAdpcmDecoder);
 
 // Tx runaway detection stuff
 uint32_t txStartTime = -1;
@@ -69,10 +69,8 @@ void initI2STx() {
   config.auto_clear = false;
   config.signal_type = PDM;
   out.begin(config);
-  txDec.setAudioInfo(txVoiceWirePcmInfo);
-  txDec.begin();
   txUpsample.begin();
-  txOut.begin(txVoiceWirePcmInfo);
+  txDecodeStream.begin(txVoiceInfo);
   i2s_zero_dma_buffer(I2S_NUM_0);
   txStreamConfigured = true;
 }
@@ -84,7 +82,7 @@ void endI2STx() {
     // causing a DC step across the AC-coupling cap and producing a pop.
     // Forcing the pin to high-Z prevents this.
     pinMode(hw.pins.pinAudioOut, INPUT); 
-    txOut.end();
+    txDecodeStream.end();
     txUpsample.end();
     out.end();
   }
@@ -95,15 +93,8 @@ void processTxAudio(uint8_t *src, size_t len) {
   if (!src || len == 0 || !txStreamConfigured) {
     return;
   }
-  size_t totalWritten = 0;
-  while (totalWritten < len) {
-    size_t written = txOut.write(src + totalWritten, len - totalWritten);
-    if (written == 0) {
-      break;
-    }
-    totalWritten += written;
-    esp_task_wdt_reset();
-  }
+  txDecodeStream.write(src, len);
+  esp_task_wdt_reset();
 }
 
 void processTxAx25(uint8_t *src, size_t len) {
