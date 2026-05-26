@@ -1493,13 +1493,11 @@ public class RadioAudioService extends Service {
 
     /**
      * Ensures that the AudioTrack is playing and gradually adjusts its volume.
-     * The volume is increased smoothly based on a factor of alpha, and the volume is capped at 0.7f.
-     * If the calculated volume is below 0.7f, the volume is set to 0.0f.
+     * The volume is increased smoothly based on a factor of alpha.
      * This method is intended to apply smooth volume adjustments to the AudioTrack.
      * <p>
      * The method first checks if the AudioTrack is playing. If it is not playing, the method starts the playback.
      * Then, the volume is adjusted by applying a smoothing factor using a simple exponential-like formula.
-     * If the volume exceeds 0.7f, it will be set to the calculated value; otherwise, the volume will be set to 0.0f.
      * </p>
      *
      * @see AudioTrack
@@ -1511,7 +1509,7 @@ public class RadioAudioService extends Service {
             audioTrack.setVolume(0.0f);
             audioTrack.play();
         }
-        float alpha = 0.05f;
+        float alpha = 0.02f;
         audioTrackVolume = alpha + (1.0f - alpha) * audioTrackVolume;
         if (audioTrackVolume > 0.7f) {
             audioTrack.setVolume(audioTrackVolume);

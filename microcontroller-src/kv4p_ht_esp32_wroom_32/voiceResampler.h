@@ -48,8 +48,7 @@ inline size_t upsampleWireTo48kLinear(const int16_t *input, size_t inputSamples,
     int32_t current = input[i];
     int32_t next = (i + 1 < inputSamples) ? input[i + 1] : current;
     for (size_t phase = 0; phase < VOICE_RESAMPLE_RATIO; phase++) {
-      output[(i * VOICE_RESAMPLE_RATIO) + phase] =
-        (int16_t)(current + (((next - current) * (int32_t)phase) / VOICE_RESAMPLE_RATIO));
+      output[(i * VOICE_RESAMPLE_RATIO) + phase] = (int16_t)(current + (((next - current) * (int32_t)phase) / VOICE_RESAMPLE_RATIO));
     }
   }
   return needed;
