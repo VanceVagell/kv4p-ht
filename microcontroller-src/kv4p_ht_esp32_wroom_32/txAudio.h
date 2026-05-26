@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "voiceResampler.h"
 
 bool txStreamConfigured = false;
+bool txDecodeStreamStarted = false;
 I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
 AudioInfo txVoiceInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
@@ -70,7 +71,10 @@ void initI2STx() {
   config.signal_type = PDM;
   out.begin(config);
   txUpsample.begin();
-  txDecodeStream.begin(txVoiceInfo);
+  if (!txDecodeStreamStarted) {
+    txDecodeStream.begin(txVoiceInfo);
+    txDecodeStreamStarted = true;
+  }
   i2s_zero_dma_buffer(I2S_NUM_0);
   txStreamConfigured = true;
 }
@@ -82,7 +86,8 @@ void endI2STx() {
     // causing a DC step across the AC-coupling cap and producing a pop.
     // Forcing the pin to high-Z prevents this.
     pinMode(hw.pins.pinAudioOut, INPUT); 
-    txDecodeStream.end();
+    // ADPCMDecoder::end() is not safe to re-begin on the pinned adpcm library.
+    // Keep the decoder alive across PTT transitions and only stop the hardware output path.
     txUpsample.end();
     out.end();
   }
