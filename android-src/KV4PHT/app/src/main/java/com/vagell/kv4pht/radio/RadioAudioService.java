@@ -119,14 +119,14 @@ public class RadioAudioService extends Service {
     public static final int AUDIO_SAMPLE_RATE = 16000;
     private static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO;
     private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
-    public static final int VOICE_FRAME_SAMPLES = 249; // One 128-byte mono IMA ADPCM block at 16kHz
-    public static final int VOICE_FRAME_BYTES = ImaAdpcm.encodedSize(VOICE_FRAME_SAMPLES);
+    public static final int AUDIO_FRAME_SAMPLES = 249; // One 128-byte mono IMA ADPCM audio block at 16kHz
+    public static final int AUDIO_FRAME_BYTES = ImaAdpcm.encodedSize(AUDIO_FRAME_SAMPLES);
     private static final int RX_AUDIO_MIN_BUFFER_SIZE =
             Math.max(AudioTrack.getMinBufferSize(
                     AUDIO_SAMPLE_RATE,
                     RX_AUDIO_CHANNEL_CONFIG,
                     RX_AUDIO_FORMAT),
-                    VOICE_FRAME_SAMPLES * 2);
+                    AUDIO_FRAME_SAMPLES * 2);
 
     // === APRS Constants ===
     public static final int APRS_POSITION_EXACT = 0;
@@ -163,11 +163,11 @@ public class RadioAudioService extends Service {
     public enum RadioModuleType {UNKNOWN, VHF, UHF}
 
     // === Audio / 4-bit IMA ADPCM Handling ===
-    private final short[] pcm16 = new short[VOICE_FRAME_SAMPLES];
+    private final short[] pcm16 = new short[AUDIO_FRAME_SAMPLES];
     private AudioTrack audioTrack;
     private float audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
-    private final byte[] txAudioFrame = new byte[VOICE_FRAME_BYTES];
+    private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES];
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -1352,9 +1352,9 @@ public class RadioAudioService extends Service {
             return; // If connection is lost, just drop the audio frame.
         }
         if (!dataMode) {
-            samples = applyMicGain(samples, VOICE_FRAME_SAMPLES);
+            samples = applyMicGain(samples, AUDIO_FRAME_SAMPLES);
         }
-        int encodedLength = ImaAdpcm.encodeBlock(samples, 0, VOICE_FRAME_SAMPLES, txAudioFrame, 0);
+        int encodedLength = ImaAdpcm.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES, txAudioFrame, 0);
         hostToEsp32.txAudio(txAudioFrame, encodedLength);
     }
 
@@ -1481,7 +1481,7 @@ public class RadioAudioService extends Service {
         if (param == null || !param.hasArray() || offset < 0 || len <= 0 || param.limit() < offset + len) {
             return;
         }
-        int decoded = ImaAdpcm.decodeBlock(param.array(), offset, len, pcm16, 0, VOICE_FRAME_SAMPLES);
+        int decoded = ImaAdpcm.decodeBlock(param.array(), offset, len, pcm16, 0, AUDIO_FRAME_SAMPLES);
 
         if ((getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) && audioTrack != null) {
             AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);

@@ -24,15 +24,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AfskModulator.h>
 #include "globals.h"
 #include "protocol.h"
-#include "voiceResampler.h"
+#include "audioResampler.h"
 
 bool txStreamConfigured = false;
 bool txDecodeStreamStarted = false;
 I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
-AudioInfo txVoiceInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
-VoiceUpsampleOutput txUpsample(out);
-ADPCMDecoder txAdpcmDecoder(AV_CODEC_ID_ADPCM_IMA_WAV, VOICE_FRAME_BYTES);
+AudioInfo txAudioInfo(AUDIO_WIRE_SAMPLE_RATE, 1, 16);
+AudioUpsampleOutput txUpsample(out);
+ADPCMDecoder txAdpcmDecoder(AV_CODEC_ID_ADPCM_IMA_WAV, AUDIO_FRAME_BYTES);
 EncodedAudioStream txDecodeStream(&txUpsample, &txAdpcmDecoder);
 
 // Tx runaway detection stuff
@@ -72,7 +72,7 @@ void initI2STx() {
   out.begin(config);
   txUpsample.begin();
   if (!txDecodeStreamStarted) {
-    txDecodeStream.begin(txVoiceInfo);
+    txDecodeStream.begin(txAudioInfo);
     txDecodeStreamStarted = true;
   }
   i2s_zero_dma_buffer(I2S_NUM_0);

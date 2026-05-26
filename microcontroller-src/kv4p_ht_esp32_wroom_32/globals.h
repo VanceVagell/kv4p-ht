@@ -26,14 +26,14 @@ enum RfModuleType : uint8_t {
   RF_SA818_UHF = 1,
 };
 
-// Firmware audio hardware stays at 48 kHz. Voice frames on USB are 16 kHz 4-bit ADPCM.
+// Firmware audio hardware stays at 48 kHz. Audio frames on USB are 16 kHz 4-bit ADPCM.
 #define AUDIO_SAMPLE_RATE 48000
-#define VOICE_WIRE_SAMPLE_RATE 16000
+#define AUDIO_WIRE_SAMPLE_RATE 16000
 // IMA WAV ADPCM mono blocks contain an odd sample count. A 128-byte block decodes to 249 samples.
-#define VOICE_FRAME_SAMPLES_WIRE 249
-#define VOICE_FRAME_SAMPLES_48K 747
-#define VOICE_FRAME_BYTES 128
-#define VOICE_RESAMPLE_RATIO 3
+#define AUDIO_FRAME_SAMPLES_WIRE 249
+#define AUDIO_FRAME_SAMPLES_48K 747
+#define AUDIO_FRAME_BYTES 128
+#define AUDIO_RESAMPLE_RATIO 3
 
 // Firmware AX.25 TX tuning. Lead/tail silence matches the previous Android-side AFSK encoder timing.
 static constexpr size_t TX_AFSK_BLOCK_SAMPLES = 256;

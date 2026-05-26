@@ -26,7 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "globals.h"
 #include "protocol.h"
 #include "debug.h"
-#include "voiceResampler.h"
+#include "audioResampler.h"
 
 class SerialOutput : public AudioOutput {
 public:
@@ -110,14 +110,14 @@ private:
 bool rxStreamConfigured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE, 1, 16);
-AudioInfo rxVoiceInfo(VOICE_WIRE_SAMPLE_RATE, 1, 16);
+AudioInfo rxAudioInfo(AUDIO_WIRE_SAMPLE_RATE, 1, 16);
 SerialOutput rxAudioOutput;
-ADPCMEncoder rxAdpcmEncoder(AV_CODEC_ID_ADPCM_IMA_WAV, VOICE_FRAME_BYTES);
+ADPCMEncoder rxAdpcmEncoder(AV_CODEC_ID_ADPCM_IMA_WAV, AUDIO_FRAME_BYTES);
 EncodedAudioStream rxOut(&rxAudioOutput, &rxAdpcmEncoder);
-VoiceDownsampleConverter rxDownsample;
+AudioDownsampleConverter rxDownsample;
 AudioEffectStream effects(in);  
 ConverterStream<int16_t> rxDownsampledEffects(effects, rxDownsample);
-StreamCopy rxCopier(rxOut, rxDownsampledEffects, VOICE_FRAME_SAMPLES_48K * sizeof(int16_t));
+StreamCopy rxCopier(rxOut, rxDownsampledEffects, AUDIO_FRAME_SAMPLES_48K * sizeof(int16_t));
 Boost mute(0.0);
 Boost gain(16.0);
 DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
@@ -157,7 +157,7 @@ void initI2SRx() {
   effects.begin(rxInfo);
   // open output
   rxDownsample.begin();
-  rxOut.begin(rxVoiceInfo);
+  rxOut.begin(rxAudioInfo);
   rxCopier.setMinCopySize(sizeof(int16_t));
   rxCopier.setCheckAvailable(false);
   rxStreamConfigured = true;

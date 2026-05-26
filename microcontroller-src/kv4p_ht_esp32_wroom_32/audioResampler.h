@@ -29,41 +29,41 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AudioTools.h>
 #endif
 
-#define VOICE_DSP_ALIGN16 __attribute__((aligned(16)))
+#define AUDIO_DSP_ALIGN16 __attribute__((aligned(16)))
 
-static constexpr int16_t VOICE_DECIMATOR_TAPS = 65;
-static constexpr int16_t VOICE_DECIMATOR_STATE_LEN = VOICE_DECIMATOR_TAPS + 4;
-static constexpr float VOICE_DECIMATOR_CUTOFF_HZ = 6800.0f;
+static constexpr int16_t AUDIO_DECIMATOR_TAPS = 65;
+static constexpr int16_t AUDIO_DECIMATOR_STATE_LEN = AUDIO_DECIMATOR_TAPS + 4;
+static constexpr float AUDIO_DECIMATOR_CUTOFF_HZ = 6800.0f;
 
-inline void voiceDesignDecimatorCoeffs(float *coeffs) {
-  afsk::dsp::afsk_design_lowpass_hamming(coeffs, VOICE_DECIMATOR_TAPS, VOICE_DECIMATOR_CUTOFF_HZ, AUDIO_SAMPLE_RATE);
+inline void audioDesignDecimatorCoeffs(float *coeffs) {
+  afsk::dsp::afsk_design_lowpass_hamming(coeffs, AUDIO_DECIMATOR_TAPS, AUDIO_DECIMATOR_CUTOFF_HZ, AUDIO_SAMPLE_RATE);
 }
 
 inline size_t upsampleWireTo48kLinear(const int16_t *input, size_t inputSamples, int16_t *output, size_t outputCapacity) {
-  size_t needed = inputSamples * VOICE_RESAMPLE_RATIO;
+  size_t needed = inputSamples * AUDIO_RESAMPLE_RATIO;
   if (outputCapacity < needed) {
     return 0;
   }
   for (size_t i = 0; i < inputSamples; i++) {
     int32_t current = input[i];
     int32_t next = (i + 1 < inputSamples) ? input[i + 1] : current;
-    for (size_t phase = 0; phase < VOICE_RESAMPLE_RATIO; phase++) {
-      output[(i * VOICE_RESAMPLE_RATIO) + phase] = (int16_t)(current + (((next - current) * (int32_t)phase) / VOICE_RESAMPLE_RATIO));
+    for (size_t phase = 0; phase < AUDIO_RESAMPLE_RATIO; phase++) {
+      output[(i * AUDIO_RESAMPLE_RATIO) + phase] = (int16_t)(current + (((next - current) * (int32_t)phase) / AUDIO_RESAMPLE_RATIO));
     }
   }
   return needed;
 }
 
-class VoiceFirDecimator {
+class AudioFirDecimator {
 public:
   bool begin() {
-    voiceDesignDecimatorCoeffs(coeffs);
-    fir.initDecim(coeffs, VOICE_DECIMATOR_TAPS, coeffs, delay, VOICE_DECIMATOR_STATE_LEN, VOICE_RESAMPLE_RATIO);
-    return fir.len == VOICE_DECIMATOR_TAPS;
+    audioDesignDecimatorCoeffs(coeffs);
+    fir.initDecim(coeffs, AUDIO_DECIMATOR_TAPS, coeffs, delay, AUDIO_DECIMATOR_STATE_LEN, AUDIO_RESAMPLE_RATIO);
+    return fir.len == AUDIO_DECIMATOR_TAPS;
   }
 
   size_t process(const int16_t *input, size_t inputSamples, int16_t *output, size_t outputCapacity) {
-    size_t outputSamples = inputSamples / VOICE_RESAMPLE_RATIO;
+    size_t outputSamples = inputSamples / AUDIO_RESAMPLE_RATIO;
     if (outputSamples > outputCapacity) {
       outputSamples = outputCapacity;
     }
@@ -92,15 +92,15 @@ private:
   }
 
   afsk::dsp::Esp32Fir fir;
-  float coeffs[VOICE_DECIMATOR_TAPS] VOICE_DSP_ALIGN16;
-  float delay[VOICE_DECIMATOR_STATE_LEN] VOICE_DSP_ALIGN16;
-  float inputFloat[VOICE_FRAME_SAMPLES_48K] VOICE_DSP_ALIGN16;
-  float outputFloat[VOICE_FRAME_SAMPLES_WIRE] VOICE_DSP_ALIGN16;
+  float coeffs[AUDIO_DECIMATOR_TAPS] AUDIO_DSP_ALIGN16;
+  float delay[AUDIO_DECIMATOR_STATE_LEN] AUDIO_DSP_ALIGN16;
+  float inputFloat[AUDIO_FRAME_SAMPLES_48K] AUDIO_DSP_ALIGN16;
+  float outputFloat[AUDIO_FRAME_SAMPLES_WIRE] AUDIO_DSP_ALIGN16;
 };
 
 #ifndef PIO_NATIVE_TEST
 
-class VoiceDownsampleConverter : public BaseConverter {
+class AudioDownsampleConverter : public BaseConverter {
 public:
   bool begin() {
     captureSamples = 0;
@@ -120,7 +120,7 @@ public:
       }
       capture48k[captureSamples++] = (int16_t)((uint16_t)b << 8 | pendingByte);
       hasPendingByte = false;
-      if (captureSamples == VOICE_FRAME_SAMPLES_48K) {
+      if (captureSamples == AUDIO_FRAME_SAMPLES_48K) {
         size_t frameBytes = decimateFrame(src + produced);
         captureSamples = 0;
         produced += frameBytes;
@@ -130,22 +130,22 @@ public:
   }
 
 private:
-  VoiceFirDecimator decimator;
-  int16_t capture48k[VOICE_FRAME_SAMPLES_48K] VOICE_DSP_ALIGN16;
+  AudioFirDecimator decimator;
+  int16_t capture48k[AUDIO_FRAME_SAMPLES_48K] AUDIO_DSP_ALIGN16;
   size_t captureSamples = 0;
   uint8_t pendingByte = 0;
   bool hasPendingByte = false;
 
   size_t decimateFrame(uint8_t *dst) {
     int16_t *pcmWire = (int16_t *)dst;
-    size_t samplesWire = decimator.process(capture48k, VOICE_FRAME_SAMPLES_48K, pcmWire, VOICE_FRAME_SAMPLES_WIRE);
+    size_t samplesWire = decimator.process(capture48k, AUDIO_FRAME_SAMPLES_48K, pcmWire, AUDIO_FRAME_SAMPLES_WIRE);
     return samplesWire * sizeof(int16_t);
   }
 };
 
-class VoiceUpsampleOutput : public AudioOutput {
+class AudioUpsampleOutput : public AudioOutput {
 public:
-  explicit VoiceUpsampleOutput(Print &out) : out(&out) {}
+  explicit AudioUpsampleOutput(Print &out) : out(&out) {}
 
   void setOutput(Print &target) {
     out = &target;
@@ -169,7 +169,7 @@ public:
       }
       pcmWire[inputSamples++] = (int16_t)((uint16_t)b << 8 | pendingByte);
       hasPendingByte = false;
-      if (inputSamples == VOICE_FRAME_SAMPLES_WIRE) {
+      if (inputSamples == AUDIO_FRAME_SAMPLES_WIRE) {
         flushFrame();
       }
     }
@@ -178,14 +178,14 @@ public:
 
 private:
   Print *out;
-  int16_t pcmWire[VOICE_FRAME_SAMPLES_WIRE] VOICE_DSP_ALIGN16;
-  int16_t pcm48k[VOICE_FRAME_SAMPLES_48K] VOICE_DSP_ALIGN16;
+  int16_t pcmWire[AUDIO_FRAME_SAMPLES_WIRE] AUDIO_DSP_ALIGN16;
+  int16_t pcm48k[AUDIO_FRAME_SAMPLES_48K] AUDIO_DSP_ALIGN16;
   size_t inputSamples = 0;
   uint8_t pendingByte = 0;
   bool hasPendingByte = false;
 
   void flushFrame() {
-    size_t samples48k = upsampleWireTo48kLinear(pcmWire, inputSamples, pcm48k, VOICE_FRAME_SAMPLES_48K);
+    size_t samples48k = upsampleWireTo48kLinear(pcmWire, inputSamples, pcm48k, AUDIO_FRAME_SAMPLES_48K);
     if (out && samples48k > 0) {
       out->write((uint8_t *)pcm48k, samples48k * sizeof(int16_t));
     }
