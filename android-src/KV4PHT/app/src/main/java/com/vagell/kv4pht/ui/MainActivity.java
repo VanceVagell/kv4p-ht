@@ -33,9 +33,6 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.hardware.usb.UsbManager;
-import android.media.AudioFormat;
-import android.media.AudioRecord;
-import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -108,15 +105,6 @@ import static com.google.android.material.snackbar.Snackbar.LENGTH_LONG;
 import static com.vagell.kv4pht.radio.RadioAudioService.INTENT_OPEN_CHAT;
 
 public class MainActivity extends AppCompatActivity {
-    // For transmitting audio to ESP32 / radio
-    private AudioRecord audioRecord;
-    private boolean isRecording = false;
-    private int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-    private int audioFormat = AudioFormat.ENCODING_PCM_FLOAT;
-    private int minBufferSize = AudioRecord.getMinBufferSize(RadioAudioService.AUDIO_SAMPLE_RATE, channelConfig, audioFormat);
-
-    private Thread recordingThread;
-
     private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
 
     // Active screen type (e.g. voice or chat)
@@ -162,7 +150,6 @@ public class MainActivity extends AppCompatActivity {
     // Tx audio visualizer constants
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
-    private static int RECORD_ANIM_FPS = 30;
 
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
@@ -536,8 +523,12 @@ public class MainActivity extends AppCompatActivity {
                 public void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
                     doShowNotification(notificationChannelId, notificationTypeId, title, message, tapIntentName);
                 }
+
+                @Override
+                public void txAudioLevel(int waitMs, float volume) {
+                    updateRecordingVisualization(waitMs, volume);
+                }
             };
-            initAudioRecorder();
             radioAudioService.setCallbacks(callbacks);
             applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
@@ -980,7 +971,7 @@ public class MainActivity extends AppCompatActivity {
             layoutParams.height = Math.abs(txVolume) < 0.001 ||
                     mode == RadioMode.RX ? 0 : (int) (MAX_AUDIO_VIZ_SIZE * txVolume) + MIN_TX_AUDIO_VIZ_SIZE;
             txAudioView.setLayoutParams(layoutParams);
-        }), waitMs); // waitMs gives us the fps we desire, see RECORD_ANIM_FPS constant.
+        }), waitMs); // waitMs gives us the fps we desire (see RECORD_ANIM_FPS in RadioAudioService).
     }
 
     private void applySettings() {
@@ -1055,6 +1046,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         stickyPTT = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_STICKY_PTT, "false"));
+
+        if (radioAudioService != null) {
+            radioAudioService.setDuckMusic(Boolean.parseBoolean(
+                settings.getOrDefault(AppSetting.SETTING_DUCK_MUSIC, "true")));
+            radioAudioService.setLowLatencyBtMic(Boolean.parseBoolean(
+                settings.getOrDefault(AppSetting.SETTING_BT_LOW_LATENCY_MIC, "false")));
+        }
     }
 
     private void applyAprsSettings(Map<String, String> settings) {
@@ -1124,7 +1122,7 @@ public class MainActivity extends AppCompatActivity {
                                 // move to a different frequency during or after the tx.
                                 radioAudioService.setScanning(false, false);
                                 setScanningUi(false);
-                                radioAudioService.startPtt();
+                                radioAudioService.startPtt(true);
                             }
                             startPttUi(false);
                         } else if (radioAudioService != null && radioAudioService.getMode() == RadioMode.TX) {
@@ -1135,15 +1133,13 @@ public class MainActivity extends AppCompatActivity {
                             endPttUi();
                         }
                     } else {
-                        if (!isRecording) {
+                        if (radioAudioService != null && radioAudioService.getMode() != RadioMode.TX) {
                             ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
-                            if (radioAudioService != null) {
-                                // If the user tries to transmit, stop scanning so we don't
-                                // move to a different frequency during or after the tx.
-                                radioAudioService.setScanning(false, false);
-                                setScanningUi(false);
-                                radioAudioService.startPtt();
-                            }
+                            // If the user tries to transmit, stop scanning so we don't
+                            // move to a different frequency during or after the tx.
+                            radioAudioService.setScanning(false, false);
+                            setScanningUi(false);
+                            radioAudioService.startPtt(true);
                             startPttUi(false);
                         }
                     }
@@ -1188,7 +1184,7 @@ public class MainActivity extends AppCompatActivity {
                 if (radioAudioService != null && radioAudioService.getMode() == RadioMode.RX) {
                     ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
                     if (radioAudioService != null) {
-                        radioAudioService.startPtt();
+                        radioAudioService.startPtt(true);
                     }
                     startPttUi(false);
                 } else if (radioAudioService != null && radioAudioService.getMode() == RadioMode.TX) {
@@ -1493,12 +1489,15 @@ public class MainActivity extends AppCompatActivity {
 
     protected void startPttUi(boolean dataMode) {
         if (!dataMode) {
-            startRecording();
+            ImageButton pttButton = findViewById(R.id.pttButton);
+            pttButton.setBackground(getDrawable(R.drawable.ptt_button_on));
         }
     }
 
     protected void endPttUi() {
-        stopRecording();
+        ImageButton pttButton = findViewById(R.id.pttButton);
+        pttButton.setBackground(getDrawable(R.drawable.ptt_button));
+        updateRecordingVisualization(100, 0.0f);
     }
 
     public void ensurePermissions(List<String> requestedPerms, Consumer<Boolean> callback) {
@@ -1569,104 +1568,6 @@ public class MainActivity extends AppCompatActivity {
         if (done != null) {
             done.accept(allGranted);
         }
-    }
-
-    private void initAudioRecorder() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-        if (null != audioRecord) {
-            audioRecord.stop();
-            audioRecord.release();
-            audioRecord = null;
-        }
-        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC,
-                RadioAudioService.AUDIO_SAMPLE_RATE,
-                channelConfig,
-                audioFormat,
-                minBufferSize);
-        if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
-            Log.d("DEBUG", "Audio init error");
-        }
-    }
-
-    private void startRecording() {
-        if (audioRecord == null) {
-            initAudioRecorder();
-        }
-
-        // After attempting to initialize, check if it's usable.
-        if (audioRecord == null || audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
-            Log.d("DEBUG", "AudioRecord not ready, cannot start recording.");
-            // If it's not null, it's in a bad state. Release it so we can try again next time.
-            if (audioRecord != null) {
-                audioRecord.release();
-                audioRecord = null;
-            }
-            return;
-        }
-
-        ImageButton pttButton = findViewById(R.id.pttButton);
-        pttButton.setBackground(getDrawable(R.drawable.ptt_button_on));
-
-        audioRecord.startRecording();
-        isRecording = true;
-
-        recordingThread = new Thread(new Runnable() {
-            public void run() {
-                processAudioStream();
-            }
-        }, "AudioRecorder Thread");
-
-        recordingThread.start();
-    }
-
-    private void processAudioStream() {
-        float audioChunkSampleTotal = 0.0f; // Accumulate across buffers
-        int accumulatedSamples = 0; // Track count of samples
-        int samplesPerAnimFrame = RadioAudioService.AUDIO_SAMPLE_RATE / RECORD_ANIM_FPS;
-        float[] audioBuffer = new float[RadioAudioService.OPUS_FRAME_SIZE];
-        while (isRecording) {
-            int samples = audioRecord.read(audioBuffer, 0, RadioAudioService.OPUS_FRAME_SIZE, AudioRecord.READ_BLOCKING);
-            if (samples == RadioAudioService.OPUS_FRAME_SIZE) {
-                if (null == radioAudioService || !radioAudioService.isRadioConnected()) {
-                    Log.d("DEBUG", "Error: Could not contact radio in processAudioStream() while recording.");
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            stopRecording();
-                        }
-                    });
-                    return;
-                }
-                radioAudioService.sendAudioToESP32(audioBuffer, false);
-                // Accumulate samples across buffers
-                for (int i = 0; i < samples; i++) {
-                    audioChunkSampleTotal += Math.abs(audioBuffer[i]) * 8.0f;
-                    accumulatedSamples++;
-                    // If we have enough samples, update visualization
-                    if (accumulatedSamples >= samplesPerAnimFrame) {
-                        updateRecordingVisualization(0, audioChunkSampleTotal / accumulatedSamples);
-                        // Reset accumulators
-                        audioChunkSampleTotal = 0.0f;
-                        accumulatedSamples = 0;
-                    }
-                }
-            }
-        }
-    }
-
-    private void stopRecording() {
-        if (audioRecord != null) {
-            isRecording = false;
-            audioRecord.stop();
-            audioRecord.release();
-            audioRecord = null;
-            recordingThread = null;
-            updateRecordingVisualization(100, 0.0f);
-        }
-        ImageButton pttButton = findViewById(R.id.pttButton);
-        pttButton.setBackground(getDrawable(R.drawable.ptt_button));
     }
 
     private void showUSBSnackbar() {

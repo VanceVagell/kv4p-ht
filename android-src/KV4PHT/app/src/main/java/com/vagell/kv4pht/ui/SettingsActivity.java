@@ -316,6 +316,13 @@ public class SettingsActivity extends AppCompatActivity {
                 setTextIfPresent(settings, AppSetting.SETTING_CALLSIGN, R.id.callsignTextInputEditText);
                 setSwitchIfPresent(settings, AppSetting.SETTING_STICKY_PTT, R.id.stickyPTTSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
+                setSwitchIfPresent(settings, AppSetting.SETTING_BT_LOW_LATENCY_MIC, R.id.btLowLatencyMicSwitch);
+                // Music ducking defaults to true (duck) so first-time users don't have music abruptly pause.
+                if (!settings.containsKey(AppSetting.SETTING_DUCK_MUSIC)) {
+                    ((Switch) findViewById(R.id.duckMusicSwitch)).setChecked(true);
+                } else {
+                    setSwitchIfPresent(settings, AppSetting.SETTING_DUCK_MUSIC, R.id.duckMusicSwitch);
+                }
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
                 if (settings.containsKey(AppSetting.SETTING_APRS_BEACON_FREQUENCY)) {
                     setDropdownIfPresent(settings, AppSetting.SETTING_APRS_BEACON_FREQUENCY, R.id.aprsBeaconFreqTextView);
@@ -423,6 +430,8 @@ public class SettingsActivity extends AppCompatActivity {
         attachSwitch(R.id.stickyPTTSwitch, this::setStickyPTT);
         attachSwitch(R.id.noAnimationsSwitch, this::setNoAnimations);
         attachSwitch(R.id.aprsPositionSwitch, this::setAprsBeaconPosition);
+        attachSwitch(R.id.btLowLatencyMicSwitch, this::setBtLowLatencyMic);
+        attachSwitch(R.id.duckMusicSwitch, this::setDuckMusic);
         attachTextView(R.id.aprsBeaconFreqTextView, this::setAprsBeaconFrequency);
         attachSwitch(R.id.digipeatPacketsSwitch, this::setDigipeatPackets);
     }
@@ -481,6 +490,14 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setNoAnimations(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_DISABLE_ANIMATIONS, Boolean.toString(enabled));
+    }
+
+    private void setBtLowLatencyMic(boolean enabled) {
+        saveAppSettingAsync(AppSetting.SETTING_BT_LOW_LATENCY_MIC, Boolean.toString(enabled));
+    }
+
+    private void setDuckMusic(boolean enabled) {
+        saveAppSettingAsync(AppSetting.SETTING_DUCK_MUSIC, Boolean.toString(enabled));
     }
 
     private void setDigipeatPackets(boolean enabled) {
