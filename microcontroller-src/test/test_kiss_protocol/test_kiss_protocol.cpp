@@ -37,9 +37,8 @@ struct CapturedCommand {
 
 static CapturedCommand captured;
 static CapturedCommand capturedAx25;
-static bool secondaryConnected = false;
 
-void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
+void handleCommands(ProtocolSession &, RcvCommand command, uint8_t *params, size_t param_len) {
   captured.called = true;
   captured.command = command;
   captured.payloadLen = param_len;
@@ -55,10 +54,6 @@ void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
   if (ax25_len > 0) {
     memcpy(capturedAx25.payload, ax25, ax25_len);
   }
-}
-
-bool isSecondaryConnected() {
-  return secondaryConnected;
 }
 
 class FakeStream : public Stream {
@@ -137,7 +132,8 @@ static void resetCaptured() {
 
 static void parseBytes(const uint8_t *data, size_t len) {
   FakeStream stream(data, len);
-  KissParser parser(stream, &handleCommands, &handleAx25Data);
+  ProtocolSession session = { &stream, true, 0, 0 };
+  KissParser parser(session, &handleCommands, &handleAx25Data);
   while (stream.available() > 0) {
     parser.loop();
   }
@@ -185,7 +181,8 @@ void test_multiple_complete_frames_in_one_buffer() {
 void test_split_frame_across_loop_calls() {
   resetCaptured();
   FakeStream stream;
-  KissParser parser(stream, &handleCommands, &handleAx25Data);
+  ProtocolSession session = { &stream, true, 0, 0 };
+  KissParser parser(session, &handleCommands, &handleAx25Data);
   const uint8_t part1[] = { KISS_FEND, KISS_CMD_DATA, 0x11 };
   const uint8_t part2[] = { 0x22, KISS_FEND };
 
@@ -333,8 +330,8 @@ void test_send_kiss_data_frame_escapes_fend_and_fesc() {
 
 void test_send_kiss_data_frame_broadcasts_to_connected_secondary_stream() {
   FakeStream secondary;
-  secondaryConnected = true;
-  setProtocolSecondaryStream(secondary, isSecondaryConnected);
+  ProtocolSession oldBtSession = protocolBtSession;
+  protocolBtSession = { &secondary, true, 0, 0 };
 
   const uint8_t payload[] = { 0x11, 0x22 };
   const uint8_t expected[] = {
@@ -346,7 +343,7 @@ void test_send_kiss_data_frame_broadcasts_to_connected_secondary_stream() {
   TEST_ASSERT_EQUAL(sizeof(expected), secondary.writtenLen());
   TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, secondary.written(), sizeof(expected));
 
-  secondaryConnected = false;
+  protocolBtSession = oldBtSession;
 }
 
 void test_send_kv4p_vendor_frame_escapes_payload() {
@@ -365,13 +362,48 @@ void test_send_kv4p_vendor_frame_escapes_payload() {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, stream.written(), sizeof(expected));
 }
 
+void test_send_audio_routes_only_to_rx_audio_open_sessions() {
+  FakeStream usb;
+  FakeStream secondary;
+  ProtocolSession oldUsbSession = protocolUsbSession;
+  ProtocolSession oldBtSession = protocolBtSession;
+  const uint8_t payload[] = { 0x55 };
+  const uint8_t expected[] = {
+    KISS_FEND, KISS_CMD_SETHARDWARE,
+    'K', 'V', '4', 'P', KV4P_PROTOCOL_VERSION, COMMAND_RX_AUDIO,
+    0x55, KISS_FEND
+  };
+
+  protocolUsbSession.stream = &usb;
+  protocolUsbSession.connected = true;
+  protocolUsbSession.flags = HOST_STATE_RX_AUDIO_OPEN;
+  protocolBtSession = { &secondary, true, 0, 0 };
+
+  sendAudio(payload, sizeof(payload));
+
+  TEST_ASSERT_EQUAL(sizeof(expected), usb.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, usb.written(), sizeof(expected));
+  TEST_ASSERT_EQUAL(0, secondary.writtenLen());
+
+  protocolUsbSession.flags = 0;
+  protocolBtSession.flags = HOST_STATE_RX_AUDIO_OPEN;
+  sendAudio(payload, sizeof(payload));
+
+  TEST_ASSERT_EQUAL(sizeof(expected), secondary.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, secondary.written(), sizeof(expected));
+
+  protocolUsbSession = oldUsbSession;
+  protocolBtSession = oldBtSession;
+}
+
 void test_parser_ack_is_written_to_input_stream() {
   resetCaptured();
   const uint8_t frame[] = {
     KISS_FEND, KISS_CMD_DATA, 0x11, KISS_FEND
   };
   FakeStream stream(frame, sizeof(frame));
-  KissParser parser(stream, &handleCommands, &handleAx25Data);
+  ProtocolSession session = { &stream, true, 0, 0 };
+  KissParser parser(session, &handleCommands, &handleAx25Data);
   const uint8_t expectedAck[] = {
     KISS_FEND, KISS_CMD_SETHARDWARE,
     'K', 'V', '4', 'P', KV4P_PROTOCOL_VERSION, COMMAND_WINDOW_UPDATE,
@@ -403,6 +435,7 @@ static int runKissProtocolTests() {
   RUN_TEST(test_send_kiss_data_frame_escapes_fend_and_fesc);
   RUN_TEST(test_send_kiss_data_frame_broadcasts_to_connected_secondary_stream);
   RUN_TEST(test_send_kv4p_vendor_frame_escapes_payload);
+  RUN_TEST(test_send_audio_routes_only_to_rx_audio_open_sessions);
   RUN_TEST(test_parser_ack_is_written_to_input_stream);
   return UNITY_END();
 }
