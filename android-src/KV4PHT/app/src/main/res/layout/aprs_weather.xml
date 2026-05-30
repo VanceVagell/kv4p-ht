@@ -22,7 +22,8 @@
             android:textColor="@color/primary"
             android:textFontWeight="500"
             android:textSize="16sp"
-            android:layout_marginRight="4dp" />
+            android:layout_marginRight="4dp"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/timestamp"
@@ -31,7 +32,8 @@
             android:text="12:10pm"
             android:textColor="@android:color/darker_gray"
             android:textSize="16sp"
-            android:layout_marginRight="4dp" />
+            android:layout_marginRight="4dp"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/relayViaLabel"
@@ -41,7 +43,8 @@
             android:textColor="@android:color/darker_gray"
             android:textSize="16sp"
             android:layout_marginRight="4dp"
-            android:visibility="gone"/>
+            android:visibility="gone"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/relayCallsign"
@@ -51,7 +54,8 @@
             android:textColor="@android:color/darker_gray"
             android:textSize="16sp"
             android:layout_marginRight="4dp"
-            android:visibility="gone"/>
+            android:visibility="gone"
+            android:maxLines="1" />
 
         <ImageButton
             android:id="@+id/senderPositionButton"
@@ -60,7 +64,8 @@
             android:background="@drawable/ic_pin"
             android:alpha="0.8"
             android:contentDescription="Show sender's position"
-            android:visibility="gone"/>
+            android:visibility="gone"
+            android:maxLines="1" />
 
     </LinearLayout>
 

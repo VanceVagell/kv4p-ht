@@ -639,22 +639,23 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void handleChatPacket(APRSPacket aprsPacket) {
+    private void handleChatPacket(APRSPacket rawAprsPacket) {
         // We use duck-typing for APRS messages since the spec is pretty loose with all the ways
         // you can define different fields and values. Once we know the type, we set aprsMessage.type.
 
+        final APRSPacket aprsPacketFinal;
         APRSMessage aprsMessage = new APRSMessage();
-        InformationField infoField = aprsPacket.getPayload();
+        InformationField infoField = rawAprsPacket.getPayload();
 
         // Handle third-party relayed packets
         String relayCallsign = null;
         com.vagell.kv4pht.aprs.parser.ThirdPartyField thirdPartyField = (com.vagell.kv4pht.aprs.parser.ThirdPartyField) infoField.getAprsData(APRSTypes.T_THIRDPARTY);
         if (thirdPartyField != null) {
-            relayCallsign = aprsPacket.getSourceCall();
+            relayCallsign = rawAprsPacket.getSourceCall();
             com.vagell.kv4pht.aprs.parser.APRSPacket innerPacket = thirdPartyField.getInnerPacket();
             if (innerPacket == null || innerPacket.hasFault()) {
                 aprsMessage.type = APRSMessage.UNKNOWN_TYPE;
-                aprsMessage.fromCallsign = aprsPacket.getSourceCall();
+                aprsMessage.fromCallsign = rawAprsPacket.getSourceCall();
                 aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
                 aprsMessage.relayCallsign = relayCallsign;
                 try {
@@ -669,8 +670,10 @@ public class MainActivity extends AppCompatActivity {
                 });
                 return;
             }
-            aprsPacket = innerPacket;
+            aprsPacketFinal = innerPacket;
             infoField = innerPacket.getPayload();
+        } else {
+            aprsPacketFinal = rawAprsPacket;
         }
 
         WeatherField weatherField = (WeatherField) infoField.getAprsData(APRSTypes.T_WX);
@@ -679,7 +682,7 @@ public class MainActivity extends AppCompatActivity {
         aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
 
         // Get the fromCallsign (all APRS messages must have this)
-        aprsMessage.fromCallsign = aprsPacket.getSourceCall();
+        aprsMessage.fromCallsign = aprsPacketFinal.getSourceCall();
 
         // Get the position, if included.
         if (null != positionField) {
@@ -689,7 +692,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Try to find a comment (could be at multiple levels in the packet).
-        String comment = aprsPacket.getComment();
+        String comment = aprsPacketFinal.getComment();
         if (null != infoField && (null == comment || comment.trim().length() == 0)) {
             comment = infoField.getComment();
         }
@@ -719,25 +722,50 @@ public class MainActivity extends AppCompatActivity {
             // Log.d("DEBUG", "Weather packet received");
         } else if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
             aprsMessage.type = APRSMessage.MESSAGE_TYPE;
-            MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacket.getDestinationCall());
+            MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacketFinal.getDestinationCall());
             aprsMessage.toCallsign = messagePacket.getTargetCallsign();
+
+            String msgNumStr = messagePacket.getMessageNumber();
+            if (msgNumStr != null && !msgNumStr.trim().isEmpty()) {
+                try {
+                    aprsMessage.msgNum = Integer.parseInt(msgNumStr.trim());
+                } catch (NumberFormatException e) {
+                    aprsMessage.msgNum = -1;
+                }
+            } else {
+                aprsMessage.msgNum = -1;
+            }
 
             if (messagePacket.isAck()) {
                 aprsMessage.wasAcknowledged = true;
-                try {
-                    String msgNumStr = messagePacket.getMessageNumber();
-                    if (msgNumStr != null) {
-                        aprsMessage.msgNum = Integer.parseInt(msgNumStr.trim());
-                    }
-                } catch (Exception e) {
+                if (aprsMessage.msgNum == -1) {
                     Log.d("DEBUG", "Warning: Bad message number in APRS ack, ignoring: '" + messagePacket.getMessageNumber() + "'");
-                    e.printStackTrace();
                     return;
                 }
                 // Log.d("DEBUG", "Message ack received");
             } else {
                 aprsMessage.msgBody = messagePacket.getMessageBody();
                 // Log.d("DEBUG", "Message packet received");
+
+                // Handle messages addressed to the current callsign
+                if (callsign != null && aprsMessage.toCallsign != null && aprsMessage.toCallsign.trim().equalsIgnoreCase(callsign.trim())) {
+                    doShowNotification(
+                            RadioAudioService.MESSAGE_NOTIFICATION_CHANNEL_ID,
+                            RadioAudioService.MESSAGE_NOTIFICATION_TO_YOU_ID,
+                            aprsPacketFinal.getSourceCall() + " messaged you",
+                            aprsMessage.msgBody,
+                            RadioAudioService.INTENT_OPEN_CHAT);
+
+                    if (aprsMessage.msgNum != -1) { // APRS spec says only ack if msg num provided
+                        // Send acknowledgment after a delay
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            if (radioAudioService != null) {
+                                radioAudioService.sendAckMessage(aprsPacketFinal.getSourceCall().toUpperCase(), String.valueOf(aprsMessage.msgNum));
+                            }
+                        }, 1000);
+                    }
+                }
+
             }
         } else if (infoField.getDataTypeIdentifier() == ';') { // APRS "object"
             aprsMessage.type = APRSMessage.OBJECT_TYPE;
@@ -748,7 +776,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // If there is a fault in the packet, or the message type is unknown, we at least display the raw contents as a comment.
-        if (aprsPacket.hasFault() || aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0)) {
+        if (aprsPacketFinal.hasFault() || aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0)) {
             if (null != infoField) {
                 try {
                     comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
@@ -776,6 +804,19 @@ public class MainActivity extends AppCompatActivity {
                     }
                 } else {
                     // Not an ack, add a message
+
+                    // Deduplicate incoming APRS messages with sequence numbers against recent history
+                    if (aprsMessage.type == APRSMessage.MESSAGE_TYPE && aprsMessage.msgNum != -1) {
+                        if (viewModel.getAppDb().aprsMessageDao().isRecentDuplicate(
+                                aprsMessage.fromCallsign,
+                                aprsMessage.msgBody,
+                                aprsMessage.msgNum)) {
+                            Log.d("DEBUG", "Discarding duplicate APRS message from " +
+                                    aprsMessage.fromCallsign + " with msgNum " + aprsMessage.msgNum);
+                            return;
+                        }
+                    }
+
                     viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
                 }
 
@@ -881,7 +922,7 @@ public class MainActivity extends AppCompatActivity {
 
         String targetCallsign = ((EditText) findViewById(R.id.textChatTo)).getText().toString().trim();
         if (targetCallsign.length() == 0) {
-            targetCallsign = "CQ";
+            targetCallsign = "BLN1CQ";
         } else {
             targetCallsign = targetCallsign.toUpperCase();
         }
@@ -1046,6 +1087,11 @@ public class MainActivity extends AppCompatActivity {
 
         if (radioAudioService != null && aprsIcon != null) {
             radioAudioService.setAprsPositionIcon(SettingsActivity.getAPRSIconFromSettingChoice(getResources(), aprsIcon));
+        }
+
+        String digipeat = settings.get(AppSetting.SETTING_DIGIPEAT_PACKETS);
+        if (digipeat != null && radioAudioService != null) {
+            radioAudioService.setDigipeatPackets(Boolean.parseBoolean(digipeat));
         }
     }
 
@@ -1305,6 +1351,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             tuneToFreqUi(String.format(java.util.Locale.US, "%.4f", radioModule.getRxFrequency()));
         }
+        radioAudioService.updateNotificationFromCurrentState();
         pendingInitialRadioUiSync = false;
         initialRadioUiSynced = true;
     }

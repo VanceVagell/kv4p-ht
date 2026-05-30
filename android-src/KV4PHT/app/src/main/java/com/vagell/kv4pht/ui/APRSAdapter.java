@@ -301,6 +301,9 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         }
 
         public void setRelayCallsign(String relayCallsign) {
+            /* TODO(vagell): The relay callsign UI is disabled for now. Reconsider this in the future,
+                although it works, it makes the status line of messages super long and hard to read,
+                and i'm not sure most people will understand "via" means via inet iGate vs. RF digipeat.
             if (null == textViewRelayCallsign) {
                 return;
             }
@@ -311,7 +314,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
                 textViewRelayCallsign.setVisibility(View.VISIBLE);
                 textViewRelayCallsign.setText(relayCallsign);
                 textViewRelayViaLabel.setVisibility(View.VISIBLE);
-            }
+            } */
         }
     }
 }

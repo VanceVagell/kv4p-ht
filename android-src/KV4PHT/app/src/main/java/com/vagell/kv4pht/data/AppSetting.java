@@ -41,6 +41,7 @@ public class AppSetting {
     public static final String SETTING_STICKY_PTT = "stickyPTT";
     public static final String SETTING_BT_LOW_LATENCY_MIC = "btLowLatencyMic";
     public static final String SETTING_DUCK_MUSIC = "duckMusic";
+    public static final String SETTING_DIGIPEAT_PACKETS = "digipeatPackets";
 
     public AppSetting(@NonNull String name, String value) {
         this.name = name;

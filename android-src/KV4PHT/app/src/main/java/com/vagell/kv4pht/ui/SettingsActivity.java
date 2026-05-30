@@ -20,12 +20,17 @@ package com.vagell.kv4pht.ui;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.*;
@@ -40,6 +45,7 @@ import com.vagell.kv4pht.BuildConfig;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSIconType;
 import com.vagell.kv4pht.data.AppSetting;
+import com.vagell.kv4pht.radio.RadioAudioService;
 
 import java.util.Arrays;
 import java.util.List;
@@ -50,6 +56,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class SettingsActivity extends AppCompatActivity {
+    private static final String TAG = SettingsActivity.class.getSimpleName();
     private final ExecutorService threadPoolExecutor = Executors.newSingleThreadExecutor();
     private MainViewModel viewModel = null;
     private boolean hasHighLowPowerSwitch = false;
@@ -62,15 +69,48 @@ public class SettingsActivity extends AppCompatActivity {
     public static final String EXTRA_FILTER_LOW = "filterLow";
     public static final String EXTRA_APRS_ICON = "aprsIcon";
 
+    private RadioAudioService radioAudioService = null;
+    private boolean radioAudioServiceBound = false;
+    private boolean doneClicked = false;
+
+    private int initialSquelch = 0;
+    private boolean initialEmphasis = false;
+    private boolean initialHighpass = false;
+    private boolean initialLowpass = false;
+
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            radioAudioService = ((RadioAudioService.RadioBinder) service).getService();
+            radioAudioServiceBound = true;
+            Log.d(TAG, "RadioAudioService bound for live updates");
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            radioAudioService = null;
+            radioAudioServiceBound = false;
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
         hasHighLowPowerSwitch = getIntent().getBooleanExtra("hasHighLowPowerSwitch", false);
         firmwareVersion = getIntent().getIntExtra("firmwareVersion", -1);
+
+        initialSquelch = getIntent().getIntExtra(EXTRA_SQUELCH, 0);
+        initialEmphasis = getIntent().getBooleanExtra(EXTRA_FILTER_PRE, false);
+        initialHighpass = getIntent().getBooleanExtra(EXTRA_FILTER_HIGH, false);
+        initialLowpass = getIntent().getBooleanExtra(EXTRA_FILTER_LOW, false);
+
         setContentView(R.layout.activity_settings);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        populateOriginalValues(this::attachListeners);
+        populateOriginalValues(() -> {
+            attachListeners();
+            attachLiveListeners();
+        });
         populateBandwidths();
         populateMinFrequencies();
         populateMaxFrequencies();
@@ -80,6 +120,68 @@ public class SettingsActivity extends AppCompatActivity {
         populateAprsIcons();
         populateRadioOptions();
         populateVersions();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        try {
+            Intent intent = new Intent(this, RadioAudioService.class);
+            bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+        } catch (Exception e) {
+            Log.e(TAG, "Error binding to RadioAudioService", e);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (!doneClicked) {
+            revertSettings();
+        }
+        if (radioAudioServiceBound) {
+            unbindService(serviceConnection);
+            radioAudioServiceBound = false;
+        }
+    }
+
+    private void revertSettings() {
+        if (radioAudioService != null && radioAudioService.isRadioConnected()) {
+            radioAudioService.getRadioModule().beginUpdate();
+            try {
+                radioAudioService.getRadioModule().setSquelch(initialSquelch);
+                radioAudioService.getRadioModule().setFilters(initialEmphasis, initialHighpass, initialLowpass);
+            } finally {
+                radioAudioService.getRadioModule().endUpdate();
+            }
+            Log.d(TAG, "Reverted radio settings");
+        }
+    }
+
+    private void attachLiveListeners() {
+        Slider squelchSlider = findViewById(R.id.squelchSlider);
+        squelchSlider.addOnChangeListener((slider, value, fromUser) -> {
+            if (fromUser && radioAudioService != null && radioAudioService.isRadioConnected()) {
+                radioAudioService.getRadioModule().setSquelch((int) value);
+            }
+        });
+
+        CompoundButton.OnCheckedChangeListener filterListener = (buttonView, isChecked) -> {
+            if (radioAudioService != null && radioAudioService.isRadioConnected()) {
+                applyFiltersLive();
+            }
+        };
+
+        ((Switch) findViewById(R.id.emphasisSwitch)).setOnCheckedChangeListener(filterListener);
+        ((Switch) findViewById(R.id.highpassSwitch)).setOnCheckedChangeListener(filterListener);
+        ((Switch) findViewById(R.id.lowpassSwitch)).setOnCheckedChangeListener(filterListener);
+    }
+
+    private void applyFiltersLive() {
+        boolean emphasis = ((Switch) findViewById(R.id.emphasisSwitch)).isChecked();
+        boolean highpass = ((Switch) findViewById(R.id.highpassSwitch)).isChecked();
+        boolean lowpass = ((Switch) findViewById(R.id.lowpassSwitch)).isChecked();
+        radioAudioService.getRadioModule().setFilters(emphasis, highpass, lowpass);
     }
 
     @Override
@@ -190,11 +292,11 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setDropdownIfPresent(Map<String, String> settings, String key, int viewId) {
         if (settings.containsKey(key)) {
-            String value = settings.get(key);
-            if ("Current".equals(value)) {
-                value = getString(R.string.current);
+            String dropdownValue = settings.get(key);
+            if ("Current".equals(dropdownValue)) {
+                dropdownValue = getString(R.string.current);
             }
-            this.<AutoCompleteTextView>findViewById(viewId).setText(value, false);
+            this.<AutoCompleteTextView>findViewById(viewId).setText(dropdownValue, false);
         }
     }
 
@@ -229,6 +331,7 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_ICON, R.id.aprsIconTextView);
+                setSwitchIfPresent(settings, AppSetting.SETTING_DIGIPEAT_PACKETS, R.id.digipeatPacketsSwitch);
                 setRadioSettingsFromIntent();
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
@@ -274,6 +377,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     public void doneButtonClicked(View view) {
+        doneClicked = true;
         Intent data = new Intent()
             .putExtra(EXTRA_RF_POWER_HIGH, isHighPowerSelected())
             .putExtra(EXTRA_BANDWIDTH, this.<AutoCompleteTextView>findViewById(R.id.bandwidthTextView).getText().toString().trim())
@@ -329,6 +433,7 @@ public class SettingsActivity extends AppCompatActivity {
         attachSwitch(R.id.btLowLatencyMicSwitch, this::setBtLowLatencyMic);
         attachSwitch(R.id.duckMusicSwitch, this::setDuckMusic);
         attachTextView(R.id.aprsBeaconFreqTextView, this::setAprsBeaconFrequency);
+        attachSwitch(R.id.digipeatPacketsSwitch, this::setDigipeatPackets);
     }
 
     private void saveAppSettingAsync(String key, String value) {
@@ -339,7 +444,8 @@ public class SettingsActivity extends AppCompatActivity {
         saveAppSettingAsync(AppSetting.SETTING_APRS_BEACON_POSITION, Boolean.toString(enabled));
     }
 
-    private void setAprsBeaconFrequency(String frequency) {
+    private void setAprsBeaconFrequency(String freq) {
+        String frequency = freq;
         if (frequency.equals(getString(R.string.current))) {
             frequency = "Current";
         }
@@ -392,6 +498,10 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setDuckMusic(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_DUCK_MUSIC, Boolean.toString(enabled));
+    }
+
+    private void setDigipeatPackets(boolean enabled) {
+        saveAppSettingAsync(AppSetting.SETTING_DIGIPEAT_PACKETS, Boolean.toString(enabled));
     }
 
     public static APRSIconType getAPRSIconFromSettingChoice(Resources resources, String choice) {

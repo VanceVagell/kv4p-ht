@@ -71,7 +71,6 @@ import com.vagell.kv4pht.aprs.parser.APRSIconType;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.APRSTypes;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
-import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
@@ -93,6 +92,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -138,9 +138,9 @@ public class RadioAudioService extends Service {
     public static final int APRS_POSITION_APPROX = 1;
     public static final int APRS_BEACON_MINS = 5;
     private static final int APRS_MAX_MESSAGE_NUM = 99999;
-    private static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
-    private static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
-    public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1*"), new Digipeater("WIDE2-1"));
+    public static final String MESSAGE_NOTIFICATION_CHANNEL_ID = "aprs_message_notifications";
+    public static final int MESSAGE_NOTIFICATION_TO_YOU_ID = 0;
+    public static final List<Digipeater> DEFAULT_DIGIPEATERS = List.of(new Digipeater("WIDE1-1"), new Digipeater("WIDE2-1"));
     private static final long SCAN_SQUELCHED_ADVANCE_DELAY_MS = 250L;
 
     // === Used for the persistent notification ===
@@ -255,6 +255,8 @@ public class RadioAudioService extends Service {
     @Getter
     @Setter
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
+    private boolean digipeatPackets = false;
+    private final java.util.Map<String, Long> digipeatDedupCache = new java.util.HashMap<>();
     private ScheduledExecutorService beaconScheduler;
     private ScheduledFuture<?> beaconFuture;
     private int messageNumber = 0;
@@ -446,6 +448,10 @@ public class RadioAudioService extends Service {
 
     public void setAprsBeaconFrequency(String frequency) {
         this.aprsBeaconFrequency = frequency;
+    }
+
+    public void setDigipeatPackets(boolean enabled) {
+        this.digipeatPackets = enabled;
     }
 
     public boolean getAprsBeaconPosition() {
@@ -672,6 +678,43 @@ public class RadioAudioService extends Service {
         this.channelMemoriesLiveData = channelMemoriesLiveData;
     }
 
+    /**
+     * Updates the foreground notification with the current radio state (frequency or memory).
+     * This is useful to call after initial connection or when memory definitions change.
+     */
+    public void updateNotificationFromCurrentState() {
+        String text = null;
+        if (activeMemoryId > -1) {
+            List<ChannelMemory> memories = null;
+            if (channelMemoriesLiveData != null) {
+                memories = channelMemoriesLiveData.getValue();
+            }
+            if (memories != null) {
+                for (ChannelMemory memory : memories) {
+                    if (memory.memoryId == activeMemoryId) {
+                        text = memory.name + " (" + memory.frequency + " MHz)";
+                        break;
+                    }
+                }
+            }
+
+            if (text == null && !activeFrequencyStr.isEmpty()) {
+                text = "Memory " + activeMemoryId + " (" + activeFrequencyStr + " MHz)";
+            }
+        } else if (!activeFrequencyStr.isEmpty()) {
+            try {
+                float freq = Float.parseFloat(activeFrequencyStr);
+                text = "Simplex " + formatFreq(freq) + " MHz";
+            } catch (NumberFormatException e) {
+                text = "Simplex " + activeFrequencyStr + " MHz";
+            }
+        }
+
+        if (text != null) {
+            updateForegroundNotification(text);
+        }
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -775,7 +818,7 @@ public class RadioAudioService extends Service {
         float freq;
         try {
             freq = Float.parseFloat(makeSafeHamFreq(frequencyStr));
-            updateForegroundNotification("Simplex " + frequencyStr + " MHz");
+            updateForegroundNotification("Simplex " + String.format(Locale.US, "%.4f", freq) + " MHz");
         } catch (NumberFormatException e) {
             Log.w(TAG, "Invalid frequency string: " + frequencyStr, e);
             return;
@@ -1842,6 +1885,7 @@ public class RadioAudioService extends Service {
             activeMemoryId = state.getMemoryId();
         }
         handleDeviceState(state);
+        updateNotificationFromCurrentState();
         callbacks.initialDeviceStateReceived();
     }
 
@@ -1993,26 +2037,18 @@ public class RadioAudioService extends Service {
     private void handleAx25Packet(byte[] packet, int offset, int len) {
         try {
             APRSPacket aprsPacket = Parser.parseAX25(packet, offset, len);
-            InformationField info = aprsPacket.getPayload();
-            // Check if the packet is an APRS message type
-            if (info.getDataTypeIdentifier() == ':') {
-                MessagePacket msg = new MessagePacket(info.getRawBytes(), aprsPacket.getDestinationCall());
-                String target = msg.getTargetCallsign().trim().toUpperCase();
-                // Handle messages addressed to the current callsign
-                if (!msg.isAck() && target.equals(callsign.toUpperCase())) {
-                    callbacks.showNotification(
-                        MESSAGE_NOTIFICATION_CHANNEL_ID,
-                        MESSAGE_NOTIFICATION_TO_YOU_ID,
-                        aprsPacket.getSourceCall() + " messaged you",
-                        msg.getMessageBody(),
-                        INTENT_OPEN_CHAT);
-                    String msgNum = msg.getMessageNumber();
-                    if (null != msgNum && !msgNum.trim().isEmpty()) { // APRS spec says only ack if msg num provided
-                        // Send acknowledgment after a delay
-                        handler.postDelayed(() -> sendAckMessage(aprsPacket.getSourceCall().toUpperCase(), msgNum), 1000);
-                    }
-                }
+
+            // Deduplicate against recent digipeats (including our own retransmissions)
+            String dedupKey = computeDigipeatDedupKey(aprsPacket);
+            if (isRecentlyDigipeated(dedupKey)) {
+                return;
             }
+
+            // Attempt to digipeat eligible packets before local processing
+            if (digipeatPackets && mode == RadioMode.RX && isTxAllowed() && !callsign.trim().isEmpty() && hostToEsp32 != null) {
+                maybeDigipeat(aprsPacket, dedupKey);
+            }
+
             // Notify callbacks about the received packet
             callbacks.packetReceived(aprsPacket);
         } catch (Exception e) {
@@ -2074,11 +2110,12 @@ public class RadioAudioService extends Service {
         final boolean wasScanning = getMode() == RadioMode.SCAN;
         final int originalMemoryId = activeMemoryId;
         final String originalFrequencyStr = activeFrequencyStr;
+        final int savedScanBaseSquelch = scanBaseSquelch;
 
         callbacks.startingAprsBeacon(aprsBeaconFrequency);
 
         if (wasScanning) {
-            setScanning(false, false);
+            cancelPendingScanAdvance();
         }
 
         tuneToFreq(aprsBeaconFrequency);
@@ -2090,7 +2127,10 @@ public class RadioAudioService extends Service {
             // Wait for transmission to finish before restoring
             handler.postDelayed(() -> {
                 if (wasScanning) {
-                    setScanning(true);
+                    activeMemoryId = originalMemoryId;
+                    scanBaseSquelch = savedScanBaseSquelch;
+                    setMode(RadioMode.SCAN);
+                    nextScan();
                 } else {
                     if (originalMemoryId != -1) {
                         tuneToMemory(originalMemoryId);
@@ -2146,14 +2186,14 @@ public class RadioAudioService extends Service {
     /**
      * Sends a chat message to the specified recipient.
      *
-     * @param to   The callsign of the recipient, or null for CQ.
+     * @param to   The callsign of the recipient, or null for BLN1CQ.
      * @param text The message text to send.
      * @return The message number if sent successfully, -1 on error.
      */
     public int sendChatMessage(String to, String text) {
         // Sanitize message text
         final String outText = text.replace('|', ' ').replace('~', ' ').replace('{', ' ');
-        final String targetCallsign = (to == null || to.trim().isEmpty()) ? "CQ" : to;
+        final String targetCallsign = (to == null || to.trim().isEmpty()) ? "BLN1CQ" : to;
         if (callsign.trim().isEmpty()) {
             Log.d(TAG, "Error: Tried to send message with no sender callsign.");
             return -1;
@@ -2172,6 +2212,95 @@ public class RadioAudioService extends Service {
             return -1;
         }
         return messageNumber - 1;
+    }
+
+    private String computeDigipeatDedupKey(APRSPacket packet) {
+        return packet.getSourceCall() + "|" + packet.getDestinationCall() + "|"
+            + java.util.Base64.getEncoder().encodeToString(packet.getPayload().getRawBytes());
+    }
+
+    private boolean isRecentlyDigipeated(String key) {
+        long now = System.currentTimeMillis();
+        Long then = digipeatDedupCache.get(key);
+        if (then != null && now - then < 28_000L) {
+            return true;
+        }
+        digipeatDedupCache.entrySet().removeIf(e -> now - e.getValue() >= 28_000L);
+        return false;
+    }
+
+    private void maybeDigipeat(APRSPacket aprsPacket, String dedupKey) {
+        java.util.List<Digipeater> digis = aprsPacket.getDigipeaters();
+        if (digis == null || digis.isEmpty()) {
+            return;
+        }
+
+        int firstUnusedIndex = -1;
+        for (int i = 0; i < digis.size(); i++) {
+            if (!digis.get(i).isUsed()) {
+                firstUnusedIndex = i;
+                break;
+            }
+        }
+        if (firstUnusedIndex < 0) {
+            return;
+        }
+
+        Digipeater firstUnused = digis.get(firstUnusedIndex);
+        String digiCall = firstUnused.getCallsign();
+        String baseCall = APRSPacket.getBaseCall(digiCall);
+        String ssidStr = APRSPacket.getSsid(firstUnused.toString());
+        int ssid = -1;
+        try {
+            ssid = Integer.parseInt(ssidStr);
+        } catch (NumberFormatException e) {
+            // SSID not numeric
+        }
+
+        boolean isOurCall = baseCall.equalsIgnoreCase(APRSPacket.getBaseCall(callsign));
+
+        // We check for WIDE1 with additional repeats left. WIDE1 is for local fill-in digipeaters, like us.
+        // We don't want to digipeat WIDE2 because that's for things like mountain-top digipeaters.
+        boolean isWide1Alias = baseCall.equalsIgnoreCase("WIDE1") && ssid >= 1 && ssid <= 2;
+
+        if (!isOurCall && !isWide1Alias) {
+            return;
+        }
+
+        java.util.List<Digipeater> newDigis = new java.util.ArrayList<>(digis);
+
+        if (isOurCall) {
+            Digipeater marked = new Digipeater(digiCall);
+            marked.setUsed(true);
+            newDigis.set(firstUnusedIndex, marked);
+        } else if (isWide1Alias) {
+            if (ssid == 1) {
+                Digipeater ourDigi = new Digipeater(callsign);
+                ourDigi.setUsed(true);
+                newDigis.set(firstUnusedIndex, ourDigi);
+            } else if (ssid == 2) {
+                Digipeater decremented = new Digipeater(baseCall + "-1");
+                decremented.setUsed(false);
+                newDigis.set(firstUnusedIndex, decremented);
+                Digipeater ourDigi = new Digipeater(callsign);
+                ourDigi.setUsed(true);
+                newDigis.add(firstUnusedIndex, ourDigi);
+            }
+        }
+
+        try {
+            APRSPacket digipeatedPacket = new APRSPacket(
+                aprsPacket.getSourceCall(),
+                aprsPacket.getDestinationCall(),
+                newDigis,
+                aprsPacket.getPayload().getRawBytes()
+            );
+            digipeatedPacket.setComment(aprsPacket.getComment());
+            txAX25Packet(new Packet(digipeatedPacket.toAX25Frame()));
+            digipeatDedupCache.put(dedupKey, System.currentTimeMillis());
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to digipeat packet", e);
+        }
     }
 
     /**
