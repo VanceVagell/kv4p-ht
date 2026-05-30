@@ -605,7 +605,9 @@ public class RadioAudioService extends Service {
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(SERVICE_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+                // Microphone type is required so hardware-PTT mic capture keeps working while the
+                // app is in the background. Without it, Android silently blocks background mic access.
+                startForeground(SERVICE_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             } else {
                 startForeground(SERVICE_ID, notification);
             }
@@ -1907,7 +1909,7 @@ public class RadioAudioService extends Service {
             boolean physPttDown = radioModule.isPhysPttDown();
             if (physPttDown) {
                 if (getMode() == RadioMode.RX && isTxAllowed()) {
-                    startPtt();
+                    startPtt(true);
                     callbacks.forcedPttStart();
                 }
             } else if (getMode() == RadioMode.TX) {
