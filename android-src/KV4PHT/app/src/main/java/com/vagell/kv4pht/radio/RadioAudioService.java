@@ -1352,7 +1352,7 @@ public class RadioAudioService extends Service {
             return; // If connection is lost, just drop the audio frame.
         }
         if (!dataMode) {
-            samples = applyMicGain(samples, AUDIO_FRAME_SAMPLES);
+            applyMicGain(samples, AUDIO_FRAME_SAMPLES);
         }
         int encodedLength = ImaAdpcm.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES, txAudioFrame, 0);
         hostToEsp32.txAudio(txAudioFrame, encodedLength);
