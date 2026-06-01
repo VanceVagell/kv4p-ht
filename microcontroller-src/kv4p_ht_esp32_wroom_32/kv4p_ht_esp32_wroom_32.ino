@@ -35,7 +35,6 @@ const uint16_t FIRMWARE_VER = 17;
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint32_t DEVICE_STATE_REPORT_INTERVAL_MS = 500;
 const uint16_t USB_BUFFER_SIZE = 1024*2;
-const char BLUETOOTH_DEVICE_NAME[] = "kv4p-ht";
 
 DRA818 sa818_vhf(&Serial2, SA818_VHF);
 DRA818 sa818_uhf(&Serial2, SA818_UHF);
@@ -363,7 +362,9 @@ void setup() {
   Serial.println("Use `logcat` or a kv4p decoder to view readable logs.");
   Serial.println("More info: https://github.com/VanceVagell/kv4p-ht/blob/main/microcontroller-src/kv4p_ht_esp32_wroom_32/readme.md");
   Serial.println("==============================");
-  SerialBT.begin(BLUETOOTH_DEVICE_NAME);
+  char bluetoothDeviceName[12];
+  formatBluetoothDeviceName(bluetoothDeviceName, sizeof(bluetoothDeviceName));
+  SerialBT.begin(bluetoothDeviceName);
   protocolBtSession.stream = &SerialBT;
   protocolBtSession.windowSize = USB_BUFFER_SIZE;
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.

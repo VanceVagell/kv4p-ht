@@ -35,6 +35,15 @@ enum RfModuleType : uint8_t {
 #define AUDIO_FRAME_BYTES 128
 #define AUDIO_RESAMPLE_RATIO 3
 
+inline uint32_t bluetoothDeviceId() {
+  uint64_t mac = ESP.getEfuseMac();
+  return (uint32_t)((mac >> 24) & 0xFFFFFF);
+}
+
+inline void formatBluetoothDeviceName(char *out, size_t outSize) {
+  snprintf(out, outSize, "kv4p-%06X", bluetoothDeviceId());
+}
+
 // Firmware AX.25 TX tuning. Lead/tail silence matches the previous Android-side AFSK encoder timing.
 static constexpr size_t TX_AFSK_BLOCK_SAMPLES = 256;
 static constexpr float TX_AFSK_GAIN = 0.8f;
