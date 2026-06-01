@@ -154,6 +154,7 @@ void printEnvironment() {
   _LOGI("PSRAM size: %d", ESP.getPsramSize());
   _LOGI("FLASH size: %d", ESP.getFlashChipSize());
   _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
+  _LOGI("BT Device Name: kv4p-%06X", bluetoothDeviceId());
   _LOGI("---");
 #endif  
 }

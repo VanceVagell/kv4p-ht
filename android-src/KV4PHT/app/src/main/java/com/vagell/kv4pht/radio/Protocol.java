@@ -54,7 +54,7 @@ public final class Protocol {
     @Getter
     public enum SndCommand {
         COMMAND_SND_UNKNOWN(0x00),
-        COMMAND_HOST_TX_AUDIO(0x07), // [COMMAND_HOST_TX_AUDIO(byte[])]
+        COMMAND_HOST_TX_AUDIO(0x0C), // [COMMAND_HOST_TX_AUDIO(byte[])]
         COMMAND_HOST_DESIRED_STATE(0x0D);
         private final int value;
         SndCommand(int value) {
@@ -71,7 +71,7 @@ public final class Protocol {
         COMMAND_DEBUG_DEBUG(0x04),      // [COMMAND_DEBUG_DEBUG(char[])]
         COMMAND_DEBUG_TRACE(0x05),      // [COMMAND_DEBUG_TRACE(char[])]
         COMMAND_HELLO(0x06),            // [COMMAND_HELLO(Hello)]
-        COMMAND_RX_AUDIO(0x07),         // [COMMAND_RX_AUDIO(int8_t[])]
+        COMMAND_RX_AUDIO(0x0C),         // [COMMAND_RX_AUDIO(int8_t[])]
         COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
         COMMAND_DEVICE_STATE(0x0B);
         private static final RcvCommand[] VALUES = values();

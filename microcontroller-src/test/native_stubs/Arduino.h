@@ -21,6 +21,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+
+class NativeEsp {
+public:
+  uint64_t getEfuseMac() const {
+    return 0x112233445566ULL;
+  }
+};
+
+inline NativeEsp ESP;
 
 class Print {
 public:

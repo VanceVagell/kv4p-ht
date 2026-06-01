@@ -19,15 +19,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include <AudioTools.h>
-#include <AudioTools/AudioCodecs/CodecOpus.h>
+#include <AudioTools/AudioCodecs/CodecADPCM.h>
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 #include <AfskDemodulator.h>
 #include "globals.h"
 #include "protocol.h"
 #include "debug.h"
+#include "audioResampler.h"
 
-// Custom Output to Forward Encoded Data to Serial
 class SerialOutput : public AudioOutput {
 public:
   size_t write(const uint8_t *data, size_t len) override {
@@ -110,11 +110,14 @@ private:
 bool rxStreamConfigured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE, 1, 16);
-OpusAudioEncoder rxEnc;
+AudioInfo rxAudioInfo(AUDIO_WIRE_SAMPLE_RATE, 1, 16);
 SerialOutput rxAudioOutput;
-EncodedAudioStream rxOut(&rxAudioOutput, &rxEnc);
+ADPCMEncoder rxAdpcmEncoder(AV_CODEC_ID_ADPCM_IMA_WAV, AUDIO_FRAME_BYTES);
+EncodedAudioStream rxOut(&rxAudioOutput, &rxAdpcmEncoder);
+AudioDownsampleConverter rxDownsample;
 AudioEffectStream effects(in);  
-StreamCopy rxCopier(rxOut, effects);
+ConverterStream<int16_t> rxDownsampledEffects(effects, rxDownsample);
+StreamCopy rxCopier(rxOut, rxDownsampledEffects, AUDIO_FRAME_SAMPLES_48K * sizeof(int16_t));
 Boost mute(0.0);
 Boost gain(16.0);
 DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
@@ -142,16 +145,8 @@ void initI2SRx() {
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = hw.pins.pinAudioIn;
-  config.sample_rate = AUDIO_SAMPLE_RATE * 1.02; // 2% over sample rate to avoid buffer underruns
+  config.sample_rate = AUDIO_SAMPLE_RATE * 1.00;
   in.begin(config);
-  rxEnc.setAudioInfo(rxInfo);
-  // configure OPUS additinal parameters
-  auto &encoderConfig = rxEnc.config();
-  encoderConfig.application = OPUS_APPLICATION_AUDIO;
-  encoderConfig.frame_sizes_ms_x2 = OPUS_FRAMESIZE_40_MS;
-  encoderConfig.vbr = 1;
-  encoderConfig.max_bandwidth = OPUS_BANDWIDTH_NARROWBAND;
-  rxEnc.begin(encoderConfig);
   // effects
   effects.clear();
   afskTapEffect.setActive(true);
@@ -161,7 +156,10 @@ void initI2SRx() {
   effects.addEffect(mute);
   effects.begin(rxInfo);
   // open output
-  rxOut.begin(rxInfo);
+  rxDownsample.begin();
+  rxOut.begin(rxAudioInfo);
+  rxCopier.setMinCopySize(sizeof(int16_t));
+  rxCopier.setCheckAvailable(false);
   rxStreamConfigured = true;
 }
 

@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <Arduino.h>
+#include <BluetoothSerial.h>
 #include <DRA818.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
@@ -38,6 +39,9 @@ const uint16_t USB_BUFFER_SIZE = 1024*2;
 DRA818 sa818_vhf(&Serial2, SA818_VHF);
 DRA818 sa818_uhf(&Serial2, SA818_UHF);
 DRA818 &sa818 = sa818_vhf;
+BluetoothSerial SerialBT;
+bool bluetoothProtocolConnected = false;
+KissParser bluetoothParser(protocolBtSession, &handleCommands, &handleAx25Data);
 
 // Were we able to communicate with the radio module during setup()?
 const char RADIO_MODULE_NOT_FOUND = 'x';
@@ -45,7 +49,6 @@ const char RADIO_MODULE_FOUND     = 'f';
 char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
 
 boolean rssiOn = true; // true if RSSI is enabled
-boolean audioOpen = false; // true when host wants RX Opus audio frames
 HostDesiredState desiredState = {
   .sequence = 0,
   .memoryId = -1,
@@ -124,7 +127,7 @@ void loadPersistedRadioState() {
   }
   desiredState.flags = flags;
   desiredState.sequence = 0;
-  desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_RX_AUDIO_OPEN);
+  desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_SESSION_FLAG_MASK);
   appliedState.memoryId = desiredState.memoryId;
   persistedState = desiredState;
   prefs.end();
@@ -174,7 +177,7 @@ uint8_t getFirmwareFeatures() {
 }
 
 Mode rxIdleMode() {
-  return audioOpen ? MODE_RX : MODE_STOPPED;
+  return protocolAnySessionFlag(HOST_STATE_RX_AUDIO_OPEN) ? MODE_RX : MODE_STOPPED;
 }
 
 uint16_t desiredFilterFlags() {
@@ -185,8 +188,9 @@ bool txAllowedByHost() {
   return desiredState.flags & HOST_STATE_TX_ALLOWED;
 }
 
-uint16_t deviceStateFlags() {
+uint16_t deviceStateFlags(uint16_t sessionFlags) {
   uint16_t flags = desiredState.flags;
+  flags |= sessionFlags & HOST_STATE_SESSION_FLAG_MASK;
   if (isPhysPttDown) {
     flags |= DEVICE_STATE_PHYS_PTT_DOWN;
   }
@@ -211,11 +215,11 @@ uint8_t deviceMode() {
   }
 }
 
-DeviceState currentDeviceState() {
+DeviceState currentDeviceState(uint16_t sessionFlags = 0) {
   return {
     .appliedSequence = desiredState.sequence,
     .memoryId = appliedState.memoryId,
-    .flags = deviceStateFlags(),
+    .flags = deviceStateFlags(sessionFlags),
     .bw = appliedState.bw,
     .freq_tx = appliedState.freq_tx,
     .freq_rx = appliedState.freq_rx,
@@ -230,11 +234,18 @@ DeviceState currentDeviceState() {
 }
 
 void sendCurrentDeviceState() {
-  if ((desiredState.flags & HOST_STATE_ENABLE_STATUS_REPORTS) == 0) {
-    return;
+  bool sent = false;
+  if (protocolSessionConnected(protocolUsbSession) && (protocolUsbSession.flags & HOST_STATE_ENABLE_STATUS_REPORTS)) {
+    sendDeviceState(*protocolUsbSession.stream, currentDeviceState(protocolUsbSession.flags));
+    sent = true;
   }
-  sendDeviceState(currentDeviceState());
-  deviceStateDirty = false;
+  if (protocolHasBtSession() && (protocolBtSession.flags & HOST_STATE_ENABLE_STATUS_REPORTS)) {
+    sendDeviceState(*protocolBtSession.stream, currentDeviceState(protocolBtSession.flags));
+    sent = true;
+  }
+  if (sent) {
+    deviceStateDirty = false;
+  }
 }
 
 void markDeviceStateDirty() {
@@ -265,7 +276,6 @@ void reconcileDesiredState(bool sendReport = true) {
     digitalWrite(hw.pins.pinHl, wantHigh ? LOW : HIGH);
   }
   rssiOn = desiredState.flags & HOST_STATE_RSSI_ENABLED;
-  audioOpen = desiredState.flags & HOST_STATE_RX_AUDIO_OPEN;
 
   uint16_t filterFlags = desiredFilterFlags();
   uint16_t appliedFilterFlags = appliedState.flags & (HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW);
@@ -343,6 +353,7 @@ void setup() {
   // Communication with Android via USB cable
   Serial.setRxBufferSize(USB_BUFFER_SIZE);
   Serial.setTxBufferSize(USB_BUFFER_SIZE);
+  protocolUsbSession.windowSize = USB_BUFFER_SIZE;
   Serial.begin(115200);
   Serial.println();
   Serial.println("===== kv4p serial output =====");
@@ -351,6 +362,11 @@ void setup() {
   Serial.println("Use `logcat` or a kv4p decoder to view readable logs.");
   Serial.println("More info: https://github.com/VanceVagell/kv4p-ht/blob/main/microcontroller-src/kv4p_ht_esp32_wroom_32/readme.md");
   Serial.println("==============================");
+  char bluetoothDeviceName[12];
+  formatBluetoothDeviceName(bluetoothDeviceName, sizeof(bluetoothDeviceName));
+  SerialBT.begin(bluetoothDeviceName);
+  protocolBtSession.stream = &SerialBT;
+  protocolBtSession.windowSize = USB_BUFFER_SIZE;
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
@@ -379,7 +395,7 @@ void setup() {
   if (radioModuleStatus == RADIO_MODULE_FOUND) {
     reconcileDesiredState(false);
   }
-  sendHello(FIRMWARE_VER, radioModuleStatus, USB_BUFFER_SIZE, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState());
+  sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState());
   _LOGI("Setup is finished");
 }
 
@@ -407,7 +423,7 @@ void initRadio(bool isHigh) {
   }
 }
 
-void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
+void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *params, size_t param_len) {
   switch (command) {
     case COMMAND_HOST_TX_AUDIO:
       if (mode == MODE_TX) {
@@ -417,8 +433,19 @@ void handleCommands(RcvCommand command, uint8_t *params, size_t param_len) {
       break;
     case COMMAND_HOST_DESIRED_STATE:
       if (param_len == sizeof(HostDesiredState)) {
-        memcpy(&desiredState, params, sizeof(HostDesiredState));
-        reconcileDesiredState();
+        HostDesiredState incomingState;
+        memcpy(&incomingState, params, sizeof(HostDesiredState));
+        uint16_t oldSessionFlags = session.flags;
+        session.flags = incomingState.flags & HOST_STATE_SESSION_FLAG_MASK;
+        bool sessionFlagsChanged = oldSessionFlags != session.flags;
+        bool globalStateChanged = incomingState.sequence > desiredState.sequence;
+        if (globalStateChanged) {
+          desiredState = incomingState;
+          desiredState.flags &= HOST_STATE_GLOBAL_FLAG_MASK;
+        }
+        if (sessionFlagsChanged || globalStateChanged) {
+          reconcileDesiredState();
+        }
         esp_task_wdt_reset();
       }
       break;
@@ -462,7 +489,7 @@ void rssiLoop() {
 }
 
 void deviceStateLoop() {
-  if ((desiredState.flags & HOST_STATE_ENABLE_STATUS_REPORTS) == 0) {
+  if (!protocolAnySessionFlag(HOST_STATE_ENABLE_STATUS_REPORTS)) {
     return;
   }
 
@@ -479,6 +506,29 @@ void deviceStateLoop() {
   END_EVERY_N_MILLISECONDS();
 }
 
+void bluetoothLoop() {
+  bool connected = SerialBT.hasClient();
+  if (connected && !bluetoothProtocolConnected) {
+    bluetoothProtocolConnected = true;
+    protocolBtSession.connected = true;
+    bluetoothParser.reset();
+    sendHello(protocolBtSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolBtSession.flags));
+  } else if (!connected && bluetoothProtocolConnected) {
+    bluetoothProtocolConnected = false;
+    protocolBtSession.connected = false;
+    uint16_t oldSessionFlags = protocolBtSession.flags;
+    protocolBtSession.flags = 0;
+    bluetoothParser.reset();
+    if (oldSessionFlags != 0) {
+      reconcileDesiredState();
+    }
+  }
+
+  if (bluetoothProtocolConnected) {
+    bluetoothParser.loop();
+  }
+}
+
 void squelchLoop() {
   bool nextSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
   if (nextSquelched != squelched) {
@@ -493,6 +543,7 @@ void loop() {
   ledLoop();
   buttonsLoop();
   protocolLoop();
+  bluetoothLoop();
   rxAudioLoop();
   txAudioLoop();
   rssiLoop();
