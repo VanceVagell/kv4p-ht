@@ -145,7 +145,7 @@ void initI2SRx() {
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = hw.pins.pinAudioIn;
-  config.sample_rate = AUDIO_SAMPLE_RATE * 1.00; 
+  config.sample_rate = AUDIO_SAMPLE_RATE * 1.00;
   in.begin(config);
   // effects
   effects.clear();
