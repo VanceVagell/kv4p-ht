@@ -462,7 +462,12 @@ public class MainActivity extends AppCompatActivity {
                  * initiate PTT, for example while firmware is transmitting an APRS packet.
                  */
                 private void showModuleState(boolean txActive, boolean squelchOpen) {
-                    int stateColor = txActive ? R.color.accent : squelchOpen ? R.color.squelch_open : 0;
+                    int stateColor = 0;
+                    if (txActive) {
+                        stateColor = R.color.accent;
+                    } else if (squelchOpen) {
+                        stateColor = R.color.squelch_open;
+                    }
                     int bandColor = ContextCompat.getColor(MainActivity.this, stateColor != 0 ? stateColor : R.color.band);
                     int sMeterColor = ContextCompat.getColor(MainActivity.this, stateColor != 0 ? stateColor : R.color.primary);
 
