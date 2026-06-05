@@ -453,17 +453,18 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void moduleTxStateChanged(boolean txActive) {
-                    runOnUiThread(() -> showModuleTxState(txActive));
+                public void moduleStateChanged(boolean txActive, boolean squelchOpen) {
+                    runOnUiThread(() -> showModuleState(txActive, squelchOpen));
                 }
 
                 /**
-                 * Shows firmware-reported TX activity even when Android did not initiate PTT,
-                 * for example while firmware is transmitting an APRS packet.
+                 * Shows firmware-reported TX and squelch state even when Android did not
+                 * initiate PTT, for example while firmware is transmitting an APRS packet.
                  */
-                private void showModuleTxState(boolean txActive) {
-                    int bandColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.band);
-                    int sMeterColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.primary);
+                private void showModuleState(boolean txActive, boolean squelchOpen) {
+                    int stateColor = txActive ? R.color.accent : squelchOpen ? R.color.squelch_open : 0;
+                    int bandColor = ContextCompat.getColor(MainActivity.this, stateColor != 0 ? stateColor : R.color.band);
+                    int sMeterColor = ContextCompat.getColor(MainActivity.this, stateColor != 0 ? stateColor : R.color.primary);
 
                     TextView activeBand = findViewById(R.id.activeBand);
                     activeBand.setTextColor(bandColor);
