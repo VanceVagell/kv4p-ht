@@ -477,7 +477,7 @@
             const flashDescription = document.getElementById('flashDescription');
 
             const manifests = {
-            firmware: 'https://kv4p.com/esp-web-tools/manifest-v15.json',
+            firmware: 'https://kv4p.com/esp-web-tools/manifest-v17.json',
             nvs: {
             v1x: {
             vhf: 'https://kv4p.com/hwconfig/manifest-v1x-vhf.json',
@@ -507,7 +507,7 @@
             if (type === 'firmware') {
             flashButton.setAttribute('manifest', manifests.firmware);
             flashButtonActivate.disabled = false;
-            flashDescription.innerHTML = 'Ready to flash <strong>Firmware v15</strong><br><small>This updates the radio firmware to the latest version</small>';
+            flashDescription.innerHTML = 'Ready to flash <strong>Firmware v17</strong><br><small>This updates the radio firmware to the latest version</small>';
             return;
             }
 
