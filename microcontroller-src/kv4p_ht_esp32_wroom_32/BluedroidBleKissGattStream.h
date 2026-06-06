@@ -67,6 +67,7 @@ public:
     uint8_t maxNotifyChunksPerLoop = 1;
     uint16_t minNotifyIntervalMs = 12;
     uint16_t notifyFailureBackoffMs = 100;
+    uint32_t subscribeTimeoutMs = 10000;
     uint16_t connMinInterval = 6;
     uint16_t connMaxInterval = 12;
     uint16_t connLatency = 0;
@@ -86,6 +87,7 @@ public:
     uint32_t txNotifyChunks = 0;
     uint32_t txQueueFullDrops = 0;
     uint32_t txNotifyFailures = 0;
+    uint32_t subscribeTimeoutDisconnects = 0;
   };
 
   explicit BluedroidBleKissGattStream(const Config &config = Config()) : _config(config) {}
@@ -160,9 +162,7 @@ public:
     }
 
     BLEDevice::stopAdvertising();
-    _connected = false;
-    _notifySubscribed = false;
-    _mtu = 23;
+    resetConnectionState();
     clearIncomingStream();
     clearQueue();
 
@@ -178,6 +178,7 @@ public:
   }
 
   void loop() {
+    disconnectUnsubscribedClientIfNeeded();
     (void)drainOutgoing(_config.maxNotifyChunksPerLoop);
   }
 
@@ -202,11 +203,28 @@ public:
   bool isConnected() const { return _connected; }
   bool isNotifySubscribed() const { return _notifySubscribed; }
 
-  bool canSend() const {
+  void disconnectClient() {
+    if (!_connected) {
+      return;
+    }
+    _LOGW("BLE KISS forcing client disconnect: conn_id=%u notify_subscribed=%u",
+          _hasConnId ? _connId : 0,
+          _notifySubscribed ? 1 : 0);
+    if (_server != nullptr && _hasConnId) {
+      _server->disconnect(_connId);
+    }
+    resetConnectionState();
+
+    if (_config.restartAdvertisingOnDisconnect) {
+      startAdvertising();
+    }
+  }
+
+  bool canSend() {
     if (!_connected || _rxChar == nullptr) {
       return false;
     }
-    if (_config.requireNotifySubscription && !_notifySubscribed) {
+    if (_config.requireNotifySubscription && !refreshNotifySubscribed()) {
       return false;
     }
     return true;
@@ -410,10 +428,13 @@ private:
   bool _begun = false;
   bool _connected = false;
   bool _notifySubscribed = false;
+  bool _hasConnId = false;
   bool _advertisingConfigured = false;
   bool _lastNotifySucceeded = false;
   bool _lastNotifyStatusSeen = false;
+  uint16_t _connId = 0;
   uint16_t _mtu = 23;
+  uint32_t _connectedAtMs = 0;
   uint32_t _lastNotifyAttemptMs = 0;
   uint32_t _notifyBackoffUntilMs = 0;
 
@@ -432,11 +453,23 @@ private:
   uint8_t _notifyWorkBuf[NOTIFY_WORK_BUFFER_SIZE];
 
   void resetRuntimeState() {
-    _connected = false;
-    _notifySubscribed = false;
-    _mtu = 23;
+    resetConnectionState();
     clearIncomingStream();
     clearQueue();
+  }
+
+  void resetConnectionState() {
+    _connected = false;
+    _notifySubscribed = false;
+    resetNotifyDescriptor();
+    _hasConnId = false;
+    _connId = 0;
+    _mtu = 23;
+    _connectedAtMs = 0;
+    _lastNotifyAttemptMs = 0;
+    _notifyBackoffUntilMs = 0;
+    _lastNotifySucceeded = false;
+    _lastNotifyStatusSeen = false;
   }
 
   void clearIncomingStream() {
@@ -533,8 +566,19 @@ private:
   }
 
   bool refreshNotifySubscribed() {
-    _notifySubscribed = (_notifyDescriptor != nullptr && _notifyDescriptor->getNotifications());
+    bool subscribed = (_notifyDescriptor != nullptr && _notifyDescriptor->getNotifications());
+    if (subscribed != _notifySubscribed) {
+      _LOGI("BLE KISS notify subscription %s", subscribed ? "enabled" : "disabled");
+    }
+    _notifySubscribed = subscribed;
     return _notifySubscribed;
+  }
+
+  void resetNotifyDescriptor() {
+    if (_notifyDescriptor != nullptr) {
+      _notifyDescriptor->setNotifications(false);
+      _notifyDescriptor->setIndications(false);
+    }
   }
 
   bool flushOneOutgoingChunk() {
@@ -620,22 +664,37 @@ private:
   void handleConnect(esp_ble_gatts_cb_param_t *param) {
     _connected = true;
     _notifySubscribed = false;
+    resetNotifyDescriptor();
     _mtu = 23;
+    _connectedAtMs = millis();
+    _lastNotifyAttemptMs = 0;
+    _notifyBackoffUntilMs = 0;
+    _lastNotifySucceeded = false;
+    _lastNotifyStatusSeen = false;
     if (_server != nullptr && param != nullptr) {
+      _connId = param->connect.conn_id;
+      _hasConnId = true;
+      _LOGI("BLE KISS client connected: conn_id=%u", _connId);
       _server->updateConnParams(
           param->connect.remote_bda,
           _config.connMinInterval,
           _config.connMaxInterval,
           _config.connLatency,
           _config.connTimeout);
+    } else {
+      _LOGI("BLE KISS client connected");
     }
   }
 
   void handleDisconnect(esp_ble_gatts_cb_param_t *param) {
-    (void)param;
-    _connected = false;
-    _notifySubscribed = false;
-    _mtu = 23;
+    if (param != nullptr) {
+      _LOGI("BLE KISS client disconnected: conn_id=%u reason=0x%02x",
+            param->disconnect.conn_id,
+            param->disconnect.reason);
+    } else {
+      _LOGI("BLE KISS client disconnected");
+    }
+    resetConnectionState();
     clearIncomingStream();
     clearQueue();
 
@@ -646,5 +705,20 @@ private:
 
   void handleMtuChange(uint16_t mtu) {
     _mtu = (mtu < 23) ? 23 : mtu;
+  }
+
+  void disconnectUnsubscribedClientIfNeeded() {
+    if (!_connected) {
+      return;
+    }
+
+    if (_config.requireNotifySubscription && _config.subscribeTimeoutMs != 0) {
+      refreshNotifySubscribed();
+      if (!_notifySubscribed && (uint32_t)(millis() - _connectedAtMs) >= _config.subscribeTimeoutMs) {
+        ++_stats.subscribeTimeoutDisconnects;
+        disconnectClient();
+        return;
+      }
+    }
   }
 };

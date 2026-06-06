@@ -18,11 +18,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 #include <BluetoothSerial.h>
-#include "BluedroidBleKissGattStream.h"
 #include <DRA818.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "debug.h"
+#include "BluedroidBleKissGattStream.h"
 #include "led.h"
 #include "protocol.h"
 #include "rxAudio.h"
@@ -575,12 +575,14 @@ void bluetoothLoop() {
 void bleKissLoop() {
   bleKissStream.loop();
   bool connected = bleKissStream.isConnected();
-  if (connected && !bleKissProtocolConnected) {
-    bleKissProtocolConnected = true;
-    protocolBleSession.connected = true;
+  bool protocolReady = bleKissStream.canSend();
+  if (protocolReady && !bleKissProtocolConnected) {
     bleKissParser.reset();
     sendHello(protocolBleSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolBleSession.flags));
-  } else if (!connected && bleKissProtocolConnected) {
+    bleKissProtocolConnected = true;
+    protocolBleSession.connected = true;
+    _LOGI("BLE KISS sent HELLO after notify subscription: firmware=%u window=%u", FIRMWARE_VER, BLE_KISS_WINDOW_SIZE);
+  } else if ((!connected || !protocolReady) && bleKissProtocolConnected) {
     bleKissProtocolConnected = false;
     protocolBleSession.connected = false;
     uint16_t oldSessionFlags = protocolBleSession.flags;
