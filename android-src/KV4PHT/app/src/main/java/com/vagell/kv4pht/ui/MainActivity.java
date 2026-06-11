@@ -578,9 +578,15 @@ public class MainActivity extends AppCompatActivity {
      * @return immutable list of required runtime permissions
      */
     private List<String> foregroundServicePermissions() {
-        return List.of(Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.POST_NOTIFICATIONS);
+        List<String> permissions = new ArrayList<>();
+        permissions.add(Manifest.permission.RECORD_AUDIO);
+        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        permissions.add(Manifest.permission.POST_NOTIFICATIONS);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN);
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+        }
+        return permissions;
     }
 
     private void startAndBindRadioAudioService() {
@@ -1545,6 +1551,10 @@ public class MainActivity extends AppCompatActivity {
                 reasons.add("• Precise location — to include GPS in APRS/beacons");
             } else if (Manifest.permission.POST_NOTIFICATIONS.equals(p) && Build.VERSION.SDK_INT >= 33) {
                 reasons.add("• Notifications — to alert you about APRS messages and status");
+            } else if (Manifest.permission.BLUETOOTH_SCAN.equals(p) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                reasons.add("• Nearby devices — to find your kv4p HT over BLE");
+            } else if (Manifest.permission.BLUETOOTH_CONNECT.equals(p) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                reasons.add("• Bluetooth connection — to communicate with your kv4p HT over BLE");
             } else if (Manifest.permission.ACCESS_BACKGROUND_LOCATION.equals(p)) {
                 reasons.add("• Background location — to send beacons with the screen off");
             }

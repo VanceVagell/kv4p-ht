@@ -174,6 +174,7 @@ public class RadioAudioService extends Service {
     @Getter
     private UsbSerialPort serialPort;
     private SerialInputOutputManager usbIoManager;
+    private RadioTransport activeTransport;
     private boolean usbPermissionRequestPending = false;
     @Getter
     private Protocol.Sender hostToEsp32;
@@ -357,6 +358,10 @@ public class RadioAudioService extends Service {
 
     public void setMode(RadioMode mode) {
         if (mode == RadioMode.FLASHING) {
+            if (serialPort == null || usbIoManager == null) {
+                Log.w(TAG, "Firmware flashing requires USB serial; current transport is not flash-capable.");
+                return;
+            }
             radioModule.stop();
             audioTrack.stop();
             usbIoManager.stop();
@@ -583,19 +588,7 @@ public class RadioAudioService extends Service {
             beaconScheduler.shutdownNow();
         }
 
-        // Clean up USB resources to prevent race conditions on restart
-        if (usbIoManager != null) {
-            usbIoManager.stop();
-            usbIoManager = null;
-        }
-        if (serialPort != null) {
-            try {
-                serialPort.close();
-            } catch (IOException e) {
-                // Ignore, closing anyway.
-            }
-            serialPort = null;
-        }
+        closePortAndReset();
 
         if (audioTrack != null) {
             audioTrack.stop();
@@ -888,8 +881,8 @@ public class RadioAudioService extends Service {
 
     private boolean isConnectionReady() {
         return hostToEsp32 != null
-            && serialPort != null
-            && usbIoManager != null;
+            && activeTransport != null
+            && activeTransport.isReady();
     }
 
     private void closePortAndReset() {
@@ -897,6 +890,20 @@ public class RadioAudioService extends Service {
         cancelHelloTimeout();
         radioModule.detachSender();
         hostToEsp32 = null;
+        RadioTransport transport = activeTransport;
+        activeTransport = null;
+        if (transport != null) {
+            try {
+                transport.close();
+            } catch (Exception ignored) {
+                // Best-effort cleanup during teardown.
+            }
+        } else {
+            closeUsbResources();
+        }
+    }
+
+    private void closeUsbResources() {
         if (usbIoManager != null) {
             try {
                 usbIoManager.stop();
@@ -934,8 +941,8 @@ public class RadioAudioService extends Service {
             setupSerialConnection();
             return;
         }
-        Log.d(TAG, connectLog("attemptUsbConnect(): no ESP32 detected"));
-        radioMissing();
+        Log.d(TAG, connectLog("attemptUsbConnect(): no ESP32 detected; trying BLE KISS"));
+        attemptBleConnect();
     }
 
     private boolean isESP32Device(UsbDevice device) {
@@ -1010,7 +1017,7 @@ public class RadioAudioService extends Service {
         usbIoManager = new SerialInputOutputManager(serialPort, new SerialInputOutputManager.Listener() {
             @Override
             public void onNewData(byte[] data) {
-                esp32DataStreamParser.processBytes(data);
+                processRadioBytes(data);
             }
             @Override
             public void onRunError(Exception e) {
@@ -1026,10 +1033,76 @@ public class RadioAudioService extends Service {
         usbIoManager.setReadBufferSize(1024); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
         usbIoManager.setReadBufferCount(16 * 2);
         usbIoManager.start();
-        hostToEsp32 = new Protocol.Sender(usbIoManager);
+        activeTransport = new RadioTransport() {
+            @Override
+            public void close() {
+                closeUsbResources();
+            }
+
+            @Override
+            public boolean isReady() {
+                return serialPort != null && usbIoManager != null;
+            }
+
+            @Override
+            public void writeAsync(byte[] bytes) {
+                usbIoManager.writeAsync(bytes);
+            }
+
+            @Override
+            public String getName() {
+                return "USB serial";
+            }
+        };
+        hostToEsp32 = new Protocol.Sender(activeTransport::writeAsync);
         radioModule.attachSender(hostToEsp32);
         Log.i(TAG, connectLog("setupSerialConnection(): serial transport connected; starting handshake"));
         startProtocolHandshake();
+    }
+
+    private void attemptBleConnect() {
+        final BleKissRadioTransport[] transportRef = new BleKissRadioTransport[1];
+        BleKissRadioTransport transport = new BleKissRadioTransport(this, handler, new BleKissRadioTransport.Listener() {
+            @Override
+            public void onBytes(byte[] bytes) {
+                processRadioBytes(bytes);
+            }
+
+            @Override
+            public void onConnected() {
+                if (activeTransport != transportRef[0]) {
+                    return;
+                }
+                callbacks.hideSnackBar();
+                hostToEsp32 = new Protocol.Sender(transportRef[0]::writeAsync, false);
+                radioModule.attachSender(hostToEsp32);
+                Log.i(TAG, connectLog("BLE KISS transport connected; starting handshake"));
+                startProtocolHandshake();
+            }
+
+            @Override
+            public void onDisconnected() {
+                if (activeTransport == transportRef[0]) {
+                    Log.i(TAG, connectLog("BLE KISS transport disconnected"));
+                    radioMissing();
+                }
+            }
+
+            @Override
+            public void onError(Exception error) {
+                if (activeTransport == transportRef[0]) {
+                    Log.w(TAG, connectLog("BLE KISS transport error"), error);
+                    radioMissing();
+                }
+            }
+        });
+        transportRef[0] = transport;
+        activeTransport = transport;
+        transport.connect();
+    }
+
+    private synchronized void processRadioBytes(byte[] data) {
+        esp32DataStreamParser.processBytes(data);
     }
 
     public void radioConnected() {
@@ -1160,6 +1233,8 @@ public class RadioAudioService extends Service {
     private String connectionStateSummary() {
         return "mode=" + mode
             + ",hostToEsp32=" + (hostToEsp32 != null)
+            + ",activeTransport=" + (activeTransport != null ? activeTransport.getName() : "null")
+            + ",activeTransportReady=" + (activeTransport != null && activeTransport.isReady())
             + ",serialPort=" + (serialPort != null)
             + ",usbIoManager=" + (usbIoManager != null)
             + ",usbPermissionPending=" + usbPermissionRequestPending
