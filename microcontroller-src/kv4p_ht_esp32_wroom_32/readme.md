@@ -24,7 +24,7 @@ The KV4P-HT protocol defines the communication interface between the microcontro
   * Parameter length field upgraded from 1 byte to 2 bytes (`uint16_t`).
   * Added `COMMAND_WINDOW_UPDATE` **(ESP32 → Android)**.
   * Version/status payload includes `windowSize`, **`rfModuleType`**, and **`features`**.
-  * Audio streams are now Opus encoded.
+  * Historical live voice audio streams used Opus on command `0x07`.
   * Window-based flow control implemented for all incoming commands, inspired by HTTP/2.
 
 ## Packet Structure
