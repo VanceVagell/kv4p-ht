@@ -453,20 +453,20 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void moduleStateChanged(boolean txActive, boolean squelchOpen) {
-                    runOnUiThread(() -> showModuleState(txActive, squelchOpen));
+                public void moduleStateChanged(boolean txActive, boolean squelched) {
+                    runOnUiThread(() -> showModuleState(txActive, squelched));
                 }
 
                 /**
                  * Shows firmware-reported TX and squelch state even when Android did not
                  * initiate PTT, for example while firmware is transmitting an APRS packet.
                  */
-                private void showModuleState(boolean txActive, boolean squelchOpen) {
+                private void showModuleState(boolean txActive, boolean squelched) {
                     TextView moduleStateLabel = findViewById(R.id.moduleStateLabel);
                     if (txActive) {
                         moduleStateLabel.setText(R.string.module_state_tx);
-                    } else if (squelchOpen) {
-                        moduleStateLabel.setText(R.string.module_state_squelch_open);
+                    } else if (squelched) {
+                        moduleStateLabel.setText(R.string.module_state_squelched);
                     } else {
                         moduleStateLabel.setText("");
                     }

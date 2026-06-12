@@ -131,7 +131,7 @@
     <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>
     <string name="sticky_ptt" translatable="false">Sticky PTT</string>
-    <string name="module_state_squelch_open">SQL</string>
+    <string name="module_state_squelched">SQL</string>
     <string name="module_state_tx">TX</string>
     <string name="find_repeaters_menu_item">Find nearby repeaters</string>
     <string name="flash_firmware_menu_item">Flash firmware</string>
