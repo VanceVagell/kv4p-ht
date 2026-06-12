@@ -480,6 +480,9 @@ public class MainActivity extends AppCompatActivity {
                     for (int sMeterId : sMeterIds) {
                         findViewById(sMeterId).setBackgroundColor(sMeterColor);
                     }
+                    if (txActive) {
+                        updateSMeter(9);
+                    }
                 }
 
                 @Override
