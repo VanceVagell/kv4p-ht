@@ -238,9 +238,27 @@ public final class Protocol {
         }
     }
 
-    public static int calculateSMeter9Value(int sMeter255Value) {
-        double result = 9.73 * Math.log(0.0297 * sMeter255Value) - 1.88;
-        return Math.max(1, Math.min(9, (int) Math.round(result)));
+    private static final float DBM_PER_RSSI = 1.2f;
+    private static final float RSSI_DBM_OFFSET = -160.8f;
+    private static final float S1_DBM = -141.0f;
+    private static final float S9_DBM = -93.0f;
+    private static final float RX_OVERLOAD_DBM = -30.0f;
+
+    public static int calculateSMeter16Value(int rssi) {
+        float dbm = rssi * DBM_PER_RSSI + RSSI_DBM_OFFSET;
+        if (dbm > RX_OVERLOAD_DBM) {
+            return 16;
+        }
+        if (dbm < S1_DBM) {
+            return 0;
+        }
+        if (dbm <= S9_DBM) {
+            int s = 1 + (int) Math.floor((dbm - S1_DBM) / 6.0f);
+            return Math.max(1, Math.min(9, s));
+        }
+        int over = (int) Math.floor((dbm - S9_DBM) / 10.0f);
+        int bar = 9 + over;
+        return Math.max(9, Math.min(15, bar));
     }
 
     @Data

@@ -1344,14 +1344,15 @@ public class RadioAudioService extends Service {
     }
 
     public void sendAudioToESP32(float[] samples, boolean dataMode) {
-        if (hostToEsp32 == null) {
+        Protocol.Sender sender = hostToEsp32;
+        if (sender == null) {
             return; // If connection is lost, just drop the audio frame.
         }
         if (!dataMode) {
             samples = applyMicGain(samples);
         }
         int encodedLength = opusEncoder.encode(samples, txAudioFrame);
-        hostToEsp32.txAudio(txAudioFrame, encodedLength);
+        sender.txAudio(txAudioFrame, encodedLength);
     }
 
     public boolean isRadioConnected() {
@@ -1443,12 +1444,13 @@ public class RadioAudioService extends Service {
 
     private void handleDeviceState(Protocol.DeviceState state) {
         radioModule.updateDeviceState(state);
-        callbacks.moduleStateChanged(radioModule.isDeviceTxActive(), radioModule.isSquelched());
+        boolean deviceTxActive = radioModule.isDeviceTxActive();
+        callbacks.moduleStateChanged(deviceTxActive, radioModule.isSquelched());
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
             updateTxAllowed(radioModule.getTxFrequency());
         }
-        if (getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
-            callbacks.sMeterUpdate(radioModule.getSMeter9Value());
+        if (deviceTxActive || getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) {
+            callbacks.sMeterUpdate(radioModule.getSMeterBarValue());
         }
         checkScanDueToSquelch();
         if (radioModule.didPhysPttChange()) {
@@ -1801,12 +1803,13 @@ public class RadioAudioService extends Service {
             Log.e(TAG, "Tried to send an AX.25 packet when radio was not in RX mode, did not send.");
             return;
         }
-        if (hostToEsp32 == null) {
+        Protocol.Sender sender = hostToEsp32;
+        if (sender == null) {
             Log.e(TAG, "Tried to send AX.25 packet with no ESP32 connection.");
             return;
         }
         Log.d(TAG, "Sending AX25 packet: " + ax25Packet);
-        hostToEsp32.txAx25(ax25Packet.bytesWithoutCRC());
+        sender.txAx25(ax25Packet.bytesWithoutCRC());
         Log.i(TAG, "Send AX25 packet: " + ax25Packet);
     }
 

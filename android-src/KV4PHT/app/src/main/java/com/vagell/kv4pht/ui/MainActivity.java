@@ -480,9 +480,6 @@ public class MainActivity extends AppCompatActivity {
                     for (int sMeterId : sMeterIds) {
                         findViewById(sMeterId).setBackgroundColor(sMeterColor);
                     }
-                    if (txActive) {
-                        updateSMeter(9);
-                    }
                 }
 
                 @Override
@@ -1267,7 +1264,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateSMeter(int value) {
-        if (value < 0 || value > 9) {
+        if (value < 0 || value > 16) {
             Log.d("DEBUG", "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
             return;
         }
@@ -1284,9 +1281,16 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.sMeter7).setAlpha(value > 6 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
         findViewById(R.id.sMeter8).setAlpha(value > 7 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
         findViewById(R.id.sMeter9).setAlpha(value > 8 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        findViewById(R.id.sMeter10).setAlpha(value > 9 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        findViewById(R.id.sMeter11).setAlpha(value > 10 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        findViewById(R.id.sMeter12).setAlpha(value > 11 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        findViewById(R.id.sMeter13).setAlpha(value > 12 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        findViewById(R.id.sMeter14).setAlpha(value > 13 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        findViewById(R.id.sMeter15).setAlpha(value > 14 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        findViewById(R.id.sMeter16).setAlpha(value > 15 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
 
         View sMeterView = findViewById(R.id.sMeter);
-        sMeterView.setContentDescription("S meter " + value + " of 9");
+        sMeterView.setContentDescription("S meter " + value + " of 16");
     }
 
     private void hideKeyboard() {

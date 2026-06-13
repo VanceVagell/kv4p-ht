@@ -29,7 +29,8 @@ bool txStreamConfigured = false;
 I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
 OpusAudioDecoder txDec;
-EncodedAudioStream txOut(&out, &txDec); 
+VolumeMeter txVolumeMeter(out);
+EncodedAudioStream txOut(&txVolumeMeter, &txDec); 
 
 // Tx runaway detection stuff
 uint32_t txStartTime = -1;
@@ -37,6 +38,29 @@ const uint16_t RUNAWAY_TX_SEC = 200;
 
 float txAfskBlock[TX_AFSK_BLOCK_SAMPLES];
 int16_t txAfskPcm[TX_AFSK_BLOCK_SAMPLES];
+
+const float TX_AUDIO_LEVEL_FULL_SCALE_RSSI = 90.0f;
+const float TX_AUDIO_DB_PER_RSSI = 1.2f;
+const float TX_AUDIO_LEVEL_RELEASE = 0.65f;
+
+static float peakHoldTxAudioVolumeRatio(float measuredRatio) {
+  static float heldRatio = 0.0f;
+  if (measuredRatio > heldRatio) {
+    heldRatio = measuredRatio;
+    return measuredRatio;
+  }
+  heldRatio = heldRatio * TX_AUDIO_LEVEL_RELEASE + measuredRatio * (1.0f - TX_AUDIO_LEVEL_RELEASE);
+  return heldRatio;
+}
+
+static void updateTxAudioLevel(float measuredRatio) {
+  float heldRatio = peakHoldTxAudioVolumeRatio(measuredRatio);
+  if (heldRatio <= 0.0f) {
+    txAudioLevel = 0.0f;
+    return;
+  }
+  txAudioLevel = constrain(TX_AUDIO_LEVEL_FULL_SCALE_RSSI + (20.0f * log10f(heldRatio) / TX_AUDIO_DB_PER_RSSI), 0.0f, 255.0f);
+}
 
 static void onAfskTxSamples(const float *samples, size_t count) {
   if (!samples || count == 0 || !txStreamConfigured) {
@@ -66,6 +90,7 @@ void initI2STx() {
   config.auto_clear = false;
   config.signal_type = PDM;
   out.begin(config);
+  txVolumeMeter.begin(txInfo);
   // configure OPUS additinal parameters
   txDec.setAudioInfo(txInfo);
   auto &decoderConfig = txDec.config();
@@ -74,6 +99,9 @@ void initI2STx() {
   // Open output
   txOut.begin(txInfo);
   i2s_zero_dma_buffer(I2S_NUM_0);
+  // Start TX meter at full scale to match radio-style TX indication.
+  // Subsequent audio frames update this to the measured TX audio level.
+  updateTxAudioLevel(1.0f);
   txStreamConfigured = true;
 }
 
@@ -95,6 +123,7 @@ void processTxAudio(uint8_t *src, size_t len) {
   while (totalWritten < len) {
       size_t written = txOut.write(src + totalWritten, len - totalWritten);
       totalWritten += written;
+      updateTxAudioLevel(txVolumeMeter.volumeRatio());
       esp_task_wdt_reset();
   }
 }

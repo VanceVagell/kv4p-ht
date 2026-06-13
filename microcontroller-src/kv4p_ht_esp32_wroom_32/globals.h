@@ -77,6 +77,7 @@ Mode mode = MODE_STOPPED;
 
 // Current SQ status
 bool squelched = false;
+float txAudioLevel = 0.0f;
 
 // Forward declarations
 void setMode(Mode newMode);

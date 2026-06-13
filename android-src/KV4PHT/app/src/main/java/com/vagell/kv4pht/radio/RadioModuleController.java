@@ -309,8 +309,8 @@ public class RadioModuleController {
         return lastDeviceState != null ? lastDeviceState.getCtcssRx() & 0xFF : 0;
     }
 
-    synchronized int getSMeter9Value() {
-        return Protocol.calculateSMeter9Value(lastDeviceState != null ? lastDeviceState.getLatestRssi() : 0);
+    synchronized int getSMeterBarValue() {
+        return Protocol.calculateSMeter16Value(lastDeviceState != null ? lastDeviceState.getLatestRssi() : 0);
     }
 
     synchronized boolean isPhysPttDown() {
