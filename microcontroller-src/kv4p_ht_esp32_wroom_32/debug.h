@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2025 Vance Vagell
+Copyright (C) 2026 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -154,6 +154,7 @@ void printEnvironment() {
   _LOGI("PSRAM size: %d", ESP.getPsramSize());
   _LOGI("FLASH size: %d", ESP.getFlashChipSize());
   _LOGI("EFUSE mac: 0x%llx", ESP.getEfuseMac());
+  _LOGI("BT Device Name: kv4p-%06X", bluetoothDeviceId());
   _LOGI("---");
 #endif  
 }

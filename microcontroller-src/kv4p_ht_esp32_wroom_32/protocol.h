@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2025 Vance Vagell
+Copyright (C) 2026 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ static constexpr uint8_t KV4P_VENDOR_PREFIX[] = {'K', 'V', '4', 'P'};
 // Incoming commands (Android -> ESP32)
 enum RcvCommand {
   COMMAND_RCV_UNKNOWN    = 0x00,
-  COMMAND_HOST_TX_AUDIO  = 0x07, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
+  COMMAND_HOST_TX_AUDIO  = 0x0C, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
   COMMAND_HOST_DESIRED_STATE = 0x0D, // [COMMAND_HOST_DESIRED_STATE(HostDesiredState)]
 };
 
@@ -54,7 +54,7 @@ enum SndCommand {
   COMMAND_DEBUG_DEBUG    = 0x04, // [COMMAND_DEBUG_DEBUG(char[])]
   COMMAND_DEBUG_TRACE    = 0x05, // [COMMAND_DEBUG_TRACE(char[])]
   COMMAND_HELLO          = 0x06, // [COMMAND_HELLO(Hello)]
-  COMMAND_RX_AUDIO       = 0x07, // [COMMAND_RX_AUDIO(int8_t[])]
+  COMMAND_RX_AUDIO       = 0x0C, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_WINDOW_UPDATE  = 0x09,
   COMMAND_DEVICE_STATE   = 0x0B, // [COMMAND_DEVICE_STATE(DeviceState)]
 };
@@ -98,6 +98,53 @@ REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define DEVICE_STATE_PHYS_PTT_DOWN      (1 << 8)
 #define DEVICE_STATE_TX_ACTIVE          (1 << 9)
 #define DEVICE_STATE_SQUELCHED          (1 << 10)
+
+static constexpr uint16_t HOST_STATE_SESSION_FLAG_MASK =
+  HOST_STATE_RX_AUDIO_OPEN
+  | HOST_STATE_ENABLE_STATUS_REPORTS;
+
+static constexpr uint16_t HOST_STATE_GLOBAL_FLAG_MASK =
+  HOST_STATE_RADIO_CONFIG_VALID
+  | HOST_STATE_PTT_REQUESTED
+  | HOST_STATE_HIGH_POWER
+  | HOST_STATE_RSSI_ENABLED
+  | HOST_STATE_FILTER_PRE
+  | HOST_STATE_FILTER_HIGH
+  | HOST_STATE_FILTER_LOW
+  | HOST_STATE_TX_ALLOWED;
+
+struct ProtocolSession {
+  Stream *stream;
+  bool connected;
+  uint16_t flags;
+  size_t windowSize;
+};
+
+bool protocolSessionConnected(const ProtocolSession &session) {
+  return session.stream != nullptr && session.connected;
+}
+
+ProtocolSession protocolUsbSession = {
+  .stream = &Serial,
+  .connected = true,
+  .flags = 0,
+  .windowSize = 0,
+};
+ProtocolSession protocolBtSession = {
+  .stream = nullptr,
+  .connected = false,
+  .flags = 0,
+  .windowSize = 0,
+};
+
+bool protocolHasBtSession() {
+  return protocolSessionConnected(protocolBtSession);
+}
+
+bool protocolAnySessionFlag(uint16_t flag) {
+  return (protocolSessionConnected(protocolUsbSession) && (protocolUsbSession.flags & flag))
+    || (protocolHasBtSession() && (protocolBtSession.flags & flag));
+}
 
 enum DeviceMode : uint8_t {
   DEVICE_MODE_TX = 0,
@@ -229,6 +276,9 @@ void inline sendKissDataFrame(Stream &out, const uint8_t *ax25, size_t len) {
 
 void inline sendKissDataFrame(const uint8_t *ax25, size_t len) {
   sendKissDataFrame(Serial, ax25, len);
+  if (protocolHasBtSession()) {
+    sendKissDataFrame(*protocolBtSession.stream, ax25, len);
+  }
 }
 
 void sendKv4pVendorFrame(Stream &out, uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
@@ -253,9 +303,12 @@ void sendKv4pVendorFrame(Stream &out, uint8_t kv4pCommand, const uint8_t *payloa
 
 void inline sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
   sendKv4pVendorFrame(Serial, kv4pCommand, payload, len);
+  if (protocolHasBtSession()) {
+    sendKv4pVendorFrame(*protocolBtSession.stream, kv4pCommand, payload, len);
+  }
 }
 
-void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
+void inline sendHello(Stream &out, uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
   Hello params = {
     .version = {
       .ver = ver,
@@ -268,47 +321,71 @@ void inline sendHello(uint16_t ver, char radioModuleStatus, size_t windowSize, R
     },
     .deviceState = deviceState,
   };
-  sendKv4pVendorFrame(COMMAND_HELLO, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(out, COMMAND_HELLO, (uint8_t*) &params, sizeof(params));
+}
+
+void inline sendHello(ProtocolSession &session, uint16_t ver, char radioModuleStatus, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {
+  sendHello(*session.stream, ver, radioModuleStatus, session.windowSize, rfModuleType, minRadioFreq, maxRadioFreq, features, deviceState);
+}
+
+void inline sendDeviceState(Stream &out, const DeviceState &state) {
+  sendKv4pVendorFrame(out, COMMAND_DEVICE_STATE, (const uint8_t*) &state, sizeof(state));
 }
 
 void inline sendDeviceState(const DeviceState &state) {
-  sendKv4pVendorFrame(COMMAND_DEVICE_STATE, (const uint8_t*) &state, sizeof(state));
+  sendDeviceState(Serial, state);
+  if (protocolHasBtSession()) {
+    sendDeviceState(*protocolBtSession.stream, state);
+  }
 }
 
 void inline sendAudio(const uint8_t *data, size_t len) {
-  sendKv4pVendorFrame(COMMAND_RX_AUDIO, data, len);
+  if (protocolSessionConnected(protocolUsbSession) && (protocolUsbSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
+    sendKv4pVendorFrame(*protocolUsbSession.stream, COMMAND_RX_AUDIO, data, len);
+  }
+  if (protocolHasBtSession() && (protocolBtSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
+    sendKv4pVendorFrame(*protocolBtSession.stream, COMMAND_RX_AUDIO, data, len);
+  }
 }
 
 void inline sendAx25Packet(const uint8_t *data, size_t len) {
   sendKissDataFrame(data, len);
 }
 
-void inline sendWindowAck(size_t size) {
+void inline sendWindowAck(Stream &out, size_t size) {
   WindowUpdate params = {
     .size = (uint32_t) size,
   };
-  sendKv4pVendorFrame(COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
+  sendKv4pVendorFrame(out, COMMAND_WINDOW_UPDATE, (uint8_t*) &params, sizeof(params));
 }
 
-typedef void (*CommandCallback)(RcvCommand command, uint8_t *params, size_t param_len);
+void inline sendWindowAck(size_t size) {
+  sendWindowAck(Serial, size);
+}
+
+typedef void (*CommandCallback)(ProtocolSession &session, RcvCommand command, uint8_t *params, size_t param_len);
 typedef void (*Ax25Callback)(uint8_t *ax25, size_t ax25_len);
 
 class KissParser {
 public:
-  KissParser(Stream &serial, CommandCallback callback, Ax25Callback ax25Callback)
-    : _serial(serial), _callback(callback), _ax25Callback(ax25Callback), _frameLen(0), _encodedFrameLen(0),
+  KissParser(ProtocolSession &session, CommandCallback callback, Ax25Callback ax25Callback)
+    : _session(session), _callback(callback), _ax25Callback(ax25Callback), _frameLen(0), _encodedFrameLen(0),
       _escape(false), _dropFrame(false), _inFrame(false) {}
 
   void loop() {
-    while (_serial.available() > 0) {
-      uint8_t b = _serial.read();
+    if (_session.stream == nullptr) {
+      return;
+    }
+    Stream &serial = *_session.stream;
+    while (serial.available() > 0) {
+      uint8_t b = serial.read();
       if (processByte(b)) {
         return;
       }
     }
   }
 private:
-  Stream &_serial;
+  ProtocolSession &_session;
   CommandCallback _callback;
   Ax25Callback _ax25Callback;
   uint8_t _frame[KISS_MAX_FRAME_SIZE];
@@ -323,7 +400,9 @@ private:
       _encodedFrameLen++;
       if (_frameLen > 0 && !_dropFrame) {
         processFrame();
-        sendWindowAck(_encodedFrameLen);
+        if (_session.stream != nullptr) {
+          sendWindowAck(*_session.stream, _encodedFrameLen);
+        }
         resetParser();
         _inFrame = true;
         _encodedFrameLen = 1;
@@ -396,7 +475,7 @@ private:
       return;
     }
     RcvCommand command = (RcvCommand)payload[5];
-    _callback(command, payload + KV4P_VENDOR_HEADER_LEN, payloadLen - KV4P_VENDOR_HEADER_LEN);
+    _callback(_session, command, payload + KV4P_VENDOR_HEADER_LEN, payloadLen - KV4P_VENDOR_HEADER_LEN);
   }
 
   void resetParser() {
@@ -406,16 +485,20 @@ private:
     _dropFrame = false;
     _inFrame = false;
   }
+public:
+  void reset() {
+    resetParser();
+  }
 };
 
 // Forward declaration of handleCommands function
-// This function processes incoming commands, taking a command type, parameters, and their length.
-void handleCommands(RcvCommand command, uint8_t *params, size_t param_len);
+// This function processes incoming commands, taking a session, command type, parameters, and their length.
+void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *params, size_t param_len);
 void handleAx25Data(uint8_t *ax25, size_t ax25_len);
 
 // Create a KISS parser and associate it with the existing command handler.
 // DATA frames dispatch as AX.25 bytes; KV4P vendor frames dispatch by kv4pCommand.
-KissParser parser(Serial, &handleCommands, &handleAx25Data);
+KissParser parser(protocolUsbSession, &handleCommands, &handleAx25Data);
 
 void inline protocolLoop() {
   parser.loop();

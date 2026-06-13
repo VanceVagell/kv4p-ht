@@ -108,6 +108,12 @@ public class ProtocolKissTest {
     }
 
     @Test
+    public void audioCommandIdsMatchFirmware() {
+        assertEquals(0x0C, Protocol.SndCommand.COMMAND_HOST_TX_AUDIO.getValue());
+        assertEquals(0x0C, Protocol.RcvCommand.COMMAND_RX_AUDIO.getValue());
+    }
+
+    @Test
     public void encoderEscapesFendAndFesc() {
         byte[] frame = buildKissFrame(
             Protocol.KISS_CMD_DATA,
