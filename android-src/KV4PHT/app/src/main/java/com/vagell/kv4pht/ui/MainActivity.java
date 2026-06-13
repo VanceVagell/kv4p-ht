@@ -455,20 +455,24 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void moduleTxStateChanged(boolean txActive) {
-                    runOnUiThread(() -> showModuleTxState(txActive));
+                public void moduleStateChanged(boolean txActive, boolean squelched) {
+                    runOnUiThread(() -> showModuleState(txActive, squelched));
                 }
 
                 /**
-                 * Shows firmware-reported TX activity even when Android did not initiate PTT,
-                 * for example while firmware is transmitting an APRS packet.
+                 * Shows firmware-reported TX and squelch state even when Android did not
+                 * initiate PTT, for example while firmware is transmitting an APRS packet.
                  */
-                private void showModuleTxState(boolean txActive) {
-                    int bandColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.band);
+                private void showModuleState(boolean txActive, boolean squelched) {
+                    TextView moduleStateLabel = findViewById(R.id.moduleStateLabel);
+                    if (txActive) {
+                        moduleStateLabel.setText(R.string.module_state_tx);
+                    } else if (squelched) {
+                        moduleStateLabel.setText(R.string.module_state_squelched);
+                    } else {
+                        moduleStateLabel.setText("");
+                    }
                     int sMeterColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.primary);
-
-                    TextView activeBand = findViewById(R.id.activeBand);
-                    activeBand.setTextColor(bandColor);
 
                     int[] sMeterIds = {
                         R.id.sMeter1, R.id.sMeter2, R.id.sMeter3,
@@ -477,6 +481,9 @@ public class MainActivity extends AppCompatActivity {
                     };
                     for (int sMeterId : sMeterIds) {
                         findViewById(sMeterId).setBackgroundColor(sMeterColor);
+                    }
+                    if (txActive) {
+                        updateSMeter(9);
                     }
                 }
 
