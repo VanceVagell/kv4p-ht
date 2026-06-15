@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2025 Vance Vagell
+Copyright (C) 2026 Vance Vagell
 
 Bluedroid-backed BLE KISS GATT Stream transport.
 BLE KISS API spec:
