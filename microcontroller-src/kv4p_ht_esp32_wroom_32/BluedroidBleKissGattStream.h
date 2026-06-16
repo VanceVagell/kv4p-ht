@@ -56,7 +56,7 @@ public:
   using Print::write;
 
   struct Config {
-    const char *deviceName = "BLE KISS TNC";
+    const char *deviceName = nullptr;
     uint16_t preferredMtu = 185;
     const char *serviceUuid = blekiss::BLE_KISS_SERVICE_UUID;
     const char *txCharUuid = blekiss::BLE_KISS_TX_CHAR_UUID;
@@ -67,6 +67,7 @@ public:
     uint8_t maxNotifyChunksPerLoop = 1;
     uint16_t minNotifyIntervalMs = 12;
     uint16_t notifyFailureBackoffMs = 100;
+    uint16_t writeQueueWaitMs = 0;
     uint32_t subscribeTimeoutMs = 10000;
     uint16_t connMinInterval = 6;
     uint16_t connMaxInterval = 12;
@@ -106,7 +107,7 @@ public:
     resetRuntimeState();
     instanceSlot() = this;
 
-    BLEDevice::init(_config.deviceName);
+    BLEDevice::init(_config.deviceName != nullptr ? _config.deviceName : "");
     if (!BLEDevice::getInitialized()) {
       instanceSlot() = nullptr;
       return false;
@@ -283,6 +284,26 @@ public:
     }
 
     const size_t chunksNeeded = (len + OUTGOING_CHUNK_SIZE - 1) / OUTGOING_CHUNK_SIZE;
+    if (chunksNeeded > OUTGOING_QUEUE_DEPTH) {
+      ++_stats.txQueueFullDrops;
+      return false;
+    }
+
+    const uint32_t waitStartMs = millis();
+    while (outgoingQueueFree() < chunksNeeded) {
+      if (_config.writeQueueWaitMs == 0 || (uint32_t)(millis() - waitStartMs) >= _config.writeQueueWaitMs) {
+        ++_stats.txQueueFullDrops;
+        return false;
+      }
+
+      size_t drained = drainOutgoing(_config.maxNotifyChunksPerLoop);
+      if (drained == 0) {
+        delay(1);
+      } else {
+        yield();
+      }
+    }
+
     portENTER_CRITICAL(&_queueMux);
     if (chunksNeeded > (OUTGOING_QUEUE_DEPTH - _queueCount)) {
       ++_stats.txQueueFullDrops;

@@ -50,6 +50,7 @@ Kv4pBleKissStream::Config bleKissConfig() {
   cfg.maxNotifyChunksPerLoop = 4;
   cfg.minNotifyIntervalMs = 0;
   cfg.notifyFailureBackoffMs = 25;
+  cfg.writeQueueWaitMs = 15;
   cfg.txPower = ESP_PWR_LVL_P7;
   return cfg;
 }
