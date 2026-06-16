@@ -434,7 +434,7 @@ void setup() {
   if (radioModuleStatus == RADIO_MODULE_FOUND) {
     reconcileDesiredState(false);
   }
-  sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState());
+  sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolUsbSession.flags));
   _LOGI("Setup is finished");
 }
 
@@ -477,6 +477,8 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
         uint16_t oldSessionFlags = session.flags;
         session.flags = incomingState.flags & HOST_STATE_SESSION_FLAG_MASK;
         bool sessionFlagsChanged = oldSessionFlags != session.flags;
+        // Desired-state sequence is global across transports; hosts must sync from
+        // DeviceState.appliedSequence before sending their next update.
         bool globalStateChanged = incomingState.sequence > desiredState.sequence;
         if (globalStateChanged) {
           desiredState = incomingState;
