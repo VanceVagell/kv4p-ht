@@ -136,14 +136,25 @@ ProtocolSession protocolBtSession = {
   .flags = 0,
   .windowSize = 0,
 };
+ProtocolSession protocolBleSession = {
+  .stream = nullptr,
+  .connected = false,
+  .flags = 0,
+  .windowSize = 0,
+};
 
 bool protocolHasBtSession() {
   return protocolSessionConnected(protocolBtSession);
 }
 
+bool protocolHasBleSession() {
+  return protocolSessionConnected(protocolBleSession);
+}
+
 bool protocolAnySessionFlag(uint16_t flag) {
   return (protocolSessionConnected(protocolUsbSession) && (protocolUsbSession.flags & flag))
-    || (protocolHasBtSession() && (protocolBtSession.flags & flag));
+    || (protocolHasBtSession() && (protocolBtSession.flags & flag))
+    || (protocolHasBleSession() && (protocolBleSession.flags & flag));
 }
 
 enum DeviceMode : uint8_t {
@@ -279,6 +290,9 @@ void inline sendKissDataFrame(const uint8_t *ax25, size_t len) {
   if (protocolHasBtSession()) {
     sendKissDataFrame(*protocolBtSession.stream, ax25, len);
   }
+  if (protocolHasBleSession()) {
+    sendKissDataFrame(*protocolBleSession.stream, ax25, len);
+  }
 }
 
 void sendKv4pVendorFrame(Stream &out, uint8_t kv4pCommand, const uint8_t *payload, size_t len) {
@@ -305,6 +319,9 @@ void inline sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, siz
   sendKv4pVendorFrame(Serial, kv4pCommand, payload, len);
   if (protocolHasBtSession()) {
     sendKv4pVendorFrame(*protocolBtSession.stream, kv4pCommand, payload, len);
+  }
+  if (protocolHasBleSession()) {
+    sendKv4pVendorFrame(*protocolBleSession.stream, kv4pCommand, payload, len);
   }
 }
 
@@ -337,6 +354,9 @@ void inline sendDeviceState(const DeviceState &state) {
   if (protocolHasBtSession()) {
     sendDeviceState(*protocolBtSession.stream, state);
   }
+  if (protocolHasBleSession()) {
+    sendDeviceState(*protocolBleSession.stream, state);
+  }
 }
 
 void inline sendAudio(const uint8_t *data, size_t len) {
@@ -345,6 +365,9 @@ void inline sendAudio(const uint8_t *data, size_t len) {
   }
   if (protocolHasBtSession() && (protocolBtSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
     sendKv4pVendorFrame(*protocolBtSession.stream, COMMAND_RX_AUDIO, data, len);
+  }
+  if (protocolHasBleSession() && (protocolBleSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
+    sendKv4pVendorFrame(*protocolBleSession.stream, COMMAND_RX_AUDIO, data, len);
   }
 }
 
