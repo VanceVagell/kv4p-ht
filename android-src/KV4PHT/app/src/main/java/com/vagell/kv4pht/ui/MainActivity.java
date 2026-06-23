@@ -1998,6 +1998,7 @@ public class MainActivity extends AppCompatActivity {
             intent.putExtra(SettingsActivity.EXTRA_FILTER_PRE, radioAudioService.getRadioModule().isPreEmphasisEnabled());
             intent.putExtra(SettingsActivity.EXTRA_FILTER_HIGH, radioAudioService.getRadioModule().isHighpassEnabled());
             intent.putExtra(SettingsActivity.EXTRA_FILTER_LOW, radioAudioService.getRadioModule().isLowpassEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_SOFT_SQUELCH_ENABLED, radioAudioService.getRadioModule().isSoftSquelchEnabled());
         }
         startActivityForResult(intent, REQUEST_SETTINGS);
     }
@@ -2011,6 +2012,9 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.getRadioModule().setHighPower(data.getBooleanExtra(SettingsActivity.EXTRA_RF_POWER_HIGH, true));
             radioAudioService.getRadioModule().setBandwidth(data.getStringExtra(SettingsActivity.EXTRA_BANDWIDTH));
             radioAudioService.getRadioModule().setSquelch(data.getIntExtra(SettingsActivity.EXTRA_SQUELCH, radioAudioService.getRadioModule().getDesiredSquelch()));
+            radioAudioService.getRadioModule().setSoftSquelchEnabled(data.getBooleanExtra(
+                SettingsActivity.EXTRA_SOFT_SQUELCH_ENABLED,
+                radioAudioService.getRadioModule().isSoftSquelchEnabled()));
             radioAudioService.getRadioModule().setFilters(
                 data.getBooleanExtra(SettingsActivity.EXTRA_FILTER_PRE, false),
                 data.getBooleanExtra(SettingsActivity.EXTRA_FILTER_HIGH, false),

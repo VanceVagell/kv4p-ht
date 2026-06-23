@@ -92,6 +92,9 @@ Mode mode = MODE_STOPPED;
 
 // Current SQ status
 bool squelched = false;
+bool hardwareSquelched = false;
+bool softSquelchEnabled = true;
+uint8_t softSquelchDeadbandLevel = 0;
 
 // Forward declarations
 void setMode(Mode newMode);
