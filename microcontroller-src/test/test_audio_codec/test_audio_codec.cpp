@@ -19,7 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Arduino.h>
 #include <unity.h>
 
-#include "audioResampler.h"
+#include "dsp/audioResampler.h"
 
 static_assert(AUDIO_FRAME_SAMPLES_WIRE == 249, "128-byte mono IMA ADPCM block must decode to 249 samples");
 static_assert(AUDIO_FRAME_SAMPLES_48K == 747, "249 samples at 16 kHz must map to 747 samples at 48 kHz");
