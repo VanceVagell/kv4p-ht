@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AudioTools.h>
 #include <AfskDemodulator.h>
 #include <math.h>
+#include <string.h>
 #include "../globals.h"
 
 #define ZCR_DECAY_TIME 0.100f  // seconds
@@ -42,6 +43,14 @@ public:
     copy->setActive(active());
     copy->setId(id());
     return copy;
+  }
+
+  void resetState() {
+    memset(bpfState, 0, sizeof(bpfState));
+    previousOutsideSample = 0.0f;
+    iirZcr = resetClosedZcr();
+    aboveThresholdSamples = closeDelaySamples();
+    setSoftSqOpen(false);
   }
 
   effect_t process(effect_t input) override {
@@ -116,13 +125,6 @@ private:
     return 0.45f - ((float)level / 8.0f) * (0.45f - 0.08f);
   }
 
-  void resetState() {
-    previousOutsideSample = 0.0f;
-    iirZcr = 0.0f;
-    aboveThresholdSamples = 0;
-    setSoftSqOpen(false);
-  }
-
   void initBpf() {
     float sampleRateFloat = (float)sampleRate;
     float centerHz = sqrtf(SOFT_SQUELCH_LOW_HZ * SOFT_SQUELCH_HIGH_HZ);
@@ -131,6 +133,17 @@ private:
                                            sampleRateFloat, 30.0f);
     normalizeBpfAt(centerHz, sampleRateFloat);
     bpf.init(bpfTaps, SOFT_SQUELCH_BPF_TAPS, bpfTaps, bpfState, SOFT_SQUELCH_BPF_STATE_LEN);
+  }
+
+  uint32_t closeDelaySamples() const {
+    return (uint32_t)((float)sampleRate * closeDelaySec);
+  }
+
+  float resetClosedZcr() const {
+    if (zcrTauSec <= 0.0f || closeDelaySec <= 0.0f) {
+      return SOFT_SQUELCH_THRESHOLD_ZCR;
+    }
+    return SOFT_SQUELCH_THRESHOLD_ZCR * expf(closeDelaySec / zcrTauSec);
   }
 
   void normalizeBpfAt(float frequencyHz, float sampleRate) {
@@ -161,8 +174,7 @@ private:
     if (aboveThresholdSamples < sampleRate) {
       aboveThresholdSamples++;
     }
-    uint32_t closeDelaySamples = (uint32_t)((float)sampleRate * closeDelaySec);
-    if (aboveThresholdSamples >= closeDelaySamples) {
+    if (aboveThresholdSamples >= closeDelaySamples()) {
       setSoftSqOpen(false);
     }
   }

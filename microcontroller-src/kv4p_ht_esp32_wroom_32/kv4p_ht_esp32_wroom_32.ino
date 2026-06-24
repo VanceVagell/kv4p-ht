@@ -301,6 +301,7 @@ void reconcileDesiredState(bool sendReport = true) {
   }
 
   if ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) && radioConfigChanged()) {
+    bool wasSoftSquelch = isSoftSquelchEnabled();
     bool wantSoftSquelch = (desiredState.flags & HOST_STATE_SOFT_SQ_ENABLED) != 0;
     uint8_t radioSquelch = wantSoftSquelch ? 0 : desiredState.squelch;
     drainRadioSerial();
@@ -319,6 +320,10 @@ void reconcileDesiredState(bool sendReport = true) {
     appliedState.flags = (appliedState.flags & ~HOST_STATE_SOFT_SQ_ENABLED)
       | (desiredState.flags & HOST_STATE_SOFT_SQ_ENABLED)
       | HOST_STATE_RADIO_CONFIG_VALID;
+    if (wantSoftSquelch && !wasSoftSquelch) {
+      softSquelchEffect.resetState();
+      squelched = true;
+    }
     radioConfigApplied = true;
   }
 
