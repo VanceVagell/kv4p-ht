@@ -129,8 +129,7 @@ void loadPersistedRadioState() {
     flags |= HOST_STATE_SOFT_SQ_ENABLED;
   }
   desiredState.flags = flags;
-  softSquelchEnabled = (desiredState.flags & HOST_STATE_SOFT_SQ_ENABLED) != 0;
-  softSquelchDeadbandLevel = desiredState.squelch > 8 ? 8 : desiredState.squelch;
+  softSquelchEffect.setDeadbandLevel(desiredState.squelch);
   desiredState.sequence = 0;
   desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_SESSION_FLAG_MASK);
   appliedState.memoryId = desiredState.memoryId;
@@ -270,6 +269,11 @@ bool radioConfigChanged() {
     || ((appliedState.flags ^ desiredState.flags) & HOST_STATE_SOFT_SQ_ENABLED);
 }
 
+bool isSoftSquelchEnabled() {
+  uint16_t flags = radioConfigApplied ? appliedState.flags : desiredState.flags;
+  return (flags & HOST_STATE_SOFT_SQ_ENABLED) != 0;
+}
+
 void drainRadioSerial() {
   while (Serial2.available()) {
     Serial2.read();
@@ -309,8 +313,7 @@ void reconcileDesiredState(bool sendReport = true) {
     appliedState.freq_rx = desiredState.freq_rx;
     appliedState.ctcss_tx = desiredState.ctcss_tx;
     appliedState.squelch = desiredState.squelch;
-    softSquelchDeadbandLevel = appliedState.squelch > 8 ? 8 : appliedState.squelch;
-    softSquelchEnabled = wantSoftSquelch;
+    softSquelchEffect.setDeadbandLevel(appliedState.squelch);
     appliedState.ctcss_rx = desiredState.ctcss_rx;
     appliedState.memoryId = desiredState.memoryId;
     appliedState.flags = (appliedState.flags & ~HOST_STATE_SOFT_SQ_ENABLED)
@@ -400,8 +403,8 @@ void setup() {
   //
   debugSetup();
   // Begin in STOPPED mode
-  hardwareSquelched = (digitalRead(hw.pins.pinSq) == HIGH);
-  squelched = softSquelchEnabled ? true : hardwareSquelched;
+  bool hardwareSquelched = (digitalRead(hw.pins.pinSq) == HIGH);
+  squelched = isSoftSquelchEnabled() ? true : hardwareSquelched;
   setMode(MODE_STOPPED);
   initI2SRx();
   ledSetup();
@@ -544,12 +547,10 @@ void bluetoothLoop() {
 }
 
 void squelchLoop() {
-  bool nextHardwareSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
-  if (nextHardwareSquelched != hardwareSquelched) {
-    hardwareSquelched = nextHardwareSquelched;
-  }
-  if (!softSquelchEnabled && hardwareSquelched != squelched) {
-    squelched = hardwareSquelched;
+  bool hardwareSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
+  bool nextSquelched = isSoftSquelchEnabled() ? !softSquelchEffect.isSoftOpen() : hardwareSquelched;
+  if (nextSquelched != squelched) {
+    squelched = nextSquelched;
     markDeviceStateDirty();
   }
 }
