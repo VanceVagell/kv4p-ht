@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2025 Vance Vagell
+Copyright (C) 2026 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,6 +21,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+
+class NativeEsp {
+public:
+  uint64_t getEfuseMac() const {
+    return 0x112233445566ULL;
+  }
+};
+
+inline NativeEsp ESP;
 
 class Print {
 public:

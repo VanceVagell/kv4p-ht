@@ -116,15 +116,17 @@ public class RadioAudioService extends Service {
     private static final int[] ESP32_PRODUCT_IDS = {60000, 29987};
 
     // === Audio Constants ===
-    public static final int AUDIO_SAMPLE_RATE = 48000;
+    public static final int AUDIO_SAMPLE_RATE = 16000;
     private static final int RX_AUDIO_CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO;
-    private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT;
-    public static final int OPUS_FRAME_SIZE = 1920; // 40ms at 48kHz
+    private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
+    public static final int AUDIO_FRAME_SAMPLES = 249; // One 128-byte mono IMA ADPCM audio block at 16kHz
+    public static final int AUDIO_FRAME_BYTES = ImaAdpcm.encodedSize(AUDIO_FRAME_SAMPLES);
     private static final int RX_AUDIO_MIN_BUFFER_SIZE =
-            AudioTrack.getMinBufferSize(
+            Math.max(AudioTrack.getMinBufferSize(
                     AUDIO_SAMPLE_RATE,
                     RX_AUDIO_CHANNEL_CONFIG,
-                    RX_AUDIO_FORMAT);
+                    RX_AUDIO_FORMAT),
+                    AUDIO_FRAME_SAMPLES * 2);
 
     // === APRS Constants ===
     public static final int APRS_POSITION_EXACT = 0;
@@ -160,16 +162,12 @@ public class RadioAudioService extends Service {
 
     public enum RadioModuleType {UNKNOWN, VHF, UHF}
 
-    // === Audio / Opus Handling ===
-    private final float[] pcmFloat = new float[OPUS_FRAME_SIZE];
+    // === Audio / 4-bit IMA ADPCM Handling ===
+    private final short[] pcm16 = new short[AUDIO_FRAME_SAMPLES];
     private AudioTrack audioTrack;
     private float audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
-    private final OpusUtils.OpusDecoderWrapper opusDecoder =
-        new OpusUtils.OpusDecoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
-    private final OpusUtils.OpusEncoderWrapper opusEncoder =
-        new OpusUtils.OpusEncoderWrapper(AUDIO_SAMPLE_RATE, OPUS_FRAME_SIZE);
-    private final byte[] txAudioFrame = new byte[Protocol.PROTO_MTU];
+    private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES];
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -1332,26 +1330,32 @@ public class RadioAudioService extends Service {
         Log.d(TAG, "Warning: All memories are skipDuringScan, no next memory found to scan to.");
     }
 
-    private float[] applyMicGain(float[] audioBuffer) {
+    private short[] applyMicGain(short[] audioBuffer, int samples) {
         if (micGainBoost == MicGainBoost.NONE) {
             return audioBuffer; // No gain, just return original
         }
-        float[] newAudioBuffer = new float[audioBuffer.length];
-        for (int i = 0; i < audioBuffer.length; i++) {
-            newAudioBuffer[i] = audioBuffer[i] * micGainBoost.getGain();
+        float gain = micGainBoost.getGain();
+        for (int i = 0; i < samples; i++) {
+            int sample = Math.round(audioBuffer[i] * gain);
+            if (sample > Short.MAX_VALUE) {
+                sample = Short.MAX_VALUE;
+            } else if (sample < Short.MIN_VALUE) {
+                sample = Short.MIN_VALUE;
+            }
+            audioBuffer[i] = (short) sample;
         }
-        return newAudioBuffer;
+        return audioBuffer;
     }
 
-    public void sendAudioToESP32(float[] samples, boolean dataMode) {
+    public void sendAudioToESP32(short[] samples, boolean dataMode) {
         Protocol.Sender sender = hostToEsp32;
         if (sender == null) {
             return; // If connection is lost, just drop the audio frame.
         }
         if (!dataMode) {
-            samples = applyMicGain(samples);
+            applyMicGain(samples, AUDIO_FRAME_SAMPLES);
         }
-        int encodedLength = opusEncoder.encode(samples, txAudioFrame);
+        int encodedLength = ImaAdpcm.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES, txAudioFrame, 0);
         sender.txAudio(txAudioFrame, encodedLength);
     }
 
@@ -1479,11 +1483,11 @@ public class RadioAudioService extends Service {
         if (param == null || !param.hasArray() || offset < 0 || len <= 0 || param.limit() < offset + len) {
             return;
         }
-        int decoded = opusDecoder.decode(param.array(), offset, len, pcmFloat);
+        int decoded = ImaAdpcm.decodeBlock(param.array(), offset, len, pcm16, 0, AUDIO_FRAME_SAMPLES);
 
         if ((getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) && audioTrack != null) {
             AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            audioTrack.write(pcmFloat, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
+            audioTrack.write(pcm16, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
             audioManager.requestAudioFocus(audioFocusRequest);
             ensureAudioPlaying();
         }
@@ -1491,13 +1495,11 @@ public class RadioAudioService extends Service {
 
     /**
      * Ensures that the AudioTrack is playing and gradually adjusts its volume.
-     * The volume is increased smoothly based on a factor of alpha, and the volume is capped at 0.7f.
-     * If the calculated volume is below 0.7f, the volume is set to 0.0f.
+     * The volume is increased smoothly based on a factor of alpha.
      * This method is intended to apply smooth volume adjustments to the AudioTrack.
      * <p>
      * The method first checks if the AudioTrack is playing. If it is not playing, the method starts the playback.
      * Then, the volume is adjusted by applying a smoothing factor using a simple exponential-like formula.
-     * If the volume exceeds 0.7f, it will be set to the calculated value; otherwise, the volume will be set to 0.0f.
      * </p>
      *
      * @see AudioTrack
@@ -1509,7 +1511,7 @@ public class RadioAudioService extends Service {
             audioTrack.setVolume(0.0f);
             audioTrack.play();
         }
-        float alpha = 0.05f;
+        float alpha = 0.02f;
         audioTrackVolume = alpha + (1.0f - alpha) * audioTrackVolume;
         if (audioTrackVolume > 0.7f) {
             audioTrack.setVolume(audioTrackVolume);
