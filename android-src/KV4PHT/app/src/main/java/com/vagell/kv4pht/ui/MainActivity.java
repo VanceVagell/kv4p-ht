@@ -1265,6 +1265,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // Keep the 16-bar mapping explicit so the UI state mirrors the meter layout.
+    @SuppressWarnings("java:S3776")
     private void updateSMeter(int value) {
         if (value < 0 || value > 16) {
             Log.d("DEBUG", "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
