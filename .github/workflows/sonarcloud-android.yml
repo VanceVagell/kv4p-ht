@@ -16,8 +16,7 @@ jobs:
       actions: read # Required to download artifacts
     steps:
       - name: 'Sonar analysis'
-        uses: evaristegalois11/sonar-fork-analysis@v1.3.0
-        #wsciaroni/sonar-fork-analysis@v1.2.1-rc
+        uses: wsciaroni/sonar-fork-analysis@v1.2.1-rc
         with:
           distribution: 'zulu'
           java-version: 17
