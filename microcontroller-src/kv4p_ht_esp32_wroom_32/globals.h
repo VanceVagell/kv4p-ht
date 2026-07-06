@@ -94,6 +94,7 @@ Mode mode = MODE_STOPPED;
 bool squelched = false;
 float txAudioLevel = 0.0f;
 
+
 // Forward declarations
 void setMode(Mode newMode);
 Mode rxIdleMode();
