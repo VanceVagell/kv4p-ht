@@ -228,6 +228,20 @@
                             android:background="@color/primary"
                             android:alpha="0.2" />
                     </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/moduleStateLabel"
+                        android:layout_width="48dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="32dp"
+                        android:gravity="start"
+                        android:text=""
+                        android:textColor="@color/primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.appcompat.widget.LinearLayoutCompat

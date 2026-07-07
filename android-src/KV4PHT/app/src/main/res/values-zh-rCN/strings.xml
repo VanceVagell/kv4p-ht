@@ -107,6 +107,8 @@
     <string name="beaconing_aprs_on">正在频率 %1$s 发送 APRS 信标...</string>
     <string name="current">当前频率</string>
     <string name="done">完成</string>
+    <string name="module_state_squelched">静噪</string>
+    <string name="module_state_tx">发射</string>
     <string name="more_display">更多</string>
     <string name="find_repeaters_menu_item">查找附近的中继台</string>
     <string name="flash_firmware_menu_item">刷写固件</string>
