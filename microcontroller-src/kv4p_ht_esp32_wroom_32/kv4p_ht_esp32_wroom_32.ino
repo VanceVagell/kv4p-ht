@@ -1,6 +1,6 @@
 /*
 KV4P-HT (see http://kv4p.com)
-Copyright (C) 2025 Vance Vagell
+Copyright (C) 2026 Vance Vagell
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -50,6 +50,7 @@ Kv4pBleKissStream::Config bleKissConfig() {
   cfg.maxNotifyChunksPerLoop = 4;
   cfg.minNotifyIntervalMs = 0;
   cfg.notifyFailureBackoffMs = 25;
+  cfg.writeQueueWaitMs = 15;
   cfg.txPower = ESP_PWR_LVL_P7;
   return cfg;
 }
@@ -434,7 +435,7 @@ void setup() {
   if (radioModuleStatus == RADIO_MODULE_FOUND) {
     reconcileDesiredState(false);
   }
-  sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState());
+  sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolUsbSession.flags));
   _LOGI("Setup is finished");
 }
 
@@ -477,6 +478,8 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
         uint16_t oldSessionFlags = session.flags;
         session.flags = incomingState.flags & HOST_STATE_SESSION_FLAG_MASK;
         bool sessionFlagsChanged = oldSessionFlags != session.flags;
+        // Desired-state sequence is global across transports; hosts must sync from
+        // DeviceState.appliedSequence before sending their next update.
         bool globalStateChanged = incomingState.sequence > desiredState.sequence;
         if (globalStateChanged) {
           desiredState = incomingState;

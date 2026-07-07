@@ -256,10 +256,11 @@ public class RadioAudioService extends Service {
         default void tunedToFreq(String frequencyStr) {}
         default void outdatedFirmware(int firmwareVer) {}
         default void initialDeviceStateReceived() {}
+        default void radioConfigChanged() {}
         default void missingFirmware() {}
         default void txStarted() {}
         default void txEnded() {}
-        default void moduleTxStateChanged(boolean txActive) {}
+        default void moduleStateChanged(boolean txActive, boolean squelched) {}
         default void chatError(String text) {}
         default void sMeterUpdate(int value) {}
         default void sentAprsBeacon(double latitude, double longitude, String frequencyStr, boolean wasSwitch) {}
@@ -1522,7 +1523,8 @@ public class RadioAudioService extends Service {
 
     private void handleDeviceState(Protocol.DeviceState state) {
         radioModule.updateDeviceState(state);
-        callbacks.moduleTxStateChanged(radioModule.isDeviceTxActive());
+        syncActiveRadioConfig(state);
+        callbacks.moduleStateChanged(radioModule.isDeviceTxActive(), radioModule.isSquelched());
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
             updateTxAllowed(radioModule.getTxFrequency());
         }
@@ -1542,6 +1544,21 @@ public class RadioAudioService extends Service {
                 callbacks.forcedPttEnd();
             }
         }
+    }
+
+    private void syncActiveRadioConfig(Protocol.DeviceState state) {
+        if (!state.hasRadioConfig() || state.getLastError() != 0) {
+            return;
+        }
+        String nextFrequency = formatFreq(state.getFreqRx());
+        int nextMemoryId = state.getMemoryId();
+        if (nextMemoryId == activeMemoryId && nextFrequency.equals(activeFrequencyStr)) {
+            return;
+        }
+        activeFrequencyStr = nextFrequency;
+        activeMemoryId = nextMemoryId;
+        updateNotificationFromCurrentState();
+        callbacks.radioConfigChanged();
     }
 
     /**

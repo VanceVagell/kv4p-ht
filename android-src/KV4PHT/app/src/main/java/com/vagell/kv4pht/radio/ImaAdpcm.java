@@ -1,6 +1,6 @@
 /*
  * KV4P-HT (see http://kv4p.com)
- * Copyright (C) 2025 Vance Vagell
+ * Copyright (C) 2026 Vance Vagell
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -9,6 +9,17 @@
  */
 package com.vagell.kv4pht.radio;
 
+/**
+ * IMA ADPCM encoder/decoder for the live voice protocol stream.
+ *
+ * <p>IMA ADPCM stores each audio sample as a 4-bit adaptive delta from a
+ * running predictor, plus a small block header containing the initial
+ * predictor state. It is lossy, but it is simple and cheap enough for both
+ * Android and the ESP32 firmware path.
+ *
+ * <p>This implementation uses the mono IMA WAV block layout used by the
+ * firmware ADPCM codec.
+ */
 public final class ImaAdpcm {
     private static final int[] INDEX_TABLE = {
             -1, -1, -1, -1, 2, 4, 6, 8,
