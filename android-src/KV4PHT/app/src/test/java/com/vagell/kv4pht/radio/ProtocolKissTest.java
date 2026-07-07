@@ -891,18 +891,18 @@ public class ProtocolKissTest {
 
     @Test
     public void sMeterUsesCalibratedRssiRange() {
-        assertEquals(0, Protocol.calculateSMeter16Value(0));
-        assertEquals(0, Protocol.calculateSMeter16Value(16));
-        assertEquals(1, Protocol.calculateSMeter16Value(17));
-        assertEquals(2, Protocol.calculateSMeter16Value(22));
-        assertEquals(8, Protocol.calculateSMeter16Value(56));
-        assertEquals(9, Protocol.calculateSMeter16Value(57));
-        assertEquals(9, Protocol.calculateSMeter16Value(64));
-        assertEquals(10, Protocol.calculateSMeter16Value(65));
-        assertEquals(15, Protocol.calculateSMeter16Value(107));
-        assertEquals(15, Protocol.calculateSMeter16Value(109));
-        assertEquals(16, Protocol.calculateSMeter16Value(110));
-        assertEquals(16, Protocol.calculateSMeter16Value(255));
+        assertEquals(0, Protocol.calculateSMeterValue(0));
+        assertEquals(0, Protocol.calculateSMeterValue(16));
+        assertEquals(1, Protocol.calculateSMeterValue(17));
+        assertEquals(2, Protocol.calculateSMeterValue(22));
+        assertEquals(8, Protocol.calculateSMeterValue(56));
+        assertEquals(9, Protocol.calculateSMeterValue(57));
+        assertEquals(9, Protocol.calculateSMeterValue(64));
+        assertEquals(10, Protocol.calculateSMeterValue(65));
+        assertEquals(12, Protocol.calculateSMeterValue(107));
+        assertEquals(12, Protocol.calculateSMeterValue(109));
+        assertEquals(13, Protocol.calculateSMeterValue(110));
+        assertEquals(13, Protocol.calculateSMeterValue(255));
     }
 
     private Protocol.KissParser newParser() {
