@@ -1491,7 +1491,7 @@ public class MainActivity extends AppCompatActivity {
     @SuppressWarnings("java:S3398")
     private void showBand(BandType bandType) {
         runOnUiThread(() -> {
-            EditText bandField = findViewById(R.id.activeBand);
+            TextView bandField = findViewById(R.id.activeBand);
             if (bandField == null) return;
             switch (bandType) {
                 case BAND_VHF:

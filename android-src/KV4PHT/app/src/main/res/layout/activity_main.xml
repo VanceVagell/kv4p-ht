@@ -122,23 +122,23 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent">
 
-                    <EditText
+                    <TextView
                         android:id="@+id/activeBand"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginEnd="32dp"
                         android:background="@color/clear"
-                        android:cursorVisible="false"
                         android:focusable="false"
                         android:focusableInTouchMode="false"
-                        android:gravity="end"
-                        android:inputType="none"
+                        android:gravity="end|bottom"
+                        android:includeFontPadding="false"
                         android:longClickable="false"
                         android:text="@string/vhf"
                         android:textColor="@color/band"
                         android:textIsSelectable="false"
                         android:textSize="14sp"
                         android:textStyle="bold"
+                        android:translationY="2dp"
                         android:visibility="invisible"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
@@ -287,11 +287,13 @@
                         android:layout_width="48dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="32dp"
-                        android:gravity="start"
+                        android:gravity="start|bottom"
+                        android:includeFontPadding="false"
                         android:text=""
                         android:textColor="@color/primary"
                         android:textSize="14sp"
                         android:textStyle="bold"
+                        android:translationY="2dp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintStart_toStartOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
