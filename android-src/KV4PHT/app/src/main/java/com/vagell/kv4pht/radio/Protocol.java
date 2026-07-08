@@ -247,7 +247,7 @@ public final class Protocol {
     public static int calculateSMeterValue(int rssi) {
         float dbm = rssi * DBM_PER_RSSI + RSSI_DBM_OFFSET;
         if (dbm > RX_OVERLOAD_DBM) {
-            return 13;
+            return 16;
         }
         if (dbm < S1_DBM) {
             return 0;
@@ -258,7 +258,7 @@ public final class Protocol {
         }
         int over = (int) Math.floor((dbm - S9_DBM) / 10.0f);
         int bar = 9 + over;
-        return Math.max(9, Math.min(12, bar));
+        return Math.max(9, Math.min(15, bar));
     }
 
     @Data

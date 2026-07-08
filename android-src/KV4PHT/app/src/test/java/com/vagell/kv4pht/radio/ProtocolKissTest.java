@@ -899,10 +899,14 @@ public class ProtocolKissTest {
         assertEquals(9, Protocol.calculateSMeterValue(57));
         assertEquals(9, Protocol.calculateSMeterValue(64));
         assertEquals(10, Protocol.calculateSMeterValue(65));
-        assertEquals(12, Protocol.calculateSMeterValue(107));
-        assertEquals(12, Protocol.calculateSMeterValue(109));
-        assertEquals(13, Protocol.calculateSMeterValue(110));
-        assertEquals(13, Protocol.calculateSMeterValue(255));
+        assertEquals(11, Protocol.calculateSMeterValue(74));
+        assertEquals(12, Protocol.calculateSMeterValue(82));
+        assertEquals(13, Protocol.calculateSMeterValue(90));
+        assertEquals(14, Protocol.calculateSMeterValue(99));
+        assertEquals(15, Protocol.calculateSMeterValue(107));
+        assertEquals(15, Protocol.calculateSMeterValue(109));
+        assertEquals(16, Protocol.calculateSMeterValue(110));
+        assertEquals(16, Protocol.calculateSMeterValue(255));
     }
 
     private Protocol.KissParser newParser() {
