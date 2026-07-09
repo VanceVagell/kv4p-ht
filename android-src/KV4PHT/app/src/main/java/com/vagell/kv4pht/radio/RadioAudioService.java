@@ -1450,7 +1450,8 @@ public class RadioAudioService extends Service {
     private void handleDeviceState(Protocol.DeviceState state) {
         radioModule.updateDeviceState(state);
         syncActiveRadioConfig(state);
-        callbacks.moduleStateChanged(radioModule.isDeviceTxActive(), radioModule.isSquelched());
+        final boolean deviceTxActive = radioModule.isDeviceTxActive();
+        callbacks.moduleStateChanged(deviceTxActive, radioModule.isSquelched());
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
             updateTxAllowed(radioModule.getTxFrequency());
         }
