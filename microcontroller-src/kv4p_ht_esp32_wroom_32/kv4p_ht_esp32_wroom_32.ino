@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "debug.h"
+#include "BluedroidBleKissGattStream.h"
 #include "led.h"
 #include "protocol.h"
 #include "rxAudio.h"
@@ -35,13 +36,35 @@ const uint16_t FIRMWARE_VER = 17;
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint32_t DEVICE_STATE_REPORT_INTERVAL_MS = 500;
 const uint16_t USB_BUFFER_SIZE = 1024*2;
+const uint16_t BLE_KISS_WINDOW_SIZE = 4096;
+
+using Kv4pBleKissStream = BluedroidBleKissGattStream<4096, 512, 32>;
+
+char bleKissDeviceName[12] = "kv4p";
+
+Kv4pBleKissStream::Config bleKissConfig() {
+  Kv4pBleKissStream::Config cfg;
+  cfg.deviceName = bleKissDeviceName;
+  cfg.preferredMtu = 247;
+  cfg.requireNotifySubscription = true;
+  cfg.maxNotifyChunksPerLoop = 4;
+  cfg.minNotifyIntervalMs = 0;
+  cfg.notifyFailureBackoffMs = 25;
+  cfg.writeQueueWaitMs = 15;
+  cfg.txPower = ESP_PWR_LVL_P7;
+  return cfg;
+}
 
 DRA818 sa818_vhf(&Serial2, SA818_VHF);
 DRA818 sa818_uhf(&Serial2, SA818_UHF);
 DRA818 &sa818 = sa818_vhf;
 BluetoothSerial SerialBT;
+Kv4pBleKissStream bleKissStream(bleKissConfig());
+bool bluetoothStarted = false;
 bool bluetoothProtocolConnected = false;
+bool bleKissProtocolConnected = false;
 KissParser bluetoothParser(protocolBtSession, &handleCommands, &handleAx25Data);
+KissParser bleKissParser(protocolBleSession, &handleCommands, &handleAx25Data);
 
 // Were we able to communicate with the radio module during setup()?
 const char RADIO_MODULE_NOT_FOUND = 'x';
@@ -243,6 +266,10 @@ void sendCurrentDeviceState() {
     sendDeviceState(*protocolBtSession.stream, currentDeviceState(protocolBtSession.flags));
     sent = true;
   }
+  if (protocolHasBleSession() && (protocolBleSession.flags & HOST_STATE_ENABLE_STATUS_REPORTS)) {
+    sendDeviceState(*protocolBleSession.stream, currentDeviceState(protocolBleSession.flags));
+    sent = true;
+  }
   if (sent) {
     deviceStateDirty = false;
   }
@@ -364,9 +391,22 @@ void setup() {
   Serial.println("==============================");
   char bluetoothDeviceName[12];
   formatBluetoothDeviceName(bluetoothDeviceName, sizeof(bluetoothDeviceName));
-  SerialBT.begin(bluetoothDeviceName);
-  protocolBtSession.stream = &SerialBT;
-  protocolBtSession.windowSize = USB_BUFFER_SIZE;
+  bluetoothStarted = SerialBT.begin(bluetoothDeviceName);
+  if (bluetoothStarted) {
+    protocolBtSession.stream = &SerialBT;
+    protocolBtSession.windowSize = USB_BUFFER_SIZE;
+  } else {
+    Serial.println("Classic Bluetooth init failed");
+  }
+  formatBluetoothDeviceName(bleKissDeviceName, sizeof(bleKissDeviceName));
+  protocolBleSession.stream = &bleKissStream;
+  protocolBleSession.windowSize = BLE_KISS_WINDOW_SIZE;
+  if (!bleKissStream.begin()) {
+    Serial.println("BLE KISS init failed");
+  } else {
+    Serial.print("BLE KISS advertising as ");
+    Serial.println(bleKissDeviceName);
+  }
   // Configure watch dog timer (WDT), which will reset the system if it gets stuck somehow.
   esp_task_wdt_init(10, true);  // Reboot if locked up for a bit
   esp_task_wdt_add(NULL);       // Add the current task to WDT watch
@@ -395,7 +435,7 @@ void setup() {
   if (radioModuleStatus == RADIO_MODULE_FOUND) {
     reconcileDesiredState(false);
   }
-  sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState());
+  sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolUsbSession.flags));
   _LOGI("Setup is finished");
 }
 
@@ -438,6 +478,8 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
         uint16_t oldSessionFlags = session.flags;
         session.flags = incomingState.flags & HOST_STATE_SESSION_FLAG_MASK;
         bool sessionFlagsChanged = oldSessionFlags != session.flags;
+        // Desired-state sequence is global across transports; hosts must sync from
+        // DeviceState.appliedSequence before sending their next update.
         bool globalStateChanged = incomingState.sequence > desiredState.sequence;
         if (globalStateChanged) {
           desiredState = incomingState;
@@ -517,6 +559,10 @@ void deviceStateLoop() {
 }
 
 void bluetoothLoop() {
+  if (!bluetoothStarted) {
+    return;
+  }
+
   bool connected = SerialBT.hasClient();
   if (connected && !bluetoothProtocolConnected) {
     bluetoothProtocolConnected = true;
@@ -539,6 +585,32 @@ void bluetoothLoop() {
   }
 }
 
+void bleKissLoop() {
+  bleKissStream.loop();
+  bool connected = bleKissStream.isConnected();
+  bool protocolReady = bleKissStream.canSend();
+  if (protocolReady && !bleKissProtocolConnected) {
+    bleKissParser.reset();
+    sendHello(protocolBleSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolBleSession.flags));
+    bleKissProtocolConnected = true;
+    protocolBleSession.connected = true;
+    _LOGI("BLE KISS sent HELLO after notify subscription: firmware=%u window=%u", FIRMWARE_VER, BLE_KISS_WINDOW_SIZE);
+  } else if ((!connected || !protocolReady) && bleKissProtocolConnected) {
+    bleKissProtocolConnected = false;
+    protocolBleSession.connected = false;
+    uint16_t oldSessionFlags = protocolBleSession.flags;
+    protocolBleSession.flags = 0;
+    bleKissParser.reset();
+    if (oldSessionFlags != 0) {
+      reconcileDesiredState();
+    }
+  }
+
+  if (bleKissProtocolConnected) {
+    bleKissParser.loop();
+  }
+}
+
 void squelchLoop() {
   bool nextSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
   if (nextSquelched != squelched) {
@@ -554,6 +626,7 @@ void loop() {
   buttonsLoop();
   protocolLoop();
   bluetoothLoop();
+  bleKissLoop();
   rxAudioLoop();
   txAudioLoop();
   rssiLoop();

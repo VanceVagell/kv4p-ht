@@ -406,6 +406,11 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
+                public void radioConfigChanged() {
+                    runOnUiThread(() -> syncRadioUiFromDeviceState());
+                }
+
+                @Override
                 public void missingFirmware() {
                     showVersionSnackbar(-1);
                 }
@@ -1358,12 +1363,25 @@ public class MainActivity extends AppCompatActivity {
         if (initialRadioUiSynced || !pendingInitialRadioUiSync || radioAudioService == null) {
             return;
         }
+        if (syncRadioUiFromDeviceState()) {
+            pendingInitialRadioUiSync = false;
+            initialRadioUiSynced = true;
+        }
+    }
+
+    /**
+     * Mirrors firmware's applied radio config into the visible frequency/memory controls.
+     */
+    private boolean syncRadioUiFromDeviceState() {
+        if (radioAudioService == null) {
+            return false;
+        }
         RadioModuleController radioModule = radioAudioService.getRadioModule();
         if (!radioModule.hasRadioConfig()) {
-            return;
+            return false;
         }
         if (radioModule.getMemoryId() >= 0 && viewModel.getChannelMemories().getValue() == null) {
-            return;
+            return false;
         }
 
         ChannelMemory memory = findMatchingMemoryForState();
@@ -1375,8 +1393,7 @@ public class MainActivity extends AppCompatActivity {
             tuneToFreqUi(String.format(java.util.Locale.US, "%.4f", radioModule.getRxFrequency()));
         }
         radioAudioService.updateNotificationFromCurrentState();
-        pendingInitialRadioUiSync = false;
-        initialRadioUiSynced = true;
+        return true;
     }
 
     /**

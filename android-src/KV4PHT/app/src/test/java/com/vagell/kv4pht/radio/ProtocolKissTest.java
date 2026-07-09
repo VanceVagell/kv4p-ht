@@ -686,6 +686,65 @@ public class ProtocolKissTest {
     }
 
     @Test
+    public void newerDeviceStateAdvancesDesiredSequenceForNextLocalChange() {
+        CapturingSender sender = new CapturingSender();
+        RadioModuleController controller = new RadioModuleController();
+        controller.attachSender(sender);
+        Protocol.DeviceState initialState = Protocol.DeviceState.builder()
+            .appliedSequence(7)
+            .memoryId(42)
+            .flags(Protocol.HOST_STATE_RADIO_CONFIG_VALID
+                | Protocol.HOST_STATE_HIGH_POWER
+                | Protocol.HOST_STATE_RSSI_ENABLED
+                | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS)
+            .bw(Protocol.DRA818_25K)
+            .freqTx(146.5200f)
+            .freqRx(146.5200f)
+            .ctcssTx((byte) 0)
+            .squelch((byte) 1)
+            .ctcssRx((byte) 0)
+            .radioModuleStatus(Protocol.RadioStatus.RADIO_STATUS_FOUND)
+            .mode(Protocol.DeviceMode.DEVICE_MODE_RX)
+            .lastError(0)
+            .latestRssi(0)
+            .build();
+
+        controller.seedFromDeviceState(initialState);
+        controller.markTransportReady();
+        Protocol.HostDesiredState statusRequest = sender.sentStates.get(0);
+        controller.updateDeviceState(deviceStateMatching(statusRequest, 0));
+
+        Protocol.DeviceState externalUpdate = Protocol.DeviceState.builder()
+            .appliedSequence(25)
+            .memoryId(77)
+            .flags(Protocol.HOST_STATE_RADIO_CONFIG_VALID
+                | Protocol.HOST_STATE_HIGH_POWER
+                | Protocol.HOST_STATE_RSSI_ENABLED
+                | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS)
+            .bw(Protocol.DRA818_12K5)
+            .freqTx(144.3900f)
+            .freqRx(144.3900f)
+            .ctcssTx((byte) 4)
+            .squelch((byte) 5)
+            .ctcssRx((byte) 6)
+            .radioModuleStatus(Protocol.RadioStatus.RADIO_STATUS_FOUND)
+            .mode(Protocol.DeviceMode.DEVICE_MODE_RX)
+            .lastError(0)
+            .latestRssi(0)
+            .build();
+
+        controller.updateDeviceState(externalUpdate);
+        controller.setSquelch(8);
+
+        Protocol.HostDesiredState localChange = sender.sentStates.get(sender.sentStates.size() - 1);
+        assertEquals(26, localChange.getSequence());
+        assertEquals(77, localChange.getMemoryId());
+        assertEquals(144.3900f, localChange.getFreqTx(), 0.0001f);
+        assertEquals(144.3900f, localChange.getFreqRx(), 0.0001f);
+        assertEquals(8, localChange.getSquelch());
+    }
+
+    @Test
     public void seedFromDeviceStateDoesNotCarryTransientHostFlags() {
         CapturingSender sender = new CapturingSender();
         RadioModuleController controller = new RadioModuleController();

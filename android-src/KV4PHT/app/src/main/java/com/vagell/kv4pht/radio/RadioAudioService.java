@@ -255,6 +255,7 @@ public class RadioAudioService extends Service {
         default void tunedToFreq(String frequencyStr) {}
         default void outdatedFirmware(int firmwareVer) {}
         default void initialDeviceStateReceived() {}
+        default void radioConfigChanged() {}
         default void missingFirmware() {}
         default void txStarted() {}
         default void txEnded() {}
@@ -1448,8 +1449,8 @@ public class RadioAudioService extends Service {
 
     private void handleDeviceState(Protocol.DeviceState state) {
         radioModule.updateDeviceState(state);
-        boolean deviceTxActive = radioModule.isDeviceTxActive();
-        callbacks.moduleStateChanged(deviceTxActive, radioModule.isSquelched());
+        syncActiveRadioConfig(state);
+        callbacks.moduleStateChanged(radioModule.isDeviceTxActive(), radioModule.isSquelched());
         if (radioModule.isAppliedStateInSync() && radioModule.getTxFrequency() > 0) {
             updateTxAllowed(radioModule.getTxFrequency());
         }
@@ -1469,6 +1470,21 @@ public class RadioAudioService extends Service {
                 callbacks.forcedPttEnd();
             }
         }
+    }
+
+    private void syncActiveRadioConfig(Protocol.DeviceState state) {
+        if (!state.hasRadioConfig() || state.getLastError() != 0) {
+            return;
+        }
+        String nextFrequency = formatFreq(state.getFreqRx());
+        int nextMemoryId = state.getMemoryId();
+        if (nextMemoryId == activeMemoryId && nextFrequency.equals(activeFrequencyStr)) {
+            return;
+        }
+        activeFrequencyStr = nextFrequency;
+        activeMemoryId = nextMemoryId;
+        updateNotificationFromCurrentState();
+        callbacks.radioConfigChanged();
     }
 
     /**
