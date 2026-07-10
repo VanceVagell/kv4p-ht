@@ -1,1 +1,0 @@
--keep class com.hoho.android.usbserial.driver.* { *; }
