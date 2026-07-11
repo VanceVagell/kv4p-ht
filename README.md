@@ -8,12 +8,17 @@ This is a fork of [VanceVagell/kv4p-ht](https://github.com/VanceVagell/kv4p-ht).
 
 - **Live audio over HTTP** — `http://<device>:8000/stream.wav`, an endless WAV (PCM16 mono, 16 kHz, lossless). Open it directly in VLC (*Media → Open Network Stream*), `ffplay`, `curl`, or any HTTP client. Up to 3 simultaneous listeners.
 - **Web UI** on port 80 (`http://kv4p-rx.local/` via mDNS):
-  - **Channel table** — up to 32 channels with number, name, frequency, bandwidth (12.5 vs 20/25 kHz), and voice/data type
+  - **Channel table** — up to 32 channels with number, name, frequency, bandwidth (12.5 vs 20/25 kHz), voice/data type, and per-channel telegram protocol (VDV R09 / NEMO LIO)
   - Active-channel selector or manual VFO tuning
   - Volume, squelch level, squelch muting
+  - **Backend uplink** — node name and position (for reference), ingest endpoint URL, station key, live decoder/uplink statistics
   - WiFi and network settings
   - **Browser-based OTA firmware updates** — no USB access needed once mounted
 - **Flat audio path** — the SA818's pre/de-emphasis and voice-band filters are bypassed on every channel, so data channels (FFSK and similar modem signals) reach the server unshaped. A channel's voice/data type is metadata for downstream consumers; apply de-emphasis in the player if voice sounds trebly.
+- **On-device telegram decoding** — each data channel can select a decoder protocol:
+  - **VDV R09** (FFSK 2400 Bd, VDV 420 announcement-point telegrams): full demodulate → frame → CRC-16 with 1–2-bit repair → structural validation
+  - **NEMO LIO** (VicosLio/IBISplus AMI line code at 4800 Bd): best-effort demodulation and HDLC deframing; clean frames validated by CRC (X.25 and CCITT conventions)
+- **Telegram uplink** — CRC-valid frames are pushed as raw hex (tagged `ffsk`/`g2`) to a configurable ingest backend, over batched **HTTP(S) POST** (`/api/v1/ingest`) or a persistent **WebSocket** (`/ws/ingest`) with auto-reconnect, chosen by the endpoint URL's scheme. Optional bearer station key; timestamps via SNTP. HTTPS/WSS is encrypted but does not verify the server certificate. A mock sink for testing lives in `tools/mock_ingest.py`.
 - **Default channel plan** — first boot seeds German **Freenet** (VHF module) or **PMR446** (UHF module) channels.
 - **Zero-touch provisioning** — with no WiFi configured (or if joining fails for 30 s), the device raises an open setup AP `kv4p-rx-setup`; browse to `192.168.4.1` and enter your network. The device keeps retrying your WiFi in the background.
 - Works on all kv4p-ht PCB revisions (v1.x strap detection, v2.0c/d, and boards with an NVS `hwconfig` blob).

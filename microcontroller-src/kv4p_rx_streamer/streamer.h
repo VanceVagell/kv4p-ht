@@ -18,7 +18,9 @@ Licensed under the GNU General Public License v3 or later.
 #define MAX_STREAM_CLIENTS 3
 #define STREAM_CHUNK 1400
 
-static uint8_t ring[RING_SIZE];
+// Heap-allocated at static-init (before setup()): a 64 kB static array
+// overflows the ESP32's dram0 .bss segment at link time.
+static uint8_t *ring = (uint8_t *)heap_caps_malloc(RING_SIZE, MALLOC_CAP_8BIT);
 static volatile uint32_t ringWritePos = 0;  // monotonic; aligned 32-bit store is atomic
 
 volatile uint32_t streamClientCount = 0;

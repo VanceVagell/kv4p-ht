@@ -14,6 +14,9 @@ Licensed under the GNU General Public License v3 or later.
 #include "radio.h"
 #include "audio.h"
 #include "streamer.h"
+#include "frames.h"
+#include "decoder.h"
+#include "uplink.h"
 
 WebServer server(80);
 
@@ -48,7 +51,8 @@ code{background:#242c34;padding:.15rem .4rem;border-radius:4px}
 <div class="row">
   Active: <select id="active"></select>
   <span id="vfoBox">VFO <input id="vfoFreq" type="number" step="0.0001" min="100" max="500"> MHz
-  <select id="vfoBw"><option value="0">12.5 kHz</option><option value="1">25 kHz</option></select></span>
+  <select id="vfoBw"><option value="0">12.5 kHz</option><option value="1">25 kHz</option></select>
+  <select id="vfoProto"><option value="0">no decode</option><option value="1">VDV R09</option><option value="2">NEMO LIO</option></select></span>
   <button class="primary" onclick="saveTuning()">Tune</button>
 </div>
 <div class="row">
@@ -60,8 +64,15 @@ code{background:#242c34;padding:.15rem .4rem;border-radius:4px}
 </section>
 
 <section><h2>Channels</h2>
-<table id="chTable"><thead><tr><th>#</th><th>Name</th><th>Frequency (MHz)</th><th>Bandwidth</th><th>Mode</th><th></th></tr></thead><tbody></tbody></table>
+<table id="chTable"><thead><tr><th>#</th><th>Name</th><th>Frequency (MHz)</th><th>Bandwidth</th><th>Mode</th><th>Protocol</th><th></th></tr></thead><tbody></tbody></table>
 <div class="row"><button onclick="addRow()">Add channel</button><button class="primary" onclick="saveChannels()">Save channel table</button></div>
+<div class="row" style="opacity:.7">On data channels set squelch to 0 — the decoders gate on their own signal envelope; hardware squelch clips telegram bursts.</div>
+</section>
+
+<section><h2>Backend uplink</h2>
+<div class="row">Node name <input id="nodeName" maxlength="32"> Lat <input id="nodeLat" type="number" step="0.000001"> Lon <input id="nodeLon" type="number" step="0.000001"></div>
+<div class="row">Endpoint <input id="upUrl" size="34" placeholder="https://… or wss://… (empty = off)"> Station key <input id="upTok" type="password" placeholder="(unchanged)"> <button class="primary" onclick="saveUplink()">Save uplink</button></div>
+<div class="row" style="opacity:.7">Decoded telegram frames are pushed to this backend. Name and position are shown here for reference; the backend's station roster (keyed by the station key) places the node on the map.</div>
 </section>
 
 <section><h2>Network</h2>
@@ -78,7 +89,7 @@ code{background:#242c34;padding:.15rem .4rem;border-radius:4px}
 
 <script>
 const $=id=>document.getElementById(id);
-const BW=["12.5 kHz","25 kHz"], MODE=["voice","data"];
+const BW=["12.5 kHz","25 kHz"], MODE=["voice","data"], PROTO=["none","VDV R09","NEMO LIO"];
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 let chans=[];
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',3000)}
@@ -93,6 +104,8 @@ async function refreshStatus(){try{
     `<span class="stat">wifi <b>${s.wifi.ssid||'setup AP'}</b> ${s.wifi.rssi?s.wifi.rssi+' dBm':''}</span>`+
     `<span class="stat">clients <b>${s.stream.clients}</b></span>`+
     `<span class="stat">overruns <b>${s.stream.overruns}</b></span>`+
+    (s.decoder.proto?`<span class="stat">decoder <b>${PROTO[s.decoder.proto]}</b> bursts <b>${s.decoder.bursts}</b> frames <b>${s.decoder.frames}</b>${s.decoder.lastLabel?', last <b>'+esc(s.decoder.lastLabel)+'</b> '+s.decoder.lastAgeS+'s ago':''}</span>`:'')+
+    (s.uplink.mode!=='off'?`<span class="stat">uplink <b>${s.uplink.mode}${s.uplink.connected?'':' ⚠'}</b> sent <b>${s.uplink.sent}</b> acc <b>${s.uplink.accepted}</b> drop <b>${s.uplink.dropped}</b>${s.uplink.lastError?' err <b>'+esc(s.uplink.lastError)+'</b>':''}</span>`:'')+
     `<span class="stat">heap <b>${Math.round(s.heap/1024)} kB</b></span>`+
     `<span class="stat">fw <b>v${s.version}</b></span>`;
   $('streamUrl').textContent=`http://${location.hostname}:${s.stream.port}/stream.wav`;
@@ -103,7 +116,8 @@ function rowHtml(c,i){return `<tr>
   <td><input class="name" maxlength="16" value="${esc(c.name)}" data-i="${i}" data-k="name"></td>
   <td><input type="number" step="0.0001" value="${(c.freqHz/1e6).toFixed(4)}" data-i="${i}" data-k="freq"></td>
   <td><select data-i="${i}" data-k="bandwidth"><option value="0"${c.bandwidth==0?' selected':''}>12.5 kHz</option><option value="1"${c.bandwidth==1?' selected':''}>20/25 kHz</option></select></td>
-  <td><select data-i="${i}" data-k="chMode"><option value="0"${c.chMode==0?' selected':''}>voice</option><option value="1"${c.chMode==1?' selected':''}>data</option></select></td>
+  <td><select data-i="${i}" data-k="chMode" onchange="this.closest('tr').querySelector('[data-k=dataProto]').disabled=this.value=='0'"><option value="0"${c.chMode==0?' selected':''}>voice</option><option value="1"${c.chMode==1?' selected':''}>data</option></select></td>
+  <td><select data-i="${i}" data-k="dataProto"${c.chMode==1?'':' disabled'}><option value="0"${(c.dataProto|0)==0?' selected':''}>none</option><option value="1"${c.dataProto==1?' selected':''}>VDV R09</option><option value="2"${c.dataProto==2?' selected':''}>NEMO LIO</option></select></td>
   <td><button onclick="delRow(${i})">✕</button></td></tr>`}
 
 function renderChannels(){
@@ -121,7 +135,7 @@ function readTable(){
   });
 }
 function addRow(){readTable();if(chans.length>=32){msg('max 32 channels');return}
-  chans.push({number:chans.length+1,name:'',freqHz:146520000,bandwidth:0,chMode:0});renderChannels()}
+  chans.push({number:chans.length+1,name:'',freqHz:146520000,bandwidth:0,chMode:0,dataProto:0});renderChannels()}
 function delRow(i){readTable();chans.splice(i,1);renderChannels()}
 async function saveChannels(){readTable();try{
   await api('/api/channels',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({channels:chans})});
@@ -130,9 +144,15 @@ async function saveChannels(){readTable();try{
 
 async function saveTuning(){try{
   await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-    activeChannel:+$('active').value,vfoFreqHz:Math.round(parseFloat($('vfoFreq').value)*1e6),vfoBandwidth:+$('vfoBw').value})});
+    activeChannel:+$('active').value,vfoFreqHz:Math.round(parseFloat($('vfoFreq').value)*1e6),vfoBandwidth:+$('vfoBw').value,vfoDataProto:+$('vfoProto').value})});
   msg('tuned');refreshStatus();
 }catch(e){msg('tune failed: '+e.message)}}
+async function saveUplink(){try{
+  const body={nodeName:$('nodeName').value,nodeLat:parseFloat($('nodeLat').value||'0'),nodeLon:parseFloat($('nodeLon').value||'0'),uplinkUrl:$('upUrl').value.trim()};
+  if($('upTok').value)body.uplinkToken=$('upTok').value;
+  await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  $('upTok').value='';msg('uplink saved');refreshStatus();
+}catch(e){msg('failed: '+e.message)}}
 async function saveAudio(){try{
   await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     volume:+$('volume').value,squelch:+$('squelch').value,muteWhenClosed:$('muteSq').checked})});
@@ -162,9 +182,11 @@ async function loadAll(){
   chans=(await api('/api/channels')).channels;
   renderChannels();
   $('active').value=c.activeChannel;$('vfoFreq').value=(c.vfoFreqHz/1e6).toFixed(4);$('vfoBw').value=c.vfoBandwidth;
+  $('vfoProto').value=c.vfoDataProto;
   $('volume').value=c.volume;$('squelch').value=c.squelch;$('muteSq').checked=c.muteWhenClosed;
   $('volumeV').textContent=c.volume;$('squelchV').textContent=c.squelch;
   $('ssid').value=c.ssid;$('port').value=c.streamPort;
+  $('nodeName').value=c.nodeName;$('nodeLat').value=c.nodeLat;$('nodeLon').value=c.nodeLon;$('upUrl').value=c.uplinkUrl;
   $('volume').oninput=e=>$('volumeV').textContent=e.target.value;
   $('squelch').oninput=e=>$('squelchV').textContent=e.target.value;
   refreshStatus();
@@ -198,7 +220,7 @@ static void sendError(int code, const char *text) {
 // --- handlers ---
 
 static void handleStatus() {
-  StaticJsonDocument<1152> doc;
+  StaticJsonDocument<1664> doc;
   doc["version"] = FIRMWARE_VERSION;
   doc["uptime"] = millis() / 1000;
   doc["heap"] = ESP.getFreeHeap();
@@ -224,11 +246,28 @@ static void handleStatus() {
   stream["clients"] = streamClientCount;
   stream["overruns"] = streamOverruns;
   stream["bytesOut"] = streamBytesOut;
+  JsonObject decoder = doc.createNestedObject("decoder");
+  decoder["proto"] = decRequestedProto;
+  decoder["bursts"] = stBursts;
+  decoder["frames"] = stFrames;
+  decoder["feedDrops"] = decFeedDrops;
+  if (stLastLabel[0]) {
+    decoder["lastLabel"] = stLastLabel;
+    decoder["lastAgeS"] = (millis() - stLastMs) / 1000;
+  }
+  JsonObject uplink = doc.createNestedObject("uplink");
+  uplink["mode"] = uplinkModeName();
+  uplink["connected"] = uplinkConnected();
+  uplink["sent"] = stSent;
+  uplink["accepted"] = stAccepted;
+  uplink["dropped"] = stDropped;
+  uplink["queued"] = frameQueue ? uxQueueMessagesWaiting(frameQueue) : 0;
+  if (upLastError[0]) uplink["lastError"] = upLastError;
   sendJson(doc);
 }
 
 static void handleGetConfig() {
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<896> doc;
   doc["ssid"] = cfg.ssid;
   doc["streamPort"] = cfg.streamPort;
   doc["volume"] = cfg.volume;
@@ -237,17 +276,24 @@ static void handleGetConfig() {
   doc["vfoFreqHz"] = cfg.vfoFreqHz;
   doc["vfoBandwidth"] = cfg.vfoBandwidth;
   doc["muteWhenClosed"] = cfg.muteWhenClosed;
+  doc["vfoDataProto"] = cfg.vfoDataProto;
+  doc["nodeName"] = cfg.nodeName;
+  doc["nodeLat"] = cfg.nodeLat;
+  doc["nodeLon"] = cfg.nodeLon;
+  doc["uplinkUrl"] = cfg.uplinkUrl;
+  doc["hasUplinkToken"] = cfg.uplinkToken.length() > 0;  // the key itself is never echoed
   doc["hasAdminPass"] = cfg.adminPass.length() > 0;
   sendJson(doc);
 }
 
 static void handlePostConfig() {
   if (!requireAuth()) return;
-  StaticJsonDocument<768> doc;
+  StaticJsonDocument<1024> doc;
   if (deserializeJson(doc, server.arg("plain"))) {
     return sendError(400, "bad json");
   }
   bool needReboot = false;
+  bool uplinkChanged = false;
   if (doc.containsKey("ssid") && doc["ssid"].as<String>() != cfg.ssid) { cfg.ssid = doc["ssid"].as<String>(); needReboot = true; }
   if (doc.containsKey("pass")) { cfg.pass = doc["pass"].as<String>(); needReboot = true; }
   if (doc.containsKey("adminPass")) cfg.adminPass = doc["adminPass"].as<String>();
@@ -269,8 +315,16 @@ static void handlePostConfig() {
     if (a >= MAX_CHANNELS || (a >= 0 && !channels.ch[a].used)) return sendError(400, "no such channel");
     cfg.activeChannel = a < 0 ? -1 : a;
   }
+  if (doc.containsKey("vfoDataProto")) cfg.vfoDataProto = constrain(doc["vfoDataProto"].as<int>(), 0, 2);
+  if (doc.containsKey("nodeName")) cfg.nodeName = doc["nodeName"].as<String>();
+  if (doc.containsKey("nodeLat")) cfg.nodeLat = doc["nodeLat"].as<float>();
+  if (doc.containsKey("nodeLon")) cfg.nodeLon = doc["nodeLon"].as<float>();
+  if (doc.containsKey("uplinkUrl")) { cfg.uplinkUrl = doc["uplinkUrl"].as<String>(); uplinkChanged = true; }
+  if (doc.containsKey("uplinkToken")) { cfg.uplinkToken = doc["uplinkToken"].as<String>(); uplinkChanged = true; }
   saveConfig();
   applyRadioTuning();
+  decoderReconfigure();  // the active channel / VFO protocol may have changed
+  if (uplinkChanged) uplinkReconfigure();
   StaticJsonDocument<64> resp;
   resp["ok"] = true;
   resp["reboot"] = needReboot;
@@ -292,6 +346,7 @@ static void handleGetChannels() {
     o["freqHz"] = channels.ch[i].freqHz;
     o["bandwidth"] = channels.ch[i].bandwidth;
     o["chMode"] = channels.ch[i].chMode;
+    o["dataProto"] = channels.ch[i].dataProto;
   }
   sendJson(doc);
 }
@@ -320,6 +375,7 @@ static void handlePutChannels() {
     c.freqHz = o["freqHz"];
     c.bandwidth = (o["bandwidth"] | 0) ? 1 : 0;
     c.chMode = (o["chMode"] | 0) ? CH_MODE_DATA : CH_MODE_VOICE;
+    c.dataProto = constrain(o["dataProto"] | 0, 0, 2);
     c.used = 1;
   }
   if (cfg.activeChannel >= i) {
@@ -327,7 +383,8 @@ static void handlePutChannels() {
     saveConfig();
   }
   saveChannelTable();
-  applyRadioTuning();  // the active channel's definition may have changed
+  applyRadioTuning();    // the active channel's definition may have changed
+  decoderReconfigure();  // ... including its data protocol
   StaticJsonDocument<32> resp;
   resp["ok"] = true;
   sendJson(resp);

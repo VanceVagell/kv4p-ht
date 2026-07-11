@@ -33,7 +33,10 @@ The radio is permanently in RX (PTT never asserted).
 #include "radio.h"
 #include "audio.h"
 #include "streamer.h"
+#include "frames.h"
+#include "decoder.h"
 #include "wifiMgr.h"
+#include "uplink.h"
 #include "webui.h"
 
 void setup() {
@@ -60,6 +63,11 @@ void setup() {
   }
   pinMode(hw.pins.pinLed, OUTPUT);
 
+  // Physical PTT buttons (unused for TX here) double as the factory-reset
+  // trigger: hold either one for 10 s.
+  pinMode(hw.pins.pinPttPhys1, INPUT_PULLUP);
+  pinMode(hw.pins.pinPttPhys2, INPUT_PULLUP);
+
   Serial2.begin(9600, SERIAL_8N1, hw.pins.pinRfModuleRxd, hw.pins.pinRfModuleTxd);
   Serial2.setTimeout(10);
 
@@ -68,6 +76,13 @@ void setup() {
   wifiSetup();
   webSetup();
   streamerStart();
+  decoderStart();
+  uplinkStart();
+
+#ifdef DECODER_SELFTEST
+  Serial.printf("[selftest] ffsk %s\n", ffskSelfTest() ? "PASS" : "FAIL");
+  Serial.printf("[selftest] nemo %s\n", nemoSelfTest() ? "PASS" : "FAIL");
+#endif
 
   Serial.printf("[setup] done. web ui on http://<ip>/  stream on :%u/stream.wav\n", cfg.streamPort);
 }
@@ -85,19 +100,45 @@ void squelchLoop() {
   }
 }
 
+// Hold either physical PTT button for 10 s to factory-reset. The LED blinks
+// fast from 5 s in ("keep holding"); any release restarts the countdown.
+void resetButtonLoop() {
+  static unsigned long heldSince = 0;
+  bool pressed = digitalRead(hw.pins.pinPttPhys1) == LOW || digitalRead(hw.pins.pinPttPhys2) == LOW;
+  if (!pressed) {
+    heldSince = 0;
+    return;
+  }
+  if (heldSince == 0) {
+    heldSince = millis();
+    return;
+  }
+  unsigned long held = millis() - heldSince;
+  if (held >= 10000) {
+    Serial.println("[reset] factory reset via PTT hold");
+    digitalWrite(hw.pins.pinLed, HIGH);
+    delay(300);  // brief solid-LED confirmation; well under the 10 s WDT
+    factoryReset();
+  } else if (held >= 5000) {
+    digitalWrite(hw.pins.pinLed, (held / 100) % 2 ? HIGH : LOW);
+  }
+}
+
 void statusLoop() {
   static unsigned long last = 0;
   if (millis() - last < 5000) {
     return;
   }
   last = millis();
-  Serial.printf("[status] heap=%u wifi=%d rssi=%d clients=%u overruns=%u sq=%d\n",
+  Serial.printf("[status] heap=%u wifi=%d rssi=%d clients=%u overruns=%u sq=%d dec=%u/%u up=%u/%u drop=%u\n",
                 ESP.getFreeHeap(), WiFi.status() == WL_CONNECTED, WiFi.RSSI(),
-                streamClientCount, streamOverruns, squelchOpen);
+                streamClientCount, streamOverruns, squelchOpen,
+                stFrames, stBursts, stSent, stAccepted, stDropped);
 }
 
 void loop() {
   squelchLoop();
+  resetButtonLoop();
   audioLoop();
   server.handleClient();
   wifiLoop();

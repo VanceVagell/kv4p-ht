@@ -21,6 +21,9 @@ Licensed under the GNU General Public License v3 or later.
 AnalogAudioStream adcIn;
 bool squelchOpen = false;
 
+// decoder.h — hands each processed frame to the telegram decoder task.
+void decoderFeed(const int16_t *b48k, size_t n48, const int16_t *b16k, size_t n16);
+
 // --- One-pole DC blocker (same time constant as upstream's DCOffsetRemover) ---
 static float dcAlpha = 0.0f;
 static float dcPrev = 0.0f;
@@ -105,14 +108,19 @@ void audioLoop() {
     return;
   }
   filled = 0;
-  bool mute = cfg.muteWhenClosed && !squelchOpen;
   for (int i = 0; i < FRAME_SAMPLES_48K; i++) {
     int32_t s = removeDc(buf48k[i]) * 16;  // 12-bit ADC data -> full 16-bit scale
     if (s > 32767) s = 32767;
     if (s < -32768) s = -32768;
-    buf48k[i] = mute ? 0 : (int16_t)s;
+    buf48k[i] = (int16_t)s;
   }
   decimateFrame(buf48k, buf16k);
+  // Decoders see the unmuted audio (they gate on their own envelopes; the
+  // hardware squelch would clip telegram bursts). Mute only the stream copy.
+  decoderFeed(buf48k, FRAME_SAMPLES_48K, buf16k, FRAME_SAMPLES_16K);
+  if (cfg.muteWhenClosed && !squelchOpen) {
+    memset(buf16k, 0, sizeof(buf16k));
+  }
   ringWrite((uint8_t *)buf16k, sizeof(buf16k));
   esp_task_wdt_reset();
 }

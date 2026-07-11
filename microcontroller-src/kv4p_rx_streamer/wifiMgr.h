@@ -19,7 +19,14 @@ Licensed under the GNU General Public License v3 or later.
 
 static bool apStarted = false;
 static bool mdnsStarted = false;
+static bool ntpStarted = false;
 static unsigned long wifiStartMs = 0;
+
+// SNTP kicks off on the first STA connect; until it converges, uploaded
+// frames omit received_at (the server stamps them on receipt instead).
+bool timeSynced() {
+  return time(nullptr) > 1700000000;  // any post-2023 date = SNTP has run
+}
 
 static void startSetupAP() {
   WiFi.mode(cfg.ssid.length() ? WIFI_AP_STA : WIFI_AP);
@@ -54,5 +61,9 @@ void wifiLoop() {
       MDNS.addService("http", "tcp", 80);
       Serial.printf("[wifi] connected, ip=%s (kv4p-rx.local)\n", WiFi.localIP().toString().c_str());
     }
+  }
+  if (!ntpStarted && WiFi.status() == WL_CONNECTED) {
+    configTime(0, 0, "pool.ntp.org");
+    ntpStarted = true;
   }
 }
