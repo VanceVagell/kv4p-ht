@@ -18,9 +18,11 @@ Licensed under the GNU General Public License v3 or later.
 #define MAX_STREAM_CLIENTS 3
 #define STREAM_CHUNK 1400
 
-// Heap-allocated at static-init (before setup()): a 64 kB static array
-// overflows the ESP32's dram0 .bss segment at link time.
-static uint8_t *ring = (uint8_t *)heap_caps_malloc(RING_SIZE, MALLOC_CAP_8BIT);
+// Heap-allocated in streamerStart(): a 64 kB static array overflows the
+// ESP32's dram0 .bss segment at link time, and allocating at static-init
+// crashed on hardware (heap_caps_malloc returned NULL before the heap was
+// ready, and the first ringWrite() then wrote to address 0).
+static uint8_t *ring = nullptr;
 static volatile uint32_t ringWritePos = 0;  // monotonic; aligned 32-bit store is atomic
 
 volatile uint32_t streamClientCount = 0;
@@ -30,6 +32,7 @@ volatile bool otaInProgress = false;
 
 // Single producer: the audio loop on core 1.
 void ringWrite(const uint8_t *data, size_t len) {
+  if (!ring) return;
   uint32_t pos = ringWritePos;
   size_t idx = pos & (RING_SIZE - 1);
   size_t first = min(len, (size_t)(RING_SIZE - idx));
@@ -173,6 +176,11 @@ static void streamerTask(void *) {
 }
 
 void streamerStart() {
+  ring = (uint8_t *)heap_caps_malloc(RING_SIZE, MALLOC_CAP_8BIT);
+  if (!ring) {
+    Serial.println("[streamer] FATAL: ring alloc failed, streaming disabled");
+    return;
+  }
   streamServer = new WiFiServer(cfg.streamPort);
   streamServer->begin();
   streamServer->setNoDelay(true);
