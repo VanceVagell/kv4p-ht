@@ -1475,6 +1475,9 @@ public class RadioAudioService extends Service {
         if (!state.hasRadioConfig() || state.getLastError() != 0) {
             return;
         }
+        if (!radioModule.isAppliedStateInSync()) {
+            return;
+        }
         String nextFrequency = formatFreq(state.getFreqRx());
         int nextMemoryId = state.getMemoryId();
         if (nextMemoryId == activeMemoryId && nextFrequency.equals(activeFrequencyStr)) {
