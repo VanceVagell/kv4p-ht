@@ -461,8 +461,21 @@ public class RadioAudioService extends Service {
         Notification notification = buildForegroundNotification();
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(SERVICE_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                startForeground(
+                        SERVICE_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                                | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                                | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                );
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                        SERVICE_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                                | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                );
             } else {
                 startForeground(SERVICE_ID, notification);
             }
