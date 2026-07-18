@@ -62,7 +62,6 @@
     <string name="your_callsign">Your callsign</string>
     <string name="my_position_accuracy">My position accuracy</string>
     <string name="advanced">Advanced</string>
-    <string name="enable_soft_sq">Enable Soft SQ</string>
     <string name="versions">Versions</string>
     <string name="bandwidth">Bandwidth</string>
     <string name="min_2m_tx_frequency">Min 2m TX frequency</string>

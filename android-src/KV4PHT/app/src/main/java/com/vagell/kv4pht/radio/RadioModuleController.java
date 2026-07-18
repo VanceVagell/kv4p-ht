@@ -45,14 +45,12 @@ public class RadioModuleController {
             | Protocol.HOST_STATE_FILTER_HIGH
             | Protocol.HOST_STATE_FILTER_LOW
             | Protocol.HOST_STATE_TX_ALLOWED
-            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS
-            | Protocol.HOST_STATE_SOFT_SQ_ENABLED;
+            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS;
     private static final int SESSION_FLAGS_MASK = Protocol.HOST_STATE_RX_AUDIO_OPEN
             | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS;
     private static final int DEFAULT_DESIRED_FLAGS = Protocol.HOST_STATE_HIGH_POWER
             | Protocol.HOST_STATE_RSSI_ENABLED
-            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS
-            | Protocol.HOST_STATE_SOFT_SQ_ENABLED;
+            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS;
 
     private Protocol.Sender sender;
     private Protocol.FirmwareVersion firmwareVersion;
@@ -211,10 +209,6 @@ public class RadioModuleController {
         setDesiredFlag(Protocol.HOST_STATE_RSSI_ENABLED, on);
     }
 
-    public synchronized void setSoftSquelchEnabled(boolean enabled) {
-        setDesiredFlag(Protocol.HOST_STATE_SOFT_SQ_ENABLED, enabled);
-    }
-
     public synchronized void setTxAllowed(boolean allowed) {
         setDesiredFlag(Protocol.HOST_STATE_TX_ALLOWED, allowed);
     }
@@ -257,10 +251,6 @@ public class RadioModuleController {
 
     public synchronized int getDesiredSquelch() {
         return desiredState.getSquelch() & 0xFF;
-    }
-
-    public synchronized boolean isSoftSquelchEnabled() {
-        return hasDesiredFlag(Protocol.HOST_STATE_SOFT_SQ_ENABLED);
     }
 
     public synchronized String getBandwidthLabel() {

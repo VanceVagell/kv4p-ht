@@ -75,7 +75,7 @@ boolean rssiOn = true; // true if RSSI is enabled
 HostDesiredState desiredState = {
   .sequence = 0,
   .memoryId = -1,
-  .flags = HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_SOFT_SQ_ENABLED,
+  .flags = HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED,
   .bw = DRA818_25K,
   .freq_tx = 0.0f,
   .freq_rx = 0.0f,
@@ -90,8 +90,6 @@ bool filtersApplied = false;
 uint8_t lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
 uint8_t latestRssi = 0;
 bool deviceStateDirty = false;
-
-Debounce squelchDebounce(100);
 
 float moduleMinRadioFreq() {
   return hw.rfModuleType == RF_SA818_UHF ? 400.0f : 134.0f;
@@ -116,7 +114,7 @@ bool isModuleRadioFreq(float freq) {
 void loadPersistedRadioState() {
   prefs.begin("radio", true);
   uint16_t flags = desiredState.flags;
-  flags &= ~(HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW | HOST_STATE_TX_ALLOWED | HOST_STATE_SOFT_SQ_ENABLED);
+  flags &= ~(HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW | HOST_STATE_TX_ALLOWED);
   flags |= HOST_STATE_RADIO_CONFIG_VALID;
   desiredState.bw = prefs.getUChar("bw", DRA818_25K);
   desiredState.freq_tx = prefs.getFloat("freq_tx", moduleDefaultRadioFreq());
@@ -148,9 +146,6 @@ void loadPersistedRadioState() {
   if (prefs.getBool("tx_allowed", false)) {
     flags |= HOST_STATE_TX_ALLOWED;
   }
-  if (prefs.getBool("soft_sq", true)) {
-    flags |= HOST_STATE_SOFT_SQ_ENABLED;
-  }
   desiredState.flags = flags;
   softSquelchEffect.setDeadbandLevel(desiredState.squelch);
   desiredState.sequence = 0;
@@ -161,7 +156,7 @@ void loadPersistedRadioState() {
 }
 
 uint16_t persistedStateFlags(uint16_t flags) {
-  return flags & (HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW | HOST_STATE_TX_ALLOWED | HOST_STATE_SOFT_SQ_ENABLED);
+  return flags & (HOST_STATE_RADIO_CONFIG_VALID | HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED | HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW | HOST_STATE_TX_ALLOWED);
 }
 
 bool persistedRadioStateMatchesDesired() {
@@ -193,7 +188,6 @@ void savePersistedRadioStateIfChanged() {
   prefs.putBool("flt_high", (desiredState.flags & HOST_STATE_FILTER_HIGH) != 0);
   prefs.putBool("flt_low", (desiredState.flags & HOST_STATE_FILTER_LOW) != 0);
   prefs.putBool("tx_allowed", (desiredState.flags & HOST_STATE_TX_ALLOWED) != 0);
-  prefs.putBool("soft_sq", (desiredState.flags & HOST_STATE_SOFT_SQ_ENABLED) != 0);
   prefs.end();
   persistedState = desiredState;
 }
@@ -292,13 +286,7 @@ bool radioConfigChanged() {
     || appliedState.ctcss_tx != desiredState.ctcss_tx
     || appliedState.squelch != desiredState.squelch
     || appliedState.ctcss_rx != desiredState.ctcss_rx
-    || appliedState.memoryId != desiredState.memoryId
-    || ((appliedState.flags ^ desiredState.flags) & HOST_STATE_SOFT_SQ_ENABLED);
-}
-
-bool isSoftSquelchEnabled() {
-  uint16_t flags = radioConfigApplied ? appliedState.flags : desiredState.flags;
-  return (flags & HOST_STATE_SOFT_SQ_ENABLED) != 0;
+    || appliedState.memoryId != desiredState.memoryId;
 }
 
 void drainRadioSerial() {
@@ -328,11 +316,8 @@ void reconcileDesiredState(bool sendReport = true) {
   }
 
   if ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) && radioConfigChanged()) {
-    bool wasSoftSquelch = isSoftSquelchEnabled();
-    bool wantSoftSquelch = (desiredState.flags & HOST_STATE_SOFT_SQ_ENABLED) != 0;
-    uint8_t radioSquelch = wantSoftSquelch ? 0 : desiredState.squelch;
     drainRadioSerial();
-    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, radioSquelch, desiredState.ctcss_rx)) {
+    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, 0, desiredState.ctcss_rx)) {
       lastDeviceStateError = DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED;
       esp_task_wdt_reset();
     }
@@ -344,13 +329,7 @@ void reconcileDesiredState(bool sendReport = true) {
     softSquelchEffect.setDeadbandLevel(appliedState.squelch);
     appliedState.ctcss_rx = desiredState.ctcss_rx;
     appliedState.memoryId = desiredState.memoryId;
-    appliedState.flags = (appliedState.flags & ~HOST_STATE_SOFT_SQ_ENABLED)
-      | (desiredState.flags & HOST_STATE_SOFT_SQ_ENABLED)
-      | HOST_STATE_RADIO_CONFIG_VALID;
-    if (wantSoftSquelch && !wasSoftSquelch) {
-      softSquelchEffect.resetState();
-      squelched = true;
-    }
+    appliedState.flags |= HOST_STATE_RADIO_CONFIG_VALID;
     radioConfigApplied = true;
   }
 
@@ -381,7 +360,6 @@ void setMode(Mode newMode) {
     case MODE_RX:
       _LOGI("MODE_RX");
       digitalWrite(hw.pins.pinPtt, HIGH);
-      squelchDebounce.forceState(true);
       endI2STx();
       initI2SRx();
     break;
@@ -435,7 +413,6 @@ void setup() {
   // Set up radio module defaults
   pinMode(hw.pins.pinPd, OUTPUT);
   digitalWrite(hw.pins.pinPd, HIGH);  // Power on
-  pinMode(hw.pins.pinSq, INPUT);
   pinMode(hw.pins.pinPtt, OUTPUT);
   digitalWrite(hw.pins.pinPtt, HIGH);  // Rx
   if (hw.features.hasHL) {
@@ -448,8 +425,7 @@ void setup() {
   //
   debugSetup();
   // Begin in STOPPED mode
-  bool hardwareSquelched = (digitalRead(hw.pins.pinSq) == HIGH);
-  squelched = isSoftSquelchEnabled() ? true : hardwareSquelched;
+  squelched = true;
   setMode(MODE_STOPPED);
   initI2SRx();
   ledSetup();
@@ -624,8 +600,7 @@ void bleKissLoop() {
 }
 
 void squelchLoop() {
-  bool hardwareSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
-  bool nextSquelched = isSoftSquelchEnabled() ? !softSquelchEffect.isSoftOpen() : hardwareSquelched;
+  bool nextSquelched = !softSquelchEffect.isSoftOpen();
   if (nextSquelched != squelched) {
     squelched = nextSquelched;
     markDeviceStateDirty();

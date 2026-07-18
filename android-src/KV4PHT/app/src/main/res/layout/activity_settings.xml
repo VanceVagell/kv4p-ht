@@ -398,17 +398,6 @@
                     android:textSize="16dp"
                     android:layout_marginTop="24dp"/>
 
-                <Switch
-                    android:id="@+id/softSquelchSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/enable_soft_sq"
-                    android:textSize="18dp"
-                    android:textColor="@color/primary"
-                    android:layout_marginTop="8dp"
-                    android:trackTintMode="add"
-                    android:checked="true"/>
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

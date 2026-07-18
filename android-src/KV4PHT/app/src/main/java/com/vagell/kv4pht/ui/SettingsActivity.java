@@ -67,7 +67,6 @@ public class SettingsActivity extends AppCompatActivity {
     public static final String EXTRA_FILTER_PRE = "filterPre";
     public static final String EXTRA_FILTER_HIGH = "filterHigh";
     public static final String EXTRA_FILTER_LOW = "filterLow";
-    public static final String EXTRA_SOFT_SQUELCH_ENABLED = "softSquelchEnabled";
     public static final String EXTRA_APRS_ICON = "aprsIcon";
 
     private RadioAudioService radioAudioService = null;
@@ -78,7 +77,6 @@ public class SettingsActivity extends AppCompatActivity {
     private boolean initialEmphasis = false;
     private boolean initialHighpass = false;
     private boolean initialLowpass = false;
-    private boolean initialSoftSquelchEnabled = true;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -106,7 +104,6 @@ public class SettingsActivity extends AppCompatActivity {
         initialEmphasis = getIntent().getBooleanExtra(EXTRA_FILTER_PRE, false);
         initialHighpass = getIntent().getBooleanExtra(EXTRA_FILTER_HIGH, false);
         initialLowpass = getIntent().getBooleanExtra(EXTRA_FILTER_LOW, false);
-        initialSoftSquelchEnabled = getIntent().getBooleanExtra(EXTRA_SOFT_SQUELCH_ENABLED, true);
 
         setContentView(R.layout.activity_settings);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -153,7 +150,6 @@ public class SettingsActivity extends AppCompatActivity {
             radioAudioService.getRadioModule().beginUpdate();
             try {
                 radioAudioService.getRadioModule().setSquelch(initialSquelch);
-                radioAudioService.getRadioModule().setSoftSquelchEnabled(initialSoftSquelchEnabled);
                 radioAudioService.getRadioModule().setFilters(initialEmphasis, initialHighpass, initialLowpass);
             } finally {
                 radioAudioService.getRadioModule().endUpdate();
@@ -179,11 +175,6 @@ public class SettingsActivity extends AppCompatActivity {
         ((Switch) findViewById(R.id.emphasisSwitch)).setOnCheckedChangeListener(filterListener);
         ((Switch) findViewById(R.id.highpassSwitch)).setOnCheckedChangeListener(filterListener);
         ((Switch) findViewById(R.id.lowpassSwitch)).setOnCheckedChangeListener(filterListener);
-        ((Switch) findViewById(R.id.softSquelchSwitch)).setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (radioAudioService != null && radioAudioService.isRadioConnected()) {
-                radioAudioService.getRadioModule().setSoftSquelchEnabled(isChecked);
-            }
-        });
     }
 
     private void applyFiltersLive() {
@@ -350,7 +341,6 @@ public class SettingsActivity extends AppCompatActivity {
         this.<Switch>findViewById(R.id.emphasisSwitch).setChecked(getIntent().getBooleanExtra(EXTRA_FILTER_PRE, false));
         this.<Switch>findViewById(R.id.highpassSwitch).setChecked(getIntent().getBooleanExtra(EXTRA_FILTER_HIGH, false));
         this.<Switch>findViewById(R.id.lowpassSwitch).setChecked(getIntent().getBooleanExtra(EXTRA_FILTER_LOW, false));
-        this.<Switch>findViewById(R.id.softSquelchSwitch).setChecked(getIntent().getBooleanExtra(EXTRA_SOFT_SQUELCH_ENABLED, true));
         this.<AutoCompleteTextView>findViewById(R.id.bandwidthTextView)
             .setText(getIntent().getStringExtra(EXTRA_BANDWIDTH) != null ? getIntent().getStringExtra(EXTRA_BANDWIDTH) : getString(R.string.wide), false);
 
@@ -387,8 +377,7 @@ public class SettingsActivity extends AppCompatActivity {
             .putExtra(EXTRA_SQUELCH, (int) this.<Slider>findViewById(R.id.squelchSlider).getValue())
             .putExtra(EXTRA_FILTER_PRE, this.<Switch>findViewById(R.id.emphasisSwitch).isChecked())
             .putExtra(EXTRA_FILTER_HIGH, this.<Switch>findViewById(R.id.highpassSwitch).isChecked())
-            .putExtra(EXTRA_FILTER_LOW, this.<Switch>findViewById(R.id.lowpassSwitch).isChecked())
-            .putExtra(EXTRA_SOFT_SQUELCH_ENABLED, this.<Switch>findViewById(R.id.softSquelchSwitch).isChecked());
+            .putExtra(EXTRA_FILTER_LOW, this.<Switch>findViewById(R.id.lowpassSwitch).isChecked());
         setResult(Activity.RESULT_OK, data);
         finish();
     }

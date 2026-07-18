@@ -121,7 +121,6 @@ public final class Protocol {
     static final int DEVICE_STATE_SQUELCHED = 1 << 10;
     static final int HOST_STATE_TX_ALLOWED = 1 << 11;
     static final int HOST_STATE_ENABLE_STATUS_REPORTS = 1 << 12;
-    static final int HOST_STATE_SOFT_SQ_ENABLED = 1 << 13;
 
     @Getter
     public enum DeviceMode {
