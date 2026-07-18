@@ -91,8 +91,6 @@ uint8_t lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
 uint8_t latestRssi = 0;
 bool deviceStateDirty = false;
 
-Debounce squelchDebounce(100);
-
 float moduleMinRadioFreq() {
   return hw.rfModuleType == RF_SA818_UHF ? 400.0f : 134.0f;
 }
@@ -149,6 +147,7 @@ void loadPersistedRadioState() {
     flags |= HOST_STATE_TX_ALLOWED;
   }
   desiredState.flags = flags;
+  softSquelchEffect.setDeadbandLevel(desiredState.squelch);
   desiredState.sequence = 0;
   desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_SESSION_FLAG_MASK);
   appliedState.memoryId = desiredState.memoryId;
@@ -318,7 +317,7 @@ void reconcileDesiredState(bool sendReport = true) {
 
   if ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) && radioConfigChanged()) {
     drainRadioSerial();
-    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, desiredState.squelch, desiredState.ctcss_rx)) {
+    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, 0, desiredState.ctcss_rx)) {
       lastDeviceStateError = DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED;
       esp_task_wdt_reset();
     }
@@ -327,6 +326,7 @@ void reconcileDesiredState(bool sendReport = true) {
     appliedState.freq_rx = desiredState.freq_rx;
     appliedState.ctcss_tx = desiredState.ctcss_tx;
     appliedState.squelch = desiredState.squelch;
+    softSquelchEffect.setDeadbandLevel(appliedState.squelch);
     appliedState.ctcss_rx = desiredState.ctcss_rx;
     appliedState.memoryId = desiredState.memoryId;
     appliedState.flags |= HOST_STATE_RADIO_CONFIG_VALID;
@@ -360,7 +360,6 @@ void setMode(Mode newMode) {
     case MODE_RX:
       _LOGI("MODE_RX");
       digitalWrite(hw.pins.pinPtt, HIGH);
-      squelchDebounce.forceState(true);
       endI2STx();
       initI2SRx();
     break;
@@ -414,7 +413,6 @@ void setup() {
   // Set up radio module defaults
   pinMode(hw.pins.pinPd, OUTPUT);
   digitalWrite(hw.pins.pinPd, HIGH);  // Power on
-  pinMode(hw.pins.pinSq, INPUT);
   pinMode(hw.pins.pinPtt, OUTPUT);
   digitalWrite(hw.pins.pinPtt, HIGH);  // Rx
   if (hw.features.hasHL) {
@@ -427,7 +425,7 @@ void setup() {
   //
   debugSetup();
   // Begin in STOPPED mode
-  squelched = (digitalRead(hw.pins.pinSq) == HIGH);
+  squelched = true;
   setMode(MODE_STOPPED);
   initI2SRx();
   ledSetup();
@@ -612,7 +610,7 @@ void bleKissLoop() {
 }
 
 void squelchLoop() {
-  bool nextSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
+  bool nextSquelched = !softSquelchEffect.isSoftOpen();
   if (nextSquelched != squelched) {
     squelched = nextSquelched;
     markDeviceStateDirty();

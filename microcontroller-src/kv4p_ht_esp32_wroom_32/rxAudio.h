@@ -23,10 +23,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 #include <AfskDemodulator.h>
+#include <math.h>
 #include "globals.h"
 #include "protocol.h"
 #include "debug.h"
-#include "audioResampler.h"
+#include "dsp/audioResampler.h"
+#include "dsp/softSquelchEffect.h"
 
 class SerialOutput : public AudioOutput {
 public:
@@ -122,6 +124,7 @@ Boost mute(0.0);
 Boost gain(16.0);
 DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
 AfskTapEffect afskTapEffect;
+SoftSquelchEffect softSquelchEffect(AUDIO_SAMPLE_RATE, ZCR_DECAY_TIME, SQ_CLOSE_DELAY);
 
 inline void injectADCBias() {
   dac_output_enable(DAC_CHANNEL_2);  // GPIO26 (DAC1)
@@ -136,6 +139,7 @@ void initI2SRx() {
   if (rxStreamConfigured) {
     return;
   }
+  softSquelchEffect.resetState();
   injectADCBias();
   setUpADCAttenuator();
   //AudioToolsLogger.begin(debugPrinter, AudioToolsLogLevel::Debug);
@@ -152,7 +156,8 @@ void initI2SRx() {
   afskTapEffect.setActive(true);
   effects.addEffect(dcOffsetRemover);
   effects.addEffect(gain);
-  effects.addEffect(afskTapEffect);    
+  effects.addEffect(afskTapEffect);
+  effects.addEffect(softSquelchEffect);
   effects.addEffect(mute);
   effects.begin(rxInfo);
   // open output

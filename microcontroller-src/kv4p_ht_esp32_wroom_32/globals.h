@@ -34,6 +34,7 @@ enum RfModuleType : uint8_t {
 #define AUDIO_FRAME_SAMPLES_48K 747
 #define AUDIO_FRAME_BYTES 128
 #define AUDIO_RESAMPLE_RATIO 3
+#define AUDIO_DSP_ALIGN16 __attribute__((aligned(16)))
 
 inline uint32_t bluetoothDeviceId() {
   uint64_t mac = ESP.getEfuseMac();
