@@ -139,7 +139,7 @@ void initI2SRx() {
   if (rxStreamConfigured) {
     return;
   }
-  softSquelchEffect.resetState();
+  softSquelchEffect.cordonTransition();
   injectADCBias();
   setUpADCAttenuator();
   //AudioToolsLogger.begin(debugPrinter, AudioToolsLogLevel::Debug);

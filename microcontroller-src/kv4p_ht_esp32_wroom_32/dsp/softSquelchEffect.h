@@ -26,6 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define ZCR_DECAY_TIME 0.100f  // seconds
 #define SQ_CLOSE_DELAY 0.250f  // seconds
+#define SQ_TRANSITION_CORDON_TIME (SQ_CLOSE_DELAY + 0.750f)  // seconds
 
 class SoftSquelchEffect : public AudioEffect {
 public:
@@ -48,13 +49,35 @@ public:
   void resetState() {
     memset(bpfState, 0, sizeof(bpfState));
     previousOutsideSample = 0.0f;
+    cordonSamplesRemaining = 0;
+    if (isBypassed()) {
+      iirZcr = 0.0f;
+      aboveThresholdSamples = 0;
+      setSoftSqOpen(true);
+      return;
+    }
     iirZcr = resetClosedZcr();
     aboveThresholdSamples = closeDelaySamples();
     setSoftSqOpen(false);
   }
 
+  void cordonTransition() {
+    if (isBypassed()) {
+      cordonSamplesRemaining = 0;
+      setSoftSqOpen(true);
+      return;
+    }
+    cordonedSoftSqOpen = isSoftOpen();
+    cordonSamplesRemaining = transitionCordonSamples();
+  }
+
   effect_t process(effect_t input) override {
     if (!active()) {
+      return input;
+    }
+    if (isBypassed()) {
+      cordonSamplesRemaining = 0;
+      setSoftSqOpen(true);
       return input;
     }
 
@@ -70,6 +93,9 @@ public:
     float crossingInstantRate = crossing ? (float)sampleRate : 0.0f;
     iirZcr += zcrAlpha * (crossingInstantRate - iirZcr);
     updateDecision();
+    if (cordonSamplesRemaining > 0) {
+      cordonSamplesRemaining--;
+    }
     return input;
   }
 
@@ -78,6 +104,9 @@ public:
   }
 
   bool isSoftOpen() const {
+    if (cordonSamplesRemaining > 0) {
+      return cordonedSoftSqOpen;
+    }
     return softSqOpen;
   }
 
@@ -87,6 +116,7 @@ public:
     }
     deadbandLevel = level;
     deadband = deadbandForLevel(level);
+    resetState();
   }
 
   uint8_t getDeadbandLevel() const {
@@ -114,7 +144,9 @@ private:
   float zcrAlpha = 0.0f;
   float iirZcr = 0.0f;
   uint32_t aboveThresholdSamples = 0;
+  uint32_t cordonSamplesRemaining = 0;
   bool softSqOpen = false;
+  bool cordonedSoftSqOpen = false;
   uint8_t deadbandLevel = 0;
   float deadband = 0.45f;
 
@@ -123,6 +155,10 @@ private:
       level = 8;
     }
     return 0.45f - ((float)level / 8.0f) * (0.45f - 0.08f);
+  }
+
+  bool isBypassed() const {
+    return deadbandLevel == 0;
   }
 
   void initBpf() {
@@ -137,6 +173,10 @@ private:
 
   uint32_t closeDelaySamples() const {
     return (uint32_t)((float)sampleRate * closeDelaySec);
+  }
+
+  uint32_t transitionCordonSamples() const {
+    return (uint32_t)((float)sampleRate * SQ_TRANSITION_CORDON_TIME);
   }
 
   float resetClosedZcr() const {
