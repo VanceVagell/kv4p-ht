@@ -167,7 +167,7 @@ public class MainActivity extends AppCompatActivity {
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
     private static int RECORD_ANIM_FPS = 30;
-    private static final int S_METER_MAX_VALUE = 16;
+    private static final int S_METER_MAX_VALUE = 13;
 
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
@@ -1283,8 +1283,7 @@ public class MainActivity extends AppCompatActivity {
             R.id.sMeter4, R.id.sMeter5, R.id.sMeter6,
             R.id.sMeter7, R.id.sMeter8, R.id.sMeter9,
             R.id.sMeter10, R.id.sMeter11, R.id.sMeter12,
-            R.id.sMeter13, R.id.sMeter14, R.id.sMeter15,
-            R.id.sMeter16
+            R.id.sMeter13
         };
 
         for (int i = 0; i < sMeterIds.length; i++) {
@@ -1293,7 +1292,7 @@ public class MainActivity extends AppCompatActivity {
             int color = primaryColor;
             if (active && moduleTxActive) {
                 color = txColor;
-            } else if (active && i == 15) {
+            } else if (active && i == 12) {
                 color = overloadColor;
             } else if (active && i >= 9) {
                 color = overS9Color;
