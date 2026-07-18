@@ -91,8 +91,6 @@ uint8_t lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
 uint8_t latestRssi = 0;
 bool deviceStateDirty = false;
 
-Debounce squelchDebounce(100);
-
 float moduleMinRadioFreq() {
   return hw.rfModuleType == RF_SA818_UHF ? 400.0f : 134.0f;
 }
@@ -149,6 +147,7 @@ void loadPersistedRadioState() {
     flags |= HOST_STATE_TX_ALLOWED;
   }
   desiredState.flags = flags;
+  softSquelchEffect.setDeadbandLevel(desiredState.squelch);
   desiredState.sequence = 0;
   desiredState.flags &= ~(HOST_STATE_PTT_REQUESTED | HOST_STATE_SESSION_FLAG_MASK);
   appliedState.memoryId = desiredState.memoryId;
@@ -318,7 +317,7 @@ void reconcileDesiredState(bool sendReport = true) {
 
   if ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) && radioConfigChanged()) {
     drainRadioSerial();
-    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, desiredState.squelch, desiredState.ctcss_rx)) {
+    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, 0, desiredState.ctcss_rx)) {
       lastDeviceStateError = DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED;
       esp_task_wdt_reset();
     }
@@ -327,6 +326,7 @@ void reconcileDesiredState(bool sendReport = true) {
     appliedState.freq_rx = desiredState.freq_rx;
     appliedState.ctcss_tx = desiredState.ctcss_tx;
     appliedState.squelch = desiredState.squelch;
+    softSquelchEffect.setDeadbandLevel(appliedState.squelch);
     appliedState.ctcss_rx = desiredState.ctcss_rx;
     appliedState.memoryId = desiredState.memoryId;
     appliedState.flags |= HOST_STATE_RADIO_CONFIG_VALID;
@@ -360,7 +360,6 @@ void setMode(Mode newMode) {
     case MODE_RX:
       _LOGI("MODE_RX");
       digitalWrite(hw.pins.pinPtt, HIGH);
-      squelchDebounce.forceState(true);
       endI2STx();
       initI2SRx();
     break;
@@ -414,7 +413,6 @@ void setup() {
   // Set up radio module defaults
   pinMode(hw.pins.pinPd, OUTPUT);
   digitalWrite(hw.pins.pinPd, HIGH);  // Power on
-  pinMode(hw.pins.pinSq, INPUT);
   pinMode(hw.pins.pinPtt, OUTPUT);
   digitalWrite(hw.pins.pinPtt, HIGH);  // Rx
   if (hw.features.hasHL) {
@@ -427,7 +425,7 @@ void setup() {
   //
   debugSetup();
   // Begin in STOPPED mode
-  squelched = (digitalRead(hw.pins.pinSq) == HIGH);
+  squelched = true;
   setMode(MODE_STOPPED);
   initI2SRx();
   ledSetup();
@@ -497,6 +495,8 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
 void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
   if (ax25_len > 0 && ax25_len <= PROTO_MTU && txAllowedByHost()) {
     setMode(MODE_TX);
+    latestRssi = (uint8_t)TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
+    txAudioLevel = TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
     sendCurrentDeviceState();
     pulseAprsTxLED();
     processTxAx25(ax25, ax25_len);
@@ -507,21 +507,29 @@ void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
 }
 
 void rssiLoop() {
-  if (rssiOn && mode == MODE_RX) {
+  if (rssiOn) {
     EVERY_N_MILLISECONDS(RSSI_REPORT_INTERVAL_MS) {
-      // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
-      // return value from the module, and just tells us success/fail.
-      // int rssi = dra->rssi();
-      Serial2.println("RSSI?");
-      String rssiResponse = Serial2.readString();
-      if (rssiResponse.length() > 7) {
-        String rssiStr = rssiResponse.substring(5);
-        int rssiInt    = rssiStr.toInt();
-        if (rssiInt >= 0 && rssiInt <= 255) {
-          uint8_t rssi = (uint8_t)rssiInt;
-          if (latestRssi != rssi) {
-            latestRssi = rssi;
-            markDeviceStateDirty();
+      if (mode == MODE_TX) {
+        uint8_t rssi = (uint8_t)roundf(constrain(txAudioLevel, 0.0f, 255.0f));
+        if (latestRssi != rssi) {
+          latestRssi = rssi;
+          markDeviceStateDirty();
+        }
+      } else if (mode == MODE_RX) {
+        // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
+        // return value from the module, and just tells us success/fail.
+        // int rssi = dra->rssi();
+        Serial2.println("RSSI?");
+        String rssiResponse = Serial2.readString();
+        if (rssiResponse.length() > 7) {
+          String rssiStr = rssiResponse.substring(5);
+          int rssiInt    = rssiStr.toInt();
+          if (rssiInt >= 0 && rssiInt <= 255) {
+            uint8_t rssi = (uint8_t)rssiInt;
+            if (latestRssi != rssi) {
+              latestRssi = rssi;
+              markDeviceStateDirty();
+            }
           }
         }
       }
@@ -602,7 +610,7 @@ void bleKissLoop() {
 }
 
 void squelchLoop() {
-  bool nextSquelched = squelchDebounce.debounce((digitalRead(hw.pins.pinSq) == HIGH));
+  bool nextSquelched = !softSquelchEffect.isSoftOpen();
   if (nextSquelched != squelched) {
     squelched = nextSquelched;
     markDeviceStateDirty();

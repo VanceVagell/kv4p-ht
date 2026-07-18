@@ -26,6 +26,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <application
         android:allowBackup="true"
@@ -106,9 +107,9 @@
         </activity>
 
         <service
-            android:name=".radio.RadioAudioService"
-            android:exported="false"
-            android:foregroundServiceType="location|mediaPlayback"></service>
+                android:name=".radio.RadioAudioService"
+                android:exported="false"
+                android:foregroundServiceType="location|mediaPlayback|microphone"/>
     </application>
 
 </manifest>

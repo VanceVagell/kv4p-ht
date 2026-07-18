@@ -948,6 +948,26 @@ public class ProtocolKissTest {
         assertFalse(Protocol.Hello.from(ByteBuffer.wrap(shortPayload).order(ByteOrder.LITTLE_ENDIAN), 0, 12).isPresent());
     }
 
+    @Test
+    public void sMeterUsesCalibratedRssiRange() {
+        assertEquals(0, Protocol.calculateSMeterValue(0));
+        assertEquals(0, Protocol.calculateSMeterValue(16));
+        assertEquals(1, Protocol.calculateSMeterValue(17));
+        assertEquals(2, Protocol.calculateSMeterValue(22));
+        assertEquals(8, Protocol.calculateSMeterValue(56));
+        assertEquals(9, Protocol.calculateSMeterValue(57));
+        assertEquals(9, Protocol.calculateSMeterValue(64));
+        assertEquals(9, Protocol.calculateSMeterValue(65));
+        assertEquals(10, Protocol.calculateSMeterValue(74));
+        assertEquals(10, Protocol.calculateSMeterValue(82));
+        assertEquals(11, Protocol.calculateSMeterValue(90));
+        assertEquals(11, Protocol.calculateSMeterValue(99));
+        assertEquals(12, Protocol.calculateSMeterValue(107));
+        assertEquals(12, Protocol.calculateSMeterValue(109));
+        assertEquals(13, Protocol.calculateSMeterValue(110));
+        assertEquals(13, Protocol.calculateSMeterValue(255));
+    }
+
     private Protocol.KissParser newParser() {
         return new Protocol.KissParser((cmd, param, offset, len) -> {
             called = true;

@@ -24,7 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AfskModulator.h>
 #include "globals.h"
 #include "protocol.h"
-#include "audioResampler.h"
+#include "dsp/audioResampler.h"
 
 bool txStreamConfigured = false;
 bool txDecodeStreamStarted = false;
@@ -32,8 +32,9 @@ I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
 AudioInfo txAudioInfo(AUDIO_WIRE_SAMPLE_RATE, 1, 16);
 AudioUpsampleOutput txUpsample(out);
+VolumeMeter txVolumeMeter(txUpsample);
 ADPCMDecoder txAdpcmDecoder(AV_CODEC_ID_ADPCM_IMA_WAV, AUDIO_FRAME_BYTES);
-EncodedAudioStream txDecodeStream(&txUpsample, &txAdpcmDecoder);
+EncodedAudioStream txDecodeStream(&txVolumeMeter, &txAdpcmDecoder);
 
 // Tx runaway detection stuff
 uint32_t txStartTime = -1;
@@ -41,6 +42,29 @@ const uint16_t RUNAWAY_TX_SEC = 200;
 
 float txAfskBlock[TX_AFSK_BLOCK_SAMPLES];
 int16_t txAfskPcm[TX_AFSK_BLOCK_SAMPLES];
+
+const float TX_AUDIO_LEVEL_FULL_SCALE_RSSI = 90.0f;
+const float TX_AUDIO_DB_PER_RSSI = 1.2f;
+const float TX_AUDIO_LEVEL_RELEASE = 0.65f;
+
+static float peakHoldTxAudioVolumeRatio(float measuredRatio) {
+  static float heldRatio = 0.0f;
+  if (measuredRatio > heldRatio) {
+    heldRatio = measuredRatio;
+    return measuredRatio;
+  }
+  heldRatio = heldRatio * TX_AUDIO_LEVEL_RELEASE + measuredRatio * (1.0f - TX_AUDIO_LEVEL_RELEASE);
+  return heldRatio;
+}
+
+static void updateTxAudioLevel(float measuredRatio) {
+  float heldRatio = peakHoldTxAudioVolumeRatio(measuredRatio);
+  if (heldRatio <= 0.0f) {
+    txAudioLevel = 0.0f;
+    return;
+  }
+  txAudioLevel = constrain(TX_AUDIO_LEVEL_FULL_SCALE_RSSI + (20.0f * log10f(heldRatio) / TX_AUDIO_DB_PER_RSSI), 0.0f, 255.0f);
+}
 
 static void onAfskTxSamples(const float *samples, size_t count) {
   if (!samples || count == 0 || !txStreamConfigured) {
@@ -71,11 +95,15 @@ void initI2STx() {
   config.signal_type = PDM;
   out.begin(config);
   txUpsample.begin();
+  txVolumeMeter.begin(txAudioInfo);
   if (!txDecodeStreamStarted) {
     txDecodeStream.begin(txAudioInfo);
     txDecodeStreamStarted = true;
   }
   i2s_zero_dma_buffer(I2S_NUM_0);
+  // Start TX meter at full scale to match radio-style TX indication.
+  // Subsequent audio frames update this to the measured TX audio level.
+  updateTxAudioLevel(1.0f);
   txStreamConfigured = true;
 }
 
@@ -99,6 +127,7 @@ void processTxAudio(uint8_t *src, size_t len) {
     return;
   }
   txDecodeStream.write(src, len);
+  updateTxAudioLevel(txVolumeMeter.volumeRatio());
   esp_task_wdt_reset();
 }
 

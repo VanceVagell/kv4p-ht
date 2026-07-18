@@ -22,14 +22,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include "globals.h"
+#include "../globals.h"
 #include <AfskDemodulator.h>
 
 #ifndef PIO_NATIVE_TEST
 #include <AudioTools.h>
 #endif
-
-#define AUDIO_DSP_ALIGN16 __attribute__((aligned(16)))
 
 static constexpr int16_t AUDIO_DECIMATOR_TAPS = 65;
 static constexpr int16_t AUDIO_DECIMATOR_STATE_LEN = AUDIO_DECIMATOR_TAPS + 4;
