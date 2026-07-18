@@ -26,7 +26,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define ZCR_DECAY_TIME 0.100f  // seconds
 #define SQ_CLOSE_DELAY 0.250f  // seconds
-#define SQ_TRANSITION_CORDON_TIME (SQ_CLOSE_DELAY + 0.750f)  // seconds
 
 class SoftSquelchEffect : public AudioEffect {
 public:
@@ -49,7 +48,6 @@ public:
   void resetState() {
     memset(bpfState, 0, sizeof(bpfState));
     previousOutsideSample = 0.0f;
-    cordonSamplesRemaining = 0;
     if (isBypassed()) {
       iirZcr = 0.0f;
       aboveThresholdSamples = 0;
@@ -61,18 +59,12 @@ public:
     setSoftSqOpen(false);
   }
 
-  void cordonTransition() {
-    if (isBypassed()) {
-      cordonSamplesRemaining = 0;
-      setSoftSqOpen(true);
-      return;
-    }
-    cordonedSoftSqOpen = isSoftOpen();
-    cordonSamplesRemaining = transitionCordonSamples();
+  void setHardwareSquelched(bool squelched) {
+    hardwareSquelched = squelched;
   }
 
   effect_t process(effect_t input) override {
-    if (!active()) {
+    if (!active() || hardwareSquelched) {
       return input;
     }
 
@@ -88,9 +80,6 @@ public:
     float crossingInstantRate = crossing ? (float)sampleRate : 0.0f;
     iirZcr += zcrAlpha * (crossingInstantRate - iirZcr);
     updateDecision();
-    if (cordonSamplesRemaining > 0) {
-      cordonSamplesRemaining--;
-    }
     return input;
   }
 
@@ -101,9 +90,6 @@ public:
   bool isSoftOpen() const {
     if (isBypassed()) {
       return true;
-    }
-    if (cordonSamplesRemaining > 0) {
-      return cordonedSoftSqOpen;
     }
     return softSqOpen;
   }
@@ -142,9 +128,8 @@ private:
   float zcrAlpha = 0.0f;
   float iirZcr = 0.0f;
   uint32_t aboveThresholdSamples = 0;
-  uint32_t cordonSamplesRemaining = 0;
   bool softSqOpen = false;
-  bool cordonedSoftSqOpen = false;
+  bool hardwareSquelched = false;
   uint8_t deadbandLevel = 0;
   float deadband = 0.45f;
 
@@ -171,10 +156,6 @@ private:
 
   uint32_t closeDelaySamples() const {
     return (uint32_t)((float)sampleRate * closeDelaySec);
-  }
-
-  uint32_t transitionCordonSamples() const {
-    return (uint32_t)((float)sampleRate * SQ_TRANSITION_CORDON_TIME);
   }
 
   float resetClosedZcr() const {
