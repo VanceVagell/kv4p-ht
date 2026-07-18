@@ -497,6 +497,8 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
 void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
   if (ax25_len > 0 && ax25_len <= PROTO_MTU && txAllowedByHost()) {
     setMode(MODE_TX);
+    latestRssi = (uint8_t)TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
+    txAudioLevel = TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
     sendCurrentDeviceState();
     pulseAprsTxLED();
     processTxAx25(ax25, ax25_len);
@@ -507,21 +509,29 @@ void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
 }
 
 void rssiLoop() {
-  if (rssiOn && mode == MODE_RX) {
+  if (rssiOn) {
     EVERY_N_MILLISECONDS(RSSI_REPORT_INTERVAL_MS) {
-      // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
-      // return value from the module, and just tells us success/fail.
-      // int rssi = dra->rssi();
-      Serial2.println("RSSI?");
-      String rssiResponse = Serial2.readString();
-      if (rssiResponse.length() > 7) {
-        String rssiStr = rssiResponse.substring(5);
-        int rssiInt    = rssiStr.toInt();
-        if (rssiInt >= 0 && rssiInt <= 255) {
-          uint8_t rssi = (uint8_t)rssiInt;
-          if (latestRssi != rssi) {
-            latestRssi = rssi;
-            markDeviceStateDirty();
+      if (mode == MODE_TX) {
+        uint8_t rssi = (uint8_t)roundf(constrain(txAudioLevel, 0.0f, 255.0f));
+        if (latestRssi != rssi) {
+          latestRssi = rssi;
+          markDeviceStateDirty();
+        }
+      } else if (mode == MODE_RX) {
+        // TODO fix the dra818 library's implementation of rssi(). Right now it just drops the
+        // return value from the module, and just tells us success/fail.
+        // int rssi = dra->rssi();
+        Serial2.println("RSSI?");
+        String rssiResponse = Serial2.readString();
+        if (rssiResponse.length() > 7) {
+          String rssiStr = rssiResponse.substring(5);
+          int rssiInt    = rssiStr.toInt();
+          if (rssiInt >= 0 && rssiInt <= 255) {
+            uint8_t rssi = (uint8_t)rssiInt;
+            if (latestRssi != rssi) {
+              latestRssi = rssi;
+              markDeviceStateDirty();
+            }
           }
         }
       }

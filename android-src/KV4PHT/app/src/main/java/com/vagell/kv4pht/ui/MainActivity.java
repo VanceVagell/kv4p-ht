@@ -142,6 +142,8 @@ public class MainActivity extends AppCompatActivity {
     private String callsign = null;
     private boolean stickyPTT = false;
     private boolean disableAnimations = false;
+    private boolean moduleTxActive = false;
+    private int currentSMeterValue = 0;
 
     // Activity callback values
     public static final int REQUEST_ADD_MEMORY = 0;
@@ -165,6 +167,7 @@ public class MainActivity extends AppCompatActivity {
     private static int MAX_AUDIO_VIZ_SIZE = 500;
     private static int MIN_TX_AUDIO_VIZ_SIZE = 200;
     private static int RECORD_ANIM_FPS = 30;
+    private static final int S_METER_MAX_VALUE = 13;
 
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
@@ -469,6 +472,7 @@ public class MainActivity extends AppCompatActivity {
                  * initiate PTT, for example while firmware is transmitting an APRS packet.
                  */
                 private void showModuleState(boolean txActive, boolean squelched) {
+                    moduleTxActive = txActive;
                     TextView moduleStateLabel = findViewById(R.id.moduleStateLabel);
                     if (txActive) {
                         moduleStateLabel.setText(R.string.module_state_tx);
@@ -477,19 +481,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         moduleStateLabel.setText("");
                     }
-                    int sMeterColor = ContextCompat.getColor(MainActivity.this, txActive ? R.color.accent : R.color.primary);
-
-                    int[] sMeterIds = {
-                        R.id.sMeter1, R.id.sMeter2, R.id.sMeter3,
-                        R.id.sMeter4, R.id.sMeter5, R.id.sMeter6,
-                        R.id.sMeter7, R.id.sMeter8, R.id.sMeter9
-                    };
-                    for (int sMeterId : sMeterIds) {
-                        findViewById(sMeterId).setBackgroundColor(sMeterColor);
-                    }
-                    if (txActive) {
-                        updateSMeter(9);
-                    }
+                    updateSMeter(currentSMeterValue);
                 }
 
                 @Override
@@ -1274,26 +1266,43 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateSMeter(int value) {
-        if (value < 0 || value > 9) {
+        if (value < 0 || value > S_METER_MAX_VALUE) {
             Log.d("DEBUG", "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
             return;
         }
+        currentSMeterValue = value;
 
         final float S_METER_ON_ALPHA = 1.0f;
         final float S_METER_OFF_ALPHA = 0.2f;
+        final int primaryColor = ContextCompat.getColor(this, R.color.primary);
+        final int overS9Color = ContextCompat.getColor(this, R.color.over_s9);
+        final int overloadColor = ContextCompat.getColor(this, R.color.overload);
+        final int txColor = ContextCompat.getColor(this, R.color.accent);
+        int[] sMeterIds = {
+            R.id.sMeter1, R.id.sMeter2, R.id.sMeter3,
+            R.id.sMeter4, R.id.sMeter5, R.id.sMeter6,
+            R.id.sMeter7, R.id.sMeter8, R.id.sMeter9,
+            R.id.sMeter10, R.id.sMeter11, R.id.sMeter12,
+            R.id.sMeter13
+        };
 
-        findViewById(R.id.sMeter1).setAlpha(value > 0 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter2).setAlpha(value > 1 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter3).setAlpha(value > 2 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter4).setAlpha(value > 3 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter5).setAlpha(value > 4 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter6).setAlpha(value > 5 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter7).setAlpha(value > 6 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter8).setAlpha(value > 7 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
-        findViewById(R.id.sMeter9).setAlpha(value > 8 ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        for (int i = 0; i < sMeterIds.length; i++) {
+            View bar = findViewById(sMeterIds[i]);
+            boolean active = value > i;
+            int color = primaryColor;
+            if (active && moduleTxActive) {
+                color = txColor;
+            } else if (active && i == 12) {
+                color = overloadColor;
+            } else if (active && i >= 9) {
+                color = overS9Color;
+            }
+            bar.setBackgroundColor(color);
+            bar.setAlpha(active ? S_METER_ON_ALPHA : S_METER_OFF_ALPHA);
+        }
 
         View sMeterView = findViewById(R.id.sMeter);
-        sMeterView.setContentDescription("S meter " + value + " of 9");
+        sMeterView.setContentDescription("S meter " + value + " of " + S_METER_MAX_VALUE);
     }
 
     private void hideKeyboard() {
@@ -1498,7 +1507,7 @@ public class MainActivity extends AppCompatActivity {
     @SuppressWarnings("java:S3398")
     private void showBand(BandType bandType) {
         runOnUiThread(() -> {
-            EditText bandField = findViewById(R.id.activeBand);
+            TextView bandField = findViewById(R.id.activeBand);
             if (bandField == null) return;
             switch (bandType) {
                 case BAND_VHF:
