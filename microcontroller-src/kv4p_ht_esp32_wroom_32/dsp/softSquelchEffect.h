@@ -75,11 +75,6 @@ public:
     if (!active()) {
       return input;
     }
-    if (isBypassed()) {
-      cordonSamplesRemaining = 0;
-      setSoftSqOpen(true);
-      return input;
-    }
 
     float x = (float)input / 32768.0f;
     float filtered = bpf.filter(x);
@@ -104,6 +99,9 @@ public:
   }
 
   bool isSoftOpen() const {
+    if (isBypassed()) {
+      return true;
+    }
     if (cordonSamplesRemaining > 0) {
       return cordonedSoftSqOpen;
     }
