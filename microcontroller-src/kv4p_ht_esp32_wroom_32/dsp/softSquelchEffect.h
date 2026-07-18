@@ -48,12 +48,6 @@ public:
   void resetState() {
     memset(bpfState, 0, sizeof(bpfState));
     previousOutsideSample = 0.0f;
-    if (isBypassed()) {
-      iirZcr = 0.0f;
-      aboveThresholdSamples = 0;
-      setSoftSqOpen(true);
-      return;
-    }
     iirZcr = resetClosedZcr();
     aboveThresholdSamples = closeDelaySamples();
     setSoftSqOpen(false);
