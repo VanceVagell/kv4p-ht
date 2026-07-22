@@ -1,26 +1,75 @@
 name: 'Sonar'
+
 on:
   workflow_run:
     workflows: [ 'Android Build' ]
     types:
       - completed
+
 jobs:
   sonar:
     name: 'Sonar analysis'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: android-src/KV4PHT
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
     permissions:
-      actions: read # Required to download artifacts
+      actions: read
+      contents: read
+
     steps:
-      - name: 'Sonar analysis'
-        uses: wsciaroni/sonar-fork-analysis@1.2.2
+      - name: Checkout PR source
+        uses: actions/checkout@v6
         with:
-          distribution: 'zulu'
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+          allow-unsafe-pr-checkout: true
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
           java-version: 17
+          distribution: zulu
+          cache: gradle
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Download sonar artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: sonar-artifact
+          run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          sonar-token: ${{ secrets.SONAR_TOKEN }}
-          project-key: VanceVagell_kv4p-ht
-          working-directory: ./android-src/KV4PHT/
+          merge-multiple: true
+
+      - name: Extract output artifact
+        run: tar -xf output.tar
+
+      - name: Read pull request event
+        run: |
+          echo "pr_number=$(sed '1q;d' pr-event.txt)" >> "$GITHUB_ENV"
+          echo "pr_head_ref=$(sed '2q;d' pr-event.txt)" >> "$GITHUB_ENV"
+          echo "pr_base_ref=$(sed '3q;d' pr-event.txt)" >> "$GITHUB_ENV"
+
+      - name: Grant execute permission for gradlew
+        working-directory: android-src/KV4PHT
+        run: chmod +x ./gradlew
+
+      - name: Sonar analysis
+        working-directory: android-src/KV4PHT
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          ./gradlew sonar
+          -Dsonar.projectKey=VanceVagell_kv4p-ht
+          -Dsonar.token=${SONAR_TOKEN}
+          ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.scm.revision=', github.event.workflow_run.head_sha) || '' }}
+          ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.key=', env.pr_number) || '' }}
+          ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.branch=', env.pr_head_ref) || '' }}
+          ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.base=', env.pr_base_ref) || '' }}
