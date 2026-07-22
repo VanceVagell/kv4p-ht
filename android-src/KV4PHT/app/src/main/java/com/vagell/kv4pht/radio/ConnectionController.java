@@ -1,29 +1,22 @@
 package com.vagell.kv4pht.radio;
 
 import android.os.Handler;
-import android.os.Looper;
-import java.util.function.BooleanSupplier;
 
 final class ConnectionController {
     private final Handler handler;
     private final long periodMs;
-    private final BooleanSupplier isConnectionReady;
-    private final Runnable attemptConnect;
+    private final Runnable reconcileConnections;
     private boolean running = false;
-    private boolean attemptActive = false;
 
     private final Runnable periodicRunnable = new Runnable() {
         @Override
-        // False positive: attemptConnect.run() can call stop() and flip running to false.
+        // False positive: reconciliation can call stop() and flip running to false.
         @SuppressWarnings("java:S2589")
         public void run() {
             if (!running) {
                 return;
             }
-            if (!isConnectionReady.getAsBoolean() && !attemptActive) {
-                attemptActive = true;
-                attemptConnect.run();
-            }
+            reconcileConnections.run();
             if (running) {
                 handler.postDelayed(this, periodMs);
             }
@@ -33,32 +26,21 @@ final class ConnectionController {
     ConnectionController(
         Handler handler,
         long periodMs,
-        BooleanSupplier isConnectionReady,
-        Runnable attemptConnect
+        Runnable reconcileConnections
     ) {
         this.handler = handler;
         this.periodMs = periodMs;
-        this.isConnectionReady = isConnectionReady;
-        this.attemptConnect = attemptConnect;
+        this.reconcileConnections = reconcileConnections;
     }
 
     void start() {
         stop();
         running = true;
-        handler.postDelayed(periodicRunnable, periodMs);
+        handler.post(periodicRunnable);
     }
 
     void stop() {
         running = false;
         handler.removeCallbacks(periodicRunnable);
-        markAttemptFinished();
-    }
-
-    void markAttemptFinished() {
-        if (Looper.myLooper() == handler.getLooper()) {
-            attemptActive = false;
-        } else {
-            handler.post(() -> attemptActive = false);
-        }
     }
 }

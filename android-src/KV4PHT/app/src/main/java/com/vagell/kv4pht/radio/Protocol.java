@@ -10,7 +10,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import androidx.annotation.NonNull;
-import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
 import android.util.Log;
 import lombok.Builder;
@@ -326,15 +325,21 @@ public final class Protocol {
     public static class Sender {
 
         private final AtomicInteger flowControlWindow = new AtomicInteger(1024);
-        private final SerialInputOutputManager usbIoManager;
+        private final AsyncFrameWriter writer;
+        private final boolean flowControlEnabled;
         private final Lock lock = new ReentrantLock();
         private final Condition canSendCondition = lock.newCondition();
         private final byte[] kissEncodeBuffer = new byte[KISS_MAX_ENCODED_FRAME_SIZE];
         private final ByteBuffer desiredStateBuffer =
             ByteBuffer.allocate(HostDesiredState.BYTE_LEN).order(ByteOrder.LITTLE_ENDIAN);
 
-        public Sender(SerialInputOutputManager usbIoManager) {
-            this.usbIoManager = usbIoManager;
+        public Sender(AsyncFrameWriter writer) {
+            this(writer, true);
+        }
+
+        public Sender(AsyncFrameWriter writer, boolean flowControlEnabled) {
+            this.writer = writer;
+            this.flowControlEnabled = flowControlEnabled;
         }
 
         private synchronized void sendKissFrame(int kissCommand, byte[] payload, int len) {
@@ -420,9 +425,11 @@ public final class Protocol {
         }
 
         private void writeEncodedFrame(int frameSize) {
-            if (waitUntilCanSend(frameSize)) {
-                usbIoManager.writeAsync(Arrays.copyOf(kissEncodeBuffer, frameSize));
-                flowControlWindow.addAndGet(-frameSize);
+            if (!flowControlEnabled || waitUntilCanSend(frameSize)) {
+                writer.writeAsync(Arrays.copyOf(kissEncodeBuffer, frameSize));
+                if (flowControlEnabled) {
+                    flowControlWindow.addAndGet(-frameSize);
+                }
             }
         }
 
@@ -485,6 +492,11 @@ public final class Protocol {
             int frameSize = encodeKv4pVendorFrame(SndCommand.COMMAND_HOST_DESIRED_STATE.getValue(), desiredStateBuffer, 0, HostDesiredState.BYTE_LEN);
             writeEncodedFrame(frameSize);
         }
+    }
+
+    @FunctionalInterface
+    public interface AsyncFrameWriter {
+        void writeAsync(byte[] bytes);
     }
 
     @FunctionalInterface
