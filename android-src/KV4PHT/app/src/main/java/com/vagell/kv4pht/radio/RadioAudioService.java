@@ -225,7 +225,7 @@ public class RadioAudioService extends Service {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private static final long CONNECT_RETRY_PERIOD_MS = 500L;
     private final ConnectionController connectionController =
-        new ConnectionController(handler, CONNECT_RETRY_PERIOD_MS, this::isConnectionReady, this::attemptUsbConnect);
+        new ConnectionController(handler, CONNECT_RETRY_PERIOD_MS, this::reconcileConnections);
     private boolean radioMissingNotified = false;
     private Runnable txTimeoutHandler;
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
@@ -878,7 +878,6 @@ public class RadioAudioService extends Service {
         usbPermissionRequestPending = false;
         // Re-plug is an explicit user/device action; allow connection attempts again.
         radioMissingNotified = false;
-        connectionController.markAttemptFinished();
     }
 
     public void renegotiateAfterFlashing() {
@@ -936,27 +935,33 @@ public class RadioAudioService extends Service {
         }
     }
 
-    private void attemptUsbConnect() {
+    private void reconcileConnections() {
         activeUsbConnectAttemptId = ++usbConnectAttemptSeq;
-        Log.d(TAG, connectLog("attemptUsbConnect(): starting; state=" + connectionStateSummary()));
-        if (isConnectionReady()) {
-            Log.d(TAG, connectLog("attemptUsbConnect(): already connected, skipping enumeration"));
-            connectionController.markAttemptFinished();
-            return;
-        }
-        setMode(RadioMode.STARTUP);
-        clearRadioTypeAndLimits();
+        Log.d(TAG, connectLog("reconcileConnections(): state=" + connectionStateSummary()));
         Optional<UsbDevice> device = usbManager.getDeviceList().values().stream()
             .filter(this::isESP32Device)
             .findFirst();
+        if (isConnectionReady()) {
+            return;
+        }
         if (device.isPresent()) {
-            Log.d(TAG, connectLog("attemptUsbConnect(): found ESP32 device"));
+            if (activeTransport instanceof BleKissRadioTransport) {
+                closePortAndReset();
+            }
+            setMode(RadioMode.STARTUP);
+            clearRadioTypeAndLimits();
+            Log.d(TAG, connectLog("reconcileConnections(): found ESP32 USB device"));
             callbacks.hideSnackBar();
             setupSerialConnection();
             return;
         }
-        Log.d(TAG, connectLog("attemptUsbConnect(): no ESP32 detected; trying BLE KISS"));
-        attemptBleConnect();
+        if (activeTransport == null) {
+            setMode(RadioMode.STARTUP);
+            clearRadioTypeAndLimits();
+            notifyRadioMissing();
+            Log.d(TAG, connectLog("reconcileConnections(): no USB device; starting BLE discovery"));
+            attemptBleConnect();
+        }
     }
 
     private boolean isESP32Device(UsbDevice device) {
@@ -1088,7 +1093,7 @@ public class RadioAudioService extends Service {
                     return;
                 }
                 callbacks.hideSnackBar();
-                hostToEsp32 = new Protocol.Sender(transportRef[0]::writeAsync, false);
+                hostToEsp32 = new Protocol.Sender(transportRef[0]::writeAsync);
                 radioModule.attachSender(hostToEsp32);
                 Log.i(TAG, connectLog("BLE KISS transport connected; starting handshake"));
                 startProtocolHandshake();
@@ -1121,7 +1126,6 @@ public class RadioAudioService extends Service {
 
     public void radioConnected() {
         Log.i(TAG, connectLog("radioConnected(): handshake complete; state=" + connectionStateSummary()));
-        connectionController.markAttemptFinished();
         radioMissingNotified = false;
         // Acquire WakeLock if not already held to ensure audio processing continues in background.
         if (wakeLock != null && !wakeLock.isHeld()) {
@@ -1149,7 +1153,6 @@ public class RadioAudioService extends Service {
             Log.w(TAG, handshakeLog(handshakeId, "waitForHello(): timed out after " + HELLO_TIMEOUT_MS + "ms"));
             setMode(RadioMode.BAD_FIRMWARE);
             callbacks.missingFirmware();
-            connectionController.markAttemptFinished();
         };
         handler.postDelayed(helloTimeoutRunnable, HELLO_TIMEOUT_MS);
     }
@@ -1181,7 +1184,6 @@ public class RadioAudioService extends Service {
             Log.e(TAG, handshakeLog(handshakeId, "HELLO missing valid Hello payload; firmware upgrade required"));
             callbacks.outdatedFirmware(0);
             setMode(RadioMode.BAD_FIRMWARE);
-            connectionController.markAttemptFinished();
             return;
         }
 
@@ -1191,7 +1193,6 @@ public class RadioAudioService extends Service {
         if (version.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
             callbacks.outdatedFirmware(version.getVer());
             setMode(RadioMode.BAD_FIRMWARE);
-            connectionController.markAttemptFinished();
             return;
         }
 
@@ -1200,7 +1201,6 @@ public class RadioAudioService extends Service {
             Log.w(TAG, handshakeLog(handshakeId, "radio module not found"));
             setMode(RadioMode.BAD_FIRMWARE);
             callbacks.radioModuleNotFound();
-            connectionController.markAttemptFinished();
             return;
         }
 
@@ -1225,14 +1225,17 @@ public class RadioAudioService extends Service {
     // Called in many situations where radio connection is found to be broken
     private void radioMissing() {
         Log.i(TAG, connectLog("radioMissing(): state=" + connectionStateSummary()));
-        connectionController.markAttemptFinished();
         closePortAndReset();
+        notifyRadioMissing();
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release(); // Don't keep screen on
+        }
+    }
+
+    private void notifyRadioMissing() {
         if (!radioMissingNotified) {
             radioMissingNotified = true;
             callbacks.radioMissing(); // Notify UI only on transition into missing state
-        }
-        if (wakeLock != null && wakeLock.isHeld()) {
-            wakeLock.release(); // Don't keep screen on
         }
     }
 
@@ -1450,6 +1453,13 @@ public class RadioAudioService extends Service {
 
     public boolean isRadioConnected() {
         return isConnectionReady() && mode != RadioMode.STARTUP;
+    }
+
+    public boolean canFlashFirmware() {
+        return activeTransport != null
+            && activeTransport.isReady()
+            && serialPort != null
+            && usbIoManager != null;
     }
 
     /**

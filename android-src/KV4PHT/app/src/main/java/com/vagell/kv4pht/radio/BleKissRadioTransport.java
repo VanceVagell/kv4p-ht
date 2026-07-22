@@ -1,6 +1,7 @@
 package com.vagell.kv4pht.radio;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -42,7 +43,9 @@ final class BleKissRadioTransport implements RadioTransport {
     private static final UUID TX_CHAR_UUID = UUID.fromString("00000002-ba2a-46c9-ae49-01b0961f68bb");
     private static final UUID RX_CHAR_UUID = UUID.fromString("00000003-ba2a-46c9-ae49-01b0961f68bb");
     private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-    private static final int SCAN_TIMEOUT_MS = 10_000;
+    // Low-latency scans normally receive an advertising radio within one interval.
+    // Keep a few seconds of margin, then let the periodic reconciler start a new window.
+    private static final int SCAN_TIMEOUT_MS = 3_000;
     private static final int REQUESTED_MTU = 247;
     private static final int WRITE_RETRY_DELAY_MS = 8;
 
@@ -50,6 +53,7 @@ final class BleKissRadioTransport implements RadioTransport {
     private final Handler handler;
     private final Listener listener;
     private final ArrayDeque<byte[]> pendingWrites = new ArrayDeque<>();
+    private final ArrayDeque<byte[]> pendingNotifications = new ArrayDeque<>();
     private BluetoothLeScanner scanner;
     private BluetoothGatt gatt;
     private BluetoothGattCharacteristic txCharacteristic;
@@ -74,6 +78,7 @@ final class BleKissRadioTransport implements RadioTransport {
         };
     }
 
+    @SuppressLint("MissingPermission")
     void connect() {
         if (!hasBluetoothPermissions()) {
             listener.onError(new SecurityException("Missing Bluetooth permissions"));
@@ -97,12 +102,19 @@ final class BleKissRadioTransport implements RadioTransport {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build();
         scanning = true;
-        scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
+        try {
+            scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
+        } catch (SecurityException error) {
+            scanning = false;
+            listener.onError(error);
+            return;
+        }
         handler.postDelayed(scanTimeout, SCAN_TIMEOUT_MS);
         Log.i(TAG, "Scanning for BLE KISS radio");
     }
 
     @Override
+    @SuppressLint("MissingPermission")
     public void close() {
         stopScan();
         ready = false;
@@ -112,6 +124,7 @@ final class BleKissRadioTransport implements RadioTransport {
         writeStartFailures = 0;
         handler.removeCallbacks(drainRunnable);
         pendingWrites.clear();
+        pendingNotifications.clear();
         txCharacteristic = null;
         if (gatt != null) {
             try {
@@ -138,11 +151,14 @@ final class BleKissRadioTransport implements RadioTransport {
         if (bytes == null || bytes.length == 0) {
             return;
         }
-        synchronized (pendingWrites) {
-            for (int offset = 0; offset < bytes.length; offset += attPayloadSize) {
-                int end = Math.min(bytes.length, offset + attPayloadSize);
-                pendingWrites.add(Arrays.copyOfRange(bytes, offset, end));
-            }
+        byte[] copy = Arrays.copyOf(bytes, bytes.length);
+        handler.post(() -> enqueueWrite(copy));
+    }
+
+    private void enqueueWrite(byte[] bytes) {
+        for (int offset = 0; offset < bytes.length; offset += attPayloadSize) {
+            int end = Math.min(bytes.length, offset + attPayloadSize);
+            pendingWrites.add(Arrays.copyOfRange(bytes, offset, end));
         }
         scheduleDrain(0);
     }
@@ -155,22 +171,83 @@ final class BleKissRadioTransport implements RadioTransport {
     private final ScanCallback scanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
-            BluetoothDevice device = result.getDevice();
-            Log.i(TAG, "Found BLE KISS radio: " + safeDeviceName(device));
-            stopScan();
-            gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+            handler.post(() -> connectToScanResult(result));
         }
 
         @Override
         public void onScanFailed(int errorCode) {
-            stopScan();
-            listener.onError(new IllegalStateException("BLE scan failed: " + errorCode));
+            handler.post(() -> {
+                stopScan();
+                listener.onError(new IllegalStateException("BLE scan failed: " + errorCode));
+            });
         }
     };
+
+    @SuppressLint("MissingPermission")
+    private void connectToScanResult(ScanResult result) {
+        if (!scanning) {
+            return;
+        }
+        BluetoothDevice device = result.getDevice();
+        Log.i(TAG, "Found BLE KISS radio: " + safeDeviceName(device));
+        stopScan();
+        try {
+            gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+        } catch (SecurityException error) {
+            listener.onError(error);
+        }
+    }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+            handler.post(() -> handleConnectionStateChange(gatt, status, newState));
+        }
+
+        @Override
+        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+            handler.post(() -> handleServicesDiscovered(gatt, status));
+        }
+
+        @Override
+        public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+            handler.post(() -> handleMtuChanged(gatt, mtu, status));
+        }
+
+        @Override
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            handler.post(() -> handleDescriptorWrite(gatt, descriptor, status));
+        }
+
+        @Override
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            byte[] value = characteristic.getValue();
+            byte[] copy = value != null ? Arrays.copyOf(value, value.length) : new byte[0];
+            handler.post(() -> handleNotification(gatt, characteristic.getUuid(), copy));
+        }
+
+        @Override
+        public void onCharacteristicChanged(
+            BluetoothGatt gatt,
+            BluetoothGattCharacteristic characteristic,
+            byte[] value
+        ) {
+            byte[] copy = Arrays.copyOf(value, value.length);
+            handler.post(() -> handleNotification(gatt, characteristic.getUuid(), copy));
+        }
+
+        @Override
+        public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
+            handler.post(() -> handleCharacteristicWrite(gatt, status));
+        }
+    };
+
+    @SuppressLint("MissingPermission")
+    private void handleConnectionStateChange(BluetoothGatt callbackGatt, int status, int newState) {
+        if (callbackGatt != gatt) {
+            return;
+        }
+        try {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 listener.onError(new IllegalStateException("BLE connection status " + status));
                 close();
@@ -185,15 +262,22 @@ final class BleKissRadioTransport implements RadioTransport {
                 ready = false;
                 listener.onDisconnected();
             }
+        } catch (SecurityException error) {
+            listener.onError(error);
         }
+    }
 
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+    @SuppressLint("MissingPermission")
+    private void handleServicesDiscovered(BluetoothGatt callbackGatt, int status) {
+        if (callbackGatt != gatt) {
+            return;
+        }
+        try {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 listener.onError(new IllegalStateException("BLE service discovery failed: " + status));
                 return;
             }
-            BluetoothGattService service = gatt.getService(SERVICE_UUID);
+            BluetoothGattService service = callbackGatt.getService(SERVICE_UUID);
             if (service == null) {
                 listener.onError(new IllegalStateException("BLE KISS service not found"));
                 return;
@@ -207,68 +291,71 @@ final class BleKissRadioTransport implements RadioTransport {
             useWriteNoResponse = (txCharacteristic.getProperties()
                 & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0;
             Log.i(TAG, "BLE KISS TX write mode=" + (useWriteNoResponse ? "no-response" : "with-response"));
-            if (!gatt.requestMtu(REQUESTED_MTU)) {
-                subscribeToRx(gatt, rxCharacteristic);
+            if (!callbackGatt.requestMtu(REQUESTED_MTU)) {
+                subscribeToRx(callbackGatt, rxCharacteristic);
             }
+        } catch (SecurityException error) {
+            listener.onError(error);
         }
+    }
 
-        @Override
-        public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                attPayloadSize = Math.max(20, mtu - 3);
-                Log.i(TAG, "BLE KISS MTU=" + mtu + " payload=" + attPayloadSize);
-            }
-            BluetoothGattService service = gatt.getService(SERVICE_UUID);
-            BluetoothGattCharacteristic rxCharacteristic = service != null ? service.getCharacteristic(RX_CHAR_UUID) : null;
-            if (rxCharacteristic != null) {
-                subscribeToRx(gatt, rxCharacteristic);
-            } else {
-                listener.onError(new IllegalStateException("BLE KISS RX characteristic missing after MTU"));
-            }
+    private void handleMtuChanged(BluetoothGatt callbackGatt, int mtu, int status) {
+        if (callbackGatt != gatt) {
+            return;
         }
-
-        @Override
-        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
-            if (CCCD_UUID.equals(descriptor.getUuid())) {
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    ready = true;
-                    listener.onConnected();
-                    scheduleDrain(0);
-                } else {
-                    listener.onError(new IllegalStateException("BLE notification subscription failed: " + status));
-                }
-            }
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            attPayloadSize = Math.max(20, mtu - 3);
+            Log.i(TAG, "BLE KISS MTU=" + mtu + " payload=" + attPayloadSize);
         }
-
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            if (RX_CHAR_UUID.equals(characteristic.getUuid())) {
-                listener.onBytes(characteristic.getValue());
-            }
+        BluetoothGattService service = callbackGatt.getService(SERVICE_UUID);
+        BluetoothGattCharacteristic rxCharacteristic = service != null ? service.getCharacteristic(RX_CHAR_UUID) : null;
+        if (rxCharacteristic != null) {
+            subscribeToRx(callbackGatt, rxCharacteristic);
+        } else {
+            listener.onError(new IllegalStateException("BLE KISS RX characteristic missing after MTU"));
         }
+    }
 
-        @Override
-        public void onCharacteristicChanged(
-            BluetoothGatt gatt,
-            BluetoothGattCharacteristic characteristic,
-            byte[] value
-        ) {
-            if (RX_CHAR_UUID.equals(characteristic.getUuid())) {
-                listener.onBytes(value);
-            }
+    private void handleDescriptorWrite(BluetoothGatt callbackGatt, BluetoothGattDescriptor descriptor, int status) {
+        if (callbackGatt != gatt || !CCCD_UUID.equals(descriptor.getUuid())) {
+            return;
         }
-
-        @Override
-        public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-            writeInFlight = false;
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                listener.onError(new IllegalStateException("BLE write failed: " + status));
-                return;
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            ready = true;
+            listener.onConnected();
+            while (!pendingNotifications.isEmpty()) {
+                listener.onBytes(pendingNotifications.remove());
             }
             scheduleDrain(0);
+        } else {
+            listener.onError(new IllegalStateException("BLE notification subscription failed: " + status));
         }
-    };
+    }
 
+    private void handleNotification(BluetoothGatt callbackGatt, UUID characteristicUuid, byte[] value) {
+        if (callbackGatt != gatt || !RX_CHAR_UUID.equals(characteristicUuid)) {
+            return;
+        }
+        if (!ready) {
+            pendingNotifications.add(value);
+            return;
+        }
+        listener.onBytes(value);
+    }
+
+    private void handleCharacteristicWrite(BluetoothGatt callbackGatt, int status) {
+        if (callbackGatt != gatt) {
+            return;
+        }
+        writeInFlight = false;
+        if (status != BluetoothGatt.GATT_SUCCESS) {
+            listener.onError(new IllegalStateException("BLE write failed: " + status));
+            return;
+        }
+        scheduleDrain(0);
+    }
+
+    @SuppressLint("MissingPermission")
     private void subscribeToRx(BluetoothGatt gatt, BluetoothGattCharacteristic rxCharacteristic) {
         if (!gatt.setCharacteristicNotification(rxCharacteristic, true)) {
             listener.onError(new IllegalStateException("BLE notification enable failed"));
@@ -309,14 +396,12 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private void drainWritesOnHandler() {
         if (!isReady() || writeInFlight) {
             return;
         }
-        byte[] next;
-        synchronized (pendingWrites) {
-            next = pendingWrites.poll();
-        }
+        byte[] next = pendingWrites.poll();
         if (next == null) {
             return;
         }
@@ -326,22 +411,22 @@ final class BleKissRadioTransport implements RadioTransport {
         writeInFlight = !useWriteNoResponse;
         txCharacteristic.setWriteType(writeType);
         boolean started;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            int status = gatt.writeCharacteristic(
-                txCharacteristic,
-                next,
-                writeType
-            );
-            started = status == BluetoothGatt.GATT_SUCCESS;
-        } else {
-            txCharacteristic.setValue(next);
-            started = gatt.writeCharacteristic(txCharacteristic);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                int status = gatt.writeCharacteristic(txCharacteristic, next, writeType);
+                started = status == BluetoothGatt.GATT_SUCCESS;
+            } else {
+                txCharacteristic.setValue(next);
+                started = gatt.writeCharacteristic(txCharacteristic);
+            }
+        } catch (SecurityException error) {
+            writeInFlight = false;
+            listener.onError(error);
+            return;
         }
         if (!started) {
             writeInFlight = false;
-            synchronized (pendingWrites) {
-                pendingWrites.addFirst(next);
-            }
+            pendingWrites.addFirst(next);
             writeStartFailures++;
             if (writeStartFailures % 25 == 1) {
                 Log.w(TAG, "BLE write did not start; retrying after backoff count=" + writeStartFailures);
@@ -355,6 +440,7 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private void stopScan() {
         handler.removeCallbacks(scanTimeout);
         if (scanning && scanner != null) {
