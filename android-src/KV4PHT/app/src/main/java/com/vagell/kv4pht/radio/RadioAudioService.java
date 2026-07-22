@@ -58,7 +58,6 @@ import com.google.android.gms.tasks.CancellationTokenSource;
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
 import com.hoho.android.usbserial.driver.UsbSerialPort;
 import com.hoho.android.usbserial.driver.UsbSerialProber;
-import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.aprs.parser.APRSIconType;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
@@ -79,7 +78,6 @@ import com.vagell.kv4pht.ui.ToneHelper;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -171,9 +169,6 @@ public class RadioAudioService extends Service {
 
     // === USB / Serial ===
     private UsbManager usbManager;
-    @Getter
-    private UsbSerialPort serialPort;
-    private SerialInputOutputManager usbIoManager;
     private RadioTransport activeTransport;
     private boolean usbPermissionRequestPending = false;
     @Getter
@@ -359,25 +354,15 @@ public class RadioAudioService extends Service {
 
     public void setMode(RadioMode mode) {
         if (mode == RadioMode.FLASHING) {
-            if (serialPort == null || usbIoManager == null) {
+            if (!canFlashFirmware()) {
                 Log.w(TAG, "Firmware flashing requires USB serial; current transport is not flash-capable.");
                 return;
             }
             radioModule.stop();
             audioTrack.stop();
-            usbIoManager.stop();
-            try {
-                serialPort.setDTR(false);
-                serialPort.setRTS(true);
-                Thread.sleep(100);
-                serialPort.setDTR(true);
-                serialPort.setRTS(false);
-                Thread.sleep(50);
-                serialPort.setDTR(false);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (IOException e) {
-                Log.e(TAG, "Error while restart ESP32.", e);
+            if (!activeTransport.prepareForFirmwareFlashing()) {
+                Log.w(TAG, "USB transport could not enter firmware flashing mode.");
+                return;
             }
         }
 
@@ -911,27 +896,6 @@ public class RadioAudioService extends Service {
             } catch (Exception ignored) {
                 // Best-effort cleanup during teardown.
             }
-        } else {
-            closeUsbResources();
-        }
-    }
-
-    private void closeUsbResources() {
-        if (usbIoManager != null) {
-            try {
-                usbIoManager.stop();
-            } catch (Exception ignored) {
-                // Best-effort cleanup during teardown; transport may already be stopping.
-            }
-            usbIoManager = null;
-        }
-        if (serialPort != null) {
-            try {
-                serialPort.close();
-            } catch (Exception ignored) {
-                // Best-effort cleanup during teardown; port may already be closed.
-            }
-            serialPort = null;
         }
     }
 
@@ -1016,14 +980,18 @@ public class RadioAudioService extends Service {
             radioMissing();
             return;
         }
-        serialPort = driver.getPorts().get(0); // Most devices have just one port (port 0)
+        UsbSerialPort serialPort = driver.getPorts().get(0); // Most devices have just one port (port 0)
         Log.d(TAG, connectLog("setupSerialConnection(): serialPort=" + serialPort));
         try {
             serialPort.open(connection);
             serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
         } catch (Exception e) {
             Log.w(TAG, connectLog("setupSerialConnection(): couldn't open USB serial port"), e);
-            closePortAndReset();
+            try {
+                serialPort.close();
+            } catch (Exception ignored) {
+                // Best-effort cleanup after a partial open.
+            }
             radioMissing();
             return;
         }
@@ -1033,91 +1001,55 @@ public class RadioAudioService extends Service {
         } catch (Exception e) {
             // Ignore, may not be supported on all devices.
         }
-        usbIoManager = new SerialInputOutputManager(serialPort, new SerialInputOutputManager.Listener() {
-            @Override
-            public void onNewData(byte[] data) {
-                processRadioBytes(data);
-            }
-            @Override
-            public void onRunError(Exception e) {
-                Log.w(TAG, connectLog("onRunError(): error reading from ESP32; state=" + connectionStateSummary()), e);
-                if (audioTrack != null) {
-                    audioTrack.stop();
-                }
-                closePortAndReset();
-                radioMissing();
-            }
-        });
-        usbIoManager.setWriteBufferSize(90000); // Must be large enough that ESP32 can take its time accepting our bytes without overrun.
-        usbIoManager.setReadBufferSize(1024); // Must not be 0 (infinite) or it may block on read() until a write() occurs.
-        usbIoManager.setReadBufferCount(16 * 2);
-        usbIoManager.start();
-        activeTransport = new RadioTransport() {
-            @Override
-            public void close() {
-                closeUsbResources();
-            }
-
-            @Override
-            public boolean isReady() {
-                return serialPort != null && usbIoManager != null;
-            }
-
-            @Override
-            public void writeAsync(byte[] bytes) {
-                usbIoManager.writeAsync(bytes);
-            }
-
-            @Override
-            public String getName() {
-                return "USB serial";
-            }
-        };
-        hostToEsp32 = new Protocol.Sender(activeTransport::writeAsync);
-        radioModule.attachSender(hostToEsp32);
-        Log.i(TAG, connectLog("setupSerialConnection(): serial transport connected; starting handshake"));
-        startProtocolHandshake();
+        RadioTransport transport = new UsbSerialRadioTransport(serialPort, handler);
+        activeTransport = transport;
+        transport.start(createTransportListener(transport));
     }
 
     private void attemptBleConnect() {
-        final BleKissRadioTransport[] transportRef = new BleKissRadioTransport[1];
-        BleKissRadioTransport transport = new BleKissRadioTransport(this, handler, new BleKissRadioTransport.Listener() {
+        RadioTransport transport = new BleKissRadioTransport(this, handler);
+        activeTransport = transport;
+        transport.start(createTransportListener(transport));
+    }
+
+    private RadioTransport.Listener createTransportListener(RadioTransport transport) {
+        return new RadioTransport.Listener() {
             @Override
             public void onBytes(byte[] bytes) {
                 processRadioBytes(bytes);
             }
 
             @Override
-            public void onConnected() {
-                if (activeTransport != transportRef[0]) {
+            public void onReady() {
+                if (activeTransport != transport) {
                     return;
                 }
                 callbacks.hideSnackBar();
-                hostToEsp32 = new Protocol.Sender(transportRef[0]::writeAsync);
+                hostToEsp32 = new Protocol.Sender(transport::writeAsync);
                 radioModule.attachSender(hostToEsp32);
-                Log.i(TAG, connectLog("BLE KISS transport connected; starting handshake"));
+                Log.i(TAG, connectLog(transport.getName() + " connected; starting handshake"));
                 startProtocolHandshake();
             }
 
             @Override
             public void onDisconnected() {
-                if (activeTransport == transportRef[0]) {
-                    Log.i(TAG, connectLog("BLE KISS transport disconnected"));
+                if (activeTransport == transport) {
+                    Log.i(TAG, connectLog(transport.getName() + " disconnected"));
                     radioMissing();
                 }
             }
 
             @Override
             public void onError(Exception error) {
-                if (activeTransport == transportRef[0]) {
-                    Log.w(TAG, connectLog("BLE KISS transport error"), error);
+                if (activeTransport == transport) {
+                    Log.w(TAG, connectLog(transport.getName() + " transport error"), error);
+                    if (audioTrack != null) {
+                        audioTrack.stop();
+                    }
                     radioMissing();
                 }
             }
-        });
-        transportRef[0] = transport;
-        activeTransport = transport;
-        transport.connect();
+        };
     }
 
     private synchronized void processRadioBytes(byte[] data) {
@@ -1252,8 +1184,6 @@ public class RadioAudioService extends Service {
             + ",hostToEsp32=" + (hostToEsp32 != null)
             + ",activeTransport=" + (activeTransport != null ? activeTransport.getName() : "null")
             + ",activeTransportReady=" + (activeTransport != null && activeTransport.isReady())
-            + ",serialPort=" + (serialPort != null)
-            + ",usbIoManager=" + (usbIoManager != null)
             + ",usbPermissionPending=" + usbPermissionRequestPending
             + ",radioMissingNotified=" + radioMissingNotified;
     }
@@ -1458,8 +1388,14 @@ public class RadioAudioService extends Service {
     public boolean canFlashFirmware() {
         return activeTransport != null
             && activeTransport.isReady()
-            && serialPort != null
-            && usbIoManager != null;
+            && activeTransport.supportsFirmwareFlashing();
+    }
+
+    public UsbSerialPort getSerialPort() {
+        if (activeTransport instanceof UsbSerialRadioTransport) {
+            return ((UsbSerialRadioTransport) activeTransport).getSerialPort();
+        }
+        return null;
     }
 
     /**

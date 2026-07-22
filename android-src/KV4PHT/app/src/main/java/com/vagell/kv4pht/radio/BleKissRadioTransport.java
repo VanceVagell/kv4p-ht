@@ -31,13 +31,6 @@ import java.util.Collections;
 import java.util.UUID;
 
 final class BleKissRadioTransport implements RadioTransport {
-    interface Listener {
-        void onBytes(byte[] bytes);
-        void onConnected();
-        void onDisconnected();
-        void onError(Exception error);
-    }
-
     private static final String TAG = BleKissRadioTransport.class.getSimpleName();
     private static final UUID SERVICE_UUID = UUID.fromString("00000001-ba2a-46c9-ae49-01b0961f68bb");
     private static final UUID TX_CHAR_UUID = UUID.fromString("00000002-ba2a-46c9-ae49-01b0961f68bb");
@@ -51,7 +44,7 @@ final class BleKissRadioTransport implements RadioTransport {
 
     private final Context context;
     private final Handler handler;
-    private final Listener listener;
+    private Listener listener;
     private final ArrayDeque<byte[]> pendingWrites = new ArrayDeque<>();
     private final ArrayDeque<byte[]> pendingNotifications = new ArrayDeque<>();
     private BluetoothLeScanner scanner;
@@ -66,10 +59,9 @@ final class BleKissRadioTransport implements RadioTransport {
     private int attPayloadSize = 20;
     private int writeStartFailures = 0;
 
-    BleKissRadioTransport(Context context, Handler handler, Listener listener) {
+    BleKissRadioTransport(Context context, Handler handler) {
         this.context = context.getApplicationContext();
         this.handler = handler;
-        this.listener = listener;
         this.scanTimeout = () -> {
             if (scanning) {
                 stopScan();
@@ -79,7 +71,9 @@ final class BleKissRadioTransport implements RadioTransport {
     }
 
     @SuppressLint("MissingPermission")
-    void connect() {
+    @Override
+    public void start(Listener listener) {
+        this.listener = listener;
         if (!hasBluetoothPermissions()) {
             listener.onError(new SecurityException("Missing Bluetooth permissions"));
             return;
@@ -153,6 +147,16 @@ final class BleKissRadioTransport implements RadioTransport {
         }
         byte[] copy = Arrays.copyOf(bytes, bytes.length);
         handler.post(() -> enqueueWrite(copy));
+    }
+
+    @Override
+    public boolean supportsFirmwareFlashing() {
+        return false;
+    }
+
+    @Override
+    public boolean prepareForFirmwareFlashing() {
+        return false;
     }
 
     private void enqueueWrite(byte[] bytes) {
@@ -328,7 +332,7 @@ final class BleKissRadioTransport implements RadioTransport {
         }
         if (status == BluetoothGatt.GATT_SUCCESS) {
             ready = true;
-            listener.onConnected();
+            listener.onReady();
             while (!pendingNotifications.isEmpty()) {
                 listener.onBytes(pendingNotifications.remove());
             }
