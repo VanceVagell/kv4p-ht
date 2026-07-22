@@ -183,6 +183,8 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     };
 
+    // Keep callback capture separate from handler-thread state processing.
+    @SuppressWarnings("java:S3398")
     @SuppressLint("MissingPermission")
     private void connectToScanResult(ScanResult result) {
         if (!scanning) {
@@ -242,6 +244,7 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     };
 
+    @SuppressWarnings("java:S3398")
     @SuppressLint("MissingPermission")
     private void handleConnectionStateChange(BluetoothGatt callbackGatt, int status, int newState) {
         if (callbackGatt != gatt) {
@@ -267,6 +270,7 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     }
 
+    @SuppressWarnings("java:S3398")
     @SuppressLint("MissingPermission")
     private void handleServicesDiscovered(BluetoothGatt callbackGatt, int status) {
         if (callbackGatt != gatt) {
@@ -299,6 +303,7 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     }
 
+    @SuppressWarnings("java:S3398")
     private void handleMtuChanged(BluetoothGatt callbackGatt, int mtu, int status) {
         if (callbackGatt != gatt) {
             return;
@@ -316,6 +321,7 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     }
 
+    @SuppressWarnings("java:S3398")
     private void handleDescriptorWrite(BluetoothGatt callbackGatt, BluetoothGattDescriptor descriptor, int status) {
         if (callbackGatt != gatt || !CCCD_UUID.equals(descriptor.getUuid())) {
             return;
@@ -332,6 +338,7 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     }
 
+    @SuppressWarnings("java:S3398")
     private void handleNotification(BluetoothGatt callbackGatt, UUID characteristicUuid, byte[] value) {
         if (callbackGatt != gatt || !RX_CHAR_UUID.equals(characteristicUuid)) {
             return;
@@ -343,6 +350,7 @@ final class BleKissRadioTransport implements RadioTransport {
         listener.onBytes(value);
     }
 
+    @SuppressWarnings("java:S3398")
     private void handleCharacteristicWrite(BluetoothGatt callbackGatt, int status) {
         if (callbackGatt != gatt) {
             return;
