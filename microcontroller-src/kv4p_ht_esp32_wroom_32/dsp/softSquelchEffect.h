@@ -53,8 +53,12 @@ public:
     setSoftSqOpen(false);
   }
 
+  void setHardwareSquelched(bool squelched) {
+    hardwareSquelched = squelched;
+  }
+
   effect_t process(effect_t input) override {
-    if (!active()) {
+    if (!active() || hardwareSquelched) {
       return input;
     }
 
@@ -78,6 +82,9 @@ public:
   }
 
   bool isSoftOpen() const {
+    if (isBypassed()) {
+      return true;
+    }
     return softSqOpen;
   }
 
@@ -87,6 +94,7 @@ public:
     }
     deadbandLevel = level;
     deadband = deadbandForLevel(level);
+    resetState();
   }
 
   uint8_t getDeadbandLevel() const {
@@ -115,6 +123,7 @@ private:
   float iirZcr = 0.0f;
   uint32_t aboveThresholdSamples = 0;
   bool softSqOpen = false;
+  bool hardwareSquelched = false;
   uint8_t deadbandLevel = 0;
   float deadband = 0.45f;
 
@@ -123,6 +132,10 @@ private:
       level = 8;
     }
     return 0.45f - ((float)level / 8.0f) * (0.45f - 0.08f);
+  }
+
+  bool isBypassed() const {
+    return deadbandLevel == 0;
   }
 
   void initBpf() {
