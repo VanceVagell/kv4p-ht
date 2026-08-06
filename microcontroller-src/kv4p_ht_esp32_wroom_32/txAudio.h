@@ -145,21 +145,26 @@ void processTxAx25(uint8_t *src, size_t len) {
   afskMod.modulate(src, len, txAfskBlock, TX_AFSK_BLOCK_SAMPLES, TX_AFSK_LEAD_SILENCE_MS, TX_AFSK_TAIL_SILENCE_MS);
 }
 
+void releaseHostPtt() {
+  if (desiredState.flags & HOST_STATE_PTT_REQUESTED) {
+    desiredState.flags &= ~HOST_STATE_PTT_REQUESTED;
+    desiredState.sequence++;
+  }
+  setMode(rxIdleMode());
+  markDeviceStateDirty();
+}
+
 void inline txAudioLoop() {
   if (mode == MODE_TX) {
     if ((desiredState.flags & HOST_STATE_PTT_REQUESTED) && txWatchDog.expired(millis())) {
       _LOGW("TX audio timeout; releasing host PTT");
-      desiredState.flags &= ~HOST_STATE_PTT_REQUESTED;
-      setMode(rxIdleMode());
-      markDeviceStateDirty();
+      releaseHostPtt();
       esp_task_wdt_reset();
       return;
     }
     // Check for runaway tx
     if ((millis() - txStartTime) > RUNAWAY_TX_SEC * 1000) {
-      desiredState.flags &= ~HOST_STATE_PTT_REQUESTED;
-      setMode(rxIdleMode());
-      markDeviceStateDirty();
+      releaseHostPtt();
       esp_task_wdt_reset();
     }
   }
