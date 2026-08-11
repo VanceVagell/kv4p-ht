@@ -6,11 +6,11 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 ## Protocol Changelog
 
-### `v2.0.0.1` (Unreleased)
+### v2.0.0.2 (Unreleased, FW: 17)
 
 * Live voice audio changed from Opus on command `0x07` to 16 kHz 4-bit ADPCM on command `0x0C`.
 
-### `v2.0.0.0`
+### v2.0.0.0 (FW: 17)
 
 * Serial transport now uses KV4P KISS framing. The old `0xDEADBEEF` delimiter and top-level length field are removed.
 * Standard KISS DATA frames carry AX.25 packets directly.
@@ -20,14 +20,14 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 * Firmware replies with `COMMAND_DEVICE_STATE` snapshots describing applied state.
 * Legacy one-shot control commands were removed.
 
-### `v1.9.4`
+### v1.9.4 (FW: 14)
 
 * Added `COMMAND_HOST_HL` (`0x08`) and `COMMAND_HOST_RSSI` (`0x09`).
 * Changed the `COMMAND_HOST_CONFIG` payload from a radio-type byte to an `isHigh` boolean.
 * Replaced the hardware field in the version payload with `rfModuleType` and a `features` bitmask.
 * Added feature bits for high/low power control and physical PTT support.
 
-### `v1.8.0`
+### v1.8.0 (FW: 13)
 
 * Introduced the unified framed host/firmware protocol and core command set in `protocol.h`.
 * Frames use the four-byte `0xDEADBEEF` delimiter, a command byte, and a two-byte (`uint16_t`) payload length.
