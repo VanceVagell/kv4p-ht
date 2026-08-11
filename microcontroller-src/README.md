@@ -151,13 +151,13 @@ You can use either Platform IO or Arduino IDE as your build environment.
    > **Note:** The version of the DRA818 library available through the Arduino Library Manager is currently broken. To ensure proper functionality, you need to install it manually from the official GitHub release.
 
    - **Download the DRA818 Library ZIP:**
-     - Visit the [DRA818 v1.0.1 Release Page](https://github.com/fatpat/arduino-dra818/releases/tag/v1.0.1).
-     - Click on the **"Source code (zip)"** link to download the ZIP file of the library.
+     - Visit this [commit of the DRA818 v1.0.1 library](https://github.com/fatpat/arduino-dra818.git#89582e3ef7bf3f31f1af149e32cec16c4b9e4cf2). It contains additional definitions needed for the `SA818_VHF` and `SA818_UHF` radio modules.
+     - Click the green `Code` button and then `Download ZIP`.
 
    - **Add the DRA818 Library to Arduino IDE:**
      - Open the Arduino IDE.
      - Go to `Sketch` > `Include Library` > `Add .ZIP Library...`.
-     - In the file dialog, navigate to the location where you downloaded the `arduino-dra818-1.0.1.zip` file.
+     - In the file dialog, navigate to the location where you downloaded the `arduino-dra818-master.zip` file.
      - Select the ZIP file and click **Open**.
      - A confirmation message should appear indicating that the library was added successfully.
 
