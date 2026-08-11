@@ -6,7 +6,7 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 ## Protocol Changelog
 
-### Unreleased (after `v2.0.0.1`)
+### `v2.0.0.1` (Unreleased)
 
 * Live voice audio changed from Opus on command `0x07` to 16 kHz 4-bit ADPCM on command `0x0C`.
 
