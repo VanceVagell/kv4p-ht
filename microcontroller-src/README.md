@@ -139,14 +139,7 @@ You can use either Platform IO or Arduino IDE as your build environment.
 
 ### Install Required Libraries
 
-1. **Install EspSoftwareSerial:**
-
-   - Navigate to `Sketch` > `Include Library` > `Manage Libraries`.
-   - In the **Library Manager** window, enter **"EspSoftwareSerial"** into the search bar.
-   - Locate the **EspSoftwareSerial** library in the search results.
-   - Click the **Install** button to add the library to your Arduino environment.
-
-2. **Install DRA818:**
+1. Install DRA818:**
 
    > **Note:** The version of the DRA818 library available through the Arduino Library Manager is currently broken. To ensure proper functionality, you need to install it manually from the official GitHub release.
 
@@ -161,7 +154,7 @@ You can use either Platform IO or Arduino IDE as your build environment.
      - Select the ZIP file and click **Open**.
      - A confirmation message should appear indicating that the library was added successfully.
 
-3. **Install AudioTools:**
+2. **Install AudioTools:**
 
    - **Download the AudioTools Library ZIP:**
      - Visit the [AudioTools v1.2.3 Release Page](https://github.com/pschatzmann/arduino-audio-tools/releases/tag/v1.2.3).
@@ -174,7 +167,7 @@ You can use either Platform IO or Arduino IDE as your build environment.
      - Select the ZIP file and click **Open**.
      - A confirmation message should appear indicating that the library was added successfully.
 
-4. **Install adpcm:**
+3. **Install adpcm:**
 
    - **Download the adpcm Library ZIP:**
      - Visit the [adpcm v1.2.1 Release Page](https://github.com/pschatzmann/adpcm/releases/tag/v1.2.1).
@@ -187,22 +180,16 @@ You can use either Platform IO or Arduino IDE as your build environment.
      - Select the ZIP file and click **Open**.
      - A confirmation message should appear indicating that the library was added successfully.
 
-5. **Install esp32-afsk:**
+4. **Install esp32-afsk:**
 
-   - **Download the esp32-afsk Library ZIP:**
-     - Visit the [esp32-afsk v0.1.3 Release Page](https://github.com/dkaukov/esp32-afsk/releases/tag/v0.1.3).
-     - Click on the **"Source code (zip)"** link to download the ZIP file of the library.
+   - Navigate to `Sketch` > `Include Library` > `Manage Libraries`.
+   - In the **Library Manager** window, enter **"esp32-afsk"** into the search bar.
+   - Locate the **esp32-afsk** library by **Dmitry Kaukov** in the search results.
+   - Click the **Install** button to add the library to your Arduino environment.
 
-   - **Add the adpcm Library to Arduino IDE:**
-     - Open the Arduino IDE.
-     - Go to `Sketch` > `Include Library` > `Add .ZIP Library...`.
-     - In the file dialog, navigate to the location where you downloaded the `esp32-afk-0.1.3.zip` file.
-     - Select the ZIP file and click **Open**.
-     - A confirmation message should appear indicating that the library was added successfully.
+5. **Confirm All Libraries Are Installed:**
 
-6. **Confirm All Libraries Are Installed:**
-
-   - After completing the above steps, go to `Sketch` > `Include Library` and scroll down to the bottom where you will find the section labeled `Contributed Libraries` (light gray). Ensure that **adpcm**, **audio-tools**,  **DRA818**, **esp32-afk** and **EspSoftwareSerial** are listed.
+   - After completing the above steps, go to `Sketch` > `Include Library` and scroll down to the bottom where you will find the section labeled `Contributed Libraries` (light gray). Ensure that **adpcm**, **audio-tools**,  **DRA818** and **esp32-afk** are listed.
    - If any libraries are missing, revisit the installation steps to ensure they were added correctly.
 
 ### Opening the Project (Arduino IDE)
