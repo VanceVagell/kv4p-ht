@@ -208,6 +208,7 @@ public class RadioAudioService extends Service {
     private @NonNull String activeFrequencyStr = "";
     private int activeMemoryId = -1;
     private int scanBaseSquelch = -1;
+    private static final int DEFAULT_SCAN_SQUELCH = 7;
     private Runnable pendingScanAdvance;
     private int pendingScanAdvanceMemoryId = -1;
     private MicGainBoost micGainBoost = MicGainBoost.NONE;
@@ -1338,7 +1339,7 @@ public class RadioAudioService extends Service {
                 int desiredSquelch = scanBaseSquelch >= 0 ? scanBaseSquelch : radioModule.getDesiredSquelch();
                 radioModule.beginUpdate();
                 try {
-                    radioModule.setSquelch((byte) (desiredSquelch > 0 ? desiredSquelch : 1));
+                    radioModule.setSquelch((byte) (desiredSquelch > 0 ? desiredSquelch : DEFAULT_SCAN_SQUELCH));
                     tuneToMemory(candidate);
                 } finally {
                     radioModule.endUpdate();
