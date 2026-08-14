@@ -40,16 +40,43 @@ public final class ImaAdpcm {
 
     private ImaAdpcm() {}
 
+    /** Stateful encoder for a continuous IMA ADPCM stream. */
+    public static final class Encoder {
+        private int stepIndex;
+
+        public int encodeBlock(short[] pcm, int pcmOffset, int samples, byte[] adpcm, int adpcmOffset) {
+            if (samples <= 0) {
+                return 0;
+            }
+            int[] state = {pcm[pcmOffset], stepIndex};
+            int encoded = ImaAdpcm.encodeBlock(pcm, pcmOffset, samples, adpcm, adpcmOffset, state);
+            if (encoded > 0) {
+                stepIndex = state[1];
+            }
+            return encoded;
+        }
+
+        public void reset() {
+            stepIndex = 0;
+        }
+    }
+
     public static int encodedSize(int samples) {
         return 4 + samples / 2;
     }
 
     public static int encodeBlock(short[] pcm, int pcmOffset, int samples, byte[] adpcm, int adpcmOffset) {
+        int[] state = {samples > 0 ? pcm[pcmOffset] : 0, 0};
+        return encodeBlock(pcm, pcmOffset, samples, adpcm, adpcmOffset, state);
+    }
+
+    private static int encodeBlock(short[] pcm, int pcmOffset, int samples, byte[] adpcm, int adpcmOffset,
+                                   int[] state) {
         if (samples <= 0) {
             return 0;
         }
 
-        int[] state = {pcm[pcmOffset], 0};
+        state[0] = pcm[pcmOffset];
         adpcm[adpcmOffset] = (byte) state[0];
         adpcm[adpcmOffset + 1] = (byte) (state[0] >> 8);
         adpcm[adpcmOffset + 2] = (byte) state[1];
@@ -104,29 +131,11 @@ public final class ImaAdpcm {
         int index = state[1];
         int step = STEP_TABLE[index];
         int diff = sample - predictor;
-        int code = 0;
-        if (diff < 0) {
-            code = 8;
-            diff = -diff;
-        }
+        int magnitude = Math.min(7, Math.abs(diff) * 4 / step);
+        int code = magnitude | (diff < 0 ? 8 : 0);
+        int delta = step * (2 * magnitude + 1) / 8;
 
-        int delta = step >> 3;
-        if (diff >= step) {
-            code |= 4;
-            diff -= step;
-            delta += step;
-        }
-        if (diff >= (step >> 1)) {
-            code |= 2;
-            diff -= step >> 1;
-            delta += step >> 1;
-        }
-        if (diff >= (step >> 2)) {
-            code |= 1;
-            delta += step >> 2;
-        }
-
-        predictor += (code & 8) != 0 ? -delta : delta;
+        predictor += diff < 0 ? -delta : delta;
         state[0] = clampInt16(predictor);
         state[1] = clampIndex(index + INDEX_TABLE[code]);
         return code;
