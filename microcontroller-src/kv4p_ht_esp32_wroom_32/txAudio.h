@@ -24,6 +24,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AfskModulator.h>
 #include "globals.h"
 #include "protocol.h"
+#include "state.h"
+#include "utils.h"
 #include "dsp/audioResampler.h"
 
 bool txStreamConfigured = false;
@@ -39,6 +41,10 @@ EncodedAudioStream txDecodeStream(&txVolumeMeter, &txAdpcmDecoder);
 // Tx runaway detection stuff
 uint32_t txStartTime = -1;
 const uint16_t RUNAWAY_TX_SEC = 200;
+
+// A host holding PTT must continuously provide voice frames. This releases PTT
+// quickly if USB, Bluetooth, or BLE disappears without sending PTT-up.
+TxWatchDog txWatchDog;
 
 float txAfskBlock[TX_AFSK_BLOCK_SAMPLES];
 int16_t txAfskPcm[TX_AFSK_BLOCK_SAMPLES];
@@ -126,6 +132,7 @@ void processTxAudio(uint8_t *src, size_t len) {
   if (!src || len == 0 || !txStreamConfigured) {
     return;
   }
+  txWatchDog.onFrame(millis());
   txDecodeStream.write(src, len);
   updateTxAudioLevel(txVolumeMeter.volumeRatio());
   esp_task_wdt_reset();
@@ -138,11 +145,26 @@ void processTxAx25(uint8_t *src, size_t len) {
   afskMod.modulate(src, len, txAfskBlock, TX_AFSK_BLOCK_SAMPLES, TX_AFSK_LEAD_SILENCE_MS, TX_AFSK_TAIL_SILENCE_MS);
 }
 
+void releaseHostPtt() {
+  if (desiredState.flags & HOST_STATE_PTT_REQUESTED) {
+    desiredState.flags &= ~HOST_STATE_PTT_REQUESTED;
+    desiredState.sequence++;
+  }
+  setMode(rxIdleMode());
+  markDeviceStateDirty();
+}
+
 void inline txAudioLoop() {
   if (mode == MODE_TX) {
+    if ((desiredState.flags & HOST_STATE_PTT_REQUESTED) && txWatchDog.expired(millis())) {
+      _LOGW("TX audio timeout; releasing host PTT");
+      releaseHostPtt();
+      esp_task_wdt_reset();
+      return;
+    }
     // Check for runaway tx
     if ((millis() - txStartTime) > RUNAWAY_TX_SEC * 1000) {
-      setMode(rxIdleMode());
+      releaseHostPtt();
       esp_task_wdt_reset();
     }
   }

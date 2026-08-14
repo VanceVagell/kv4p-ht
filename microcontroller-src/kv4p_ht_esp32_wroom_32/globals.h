@@ -36,6 +36,10 @@ enum RfModuleType : uint8_t {
 #define AUDIO_RESAMPLE_RATIO 3
 #define AUDIO_DSP_ALIGN16 __attribute__((aligned(16)))
 
+static constexpr uint16_t TX_AUDIO_TIMEOUT_FRAMES = 50;
+static constexpr uint32_t TX_AUDIO_TIMEOUT_MS =
+  (uint32_t)TX_AUDIO_TIMEOUT_FRAMES * AUDIO_FRAME_SAMPLES_WIRE * 1000 / AUDIO_WIRE_SAMPLE_RATE;
+
 inline uint32_t bluetoothDeviceId() {
   uint64_t mac = ESP.getEfuseMac();
   return (uint32_t)((mac >> 24) & 0xFFFFFF);
