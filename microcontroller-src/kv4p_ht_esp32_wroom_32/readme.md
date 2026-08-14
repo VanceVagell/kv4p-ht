@@ -4,28 +4,37 @@
 
 The KV4P-HT protocol defines the communication interface between the microcontroller and external systems. It specifies message structures and command types for data exchange.
 
-## Protocol Version
+## Protocol Changelog
 
-* **Current Version:** 2.2
-* **Changelog:**
-  * Serial transport now uses KV4P KISS framing. The old `0xDEADBEEF` delimiter and top-level length field are removed.
-  * Standard KISS DATA frames carry AX.25 packets directly.
-  * kv4p-specific commands are carried in KISS SETHARDWARE vendor frames with payload prefix `"KV4P"` and protocol version `1`.
-  * `COMMAND_HELLO` now carries the version/status payload after firmware radio initialization completes.
-  * Android now sends `COMMAND_HOST_DESIRED_STATE` snapshots for radio config, filters, PTT, audio-open, high-power, and RSSI state.
-  * Firmware replies with `COMMAND_DEVICE_STATE` snapshots describing applied state.
-  * Firmware coalesces state changes through a dirty flag; `deviceStateLoop()` is the single state-report sender.
-  * Android retries an unacknowledged desired-state snapshot by resending the same sequence.
-  * Live voice audio uses 16 kHz 4-bit ADPCM payloads.
-  * Legacy one-shot control commands were removed.
- 
-* **Historical 2.1 changelog:**
-  * Initial version with core command set.
-  * Parameter length field upgraded from 1 byte to 2 bytes (`uint16_t`).
-  * Added `COMMAND_WINDOW_UPDATE` **(ESP32 → Android)**.
-  * Version/status payload includes `windowSize`, **`rfModuleType`**, and **`features`**.
-  * Historical live voice audio streams used Opus on command `0x07`.
-  * Window-based flow control implemented for all incoming commands, inspired by HTTP/2.
+### v2.0.0.2 (Unreleased, FW: 17)
+
+* Live voice audio changed from Opus on command `0x07` to 16 kHz 4-bit ADPCM on command `0x0C`.
+
+### v2.0.0.0 (FW: 17)
+
+* Serial transport now uses KV4P KISS framing. The old `0xDEADBEEF` delimiter and top-level length field are removed.
+* Standard KISS DATA frames carry AX.25 packets directly.
+* kv4p-specific commands are carried in KISS SETHARDWARE vendor frames with payload prefix `"KV4P"` and protocol version `1`.
+* `COMMAND_HELLO` now carries the version/status payload after firmware radio initialization completes.
+* Android now sends `COMMAND_HOST_DESIRED_STATE` snapshots for radio config, filters, PTT, audio-open, high-power, and RSSI state.
+* Firmware replies with `COMMAND_DEVICE_STATE` snapshots describing applied state.
+* Legacy one-shot control commands were removed.
+
+### v1.9.4 (FW: 14)
+
+* Added `COMMAND_HOST_HL` (`0x08`) and `COMMAND_HOST_RSSI` (`0x09`).
+* Changed the `COMMAND_HOST_CONFIG` payload from a radio-type byte to an `isHigh` boolean.
+* Replaced the hardware field in the version payload with `rfModuleType` and a `features` bitmask.
+* Added feature bits for high/low power control and physical PTT support.
+
+### v1.8.0 (FW: 13)
+
+* Introduced the unified framed host/firmware protocol and core command set in `protocol.h`.
+* Frames use the four-byte `0xDEADBEEF` delimiter, a command byte, and a two-byte (`uint16_t`) payload length.
+* Added `COMMAND_WINDOW_UPDATE` **(ESP32 → Android)**.
+* The version payload includes firmware version, radio status, hardware version, and `windowSize`.
+* Live voice audio uses Opus on command `0x07` in both directions.
+* Window-based flow control applies to incoming commands.
 
 ## Packet Structure
 

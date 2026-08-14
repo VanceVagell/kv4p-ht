@@ -166,6 +166,7 @@ public class RadioAudioService extends Service {
     private float audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
     private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES];
+    private final ImaAdpcm.Encoder txAudioEncoder = new ImaAdpcm.Encoder();
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -836,6 +837,7 @@ public class RadioAudioService extends Service {
             return;
         }
         if (mode == RadioMode.RX && isTxAllowed()) {
+            txAudioEncoder.reset();
             setMode(RadioMode.TX);
             callbacks.sMeterUpdate(0);
             setTxRunAwayTimer();
@@ -1377,7 +1379,7 @@ public class RadioAudioService extends Service {
         if (!dataMode) {
             applyMicGain(samples, AUDIO_FRAME_SAMPLES);
         }
-        int encodedLength = ImaAdpcm.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES, txAudioFrame, 0);
+        int encodedLength = txAudioEncoder.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES, txAudioFrame, 0);
         sender.txAudio(txAudioFrame, encodedLength);
     }
 

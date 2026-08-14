@@ -415,6 +415,7 @@ void setup() {
   digitalWrite(hw.pins.pinPd, HIGH);  // Power on
   pinMode(hw.pins.pinPtt, OUTPUT);
   digitalWrite(hw.pins.pinPtt, HIGH);  // Rx
+  pinMode(hw.pins.pinSq, INPUT);
   if (hw.features.hasHL) {
     pinMode(hw.pins.pinHl, OUTPUT);
     digitalWrite(hw.pins.pinHl, LOW);  // High power

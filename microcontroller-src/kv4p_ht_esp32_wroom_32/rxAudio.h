@@ -139,7 +139,6 @@ void initI2SRx() {
   if (rxStreamConfigured) {
     return;
   }
-  softSquelchEffect.resetState();
   injectADCBias();
   setUpADCAttenuator();
   //AudioToolsLogger.begin(debugPrinter, AudioToolsLogLevel::Debug);
@@ -179,6 +178,7 @@ void endI2SRx() {
 }
   
 void rxAudioLoop() {
+  softSquelchEffect.setHardwareSquelched(digitalRead(hw.pins.pinSq) == HIGH);
   if (mode == MODE_RX || mode == MODE_STOPPED) {
     mute.setActive(squelched);
     rxCopier.copy();
