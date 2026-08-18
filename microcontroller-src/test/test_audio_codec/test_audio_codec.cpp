@@ -63,6 +63,16 @@ void test_decimator_coefficients_have_expected_dc_gain() {
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, kExpectedDecimatorDcGain, sum);
 }
 
+void test_low_stop_decimator_coefficients_reject_dc() {
+  float coeffs[AUDIO_DECIMATOR_TAPS];
+  float sum = 0.0f;
+  audioDesignDecimatorCoeffs(coeffs, false, true);
+  for (size_t i = 0; i < AUDIO_DECIMATOR_TAPS; i++) {
+    sum += coeffs[i];
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, sum);
+}
+
 void test_decimator_expected_gain_for_dc_after_warmup() {
   static constexpr int16_t kInputLevel = 10000;
   static constexpr int16_t kExpectedLevel = (int16_t)(kInputLevel * kExpectedDecimatorDcGain);
@@ -89,6 +99,7 @@ void setup() {
   RUN_TEST(test_upsampler_interpolates);
   RUN_TEST(test_decimator_output_length);
   RUN_TEST(test_decimator_coefficients_have_expected_dc_gain);
+  RUN_TEST(test_low_stop_decimator_coefficients_reject_dc);
   RUN_TEST(test_decimator_expected_gain_for_dc_after_warmup);
   UNITY_END();
 }
