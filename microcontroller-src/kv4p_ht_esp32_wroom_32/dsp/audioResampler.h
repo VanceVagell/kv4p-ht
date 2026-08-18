@@ -115,10 +115,12 @@ public:
   bool begin() {
     captureSamples = 0;
     hasPendingByte = false;
-    return decimator.begin();
+    return decimator.begin(highStop, lowStop);
   }
 
-  bool setFilters(bool highStop, bool lowStop) {
+  bool setFilters(bool useHighStop, bool useLowStop) {
+    highStop = useHighStop;
+    lowStop = useLowStop;
     return decimator.begin(highStop, lowStop);
   }
 
@@ -149,6 +151,8 @@ private:
   size_t captureSamples = 0;
   uint8_t pendingByte = 0;
   bool hasPendingByte = false;
+  bool highStop = false;
+  bool lowStop = false;
 
   size_t decimateFrame(uint8_t *dst) {
     int16_t *pcmWire = (int16_t *)dst;
