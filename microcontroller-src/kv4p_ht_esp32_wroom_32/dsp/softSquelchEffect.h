@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <math.h>
 #include <string.h>
 #include "../globals.h"
+#include "ctcssDetector.h"
 
 #define ZCR_DECAY_TIME 0.100f  // seconds
 #define SQ_CLOSE_DELAY 0.250f  // seconds
@@ -32,7 +33,8 @@ public:
   SoftSquelchEffect(uint32_t sampleRate = AUDIO_SAMPLE_RATE, float zcrTauSec = ZCR_DECAY_TIME, float closeDelaySec = SQ_CLOSE_DELAY)
     : sampleRate(sampleRate == 0 ? AUDIO_SAMPLE_RATE : sampleRate),
       zcrTauSec(zcrTauSec),
-      closeDelaySec(closeDelaySec) {
+      closeDelaySec(closeDelaySec),
+      ctcssDetector(this->sampleRate) {
     zcrAlpha = 1.0f - expf(-1.0f / ((float)this->sampleRate * this->zcrTauSec));
     initBpf();
     resetState();
@@ -50,6 +52,7 @@ public:
     previousOutsideSample = 0.0f;
     iirZcr = resetClosedZcr();
     aboveThresholdSamples = closeDelaySamples();
+    ctcssDetector.reset();
     setSoftSqOpen(false);
   }
 
@@ -57,8 +60,17 @@ public:
     hardwareSquelched = squelched;
   }
 
+  void setCtcssTone(uint8_t toneIndex) {
+    ctcssDetector.setToneIndex(toneIndex);
+  }
+
   effect_t process(effect_t input) override {
-    if (!active() || hardwareSquelched) {
+    if (!active()) {
+      return input;
+    }
+
+    ctcssDetector.process(input);
+    if (hardwareSquelched) {
       return input;
     }
 
@@ -82,6 +94,9 @@ public:
   }
 
   bool isSoftOpen() const {
+    if (!ctcssDetector.isDetected()) {
+      return false;
+    }
     if (isBypassed()) {
       return true;
     }
@@ -124,6 +139,7 @@ private:
   uint32_t aboveThresholdSamples = 0;
   bool softSqOpen = false;
   bool hardwareSquelched = false;
+  CtcssDetector ctcssDetector;
   uint8_t deadbandLevel = 0;
   float deadband = 0.45f;
 

@@ -319,7 +319,7 @@ void reconcileDesiredState(bool sendReport = true) {
 
   if ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) && radioConfigChanged()) {
     drainRadioSerial();
-    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, 0, desiredState.ctcss_rx)) {
+    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, 0, 0)) {
       lastDeviceStateError = DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED;
       esp_task_wdt_reset();
     }
@@ -329,6 +329,7 @@ void reconcileDesiredState(bool sendReport = true) {
     appliedState.ctcss_tx = desiredState.ctcss_tx;
     appliedState.squelch = desiredState.squelch;
     softSquelchEffect.setDeadbandLevel(appliedState.squelch);
+    softSquelchEffect.setCtcssTone(desiredState.ctcss_rx);
     appliedState.ctcss_rx = desiredState.ctcss_rx;
     appliedState.memoryId = desiredState.memoryId;
     appliedState.flags |= HOST_STATE_RADIO_CONFIG_VALID;
