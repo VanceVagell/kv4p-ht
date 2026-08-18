@@ -121,10 +121,10 @@ public:
   }
 
 private:
-  static constexpr float SOFT_SQUELCH_LOW_HZ = 200.0f;
-  static constexpr float SOFT_SQUELCH_HIGH_HZ = 500.0f;
-  static constexpr float SOFT_SQUELCH_THRESHOLD_ZCR = 30.0f;
-  static constexpr int SOFT_SQUELCH_BPF_TAPS = 33;
+  static constexpr float SOFT_SQUELCH_LOW_HZ = 3500.0f;
+  static constexpr float SOFT_SQUELCH_HIGH_HZ = 4000.0f;
+  static constexpr float SOFT_SQUELCH_THRESHOLD_ZCR = 350.0f;
+  static constexpr int SOFT_SQUELCH_BPF_TAPS = 65;
   static constexpr int SOFT_SQUELCH_BPF_STATE_LEN = SOFT_SQUELCH_BPF_TAPS + 4;
 
   uint32_t sampleRate;
@@ -141,13 +141,13 @@ private:
   bool hardwareSquelched = false;
   CtcssDetector ctcssDetector;
   uint8_t deadbandLevel = 0;
-  float deadband = 0.45f;
+  float deadband = 0.13f;
 
   static float deadbandForLevel(uint8_t level) {
     if (level > 8) {
       level = 8;
     }
-    return 0.45f - ((float)level / 8.0f) * (0.45f - 0.08f);
+    return 0.13f - ((float)level / 8.0f) * (0.13f - 0.08f);
   }
 
   bool isBypassed() const {
