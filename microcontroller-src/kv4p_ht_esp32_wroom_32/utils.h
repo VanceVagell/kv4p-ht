@@ -55,3 +55,21 @@ public:
     lastDebounceTime = millis();
   }
 };
+
+class TxWatchDog {
+public:
+  void reset(uint32_t now) {
+    lastFrameTime = now;
+  }
+
+  void onFrame(uint32_t now) {
+    lastFrameTime = now;
+  }
+
+  bool expired(uint32_t now) const {
+    return (uint32_t)(now - lastFrameTime) >= TX_AUDIO_TIMEOUT_MS;
+  }
+
+private:
+  uint32_t lastFrameTime = 0;
+};

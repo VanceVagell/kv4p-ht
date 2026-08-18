@@ -23,6 +23,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstring>
 #include <cstdio>
 
+inline unsigned long millis() {
+  return 0;
+}
+
 class NativeEsp {
 public:
   uint64_t getEfuseMac() const {

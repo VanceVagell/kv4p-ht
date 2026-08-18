@@ -582,9 +582,15 @@ public class MainActivity extends AppCompatActivity {
      * @return immutable list of required runtime permissions
      */
     private List<String> foregroundServicePermissions() {
-        return List.of(Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.POST_NOTIFICATIONS);
+        List<String> permissions = new ArrayList<>();
+        permissions.add(Manifest.permission.RECORD_AUDIO);
+        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        permissions.add(Manifest.permission.POST_NOTIFICATIONS);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN);
+            permissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+        }
+        return permissions;
     }
 
     private void startAndBindRadioAudioService() {
@@ -1578,6 +1584,10 @@ public class MainActivity extends AppCompatActivity {
                 reasons.add("• Precise location — to include GPS in APRS/beacons");
             } else if (Manifest.permission.POST_NOTIFICATIONS.equals(p) && Build.VERSION.SDK_INT >= 33) {
                 reasons.add("• Notifications — to alert you about APRS messages and status");
+            } else if (Manifest.permission.BLUETOOTH_SCAN.equals(p) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                reasons.add("• Nearby devices — to find your kv4p HT over BLE");
+            } else if (Manifest.permission.BLUETOOTH_CONNECT.equals(p) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                reasons.add("• Bluetooth connection — to communicate with your kv4p HT over BLE");
             } else if (Manifest.permission.ACCESS_BACKGROUND_LOCATION.equals(p)) {
                 reasons.add("• Background location — to send beacons with the screen off");
             }
@@ -1753,17 +1763,13 @@ public class MainActivity extends AppCompatActivity {
      * @param firmwareVer The currently installed firmware version, or -1 if no firmware installed.
      */
     private void showVersionSnackbar(int firmwareVer) {
-        final Context ctx = this;
         CharSequence snackbarMsg = firmwareVer == -1 ? getString(R.string.no_firmware_installed) : getString(R.string.new_firmware_available);
         versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
-                .setAction("Flash now", new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        startFirmwareActivity();
-                    }
-                })
                 .setAnchorView(findViewById(R.id.bottomNavigationView));
+        if (canFlashFirmware()) {
+            versionSnackbar.setAction("Flash now", view -> startFirmwareActivity());
+        }
 
         // Make the text of the snackbar larger.
         TextView snackbarActionTextView = (TextView) versionSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
@@ -1981,6 +1987,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startFirmwareActivity() {
+        if (!canFlashFirmware()) {
+            showSimpleSnackbar(getString(R.string.firmware_flash_requires_usb));
+            return;
+        }
         // Stop any scanning or transmitting
         if (radioAudioService != null) {
             radioAudioService.setScanning(false);
@@ -2087,9 +2097,13 @@ public class MainActivity extends AppCompatActivity {
         });
 
         boolean showRadioOptions = radioAudioService != null && radioAudioService.isRadioConnected();
-        moreMenu.getMenu().findItem(R.id.flash_firmware).setEnabled(showRadioOptions);
+        moreMenu.getMenu().findItem(R.id.flash_firmware).setEnabled(canFlashFirmware());
         moreMenu.getMenu().findItem(R.id.import_from_repeaterbook).setEnabled(showRadioOptions);
         moreMenu.show();
+    }
+
+    private boolean canFlashFirmware() {
+        return radioAudioService != null && radioAudioService.canFlashFirmware();
     }
 
     /**

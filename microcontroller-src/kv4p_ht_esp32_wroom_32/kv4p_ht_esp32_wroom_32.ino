@@ -25,6 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "BluedroidBleKissGattStream.h"
 #include "led.h"
 #include "protocol.h"
+#include "state.h"
 #include "rxAudio.h"
 #include "txAudio.h"
 #include "buttons.h"
@@ -65,31 +66,6 @@ bool bluetoothProtocolConnected = false;
 bool bleKissProtocolConnected = false;
 KissParser bluetoothParser(protocolBtSession, &handleCommands, &handleAx25Data);
 KissParser bleKissParser(protocolBleSession, &handleCommands, &handleAx25Data);
-
-// Were we able to communicate with the radio module during setup()?
-const char RADIO_MODULE_NOT_FOUND = 'x';
-const char RADIO_MODULE_FOUND     = 'f';
-char radioModuleStatus            = RADIO_MODULE_NOT_FOUND;
-
-boolean rssiOn = true; // true if RSSI is enabled
-HostDesiredState desiredState = {
-  .sequence = 0,
-  .memoryId = -1,
-  .flags = HOST_STATE_HIGH_POWER | HOST_STATE_RSSI_ENABLED,
-  .bw = DRA818_25K,
-  .freq_tx = 0.0f,
-  .freq_rx = 0.0f,
-  .ctcss_tx = 0,
-  .squelch = 0,
-  .ctcss_rx = 0,
-};
-HostDesiredState appliedState = {};
-HostDesiredState persistedState = {};
-bool radioConfigApplied = false;
-bool filtersApplied = false;
-uint8_t lastDeviceStateError = DEVICE_STATE_ERROR_NONE;
-uint8_t latestRssi = 0;
-bool deviceStateDirty = false;
 
 float moduleMinRadioFreq() {
   return hw.rfModuleType == RF_SA818_UHF ? 400.0f : 134.0f;
@@ -369,6 +345,7 @@ void setMode(Mode newMode) {
     case MODE_TX:
       _LOGI("MODE_TX");
       txStartTime = millis();
+      txWatchDog.reset(txStartTime);
       digitalWrite(hw.pins.pinPtt, LOW);
       endI2SRx();
       initI2STx();
