@@ -32,9 +32,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 static constexpr int16_t AUDIO_DECIMATOR_TAPS = 65;
 static constexpr int16_t AUDIO_DECIMATOR_STATE_LEN = AUDIO_DECIMATOR_TAPS + 4;
 static constexpr float AUDIO_DECIMATOR_CUTOFF_HZ = 6800.0f;
+static constexpr float AUDIO_FILTER_LOW_STOP_CUTOFF_HZ = 300.0f;
+static constexpr float AUDIO_FILTER_HIGH_STOP_CUTOFF_HZ = 3000.0f;
 
-inline void audioDesignDecimatorCoeffs(float *coeffs) {
-  afsk::dsp::afsk_design_lowpass_hamming(coeffs, AUDIO_DECIMATOR_TAPS, AUDIO_DECIMATOR_CUTOFF_HZ, AUDIO_SAMPLE_RATE);
+inline void audioDesignDecimatorCoeffs(float *coeffs, bool highStop = false, bool lowStop = false) {
+  float lowPassCoeffs[AUDIO_DECIMATOR_TAPS];
+  float cutoff = highStop ? AUDIO_FILTER_HIGH_STOP_CUTOFF_HZ : AUDIO_DECIMATOR_CUTOFF_HZ;
+  afsk::dsp::afsk_design_lowpass_hamming(coeffs, AUDIO_DECIMATOR_TAPS, cutoff, AUDIO_SAMPLE_RATE);
+  if (lowStop) {
+    afsk::dsp::afsk_design_lowpass_hamming(lowPassCoeffs, AUDIO_DECIMATOR_TAPS,
+                                           AUDIO_FILTER_LOW_STOP_CUTOFF_HZ, AUDIO_SAMPLE_RATE);
+    for (size_t i = 0; i < AUDIO_DECIMATOR_TAPS; i++) {
+      coeffs[i] -= lowPassCoeffs[i];
+    }
+  }
 }
 
 inline size_t upsampleWireTo48kLinear(const int16_t *input, size_t inputSamples, int16_t *output, size_t outputCapacity) {
@@ -54,8 +65,9 @@ inline size_t upsampleWireTo48kLinear(const int16_t *input, size_t inputSamples,
 
 class AudioFirDecimator {
 public:
-  bool begin() {
-    audioDesignDecimatorCoeffs(coeffs);
+  bool begin(bool highStop = false, bool lowStop = false) {
+    audioDesignDecimatorCoeffs(coeffs, highStop, lowStop);
+    memset(delay, 0, sizeof(delay));
     fir.initDecim(coeffs, AUDIO_DECIMATOR_TAPS, coeffs, delay, AUDIO_DECIMATOR_STATE_LEN, AUDIO_RESAMPLE_RATIO);
     return fir.len == AUDIO_DECIMATOR_TAPS;
   }
@@ -103,7 +115,13 @@ public:
   bool begin() {
     captureSamples = 0;
     hasPendingByte = false;
-    return decimator.begin();
+    return decimator.begin(highStop, lowStop);
+  }
+
+  bool setFilters(bool useHighStop, bool useLowStop) {
+    highStop = useHighStop;
+    lowStop = useLowStop;
+    return decimator.begin(highStop, lowStop);
   }
 
   size_t convert(uint8_t *src, size_t size) override {
@@ -133,6 +151,8 @@ private:
   size_t captureSamples = 0;
   uint8_t pendingByte = 0;
   bool hasPendingByte = false;
+  bool highStop = false;
+  bool lowStop = false;
 
   size_t decimateFrame(uint8_t *dst) {
     int16_t *pcmWire = (int16_t *)dst;

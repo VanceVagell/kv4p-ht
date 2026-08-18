@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <unity.h>
 
 #include "dsp/audioResampler.h"
+#include "dsp/ctcssDetector.h"
 
 static_assert(AUDIO_FRAME_SAMPLES_WIRE == 249, "128-byte mono IMA ADPCM block must decode to 249 samples");
 static_assert(AUDIO_FRAME_SAMPLES_48K == 747, "249 samples at 16 kHz must map to 747 samples at 48 kHz");
@@ -63,6 +64,16 @@ void test_decimator_coefficients_have_expected_dc_gain() {
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, kExpectedDecimatorDcGain, sum);
 }
 
+void test_low_stop_decimator_coefficients_reject_dc() {
+  float coeffs[AUDIO_DECIMATOR_TAPS];
+  float sum = 0.0f;
+  audioDesignDecimatorCoeffs(coeffs, false, true);
+  for (size_t i = 0; i < AUDIO_DECIMATOR_TAPS; i++) {
+    sum += coeffs[i];
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, sum);
+}
+
 void test_decimator_expected_gain_for_dc_after_warmup() {
   static constexpr int16_t kInputLevel = 10000;
   static constexpr int16_t kExpectedLevel = (int16_t)(kInputLevel * kExpectedDecimatorDcGain);
@@ -83,13 +94,39 @@ void test_decimator_expected_gain_for_dc_after_warmup() {
   TEST_ASSERT_INT16_WITHIN(2, kExpectedLevel, out[AUDIO_FRAME_SAMPLES_WIRE - 1]);
 }
 
+void feed_detector_tone(CtcssDetector &detector, float frequencyHz, float seconds) {
+  static constexpr float kPi = 3.14159265358979323846f;
+  size_t samples = (size_t)(AUDIO_SAMPLE_RATE * seconds);
+  for (size_t i = 0; i < samples; i++) {
+    int16_t sample = (int16_t)(8000.0f * sinf(2.0f * kPi * frequencyHz * (float)i / AUDIO_SAMPLE_RATE));
+    detector.process(sample);
+  }
+}
+
+void test_ctcss_detector_recognizes_selected_tone() {
+  CtcssDetector detector(AUDIO_SAMPLE_RATE);
+  detector.setToneIndex(12);
+  feed_detector_tone(detector, 100.0f, 0.4f);
+  TEST_ASSERT_TRUE(detector.isDetected());
+}
+
+void test_ctcss_detector_rejects_adjacent_tone() {
+  CtcssDetector detector(AUDIO_SAMPLE_RATE);
+  detector.setToneIndex(12);
+  feed_detector_tone(detector, 103.5f, 0.4f);
+  TEST_ASSERT_FALSE(detector.isDetected());
+}
+
 void setup() {
   UNITY_BEGIN();
   RUN_TEST(test_upsampler_output_length);
   RUN_TEST(test_upsampler_interpolates);
   RUN_TEST(test_decimator_output_length);
   RUN_TEST(test_decimator_coefficients_have_expected_dc_gain);
+  RUN_TEST(test_low_stop_decimator_coefficients_reject_dc);
   RUN_TEST(test_decimator_expected_gain_for_dc_after_warmup);
+  RUN_TEST(test_ctcss_detector_recognizes_selected_tone);
+  RUN_TEST(test_ctcss_detector_rejects_adjacent_tone);
   UNITY_END();
 }
 

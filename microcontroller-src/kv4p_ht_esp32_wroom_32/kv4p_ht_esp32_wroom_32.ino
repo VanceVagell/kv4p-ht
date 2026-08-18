@@ -283,17 +283,19 @@ void reconcileDesiredState(bool sendReport = true) {
   uint16_t appliedFilterFlags = appliedState.flags & (HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW);
   if (!filtersApplied || filterFlags != appliedFilterFlags) {
     drainRadioSerial();
-    while (!sa818.filters((filterFlags & HOST_STATE_FILTER_PRE), (filterFlags & HOST_STATE_FILTER_HIGH), (filterFlags & HOST_STATE_FILTER_LOW))) {
+    while (!sa818.filters((filterFlags & HOST_STATE_FILTER_PRE), false, false)) {
       lastDeviceStateError = DEVICE_STATE_ERROR_FILTERS_FAILED;
       esp_task_wdt_reset();
     }
+    rxDownsample.setFilters((filterFlags & HOST_STATE_FILTER_HIGH) != 0,
+                            (filterFlags & HOST_STATE_FILTER_LOW) != 0);
     appliedState.flags = (appliedState.flags & ~(HOST_STATE_FILTER_PRE | HOST_STATE_FILTER_HIGH | HOST_STATE_FILTER_LOW)) | filterFlags;
     filtersApplied = true;
   }
 
   if ((desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID) && radioConfigChanged()) {
     drainRadioSerial();
-    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, 0, desiredState.ctcss_rx)) {
+    while (!sa818.group(desiredState.bw, desiredState.freq_tx, desiredState.freq_rx, desiredState.ctcss_tx, 0, 0)) {
       lastDeviceStateError = DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED;
       esp_task_wdt_reset();
     }
@@ -303,6 +305,7 @@ void reconcileDesiredState(bool sendReport = true) {
     appliedState.ctcss_tx = desiredState.ctcss_tx;
     appliedState.squelch = desiredState.squelch;
     softSquelchEffect.setDeadbandLevel(appliedState.squelch);
+    softSquelchEffect.setCtcssTone(desiredState.ctcss_rx);
     appliedState.ctcss_rx = desiredState.ctcss_rx;
     appliedState.memoryId = desiredState.memoryId;
     appliedState.flags |= HOST_STATE_RADIO_CONFIG_VALID;
