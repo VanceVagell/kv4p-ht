@@ -1,0 +1,189 @@
+name: Nightly build
+
+on:
+  schedule:
+    # Run away from the top of the hour, when scheduled Actions are busiest.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even when this commit was already published successfully
+        type: boolean
+        default: false
+
+# Only one run may update the rolling nightly release at a time.
+concurrency:
+  group: nightly-build
+  cancel-in-progress: false
+
+# Publishing the rolling pre-release and moving its tag require repository contents access.
+permissions:
+  contents: write
+
+jobs:
+  changes:
+    name: Check for changes
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    outputs:
+      should-build: ${{ steps.changes.outputs.should-build }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare with the last nightly
+        id: changes
+        env:
+          FORCE_BUILD: ${{ inputs.force || false }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$FORCE_BUILD" == "true" ]]; then
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+          elif gh release view nightly --json body --jq .body 2>/dev/null \
+            | grep -Fq "<!-- nightly-commit: $GITHUB_SHA -->"; then
+            echo "No changes since the last successful nightly build."
+            echo "should-build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build firmware and Android app
+    needs: changes
+    if: needs.changes.outputs.should-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio/.cache
+          key: ${{ runner.os }}-platformio-${{ hashFiles('microcontroller-src/platformio.ini') }}
+          restore-keys: ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO
+        run: python -m pip install platformio==6.1.18
+
+      - name: Build debug and release firmware
+        working-directory: microcontroller-src
+        run: pio run -e esp32dev -e esp32dev-release
+
+      - name: Run firmware tests
+        working-directory: microcontroller-src
+        run: pio test -e native-tests
+
+      - name: Bundle firmware with the Android app
+        run: |
+          install -m 0644 \
+            microcontroller-src/.pio/build/esp32dev-release/firmware.bin \
+            android-src/KV4PHT/app/src/main/res/raw/firmware_v17.bin
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test the Android app
+        working-directory: android-src/KV4PHT
+        run: ./gradlew :app:compileDebugJavaWithJavac :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Prepare downloadable files
+        run: |
+          install -m 0644 \
+            android-src/KV4PHT/app/build/outputs/apk/debug/app-debug.apk \
+            kv4p-ht-nightly.apk
+          install -m 0644 \
+            microcontroller-src/.pio/build/esp32dev-release/firmware.bin \
+            firmware-nightly.bin
+          sha256sum kv4p-ht-nightly.apk firmware-nightly.bin > SHA256SUMS
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kv4p-ht-nightly-${{ github.sha }}
+          path: |
+            kv4p-ht-nightly.apk
+            firmware-nightly.bin
+            SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Generate changelog since the latest release
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          if [[ -z "$previous_tag" ]]; then
+            previous_tag="$(git tag --sort=-version:refname | grep -v '^nightly$' | head -n 1 || true)"
+          fi
+
+          git tag --force nightly "$GITHUB_SHA"
+          git push --force origin refs/tags/nightly
+
+          if [[ -n "$previous_tag" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name=nightly \
+              -f target_commitish="$GITHUB_SHA" \
+              -f previous_tag_name="$previous_tag" \
+              --jq .body > generated-notes.md
+          else
+            git log --first-parent --pretty='format:* %s (%h)' > generated-notes.md
+          fi
+
+          short_sha="${GITHUB_SHA::7}"
+          {
+            echo "> [!WARNING]"
+            echo "> Automated development build from \`$short_sha\`. It may be unstable."
+            echo
+            echo "The APK includes the firmware built from the same commit."
+            echo
+            cat generated-notes.md
+          } > release-notes.md
+          echo "short-sha=$short_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Publish rolling nightly pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT_SHA: ${{ steps.notes.outputs.short-sha }}
+        run: |
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release edit nightly \
+              --title "Nightly ($SHORT_SHA)" \
+              --notes-file release-notes.md \
+              --prerelease
+          else
+            gh release create nightly \
+              --title "Nightly ($SHORT_SHA)" \
+              --notes-file release-notes.md \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
+
+          gh release upload nightly \
+            kv4p-ht-nightly.apk \
+            firmware-nightly.bin \
+            SHA256SUMS \
+            --clobber
+
+          # Record success last. The next scheduled run only skips when this
+          # marker proves that every release asset was published.
+          echo >> release-notes.md
+          echo "<!-- nightly-commit: $GITHUB_SHA -->" >> release-notes.md
+          gh release edit nightly --notes-file release-notes.md

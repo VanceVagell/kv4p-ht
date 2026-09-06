@@ -7,6 +7,70 @@ on:
       - completed
 
 jobs:
+  pr-build-comment:
+    name: Link PR build artifact
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Create or update artifact comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          artifact="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
+              --jq '.artifacts | map(select(.name | startswith("kv4p-ht-pr-"))) | first | select(. != null) | [.id, .name] | @tsv'
+          )"
+
+          if [[ -z "$artifact" ]]; then
+            echo "No downloadable PR build artifact was found."
+            exit 0
+          fi
+
+          IFS=$'\t' read -r artifact_id artifact_name <<< "$artifact"
+          if [[ "$artifact_name" =~ ^kv4p-ht-pr-([0-9]+)-([0-9a-f]{40})$ ]]; then
+            PR_NUMBER="${BASH_REMATCH[1]}"
+            HEAD_SHA="${BASH_REMATCH[2]}"
+          else
+            echo "Unexpected artifact name: $artifact_name"
+            exit 1
+          fi
+
+          short_sha="${HEAD_SHA::7}"
+          artifact_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts/$artifact_id"
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          {
+            echo '<!-- kv4p-pr-build -->'
+            echo '### PR test build'
+            echo
+            echo "[Download the APK and firmware artifact]($artifact_url) built from \`$short_sha\`."
+            echo
+            echo "The artifact also contains SHA-256 checksums and a change summary. It expires after 14 days. [View the workflow run]($run_url)."
+          } > comment.md
+
+          comment_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+              --jq 'map(select(.body | contains("<!-- kv4p-pr-build -->"))) | first | .id // empty'
+          )"
+
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              -F body=@comment.md >/dev/null
+          else
+            gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -F body=@comment.md >/dev/null
+          fi
+
   sonar:
     name: 'Sonar analysis'
     runs-on: ubuntu-latest

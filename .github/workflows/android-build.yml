@@ -4,12 +4,61 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
   release:
     types: [created]
+
+concurrency:
+  group: android-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  firmware:
+    name: Build and test firmware for PR
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio/.cache
+          key: ${{ runner.os }}-platformio-${{ hashFiles('microcontroller-src/platformio.ini') }}
+          restore-keys: ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO
+        run: python -m pip install platformio==6.1.18
+
+      - name: Build debug and release firmware
+        working-directory: microcontroller-src
+        run: pio run -e esp32dev -e esp32dev-release
+
+      - name: Run firmware tests
+        working-directory: microcontroller-src
+        run: pio test -e native-tests
+
+      - name: Upload firmware for Android build
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-firmware-${{ github.event.pull_request.number }}
+          path: microcontroller-src/.pio/build/esp32dev-release/firmware.bin
+          if-no-files-found: error
+          retention-days: 1
+
   build:
     name: Build and analyze
+    needs: firmware
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && (needs.firmware.result == 'success' || needs.firmware.result == 'skipped') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,6 +86,18 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
+      - name: Download PR firmware
+        if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-firmware-${{ github.event.pull_request.number }}
+          path: .pr-firmware
+      - name: Bundle PR firmware with the Android app
+        if: github.event_name == 'pull_request'
+        run: |
+          install -m 0644 \
+            ../../.pr-firmware/firmware.bin \
+            app/src/main/res/raw/firmware_v17.bin
       - name: Gradle Check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
@@ -46,6 +107,41 @@ jobs:
         run: ./gradlew test --stacktrace
       - name: 'Gradle Build'
         run: ./gradlew build -x lint --stacktrace
+      - name: Prepare PR build artifact
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p ../../pr-dist
+          install -m 0644 \
+            app/build/outputs/apk/debug/app-debug.apk \
+            "../../pr-dist/kv4p-ht-pr-$PR_NUMBER.apk"
+          install -m 0644 \
+            ../../.pr-firmware/firmware.bin \
+            "../../pr-dist/firmware-pr-$PR_NUMBER.bin"
+          cd ../../pr-dist
+          sha256sum \
+            "kv4p-ht-pr-$PR_NUMBER.apk" \
+            "firmware-pr-$PR_NUMBER.bin" > SHA256SUMS
+          {
+            echo "# Pull request #$PR_NUMBER changes"
+            echo
+            echo "Built head commit: \`$HEAD_SHA\`"
+            echo
+            git -C .. log --no-merges \
+              --pretty='format:* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))' \
+              "$BASE_SHA..$HEAD_SHA"
+          } > PR_CHANGES.md
+      - name: Upload PR build
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kv4p-ht-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: pr-dist/
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload APK
         if: startsWith(github.ref, 'refs/tags')
         uses: AButler/upload-release-assets@v3.0
