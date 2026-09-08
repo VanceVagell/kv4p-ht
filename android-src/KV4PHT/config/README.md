@@ -1,6 +1,6 @@
 # CI debug signing key
 
-`kv4p-ci-debug.keystore` is an intentionally public signing key used only for
+`debug.keystore` is an intentionally public signing key used only for
 PR and nightly debug APKs. Keeping this key stable lets one CI build update a
 previous CI build without uninstalling the app first.
 

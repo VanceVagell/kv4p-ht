@@ -23,9 +23,9 @@ android {
     }
 
     signingConfigs {
-        ciDebug {
+        debug {
             // Intentionally public and only for installable CI development builds.
-            storeFile rootProject.file('ci/kv4p-ci-debug.keystore')
+            storeFile rootProject.file('config/debug.keystore')
             storePassword 'android'
             keyAlias 'kv4p-ci-debug'
             keyPassword 'android'
@@ -33,9 +33,6 @@ android {
     }
 
     buildTypes {
-        debug {
-            signingConfig signingConfigs.ciDebug
-        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
