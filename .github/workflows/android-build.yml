@@ -106,7 +106,7 @@ jobs:
       - name: Gradle Tests
         run: ./gradlew test --stacktrace
       - name: 'Gradle Build'
-        run: ./gradlew build -x lint --stacktrace
+        run: ./gradlew -PciSigning build -x lint --stacktrace
       - name: Prepare PR build artifact
         if: github.event_name == 'pull_request'
         env:
