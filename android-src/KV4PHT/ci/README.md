@@ -14,5 +14,5 @@ build presented as trusted. Production signing keys must remain private.
 - SHA-256 certificate fingerprint:
   `24:5E:4C:B9:A6:AC:EA:30:C1:2F:8E:FA:11:2F:3B:64:EB:69:FD:E9:43:59:75:22:FA:24:F7:AA:FA:6E:B9:5C`
 
-Gradle uses this key only when invoked with `-PciSigning`; normal local debug
-builds continue to use each developer's standard debug keystore.
+Gradle uses this key for every `debug` build, including Android Studio, PR, and
+nightly builds. This shared certificate lets those builds update each other.

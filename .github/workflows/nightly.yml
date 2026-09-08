@@ -101,7 +101,7 @@ jobs:
 
       - name: Build and test the Android app
         working-directory: android-src/KV4PHT
-        run: ./gradlew -PciSigning :app:compileDebugJavaWithJavac :app:testDebugUnitTest :app:assembleDebug
+        run: ./gradlew :app:compileDebugJavaWithJavac :app:testDebugUnitTest :app:assembleDebug
 
       - name: Prepare downloadable files
         run: |
