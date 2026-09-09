@@ -75,6 +75,7 @@ import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
 import com.vagell.kv4pht.ui.ToneHelper;
+import io.github.dkaukov.codec2.Codec2;
 import lombok.Getter;
 import lombok.Setter;
 import java.nio.ByteBuffer;
