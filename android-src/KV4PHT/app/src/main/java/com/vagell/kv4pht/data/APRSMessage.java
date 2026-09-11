@@ -29,6 +29,11 @@ public class APRSMessage {
     public static final int OBJECT_TYPE = 2;
     public static final int POSITION_TYPE = 3;
     public static final int WEATHER_TYPE = 4;
+    public static final int DELIVERY_NONE = 0;
+    public static final int DELIVERY_PENDING = 1;
+    public static final int DELIVERY_DELIVERED = 2;
+    public static final int DELIVERY_REJECTED = 3;
+    public static final int DELIVERY_FAILED = 4;
 
     @PrimaryKey(autoGenerate = true)
     public int id;
@@ -71,6 +76,22 @@ public class APRSMessage {
 
     @ColumnInfo(name = "message_num")
     public int msgNum;
+
+    @ColumnInfo(name = "message_identifier")
+    public String messageIdentifier;
+
+    @ColumnInfo(name = "delivery_state", defaultValue = "0")
+    public int deliveryState;
+
+    @ColumnInfo(name = "retries_remaining")
+    public Integer retriesRemaining;
+
+    @ColumnInfo(name = "transmit_attempts", defaultValue = "0")
+    public int transmitAttempts;
+
+    /** Epoch milliseconds when a pending reliable message should next be retried. */
+    @ColumnInfo(name = "next_retry_at")
+    public Long nextRetryAt;
 
     @ColumnInfo(name = "msg_body")
     public String msgBody;

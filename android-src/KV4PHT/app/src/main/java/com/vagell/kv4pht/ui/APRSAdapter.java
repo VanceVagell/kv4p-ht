@@ -112,6 +112,8 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             case APRSMessage.POSITION_TYPE: // Can only have default values
             case APRSMessage.UNKNOWN_TYPE: // Ditto
                 break;
+            default:
+                break;
         }
         holder.setRelayCallsign(aprsMessage.relayCallsign);
 

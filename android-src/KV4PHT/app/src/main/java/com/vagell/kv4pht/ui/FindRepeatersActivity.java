@@ -56,6 +56,7 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.CancellationTokenSource;
+import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
@@ -105,7 +106,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
         // Listen for file downloads so we can detect when CSV download is done.
         IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        registerReceiver(onDownloadComplete, filter, Context.RECEIVER_EXPORTED);
+        registerReceiver(onDownloadComplete, filter, Context.RECEIVER_NOT_EXPORTED);
 
         populateMemoryGroups();
         requestPermissions();
@@ -168,10 +169,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
 
         // External storage permission...
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                && ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
 
                 new AlertDialog.Builder(this)
                         .setTitle("Permission needed")
@@ -182,7 +181,6 @@ public class FindRepeatersActivity extends AppCompatActivity {
                         .create()
                         .show();
 
-            }
         }
     }
 
@@ -347,7 +345,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
      */
     @SuppressWarnings("javasecurity:S6384") // This sets a fixed result code and never forwards an Intent.
     private void showErrorSnackbar(String msg) {
-        errorSnackbar = Snackbar.make(this, findViewById(R.id.firmwareTopLevelView), msg, Snackbar.LENGTH_INDEFINITE)
+        errorSnackbar = Snackbar.make(this, findViewById(R.id.firmwareTopLevelView), msg, BaseTransientBottomBar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
         errorSnackbar.setAction("Close", view -> {
             errorSnackbar.dismiss();
@@ -400,7 +398,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     };
 
-    @SuppressWarnings("java:S3398") // Keeping file I/O separate makes the broadcast receiver readable and testable.
+    @SuppressWarnings({"java:S3398", "java:S2583"}) // Keep file I/O separate; ContentResolver can return null despite the analyzer's contract.
     private String readDownloadedCsvFile(Uri fileUri) throws IOException {
         if (fileUri == null) {
             throw new IOException("Downloaded CSV file URI is null.");
@@ -517,16 +515,16 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     private List<String> splitCsvRecords(String csvData) {
         List<String> records = new ArrayList<>();
-        boolean inQuotes = false;
+        boolean insideQuotes = false;
         StringBuilder record = new StringBuilder();
 
         for (int i = 0; i < csvData.length(); i++) {
             char c = csvData.charAt(i);
             if (c == '"') {
-                inQuotes = !inQuotes;
+                insideQuotes = !insideQuotes;
             }
 
-            if (c == '\n' && !inQuotes) {
+            if (c == '\n' && !insideQuotes) {
                 records.add(record.toString());
                 record.setLength(0);
             } else {
