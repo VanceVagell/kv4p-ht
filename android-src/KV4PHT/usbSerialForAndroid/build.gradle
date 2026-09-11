@@ -4,11 +4,10 @@ plugins {
 }
 
 android {
-    compileSdkVersion 35
+    compileSdkVersion 36
 
     defaultConfig {
         minSdkVersion 26
-        targetSdkVersion 35
         consumerProguardFiles 'proguard-rules.pro'
         
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -28,16 +27,22 @@ android {
             withSourcesJar()
         }
     }
+    lint {
+        targetSdk 36
+    }
+    testOptions {
+        targetSdk 36
+    }
 }
 
 dependencies {
     implementation "androidx.annotation:annotation:1.9.1"
     testImplementation 'junit:junit:4.13.2'
-    testImplementation 'org.mockito:mockito-core:5.8.0'
+    testImplementation 'org.mockito:mockito-core:5.23.0'
     androidTestImplementation 'androidx.test:core:1.6.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
-    androidTestImplementation 'commons-net:commons-net:3.10.0'
-    androidTestImplementation 'org.apache.commons:commons-lang3:3.18.0'
+    androidTestImplementation 'commons-net:commons-net:3.13.0'
+    androidTestImplementation 'org.apache.commons:commons-lang3:3.20.0'
 }
 
 // gradle task: publishToMavenLocal

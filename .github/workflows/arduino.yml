@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    types: [opened, synchronize, reopened]
   release:
     types: [created]
 
@@ -20,15 +18,15 @@ jobs:
           git config --global filter.lfs.process "git-lfs filter-process --skip"
     
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.x'
+          python-version: '3.12'
 
       - name: Install PlatformIO
-        run: pip install -U platformio
+        run: pip install -U platformio==6.1.18
 
       - name: Build project
         run: pio run -v -e esp32dev -e esp32dev-release
@@ -39,7 +37,7 @@ jobs:
         working-directory: microcontroller-src
 
       - name: Upload firmware binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-binaries
           path: |
