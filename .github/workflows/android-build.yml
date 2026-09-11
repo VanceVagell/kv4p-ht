@@ -142,5 +142,25 @@ jobs:
           path: pr-dist/
           if-no-files-found: error
           retention-days: 14
-      - name: 'Prepare Sonar analysis'
-        uses: evaristegalois11/sonar-fork-analysis@v1.2.0
+      # Keep the artifact handoff in-repository rather than relying on the
+      # composite action, whose pinned upload-artifact@v4 runtime is deprecated.
+      - name: Prepare Sonar analysis artifact
+        working-directory: ${{ github.workspace }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          printf '%s\n%s\n%s\n' "$PR_NUMBER" "$PR_HEAD_REF" "$PR_BASE_REF" > pr-event.txt
+          find android-src/KV4PHT -type d -iname '*build' -print0 \
+            | tar --null --files-from=- -cf output.tar
+
+      - name: Upload Sonar analysis artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: sonar-artifact
+          path: |
+            pr-event.txt
+            output.tar
+          if-no-files-found: error
+          retention-days: 1
