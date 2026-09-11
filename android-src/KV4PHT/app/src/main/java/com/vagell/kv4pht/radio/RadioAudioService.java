@@ -92,6 +92,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Background service that manages the connection to the ESP32 (to control the radio), and
@@ -175,9 +177,9 @@ public class RadioAudioService extends Service {
     private AudioFocusRequest audioFocusRequest;
     private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES];
     private final ImaAdpcm.Encoder txAudioEncoder = new ImaAdpcm.Encoder();
-    private volatile AudioRecord audioRecord;
+    private final AtomicReference<AudioRecord> audioRecord = new AtomicReference<>();
     private volatile boolean voiceCaptureActive;
-    private volatile int voiceCaptureSession;
+    private final AtomicInteger voiceCaptureSession = new AtomicInteger();
     private static final int TX_AUDIO_MIN_BUFFER_SIZE = Math.max(
             AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT), AUDIO_FRAME_SAMPLES * 2);
@@ -903,7 +905,7 @@ public class RadioAudioService extends Service {
                 != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        voiceCaptureSession++;
+        int captureSession = voiceCaptureSession.incrementAndGet();
         releaseAudioRecord();
         AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, AUDIO_SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
@@ -914,8 +916,7 @@ public class RadioAudioService extends Service {
             return;
         }
         recorder.startRecording();
-        int captureSession = voiceCaptureSession;
-        audioRecord = recorder;
+        audioRecord.set(recorder);
         voiceCaptureActive = true;
         new Thread(() -> captureVoiceAudio(recorder, captureSession), "Radio voice capture").start();
     }
@@ -931,29 +932,31 @@ public class RadioAudioService extends Service {
     }
 
     private boolean isVoiceCaptureSessionActive(AudioRecord recorder, int captureSession) {
-        return voiceCaptureActive && voiceCaptureSession == captureSession && audioRecord == recorder;
+        return voiceCaptureActive
+                && voiceCaptureSession.get() == captureSession
+                && audioRecord.get() == recorder;
     }
 
     private void stopVoiceCapture() {
-        if (!voiceCaptureActive && audioRecord == null) {
+        if (!voiceCaptureActive && audioRecord.get() == null) {
             return;
         }
         voiceCaptureActive = false;
-        voiceCaptureSession++;
+        voiceCaptureSession.incrementAndGet();
         releaseAudioRecord();
     }
 
     private void releaseAudioRecord() {
-        if (audioRecord == null) {
+        AudioRecord recorder = audioRecord.getAndSet(null);
+        if (recorder == null) {
             return;
         }
         try {
-            audioRecord.stop();
+            recorder.stop();
         } catch (IllegalStateException ignored) {
             // Recorder was never started or was already stopped.
         }
-        audioRecord.release();
-        audioRecord = null;
+        recorder.release();
     }
 
     public void reconnectViaUSB() {
