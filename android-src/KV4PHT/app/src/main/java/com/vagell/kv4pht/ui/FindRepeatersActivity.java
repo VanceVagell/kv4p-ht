@@ -297,8 +297,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
         downloadWebView = new WebView(this);
         downloadWebView.setDownloadListener(createDownloadListener());
 
-        // Enable JavaScript if your webpage needs it
-        webView.getSettings().setJavaScriptEnabled(true);
+        // RepeaterBook's authenticated download page requires JavaScript.
+        webView.getSettings().setJavaScriptEnabled(true); // NOSONAR java:S6362
 
         // Set a WebViewClient to handle page loading inside the app
         webView.setWebViewClient(new WebViewClient() {
