@@ -175,9 +175,9 @@ public class RadioAudioService extends Service {
     private AudioFocusRequest audioFocusRequest;
     private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES];
     private final ImaAdpcm.Encoder txAudioEncoder = new ImaAdpcm.Encoder();
-    private AudioRecord audioRecord;
+    private volatile AudioRecord audioRecord;
     private volatile boolean voiceCaptureActive;
-    private Thread voiceCaptureThread;
+    private volatile int voiceCaptureSession;
     private static final int TX_AUDIO_MIN_BUFFER_SIZE = Math.max(
             AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT), AUDIO_FRAME_SAMPLES * 2);
@@ -903,33 +903,35 @@ public class RadioAudioService extends Service {
                 != PackageManager.PERMISSION_GRANTED) {
             return;
         }
+        voiceCaptureSession++;
         releaseAudioRecord();
-        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, AUDIO_SAMPLE_RATE,
+        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, AUDIO_SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
                 TX_AUDIO_MIN_BUFFER_SIZE);
-        if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+        if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.w(TAG, "AudioRecord initialization failed");
-            releaseAudioRecord();
+            recorder.release();
             return;
         }
-        audioRecord.startRecording();
+        recorder.startRecording();
+        int captureSession = voiceCaptureSession;
+        audioRecord = recorder;
         voiceCaptureActive = true;
-        voiceCaptureThread = new Thread(this::captureVoiceAudio, "Radio voice capture");
-        voiceCaptureThread.start();
+        new Thread(() -> captureVoiceAudio(recorder, captureSession), "Radio voice capture").start();
     }
 
-    private void captureVoiceAudio() {
+    private void captureVoiceAudio(AudioRecord recorder, int captureSession) {
         short[] audioBuffer = new short[AUDIO_FRAME_SAMPLES];
-        while (voiceCaptureActive) {
-            AudioRecord recorder = audioRecord;
-            if (recorder == null) {
-                break;
-            }
+        while (isVoiceCaptureSessionActive(recorder, captureSession)) {
             int samples = recorder.read(audioBuffer, 0, AUDIO_FRAME_SAMPLES, AudioRecord.READ_BLOCKING);
-            if (samples == AUDIO_FRAME_SAMPLES) {
+            if (samples == AUDIO_FRAME_SAMPLES && isVoiceCaptureSessionActive(recorder, captureSession)) {
                 sendAudioToESP32(audioBuffer, false);
             }
         }
+    }
+
+    private boolean isVoiceCaptureSessionActive(AudioRecord recorder, int captureSession) {
+        return voiceCaptureActive && voiceCaptureSession == captureSession && audioRecord == recorder;
     }
 
     private void stopVoiceCapture() {
@@ -937,8 +939,8 @@ public class RadioAudioService extends Service {
             return;
         }
         voiceCaptureActive = false;
+        voiceCaptureSession++;
         releaseAudioRecord();
-        voiceCaptureThread = null;
     }
 
     private void releaseAudioRecord() {
