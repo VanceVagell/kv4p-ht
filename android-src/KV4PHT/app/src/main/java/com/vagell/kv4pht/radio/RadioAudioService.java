@@ -1827,22 +1827,21 @@ public class RadioAudioService extends Service {
      *
      * @param to   The callsign of the recipient, or null for BLN1CQ.
      * @param text The message text to send.
-     * @return The message number if sent successfully, -1 on error.
      */
-    public int sendChatMessage(String to, String text) {
+    public void sendChatMessage(String to, String text) {
         // Sanitize message text
         final String outText = text.replace('|', ' ').replace('~', ' ').replace('{', ' ');
         final String targetCallsign = (to == null || to.trim().isEmpty()) ? "BLN1CQ" : to;
         if (callsign.trim().isEmpty()) {
             Log.d(TAG, "Error: Tried to send message with no sender callsign.");
-            return -1;
+            return;
         }
         // Create message and digipeater path
         if (messageNumber > APRS_MAX_MESSAGE_NUM) {
             messageNumber = 0;
         }
         boolean reliable = AprsController.requiresAcknowledgement(targetCallsign);
-        int outgoingMessageNumber = messageNumber;
+        int outgoingMessageNumber = reliable ? messageNumber : -1;
         try {
             String identifier = reliable ? String.valueOf(messageNumber++) : null;
             APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS,
@@ -1853,9 +1852,8 @@ public class RadioAudioService extends Service {
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Error: sending APRS packet", e);
             callbacks.chatError(e.getMessage());
-            return -1;
+            return;
         }
-        return outgoingMessageNumber;
     }
 
     /**
