@@ -689,7 +689,7 @@ public class RadioAudioService extends Service {
         float freq;
         try {
             freq = Float.parseFloat(makeSafeHamFreq(frequencyStr));
-            updateForegroundNotification("Simplex " + String.format(Locale.US, "%.4f", freq) + " MHz");
+            updateForegroundNotification(SIMPLEX_PREFIX + String.format(Locale.US, "%.4f", freq) + MEGAHERTZ);
         } catch (NumberFormatException e) {
             Log.w(TAG, "Invalid frequency string: " + frequencyStr, e);
             return;
