@@ -102,7 +102,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
         APRSPacket outerPacket = Parser.parse(
-            "RELAY1>APRS,WIDE1-1:}VK3ABC>APRS::VK3ME   :hello{7");
+            "RELAY1>APKVPA,WIDE1-1:}VK3ABC>APRS::VK3ME   :hello{7");
         byte[] rawAx25 = outerPacket.toAX25Frame();
 
         controller.handle(outerPacket, APRSMessage.SOURCE_RX_RF, "145.1750", rawAx25);
@@ -111,7 +111,7 @@ public class AprsControllerTest {
         assertEquals("VK3ABC", message.fromCallsign);
         assertEquals("VK3ME", message.toCallsign);
         assertEquals("RELAY1", message.relayCallsign);
-        assertEquals("APRS", message.ax25Destination);
+        assertEquals("APKVPA", message.ax25Destination);
         assertEquals("WIDE1-1", message.path);
         assertArrayEquals(rawAx25, message.rawAx25);
     }

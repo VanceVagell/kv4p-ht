@@ -78,7 +78,7 @@ public class APRSMessage {
     @ColumnInfo(name = "path")
     public String path;
 
-    /** Exact AX.25 frame bytes, without KISS or serial transport framing. */
+    /** Exact AX.25 frame bytes without FCS, KISS, or serial transport framing. */
     @ColumnInfo(name = "raw_ax25")
     public byte[] rawAx25;
 
