@@ -162,18 +162,23 @@ public final class AprsController {
      * display while preserving their relaying station.</p>
      */
     public void handle(APRSPacket rawPacket) {
+        handle(rawPacket, APRSMessage.SOURCE_UNKNOWN, null);
+    }
+
+    /** Processes one decoded packet with its explicit transport source and RF frequency. */
+    public void handle(APRSPacket rawPacket, String source, String frequency) {
         if (isRecentlyDigipeated(rawPacket)) return;
         maybeDigipeat(rawPacket);
         PacketContext context = unwrap(rawPacket);
         if (context == null) {
-            storeInvalidRelay(rawPacket, new APRSMessage());
+            storeInvalidRelay(rawPacket, new APRSMessage(), source, frequency);
             return;
         }
-        handleDecodedPacket(context);
+        handleDecodedPacket(context, source, frequency);
     }
 
     /** Converts a parser-validated packet into its durable APRS history representation. */
-    private void handleDecodedPacket(PacketContext context) {
+    private void handleDecodedPacket(PacketContext context, String source, String frequency) {
         APRSMessage message = new APRSMessage();
         InformationField info = context.info;
         WeatherField weather = (WeatherField) info.getAprsData(APRSTypes.T_WX);
@@ -181,6 +186,8 @@ public final class AprsController {
         ObjectField object = (ObjectField) info.getAprsData(APRSTypes.T_OBJECT);
         message.timestamp = Instant.now().getEpochSecond();
         message.fromCallsign = context.packet.getSourceCall();
+        message.source = source == null ? APRSMessage.SOURCE_UNKNOWN : source;
+        message.frequency = frequency;
         applyPosition(message, position);
         applyComment(message, context.packet, info, position, object, weather);
         if (!applyPayload(message, context.packet, info, object, weather)) return;
@@ -266,10 +273,12 @@ public final class AprsController {
             : new PacketContext(inner, inner.getPayload(), raw.getSourceCall());
     }
 
-    private void storeInvalidRelay(APRSPacket raw, APRSMessage message) {
+    private void storeInvalidRelay(APRSPacket raw, APRSMessage message, String source, String frequency) {
         message.type = APRSMessage.UNKNOWN_TYPE;
         message.fromCallsign = raw.getSourceCall();
         message.timestamp = Instant.now().getEpochSecond();
+        message.source = source == null ? APRSMessage.SOURCE_UNKNOWN : source;
+        message.frequency = frequency;
         message.relayCallsign = raw.getSourceCall();
         message.comment = "Raw: " + new String(raw.getPayload().getRawBytes(), java.nio.charset.StandardCharsets.UTF_8);
         save(message);
@@ -436,13 +445,16 @@ public final class AprsController {
      * Records a transmitted message. Bulletin destinations are retained as fire-and-forget
      * history; station-to-station messages receive a sequence number and retry schedule.
      */
-    public void recordOutgoingMessage(String from, String to, String text, int messageNumber) {
+    public void recordOutgoingMessage(String from, String to, String text, int messageNumber,
+                                      String frequency) {
         APRSMessage message = new APRSMessage();
         message.type = APRSMessage.MESSAGE_TYPE;
         message.fromCallsign = from.toUpperCase().trim();
         message.toCallsign = to.toUpperCase().trim();
         message.msgBody = text.trim();
         message.timestamp = Instant.now().getEpochSecond();
+        message.source = APRSMessage.SOURCE_TX_RF;
+        message.frequency = frequency;
         if (requiresAcknowledgement(to)) {
             message.msgNum = messageNumber;
             message.messageIdentifier = String.valueOf(messageNumber);
@@ -468,13 +480,16 @@ public final class AprsController {
     }
 
     /** Records a successfully transmitted position beacon in APRS history. */
-    public void recordPositionBeacon(String callsign, double latitude, double longitude) {
+    public void recordPositionBeacon(String callsign, double latitude, double longitude,
+                                     String frequency) {
         APRSMessage message = new APRSMessage();
         message.type = APRSMessage.POSITION_TYPE;
         message.fromCallsign = callsign;
         message.positionLat = latitude;
         message.positionLong = longitude;
         message.timestamp = Instant.now().getEpochSecond();
+        message.source = APRSMessage.SOURCE_TX_RF;
+        message.frequency = frequency;
         save(message);
     }
 

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 8,
-    "identityHash": "a36b6e31696734c56d742c65f3c32a31",
+    "identityHash": "f73843bf678e7c2b306f9f59eb87dc32",
     "entities": [
       {
         "tableName": "app_settings",
@@ -93,7 +93,7 @@
       },
       {
         "tableName": "aprs_messages",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` INTEGER NOT NULL DEFAULT 0, `from_callsign` TEXT, `to_callsign` TEXT, `timestamp` INTEGER NOT NULL, `position_lat` REAL NOT NULL, `position_long` REAL NOT NULL, `comment` TEXT, `obj_name` TEXT, `ack` INTEGER NOT NULL, `message_num` INTEGER NOT NULL, `message_identifier` TEXT, `delivery_state` INTEGER NOT NULL DEFAULT 0, `retries_remaining` INTEGER, `transmit_attempts` INTEGER NOT NULL DEFAULT 0, `next_retry_at` INTEGER, `msg_body` TEXT, `temperature` REAL NOT NULL, `humidity` REAL NOT NULL, `pressure` REAL NOT NULL, `rain` REAL NOT NULL, `snow` REAL NOT NULL, `wind_force` INTEGER NOT NULL, `wind_dir` TEXT, `relay_callsign` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` INTEGER NOT NULL DEFAULT 0, `from_callsign` TEXT, `to_callsign` TEXT, `timestamp` INTEGER NOT NULL, `frequency` TEXT, `source` TEXT DEFAULT 'UNKNOWN', `position_lat` REAL NOT NULL, `position_long` REAL NOT NULL, `comment` TEXT, `obj_name` TEXT, `ack` INTEGER NOT NULL, `message_num` INTEGER NOT NULL, `message_identifier` TEXT, `delivery_state` INTEGER NOT NULL DEFAULT 0, `retries_remaining` INTEGER, `transmit_attempts` INTEGER NOT NULL DEFAULT 0, `next_retry_at` INTEGER, `msg_body` TEXT, `temperature` REAL NOT NULL, `humidity` REAL NOT NULL, `pressure` REAL NOT NULL, `rain` REAL NOT NULL, `snow` REAL NOT NULL, `wind_force` INTEGER NOT NULL, `wind_dir` TEXT, `relay_callsign` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -123,6 +123,17 @@
             "columnName": "timestamp",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "frequency",
+            "columnName": "frequency",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "defaultValue": "'UNKNOWN'"
           },
           {
             "fieldPath": "positionLat",
@@ -261,7 +272,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a36b6e31696734c56d742c65f3c32a31')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f73843bf678e7c2b306f9f59eb87dc32')"
     ]
   }
 }

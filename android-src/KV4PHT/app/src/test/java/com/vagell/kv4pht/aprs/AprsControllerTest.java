@@ -26,7 +26,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
 
-        controller.recordOutgoingMessage("vk3abc", "vk3def", " hello ", 7);
+        controller.recordOutgoingMessage("vk3abc", "vk3def", " hello ", 7, "144.3900");
 
         assertEquals(1, dao.messages.size());
         APRSMessage message = dao.messages.get(0);
@@ -34,6 +34,21 @@ public class AprsControllerTest {
         assertEquals("VK3DEF", message.toCallsign);
         assertEquals("hello", message.msgBody);
         assertEquals(7, message.msgNum);
+        assertEquals(APRSMessage.SOURCE_TX_RF, message.source);
+        assertEquals("144.3900", message.frequency);
+    }
+
+    @Test
+    public void recordsReceivedMessagesWithExplicitRfSourceAndFrequency() {
+        FakeDao dao = new FakeDao();
+        AprsController controller = controller(dao);
+
+        controller.handle(directMessage("VK3ABC", "VK3ME", "hello", "7"),
+            APRSMessage.SOURCE_RX_RF, "145.1750");
+
+        APRSMessage message = dao.messages.get(0);
+        assertEquals(APRSMessage.SOURCE_RX_RF, message.source);
+        assertEquals("145.1750", message.frequency);
     }
 
     @Test
@@ -180,7 +195,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
 
-        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7);
+        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7, "144.3900");
 
         APRSMessage bulletin = dao.messages.get(0);
         assertEquals(-1, bulletin.msgNum);
@@ -194,7 +209,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         FakeCallbacks callbacks = new FakeCallbacks();
         AprsController controller = controller(dao, callbacks);
-        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7);
+        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7, "144.3900");
 
         controller.tick(Long.MAX_VALUE);
 
@@ -222,7 +237,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
 
-        controller.recordOutgoingMessage("VK3ME", "QST", "net starts now", 7);
+        controller.recordOutgoingMessage("VK3ME", "QST", "net starts now", 7, "144.3900");
 
         APRSMessage groupMessage = dao.messages.get(0);
         assertEquals(-1, groupMessage.msgNum);

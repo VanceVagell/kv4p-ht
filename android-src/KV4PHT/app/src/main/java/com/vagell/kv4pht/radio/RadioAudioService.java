@@ -1688,7 +1688,7 @@ public class RadioAudioService extends Service {
         try {
             APRSPacket aprsPacket = Parser.parseAX25(packet, offset, len);
 
-            aprsController.handle(aprsPacket);
+            aprsController.handle(aprsPacket, APRSMessage.SOURCE_RX_RF, activeFrequencyStr);
         } catch (Exception e) {
             Log.d(TAG, "Unable to parse an APRS packet, skipping.");
         }
@@ -1804,7 +1804,8 @@ public class RadioAudioService extends Service {
             final APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
             txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
-            aprsController.recordPositionBeacon(callsign, myPos.getLatitude(), myPos.getLongitude());
+            aprsController.recordPositionBeacon(callsign, myPos.getLatitude(), myPos.getLongitude(),
+                activeFrequencyStr);
             callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), activeFrequencyStr, wasSwitch);
         } catch (Exception e) {
             Log.w(TAG, "Exception while trying to beacon APRS location.", e);
@@ -1848,7 +1849,8 @@ public class RadioAudioService extends Service {
                 MessagePacket.createMessagePayload(targetCallsign, outText, identifier));
             Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
             txAX25Packet(ax25Packet);
-            aprsController.recordOutgoingMessage(callsign, targetCallsign, outText, outgoingMessageNumber);
+            aprsController.recordOutgoingMessage(callsign, targetCallsign, outText, outgoingMessageNumber,
+                activeFrequencyStr);
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Error: sending APRS packet", e);
             callbacks.chatError(e.getMessage());

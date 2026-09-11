@@ -38,6 +38,11 @@ public class APRSMessage {
     public static final int DELIVERY_DELIVERED = 2;
     public static final int DELIVERY_REJECTED = 3;
     public static final int DELIVERY_FAILED = 4;
+    public static final String SOURCE_UNKNOWN = "UNKNOWN";
+    public static final String SOURCE_RX_RF = "RX_RF";
+    public static final String SOURCE_TX_RF = "TX_RF";
+    public static final String SOURCE_RX_APRS_IS = "RX_APRS_IS";
+    public static final String SOURCE_TX_APRS_IS = "TX_APRS_IS";
 
     @PrimaryKey(autoGenerate = true)
     public int id;
@@ -56,6 +61,14 @@ public class APRSMessage {
 
     @ColumnInfo(name = "timestamp")
     public long timestamp; // Seconds since epoch in UTC
+
+    /** Tuning frequency in MHz when this APRS record was received or transmitted over RF. */
+    @ColumnInfo(name = "frequency")
+    public String frequency;
+
+    /** Transport direction/source, for example {@link #SOURCE_RX_RF} or {@link #SOURCE_TX_RF}. */
+    @ColumnInfo(name = "source", defaultValue = "'UNKNOWN'")
+    public String source;
 
     @ColumnInfo(name = "position_lat")
     public double positionLat;
