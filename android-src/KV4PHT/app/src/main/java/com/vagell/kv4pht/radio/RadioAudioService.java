@@ -1852,7 +1852,6 @@ public class RadioAudioService extends Service {
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Error: sending APRS packet", e);
             callbacks.chatError(e.getMessage());
-            return;
         }
     }
 
