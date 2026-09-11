@@ -31,6 +31,7 @@ import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -45,6 +46,7 @@ public class MainViewModel extends AndroidViewModel {
     private final MutableLiveData<List<ChannelMemory>> channelMemories = new MutableLiveData<>();
     // LiveData holding the list of APRSMessage objects
     private final MutableLiveData<List<APRSMessage>> aprsMessages = new MutableLiveData<>();
+    private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
 
     public MainViewModel(@NotNull Application application) {
         super(application);
@@ -58,7 +60,7 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     public void loadDataAsync(Runnable callback) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        databaseExecutor.execute(() -> {
             loadData();
             callback.run();
         });
@@ -88,7 +90,7 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     public void deleteMemoryAsync(ChannelMemory memory, Runnable callback) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        databaseExecutor.execute(() -> {
             deleteMemory(memory);
             callback.run();
         });
@@ -96,5 +98,11 @@ public class MainViewModel extends AndroidViewModel {
 
     public boolean isLoaded() {
         return loaded.get();
+    }
+
+    @Override
+    protected void onCleared() {
+        databaseExecutor.shutdown();
+        super.onCleared();
     }
 }

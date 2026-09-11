@@ -4,6 +4,10 @@ import java.util.List;
 import java.util.Arrays;
 
 public class ToneHelper {
+    private ToneHelper() {
+        // Static utility class.
+    }
+
     // Valid tones as doubles for numeric comparison
     private static final double[] VALID_TONE_VALUES = {
             67, 71.9, 74.4, 77, 79.7, 82.5, 85.4, 88.5,
@@ -14,7 +18,7 @@ public class ToneHelper {
     };
 
     // String representations for exact matching
-    public static final List<String> VALID_TONE_STRINGS = Arrays.asList(
+    protected static final List<String> VALID_TONE_STRINGS = Arrays.asList(
             "None", "67", "71.9", "74.4", "77", "79.7", "82.5", "85.4", "88.5",
             "91.5", "94.8", "97.4", "100", "103.5", "107.2", "110.9", "114.8",
             "118.8", "123", "127.3", "131.8", "136.5", "141.3", "146.2", "151.4",
