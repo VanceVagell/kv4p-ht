@@ -84,6 +84,73 @@ public class AprsControllerTest {
     }
 
     @Test
+    public void tickUsesEveryRetryDelayThenFinalAcknowledgementGrace() {
+        FakeDao dao = new FakeDao();
+        FakeCallbacks callbacks = new FakeCallbacks();
+        AprsController controller = controller(dao, callbacks);
+        APRSMessage message = pendingMessage(0L, 5);
+        dao.messages.add(message);
+
+        controller.tick(0L);
+        assertRetryState(callbacks, message, 1, 2, 4, 30_000L);
+        controller.tick(30_000L);
+        assertRetryState(callbacks, message, 2, 3, 3, 90_000L);
+        controller.tick(90_000L);
+        assertRetryState(callbacks, message, 3, 4, 2, 210_000L);
+        controller.tick(210_000L);
+        assertRetryState(callbacks, message, 4, 5, 1, 450_000L);
+        controller.tick(450_000L);
+        assertRetryState(callbacks, message, 5, 6, 0, 480_000L);
+        controller.tick(480_000L);
+
+        assertEquals(5, callbacks.retryCount);
+        assertEquals(APRSMessage.DELIVERY_FAILED, message.deliveryState);
+        assertNull(message.nextRetryAt);
+    }
+
+    @Test
+    public void failedRetryDoesNotConsumeAnAttempt() {
+        FakeDao dao = new FakeDao();
+        FakeCallbacks callbacks = new FakeCallbacks();
+        callbacks.retrySucceeds = false;
+        AprsController controller = controller(dao, callbacks);
+        APRSMessage message = pendingMessage(100L, 5);
+        dao.messages.add(message);
+
+        controller.tick(100L);
+
+        assertEquals(1, callbacks.retryCount);
+        assertEquals(1, message.transmitAttempts);
+        assertEquals(Integer.valueOf(5), message.retriesRemaining);
+        assertEquals(Long.valueOf(15_100L), message.nextRetryAt);
+    }
+
+    @Test
+    public void restartedControllerRetriesOnlyPersistedPendingMessages() {
+        FakeDao dao = new FakeDao();
+        APRSMessage pending = pendingMessage(0L, 5);
+        APRSMessage delivered = pendingMessage(0L, 5);
+        delivered.deliveryState = APRSMessage.DELIVERY_DELIVERED;
+        APRSMessage rejected = pendingMessage(0L, 5);
+        rejected.deliveryState = APRSMessage.DELIVERY_REJECTED;
+        APRSMessage failed = pendingMessage(0L, 5);
+        failed.deliveryState = APRSMessage.DELIVERY_FAILED;
+        dao.messages.add(pending);
+        dao.messages.add(delivered);
+        dao.messages.add(rejected);
+        dao.messages.add(failed);
+        FakeCallbacks callbacks = new FakeCallbacks();
+
+        controller(dao, callbacks).tick(0L);
+
+        assertEquals(1, callbacks.retryCount);
+        assertEquals(2, pending.transmitAttempts);
+        assertEquals(1, delivered.transmitAttempts);
+        assertEquals(1, rejected.transmitAttempts);
+        assertEquals(1, failed.transmitAttempts);
+    }
+
+    @Test
     public void tickRequestsPositionBeaconOnlyAtConfiguredCadence() {
         FakeCallbacks callbacks = new FakeCallbacks();
         AprsController controller = controller(new FakeDao(), callbacks);
@@ -275,6 +342,24 @@ public class AprsControllerTest {
         assertEquals(1, dao.messages.size());
     }
 
+    @Test
+    public void duplicateDirectMessageIsAcknowledgedWithoutAnotherNotification() {
+        FakeDao dao = new FakeDao();
+        FakeCallbacks callbacks = new FakeCallbacks();
+        AprsController controller = controller(dao, callbacks);
+        APRSPacket message = directMessage("VK3ABC", "VK3ME", "hello", "7");
+
+        controller.handle(message);
+        dao.duplicate = true;
+        controller.handle(message);
+
+        assertEquals(1, dao.messages.size());
+        assertEquals(1, callbacks.notificationCount);
+        assertEquals(2, callbacks.acknowledgementCount);
+        assertEquals("VK3ABC", callbacks.lastAcknowledgementDestination);
+        assertEquals(7, callbacks.lastAcknowledgementNumber);
+    }
+
     private AprsController controller(FakeDao dao) {
         return controller(dao, new FakeCallbacks());
     }
@@ -310,6 +395,19 @@ public class AprsControllerTest {
     private APRSPacket deliveryResponse(String source, String response) {
         return new APRSPacket(source, "APRS", java.util.Collections.emptyList(),
             MessagePacket.createMessagePayload("VK3ME", response, null));
+    }
+
+    private APRSPacket directMessage(String source, String destination, String body, String identifier) {
+        return new APRSPacket(source, "APRS", java.util.Collections.emptyList(),
+            MessagePacket.createMessagePayload(destination, body, identifier));
+    }
+
+    private void assertRetryState(FakeCallbacks callbacks, APRSMessage message, int retries,
+                                  int attempts, int remaining, long nextRetryAt) {
+        assertEquals(retries, callbacks.retryCount);
+        assertEquals(attempts, message.transmitAttempts);
+        assertEquals(Integer.valueOf(remaining), message.retriesRemaining);
+        assertEquals(Long.valueOf(nextRetryAt), message.nextRetryAt);
     }
 
     private static final class FakeDao implements AprsController.Repository {
@@ -358,15 +456,22 @@ public class AprsControllerTest {
         private int retryCount;
         private int beaconCount;
         private int digipeatCount;
+        private int notificationCount;
+        private int acknowledgementCount;
+        private boolean retrySucceeds = true;
+        private String lastAcknowledgementDestination;
+        private int lastAcknowledgementNumber;
         private APRSPacket lastDigipeatedPacket;
         @Override public String getCallsign() { return "VK3ME"; }
         @Override public void showNotification(String title, String message) {
-            // Notification presentation is outside this controller test double's scope.
+            notificationCount++;
         }
         @Override public void sendAcknowledgement(String destination, int messageNumber) {
-            // Acknowledgement transmission is outside this controller test double's scope.
+            acknowledgementCount++;
+            lastAcknowledgementDestination = destination;
+            lastAcknowledgementNumber = messageNumber;
         }
-        @Override public boolean retryMessage(APRSMessage message) { retryCount++; return true; }
+        @Override public boolean retryMessage(APRSMessage message) { retryCount++; return retrySucceeds; }
         @Override public void requestPositionBeacon() { beaconCount++; }
         @Override public boolean transmitDigipeatedPacket(APRSPacket packet) {
             digipeatCount++;

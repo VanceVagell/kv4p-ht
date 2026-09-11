@@ -135,20 +135,23 @@ public final class AprsController {
     }
 
     /**
-     * Notifies and acknowledges a numbered message addressed to the local callsign.
+     * Notifies and acknowledges a message addressed to the local callsign.
      *
-     * <p>Messages for other stations remain in history but must not produce local notifications
-     * or acknowledgements.</p>
+     * <p>Duplicate RF copies are acknowledged again but do not produce another user
+     * notification. Messages for other stations remain in history but must not produce local
+     * notifications or acknowledgements.</p>
      */
-    public void notifyAndAcknowledgeDirectMessage(APRSMessage message, APRSPacket packet) {
+    private void notifyAndAcknowledgeDirectMessage(APRSMessage message, boolean notifyUser) {
         String callsign = callbacks.getCallsign();
         if (callsign == null || message.toCallsign == null
                 || !message.toCallsign.trim().equalsIgnoreCase(callsign.trim())) {
             return;
         }
-        callbacks.showNotification(packet.getSourceCall() + " messaged you", message.msgBody);
+        if (notifyUser) {
+            callbacks.showNotification(message.fromCallsign + " messaged you", message.msgBody);
+        }
         if (message.msgNum != -1) {
-            callbacks.sendAcknowledgement(packet.getSourceCall().toUpperCase(), message.msgNum);
+            callbacks.sendAcknowledgement(message.fromCallsign.toUpperCase(), message.msgNum);
         }
     }
 
@@ -337,7 +340,6 @@ public final class AprsController {
             return message.messageIdentifier != null && !message.messageIdentifier.trim().isEmpty();
         }
         message.msgBody = packetMessage.getMessageBody();
-        notifyAndAcknowledgeDirectMessage(message, packet);
         return true;
     }
 
@@ -361,9 +363,11 @@ public final class AprsController {
                     return;
                 }
             } else if (isRecentDuplicate(message)) {
+                notifyAndAcknowledgeDirectMessage(message, false);
                 return;
             } else {
                 repository.insert(message);
+                notifyAndAcknowledgeDirectMessage(message, true);
             }
             refreshMessages();
         });
