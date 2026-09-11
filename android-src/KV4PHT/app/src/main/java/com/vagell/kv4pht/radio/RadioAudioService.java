@@ -103,6 +103,8 @@ public class RadioAudioService extends Service {
     private static final String MEGAHERTZ = " MHz";
     private static final String MEMORY_FREQUENCY_SUFFIX = MEGAHERTZ + ")";
     private static final String SIMPLEX_PREFIX = "Simplex ";
+    private static final String CURRENT_FREQUENCY = "Current";
+    private static final String NOTIFICATION_CHANNEL_ID = "KV4P_HT_RADIO_AUDIO";
 
     // === Constants ===
     private static final String TAG = RadioAudioService.class.getSimpleName();
@@ -194,7 +196,7 @@ public class RadioAudioService extends Service {
 
     // === APRS State ===
     private boolean aprsBeaconPosition = false;
-    private String aprsBeaconFrequency = "Current";
+    private String aprsBeaconFrequency = CURRENT_FREQUENCY;
     @Getter
     @Setter
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
@@ -203,6 +205,7 @@ public class RadioAudioService extends Service {
     private ScheduledExecutorService beaconScheduler;
     private ScheduledFuture<?> beaconFuture;
     private int messageNumber = 0;
+    private final SecureRandom messageNumberRandom = new SecureRandom();
 
     // === Protocol Handshake ===
     private static final int HELLO_TIMEOUT_MS = 60000;
@@ -435,7 +438,7 @@ public class RadioAudioService extends Service {
         // Create channel for the persistent notification user can interact with
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel chan = new NotificationChannel(
-                    "KV4P_HT_RADIO_AUDIO",
+                    NOTIFICATION_CHANNEL_ID,
                     "kv4p HT audio",
                     NotificationManager.IMPORTANCE_DEFAULT);
             chan.setSound(null, null); // no sound for the notification itself
@@ -445,8 +448,7 @@ public class RadioAudioService extends Service {
             nm.createNotificationChannel(chan);
         }
 
-        SecureRandom random = new SecureRandom();
-        messageNumber = random.nextInt(APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
+        messageNumber = messageNumberRandom.nextInt(APRS_MAX_MESSAGE_NUM); // Start with any Message # from 0-99999, we'll increment it by 1 each tx until restart.
     }
 
     /**
@@ -513,7 +515,7 @@ public class RadioAudioService extends Service {
         stopSelf.setAction(ACTION_STOP_SERVICE);
         PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        return new NotificationCompat.Builder(this, "KV4P_HT_RADIO_AUDIO")
+        return new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_radio)
                 .setContentTitle("kv4p HT")
                 .setContentText("Starting up...")
@@ -531,7 +533,7 @@ public class RadioAudioService extends Service {
         stopSelf.setAction(ACTION_STOP_SERVICE);
         PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        Notification notification = new NotificationCompat.Builder(this, "KV4P_HT_RADIO_AUDIO")
+        Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_radio)
                 .setContentTitle("kv4p HT")
                 .setContentText(text)
@@ -1709,7 +1711,7 @@ public class RadioAudioService extends Service {
     public void sendPositionBeacon() {
         boolean isScanning = getMode() == RadioMode.SCAN;
         boolean isRx = getMode() == RadioMode.RX;
-        boolean isCurrent = "Current".equals(aprsBeaconFrequency);
+        boolean isCurrent = CURRENT_FREQUENCY.equals(aprsBeaconFrequency);
 
         if (!isRadioConnected() || !isTxAllowed()) {
             Log.d(TAG, "Skipping position beacon: radio disconnected or tx not allowed.");
@@ -1744,7 +1746,7 @@ public class RadioAudioService extends Service {
     }
 
     private void performPositionBeacon(final double latitude, final double longitude) {
-        if ("Current".equals(aprsBeaconFrequency)) {
+        if (CURRENT_FREQUENCY.equals(aprsBeaconFrequency)) {
             callbacks.startingAprsBeacon(activeFrequencyStr);
             sendPositionBeacon(latitude, longitude, false);
             return;
