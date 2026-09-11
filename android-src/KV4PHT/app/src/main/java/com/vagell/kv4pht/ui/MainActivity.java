@@ -1924,15 +1924,16 @@ public class MainActivity extends AppCompatActivity {
 
         Intent intent = new Intent("com.vagell.kv4pht.SETTINGS_ACTION");
         intent.putExtra("requestCode", REQUEST_SETTINGS);
-        if (radioAudioService != null && radioAudioService.isRadioConnected()) {
+        RadioModuleController radioModule = radioAudioService == null ? null : radioAudioService.getRadioModule();
+        if (radioAudioService != null && radioAudioService.isRadioConnected() && radioModule != null) {
             intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
-            intent.putExtra("firmwareVersion", radioAudioService.getRadioModule().getFirmwareVersionNumber());
-            intent.putExtra(SettingsActivity.EXTRA_RF_POWER_HIGH, radioAudioService.getRadioModule().isHighPowerEnabled());
-            intent.putExtra(SettingsActivity.EXTRA_BANDWIDTH, radioAudioService.getRadioModule().getBandwidthLabel());
-            intent.putExtra(SettingsActivity.EXTRA_SQUELCH, radioAudioService.getRadioModule().getDesiredSquelch());
-            intent.putExtra(SettingsActivity.EXTRA_FILTER_PRE, radioAudioService.getRadioModule().isPreEmphasisEnabled());
-            intent.putExtra(SettingsActivity.EXTRA_FILTER_HIGH, radioAudioService.getRadioModule().isHighpassEnabled());
-            intent.putExtra(SettingsActivity.EXTRA_FILTER_LOW, radioAudioService.getRadioModule().isLowpassEnabled());
+            intent.putExtra("firmwareVersion", radioModule.getFirmwareVersionNumber());
+            intent.putExtra(SettingsActivity.EXTRA_RF_POWER_HIGH, radioModule.isHighPowerEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_BANDWIDTH, radioModule.getBandwidthLabel());
+            intent.putExtra(SettingsActivity.EXTRA_SQUELCH, radioModule.getDesiredSquelch());
+            intent.putExtra(SettingsActivity.EXTRA_FILTER_PRE, radioModule.isPreEmphasisEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_FILTER_HIGH, radioModule.isHighpassEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_FILTER_LOW, radioModule.isLowpassEnabled());
         }
         startActivityForResult(intent, REQUEST_SETTINGS);
     }
