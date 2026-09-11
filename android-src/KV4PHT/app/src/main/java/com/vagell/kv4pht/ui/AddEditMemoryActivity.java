@@ -144,14 +144,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         threadPoolExecutor.execute(() -> {
             List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
 
-            // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
-            for (int i = 0; i < memoryGroups.size(); i++) {
-                String name = memoryGroups.get(i);
-                if (name == null || name.trim().length() == 0) {
-                    memoryGroups.remove(i);
-                    i--;
-                }
-            }
+            memoryGroups.removeIf(name -> name == null || name.trim().isEmpty());
 
             activity.runOnUiThread(() -> {
                 AutoCompleteTextView editMemoryGroupTextView = findViewById(R.id.editMemoryGroupTextInputEditText);
@@ -198,9 +191,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
             return;
         }
 
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
+        runOnUiThread(() -> {
                 // Name
                 TextInputEditText editNameTextInputEditText = findViewById(R.id.editNameTextInputEditText);
                 editNameTextInputEditText.setText(mMemory.name);
@@ -238,15 +229,16 @@ public class AddEditMemoryActivity extends AppCompatActivity {
                 // Skip during scan
                 Switch skipDuringScanSwitch = findViewById(R.id.skipDuringScanSwitch);
                 skipDuringScanSwitch.setChecked(mMemory.skipDuringScan);
-            }
         });
     }
 
+    @SuppressWarnings({"java:S1172", "javasecurity:S6384"}) // Called from XML; this only sets a fixed result code.
     public void cancelButtonClicked(View view) {
         setResult(Activity.RESULT_CANCELED);
         finish();
     }
 
+    @SuppressWarnings({"java:S1172", "javasecurity:S6384"}) // Called from XML; result Intent is created locally.
     public void saveButtonClicked(View view) {
         MemoryForm form = readMemoryForm();
         if (!validateMemoryForm(form)) {
@@ -375,6 +367,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         boolean skipDuringScan;
     }
 
+    @SuppressWarnings("java:S1172") // Called from the layout's android:onClick attribute.
     public void advancedMemoryOptionsButtonClicked(View view) {
         setAdvancedOptionsVisible(true);
     }
