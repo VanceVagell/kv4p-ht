@@ -138,9 +138,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                     latitude = currentLatitude;
                     longitude = currentLongitude;
                     startCSVDownload();
-                }).addOnFailureListener(e -> {
-                    showErrorSnackbar("Failed to find your GPS location.");
-                });
+                }).addOnFailureListener(e -> showErrorSnackbar("Failed to find your GPS location."));
     }
 
     protected void requestPermissions() {
@@ -386,7 +384,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                     Log.d(TAG, "CSV Contents:\n" + csvData);
                     nearbyRepeaters = parseRepeaterList(csvData);
                     Log.d(TAG, "Num repeaters found: " + nearbyRepeaters.size());
-                    if (nearbyRepeaters == null || nearbyRepeaters.isEmpty()) {
+                    if (nearbyRepeaters.isEmpty()) {
                         downloadUrlIndex++;
                         attemptNextDownload();
                     } else {
@@ -402,6 +400,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     };
 
+    @SuppressWarnings("java:S3398") // Keeping file I/O separate makes the broadcast receiver readable and testable.
     private String readDownloadedCsvFile(Uri fileUri) throws IOException {
         if (fileUri == null) {
             throw new IOException("Downloaded CSV file URI is null.");
