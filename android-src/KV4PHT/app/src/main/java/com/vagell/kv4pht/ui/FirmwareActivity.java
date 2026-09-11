@@ -18,7 +18,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.ui;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -99,12 +98,11 @@ public class FirmwareActivity extends AppCompatActivity {
         executor.shutdownNow();
     }
 
-    @SuppressLint("UnsafeIntentLaunch")
     public void firmwareCancelButtonClicked(View view) {
         if (flashingTask != null) {
             flashingTask.cancel(true); // sends an interrupt
         }
-        setResult(Activity.RESULT_CANCELED, getIntent());
+        setResult(Activity.RESULT_CANCELED);
         finish();
     }
 
@@ -140,12 +138,11 @@ public class FirmwareActivity extends AppCompatActivity {
                         progressIndicator.setProgress(percent);
                     });
                 }
-                @SuppressLint("UnsafeIntentLaunch")
                 @Override
                 public void doneFlashing(boolean success) {
                     Log.d("FirmwareActivity", "Flashing done: " + success);
                     if (success) {
-                        setResult(Activity.RESULT_OK, getIntent());
+                        setResult(Activity.RESULT_OK);
                         finish();
                     } else {
                         showErrorSnackBar(serialPort);

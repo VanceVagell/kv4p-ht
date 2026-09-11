@@ -388,7 +388,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 errorSnackbar.dismiss();
-                setResult(Activity.RESULT_CANCELED, getIntent());
+                setResult(Activity.RESULT_CANCELED);
                 finish();
             }
         });
@@ -403,7 +403,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
     }
 
     public void findRepeatersCancelButtonClicked(View view) {
-        setResult(Activity.RESULT_CANCELED, getIntent());
+        setResult(Activity.RESULT_CANCELED);
         finish();
     }
 
@@ -437,23 +437,23 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     };
 
-    private String readDownloadedCsvFile(Uri fileUri) throws Exception {
+    private String readDownloadedCsvFile(Uri fileUri) throws IOException {
         if (fileUri == null) {
-            throw new Exception("Downloaded CSV file URI is null.");
+            throw new IOException("Downloaded CSV file URI is null.");
         }
         InputStream inputStream = getContentResolver().openInputStream(fileUri);
         if (inputStream == null) {
-            throw new Exception("Could not open input stream for downloaded CSV file.");
+            throw new IOException("Could not open input stream for downloaded CSV file.");
         }
 
         // Read file into a String
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
         StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line).append('\n');
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append('\n');
+            }
         }
-        reader.close();
         return sb.toString();
     }
 
@@ -484,61 +484,71 @@ public class FindRepeatersActivity extends AppCompatActivity {
             return repeaters;
         }
 
-        // 1) skip header
         String header = records.get(0);
         boolean isUsFormat = header.startsWith("Freq,Input,Offset,Tone,Location");
-        boolean isIntlFormat = header.startsWith("Output Freq,Input Freq,Offset,Uplink Tone");
-
-        if (!isUsFormat && !isIntlFormat) {
+        if (!isUsFormat && !header.startsWith("Output Freq,Input Freq,Offset,Uplink Tone")) {
             return repeaters; // Unknown format
         }
 
-        for (int i = 1; i < records.size(); i++) {
-            String record = records.get(i);
-            if (record.trim().isEmpty()) continue;
-
-            // 2) split into columns, respecting quotes
-            String[] cols = splitCSVLine(record);
-
-            // 3) map to a RepeaterInfo
-            RepeaterInfo r = new RepeaterInfo();
-            if (isUsFormat) {
-                if (cols.length < 12) continue;
-                r.freq     = tryParseDouble(cols[0]);
-                r.input    = tryParseDouble(cols[1]);
-                r.offset   = tryParseDouble(cols[2]);
-                r.tone     = ToneHelper.normalizeTone(cols[3].trim());
-                r.location = cols[4].replace("\n", " ").replace("\r", "");
-                r.state    = cols[5];
-                r.county   = cols[6];
-                r.call     = cols[7];
-                r.use      = cols[8];
-                r.miles    = tryParseDouble(cols[9]);
-                r.bearing  = cols[10];
-                r.degrees  = tryParseDouble(cols[11]);
-            } else { // Intl format
-                if (cols.length < 11) continue;
-                r.freq     = tryParseDouble(cols[0]);
-                r.input    = tryParseDouble(cols[1]);
-                r.offset   = tryParseDouble(cols[2]);
-                r.tone     = ToneHelper.normalizeTone(cols[3].trim());
-                // cols[4] is Downlink Tone, skipping.
-                r.call     = cols[5];
-                r.location = cols[6].replace("\n", " ").replace("\r", "");
-                r.county   = cols[7];
-                r.state    = cols[8];
-                // cols[9] is Status.
-                // cols[10] is Modes.
-            }
-
-            // If this repeater is below or above the frequencies this radio is capable of, skip it.
-            if (radioAudioService == null || r.freq < radioAudioService.getMinRadioFreq() || r.freq > radioAudioService.getMaxRadioFreq()) {
+        for (int recordIndex = 1; recordIndex < records.size(); recordIndex++) {
+            String record = records.get(recordIndex);
+            if (record.trim().isEmpty()) {
                 continue;
             }
-
-            repeaters.add(r);
+            String[] cols = splitCSVLine(record);
+            RepeaterInfo repeater = isUsFormat ? parseUsRepeater(cols) : parseInternationalRepeater(cols);
+            if (repeater != null && isWithinRadioRange(repeater)) {
+                repeaters.add(repeater);
+            }
         }
         return repeaters;
+    }
+
+    private RepeaterInfo parseUsRepeater(String[] cols) {
+        if (cols.length < 12) {
+            return null;
+        }
+        RepeaterInfo repeater = parseCommonRepeaterFields(cols);
+        repeater.location = cleanLocation(cols[4]);
+        repeater.state = cols[5];
+        repeater.county = cols[6];
+        repeater.call = cols[7];
+        repeater.use = cols[8];
+        repeater.miles = tryParseDouble(cols[9]);
+        repeater.bearing = cols[10];
+        repeater.degrees = tryParseDouble(cols[11]);
+        return repeater;
+    }
+
+    private RepeaterInfo parseInternationalRepeater(String[] cols) {
+        if (cols.length < 11) {
+            return null;
+        }
+        RepeaterInfo repeater = parseCommonRepeaterFields(cols);
+        repeater.call = cols[5];
+        repeater.location = cleanLocation(cols[6]);
+        repeater.county = cols[7];
+        repeater.state = cols[8];
+        return repeater;
+    }
+
+    private RepeaterInfo parseCommonRepeaterFields(String[] cols) {
+        RepeaterInfo repeater = new RepeaterInfo();
+        repeater.freq = tryParseDouble(cols[0]);
+        repeater.input = tryParseDouble(cols[1]);
+        repeater.offset = tryParseDouble(cols[2]);
+        repeater.tone = ToneHelper.normalizeTone(cols[3].trim());
+        return repeater;
+    }
+
+    private String cleanLocation(String location) {
+        return location.replace("\n", " ").replace("\r", "");
+    }
+
+    private boolean isWithinRadioRange(RepeaterInfo repeater) {
+        return radioAudioService != null
+                && repeater.freq >= radioAudioService.getMinRadioFreq()
+                && repeater.freq <= radioAudioService.getMaxRadioFreq();
     }
 
     private List<String> splitCsvRecords(String csvData) {
@@ -700,7 +710,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 for (int i = 0; i < memoriesToAdd.size(); i++) {
                     viewModel.getAppDb().channelMemoryDao().insertAll(memoriesToAdd.get(i));
                 }
-                setResult(Activity.RESULT_OK, getIntent());
+                setResult(Activity.RESULT_OK);
                 finish();
             }
         });

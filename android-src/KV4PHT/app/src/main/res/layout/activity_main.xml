@@ -35,31 +35,6 @@
         </androidx.appcompat.widget.LinearLayoutCompat>
 
         <androidx.appcompat.widget.LinearLayoutCompat
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="bottom">
-
-            <androidx.appcompat.widget.LinearLayoutCompat
-                android:layout_width="match_parent"
-                android:layout_height="200dp"
-                android:orientation="vertical"
-                android:gravity="center">
-
-                <ImageView
-                    android:id="@+id/txAudioCircle"
-                    android:contentDescription="@string/visualization_of_current_transmit_audio_volume"
-                    android:layout_height="0dp"
-                    android:layout_width="0dp"
-                    android:src="@drawable/circle_tx"
-                    android:focusable="false"
-                    android:importantForAccessibility="no"/>
-
-            </androidx.appcompat.widget.LinearLayoutCompat>
-
-        </androidx.appcompat.widget.LinearLayoutCompat>
-
-        <androidx.appcompat.widget.LinearLayoutCompat
             android:id="@+id/mainTopLevelLayout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"

@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package com.vagell.kv4pht.ui;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
@@ -61,54 +62,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        Bundle extras = getIntent().getExtras();
-        if (extras != null) {
-            isAdd = (extras.getInt("requestCode") == MainActivity.REQUEST_ADD_MEMORY);
-            isVhfRadio = (extras.getBoolean("isVhfRadio"));
-            int mMemoryId;
-            if (!isAdd) { // Edit
-                mMemoryId = extras.getInt("memoryId");
-                threadPoolExecutor.execute(() -> {
-                    mMemory = viewModel.getAppDb().channelMemoryDao().getById(mMemoryId);
-                    populateOriginalValues();
-                });
-            } else { // Add
-                populateDefaults();
-
-                mMemoryId = -1; // This ID is never used, just to help with debugging.
-
-                String activeFrequencyStr = extras.getString("activeFrequencyStr");
-                if (activeFrequencyStr != null) {
-                    TextInputEditText editFrequencyTextInputEditText = findViewById(R.id.editFrequencyTextInputEditText);
-                    editFrequencyTextInputEditText.setText(activeFrequencyStr);
-                }
-
-                String selectedMemoryGroup = extras.getString("selectedMemoryGroup");
-                if (selectedMemoryGroup != null) {
-                    AutoCompleteTextView editMemoryGroupTextInputEditText = findViewById(R.id.editMemoryGroupTextInputEditText);
-                    editMemoryGroupTextInputEditText.setText(selectedMemoryGroup, false);
-                }
-
-                String offset = extras.getString("offset");
-                if (offset != null) {
-                    AutoCompleteTextView editOffset = findViewById(R.id.editOffsetTextView);
-                    editOffset.setText(offset, false);
-                }
-
-                String tone = extras.getString("tone");
-                if (tone != null) {
-                    AutoCompleteTextView editTone = findViewById(R.id.editToneTxTextView);
-                    editTone.setText(tone, false);
-                }
-
-                String name = extras.getString("name");
-                if (name != null) {
-                    TextInputEditText editNameTextInputEditText = findViewById(R.id.editNameTextInputEditText);
-                    editNameTextInputEditText.setText(name);
-                }
-
-            }
-        }
+        initializeMemoryFromIntent(getIntent().getExtras());
 
         // Setup the title
         TextView titleTextView = findViewById(R.id.addEditToolbarTitle);
@@ -121,6 +75,47 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         populateMemoryGroups();
         populateOffsets();
         populateTones();
+    }
+
+    private void initializeMemoryFromIntent(Bundle extras) {
+        if (extras == null) {
+            return;
+        }
+        isAdd = extras.getInt("requestCode") == MainActivity.REQUEST_ADD_MEMORY;
+        isVhfRadio = extras.getBoolean("isVhfRadio");
+        if (isAdd) {
+            populateAddMemoryFields(extras);
+        } else {
+            loadMemoryForEditing(extras.getInt("memoryId"));
+        }
+    }
+
+    private void loadMemoryForEditing(int memoryId) {
+        threadPoolExecutor.execute(() -> {
+            mMemory = viewModel.getAppDb().channelMemoryDao().getById(memoryId);
+            populateOriginalValues();
+        });
+    }
+
+    private void populateAddMemoryFields(Bundle extras) {
+        populateDefaults();
+        setTextIfPresent(R.id.editFrequencyTextInputEditText, extras.getString("activeFrequencyStr"));
+        setDropdownTextIfPresent(R.id.editMemoryGroupTextInputEditText, extras.getString("selectedMemoryGroup"));
+        setDropdownTextIfPresent(R.id.editOffsetTextView, extras.getString("offset"));
+        setDropdownTextIfPresent(R.id.editToneTxTextView, extras.getString("tone"));
+        setTextIfPresent(R.id.editNameTextInputEditText, extras.getString("name"));
+    }
+
+    private void setTextIfPresent(int viewId, String value) {
+        if (value != null) {
+            ((TextInputEditText) findViewById(viewId)).setText(value);
+        }
+    }
+
+    private void setDropdownTextIfPresent(int viewId, String value) {
+        if (value != null) {
+            ((AutoCompleteTextView) findViewById(viewId)).setText(value, false);
+        }
     }
 
     @Override
@@ -248,119 +243,127 @@ public class AddEditMemoryActivity extends AppCompatActivity {
     }
 
     public void cancelButtonClicked(View view) {
-        setResult(Activity.RESULT_CANCELED, getIntent());
+        setResult(Activity.RESULT_CANCELED);
         finish();
     }
 
     public void saveButtonClicked(View view) {
-        // Name
-        TextInputEditText editNameTextInputEditText = findViewById(R.id.editNameTextInputEditText);
-        String name = editNameTextInputEditText.getText().toString().trim();
-
-        // Group
-        AutoCompleteTextView editMemoryGroupTextInputEditText = findViewById(R.id.editMemoryGroupTextInputEditText);
-        String group = editMemoryGroupTextInputEditText.getText().toString().trim();
-
-        // Frequency
-        TextInputEditText editFrequencyTextInputEditText = findViewById(R.id.editFrequencyTextInputEditText);
-        String frequency = editFrequencyTextInputEditText.getText().toString().trim();
-
-        // Offset direction
-        AutoCompleteTextView editOffsetTextView = findViewById(R.id.editOffsetTextView);
-        String offset = editOffsetTextView.getText().toString().trim();
-
-        // Tone (TX)
-        AutoCompleteTextView editToneTxTextView = findViewById(R.id.editToneTxTextView);
-        String txTone = editToneTxTextView.getText().toString().trim();
-
-        // Tone (RX)
-        AutoCompleteTextView editToneRxTextView = findViewById(R.id.editToneRxTextView);
-        String rxTone = editToneRxTextView.getText().toString().trim();
-
-        // Custom offset (kHz)
-        TextInputEditText customOffsetTextInputEditText = findViewById(R.id.customOffsetTextInputEditText);
-        String offsetKhz = customOffsetTextInputEditText.getText().toString().trim();
-
-        // Skip during scan
-        Switch skipDuringScanSwitch = findViewById(R.id.skipDuringScanSwitch);
-        boolean skipDuringScan = skipDuringScanSwitch.isChecked();
-
-        // Validate form fields
-        if (name.length() == 0) {
-            editNameTextInputEditText.setError("Name this memory");
-            editNameTextInputEditText.requestFocus();
+        MemoryForm form = readMemoryForm();
+        if (!validateMemoryForm(form)) {
             return;
         }
+        ChannelMemory memory = isAdd ? new ChannelMemory() : mMemory;
+        applyForm(memory, form);
+        saveMemory(memory);
+    }
 
-        if (frequency.length() == 0) {
-            editFrequencyTextInputEditText.setError("Enter a frequency");
-            editFrequencyTextInputEditText.requestFocus();
-            return;
-        } else {
-            if (radioAudioService == null) {
-                editFrequencyTextInputEditText.setError("Service not available. Please try again later.");
-                editFrequencyTextInputEditText.requestFocus();
-                return;
-            }
-            String formattedFrequency = radioAudioService.makeSafeHamFreq(frequency);
-            if (formattedFrequency == null) {
-                editFrequencyTextInputEditText.setError("Enter a frequency like 144.0000");
-                editFrequencyTextInputEditText.requestFocus();
-                return;
-            } else {
-                frequency = formattedFrequency;
-            }
+    private MemoryForm readMemoryForm() {
+        MemoryForm form = new MemoryForm();
+        form.nameView = findViewById(R.id.editNameTextInputEditText);
+        form.frequencyView = findViewById(R.id.editFrequencyTextInputEditText);
+        form.offsetView = findViewById(R.id.customOffsetTextInputEditText);
+        form.name = form.nameView.getText().toString().trim();
+        form.group = ((AutoCompleteTextView) findViewById(R.id.editMemoryGroupTextInputEditText)).getText().toString().trim();
+        form.frequency = form.frequencyView.getText().toString().trim();
+        form.offsetDirection = ((AutoCompleteTextView) findViewById(R.id.editOffsetTextView)).getText().toString().trim();
+        form.txTone = ((AutoCompleteTextView) findViewById(R.id.editToneTxTextView)).getText().toString().trim();
+        form.rxTone = ((AutoCompleteTextView) findViewById(R.id.editToneRxTextView)).getText().toString().trim();
+        form.offsetKhz = form.offsetView.getText().toString().trim();
+        form.skipDuringScan = ((Switch) findViewById(R.id.skipDuringScanSwitch)).isChecked();
+        return form;
+    }
+
+    private boolean validateMemoryForm(MemoryForm form) {
+        if (form.name.isEmpty()) {
+            showValidationError(form.nameView, "Name this memory");
+            return false;
         }
-
-        int offsetKhzInt = -1;
-        if (offsetKhz.length() == 0) {
-            customOffsetTextInputEditText.setError("Enter a custom offset");
-            return;
-        } else {
-            try {
-                offsetKhzInt = Integer.parseInt(offsetKhz);
-                if (offsetKhzInt > 30000 || offsetKhzInt < 0) { // Hard to say what a legit offset would look like, but it has to be smaller than 30MHz (width of 70cm band).
-                    customOffsetTextInputEditText.setError("Enter a custom offset like 600");
-                    return;
-                }
-            } catch (NumberFormatException nfe) {
-                customOffsetTextInputEditText.setError("Enter a custom offset like 600");
-                return;
-            }
+        if (!validateFrequency(form)) {
+            return false;
         }
+        return validateOffset(form);
+    }
 
-        ChannelMemory memory = null;
-        if (isAdd) {
-            memory = new ChannelMemory();
-        } else {
-            memory = mMemory;
+    private boolean validateFrequency(MemoryForm form) {
+        if (form.frequency.isEmpty()) {
+            showValidationError(form.frequencyView, "Enter a frequency");
+            return false;
         }
-
-        memory.name = name;
-        memory.group = group;
-        memory.frequency = frequency;
-        if (offset.equals("Down")) {
-            memory.offset = ChannelMemory.OFFSET_DOWN;
-        } else if (offset.equals("Up")) {
-            memory.offset = ChannelMemory.OFFSET_UP;
-        } else {
-            memory.offset = ChannelMemory.OFFSET_NONE;
+        if (radioAudioService == null) {
+            showValidationError(form.frequencyView, "Service not available. Please try again later.");
+            return false;
         }
-        memory.txTone = txTone;
-        memory.rxTone = rxTone;
-        memory.offsetKhz = offsetKhzInt;
-        memory.skipDuringScan = skipDuringScan;
+        form.frequency = radioAudioService.makeSafeHamFreq(form.frequency);
+        if (form.frequency == null) {
+            showValidationError(form.frequencyView, "Enter a frequency like 144.0000");
+            return false;
+        }
+        return true;
+    }
 
-        final ChannelMemory finalMemory = memory;
+    private boolean validateOffset(MemoryForm form) {
+        if (form.offsetKhz.isEmpty()) {
+            form.offsetView.setError("Enter a custom offset");
+            return false;
+        }
+        try {
+            form.offsetKhzValue = Integer.parseInt(form.offsetKhz);
+        } catch (NumberFormatException e) {
+            form.offsetKhzValue = -1;
+        }
+        if (form.offsetKhzValue < 0 || form.offsetKhzValue > 30000) {
+            form.offsetView.setError("Enter a custom offset like 600");
+            return false;
+        }
+        return true;
+    }
+
+    private void showValidationError(TextInputEditText view, String error) {
+        view.setError(error);
+        view.requestFocus();
+    }
+
+    private void applyForm(ChannelMemory memory, MemoryForm form) {
+        memory.name = form.name;
+        memory.group = form.group;
+        memory.frequency = form.frequency;
+        memory.offset = "Down".equals(form.offsetDirection) ? ChannelMemory.OFFSET_DOWN
+                : "Up".equals(form.offsetDirection) ? ChannelMemory.OFFSET_UP : ChannelMemory.OFFSET_NONE;
+        memory.txTone = form.txTone;
+        memory.rxTone = form.rxTone;
+        memory.offsetKhz = form.offsetKhzValue;
+        memory.skipDuringScan = form.skipDuringScan;
+    }
+
+    private void saveMemory(ChannelMemory memory) {
         threadPoolExecutor.execute(() -> {
             if (isAdd) {
-                viewModel.getAppDb().channelMemoryDao().insertAll(finalMemory);
+                viewModel.getAppDb().channelMemoryDao().insertAll(memory);
             } else {
-                viewModel.getAppDb().channelMemoryDao().update(finalMemory);
+                viewModel.getAppDb().channelMemoryDao().update(memory);
             }
-            setResult(Activity.RESULT_OK, getIntent());
+            Intent result = new Intent();
+            if (!isAdd) {
+                result.putExtra("memoryId", memory.memoryId);
+            }
+            setResult(Activity.RESULT_OK, result);
             finish();
         });
+    }
+
+    private static class MemoryForm {
+        TextInputEditText nameView;
+        TextInputEditText frequencyView;
+        TextInputEditText offsetView;
+        String name;
+        String group;
+        String frequency;
+        String offsetDirection;
+        String txTone;
+        String rxTone;
+        String offsetKhz;
+        int offsetKhzValue;
+        boolean skipDuringScan;
     }
 
     public void advancedMemoryOptionsButtonClicked(View view) {
