@@ -57,6 +57,22 @@ import java.util.stream.Collectors;
 
 public class SettingsActivity extends AppCompatActivity {
     private static final String TAG = SettingsActivity.class.getSimpleName();
+    private static final int[] APRS_ICON_CHOICE_RESOURCES = {
+            R.string.aprs_icon_phone, R.string.aprs_icon_person, R.string.aprs_icon_house,
+            R.string.aprs_icon_bicycle, R.string.aprs_icon_car, R.string.aprs_icon_jeep,
+            R.string.aprs_icon_truck, R.string.aprs_icon_motorcycle, R.string.aprs_icon_van,
+            R.string.aprs_icon_rv, R.string.aprs_icon_18_wheeler, R.string.aprs_icon_glider,
+            R.string.aprs_icon_small_aircraft, R.string.aprs_icon_helicopter,
+            R.string.aprs_icon_sailboat, R.string.aprs_icon_motorboat
+    };
+    private static final APRSIconType[] APRS_ICON_TYPES = {
+            APRSIconType.T_PHONE, APRSIconType.T_PERSON, APRSIconType.T_HOUSE,
+            APRSIconType.T_BICYCLE, APRSIconType.T_CAR, APRSIconType.T_JEEP,
+            APRSIconType.T_TRUCK, APRSIconType.T_MOTORCYCLE, APRSIconType.T_VAN,
+            APRSIconType.T_RV, APRSIconType.T_18_WHEELER, APRSIconType.T_GLIDER,
+            APRSIconType.T_SMALL_AIRCRAFT, APRSIconType.T_HELICOPTER,
+            APRSIconType.T_SAILBOAT, APRSIconType.T_MOTORBOAT
+    };
     private final ExecutorService threadPoolExecutor = Executors.newSingleThreadExecutor();
     private MainViewModel viewModel = null;
     private boolean hasHighLowPowerSwitch = false;
@@ -488,44 +504,13 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     public static APRSIconType getAPRSIconFromSettingChoice(Resources resources, String choice) {
-        if (null == choice || choice.trim().isEmpty()) {
-            return APRSIconType.T_PHONE;
+        if (choice != null) {
+            for (int i = 0; i < APRS_ICON_CHOICE_RESOURCES.length; i++) {
+                if (resources.getString(APRS_ICON_CHOICE_RESOURCES[i]).equals(choice)) {
+                    return APRS_ICON_TYPES[i];
+                }
+            }
         }
-
-        if (resources.getString(R.string.aprs_icon_phone).equals(choice)) {
-            return APRSIconType.T_PHONE;
-        } else if (resources.getString(R.string.aprs_icon_person).equals(choice)) {
-            return APRSIconType.T_PERSON;
-        } else if (resources.getString(R.string.aprs_icon_house).equals(choice)) {
-            return APRSIconType.T_HOUSE;
-        } else if (resources.getString(R.string.aprs_icon_bicycle).equals(choice)) {
-            return APRSIconType.T_BICYCLE;
-        } else if (resources.getString(R.string.aprs_icon_car).equals(choice)) {
-            return APRSIconType.T_CAR;
-        } else if (resources.getString(R.string.aprs_icon_jeep).equals(choice)) {
-            return APRSIconType.T_JEEP;
-        } else if (resources.getString(R.string.aprs_icon_truck).equals(choice)) {
-            return APRSIconType.T_TRUCK;
-        } else if (resources.getString(R.string.aprs_icon_motorcycle).equals(choice)) {
-            return APRSIconType.T_MOTORCYCLE;
-        } else if (resources.getString(R.string.aprs_icon_van).equals(choice)) {
-            return APRSIconType.T_VAN;
-        } else if (resources.getString(R.string.aprs_icon_rv).equals(choice)) {
-            return APRSIconType.T_RV;
-        } else if (resources.getString(R.string.aprs_icon_18_wheeler).equals(choice)) {
-            return APRSIconType.T_18_WHEELER;
-        } else if (resources.getString(R.string.aprs_icon_glider).equals(choice)) {
-            return APRSIconType.T_GLIDER;
-        } else if (resources.getString(R.string.aprs_icon_small_aircraft).equals(choice)) {
-            return APRSIconType.T_SMALL_AIRCRAFT;
-        } else if (resources.getString(R.string.aprs_icon_helicopter).equals(choice)) {
-            return APRSIconType.T_HELICOPTER;
-        } else if (resources.getString(R.string.aprs_icon_sailboat).equals(choice)) {
-            return APRSIconType.T_SAILBOAT;
-        } else if (resources.getString(R.string.aprs_icon_motorboat).equals(choice)) {
-            return APRSIconType.T_MOTORBOAT;
-        } else {
-            return APRSIconType.T_PHONE;
-        }
+        return APRSIconType.T_PHONE;
     }
 }

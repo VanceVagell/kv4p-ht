@@ -23,15 +23,12 @@ import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Address;
 import android.location.Geocoder;
-import android.location.Location;
-import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -50,6 +47,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import androidx.lifecycle.ViewModelProvider;
 import com.google.android.gms.common.ConnectionResult;
@@ -58,8 +56,6 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.CancellationTokenSource;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
@@ -78,6 +74,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class FindRepeatersActivity extends AppCompatActivity {
+    private static final String TAG = "FindRepeatersActivity";
+    private static final String URL_LONGITUDE_PARAMETER = "&long=";
     private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     private Snackbar errorSnackbar = null;
     private long downloadId = 0; // So we can tell when the download is done
@@ -86,7 +84,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
     private MainViewModel viewModel;
     private RadioServiceConnector serviceConnector;
     private RadioAudioService radioAudioService;
-    private double latitude = 0, longitude = 0;
+    private double latitude = 0;
+    private double longitude = 0;
     private String[] downloadUrls = null;
     private int downloadUrlIndex = 0;
     private WebView downloadWebView;
@@ -113,10 +112,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
     }
 
     private void getGpsLocation() {
-        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-            Log.d("DEBUG", "Unable to get nearby repeaters because Android device is missing Google Play Services, needed to get GPS location.");
+            Log.d(TAG, "Unable to get nearby repeaters because Android device is missing Google Play Services, needed to get GPS location.");
             showErrorSnackbar("Google Play Services is missing, it's needed for GPS location.");
             return;
         }
@@ -124,40 +121,29 @@ public class FindRepeatersActivity extends AppCompatActivity {
         FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions();
             return;
         }
 
-        FindRepeatersActivity ctx = this;
         fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
-                .addOnSuccessListener(new OnSuccessListener<Location>() {
-                    @Override
-                    public void onSuccess(Location location) {
-                        if (location != null) {
-                            // Use the location
-                            double latitude = location.getLatitude();
-                            double longitude = location.getLongitude();
-                            findLocalityAsync(latitude, longitude);
-                            ctx.latitude = latitude;
-                            ctx.longitude = longitude;
-                            startCSVDownload();
-                        } else {
-                            showErrorSnackbar("Failed to find your GPS location (it came back null).");
-                            return;
-                        }
+                .addOnSuccessListener(location -> {
+                    if (location == null) {
+                        showErrorSnackbar("Failed to find your GPS location (it came back null).");
+                        return;
                     }
-                }).addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        showErrorSnackbar("Failed to find your GPS location.");
-                    }
-                });
+                    double currentLatitude = location.getLatitude();
+                    double currentLongitude = location.getLongitude();
+                    findLocalityAsync(currentLatitude, currentLongitude);
+                    latitude = currentLatitude;
+                    longitude = currentLongitude;
+                    startCSVDownload();
+                }).addOnFailureListener(e -> showErrorSnackbar("Failed to find your GPS location."));
     }
 
     protected void requestPermissions() {
         // Location permission...
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // Should we show an explanation?
             if (ActivityCompat.shouldShowRequestPermissionRationale(this,
                     Manifest.permission.ACCESS_FINE_LOCATION)) {
@@ -165,14 +151,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 new AlertDialog.Builder(this)
                         .setTitle("Permission needed")
                         .setMessage("This app needs the fine location permission")
-                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                ActivityCompat.requestPermissions(FindRepeatersActivity.this,
-                                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                        REQUEST_LOCATION_PERMISSION_CODE);
-                            }
-                        })
+                        .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
+                                FindRepeatersActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                                REQUEST_LOCATION_PERMISSION_CODE))
                         .create()
                         .show();
 
@@ -182,13 +163,12 @@ public class FindRepeatersActivity extends AppCompatActivity {
                         REQUEST_LOCATION_PERMISSION_CODE);
             }
         } else {
-            // Once it's confirmed we have location permission, get GPS position.
-            // TODO: This is a side effect, find a better way to do this in the flow of this Activity.
+            // Start the location-dependent download after permission is confirmed.
             getGpsLocation();
         }
 
         // External storage permission...
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             // Should we show an explanation?
             if (ActivityCompat.shouldShowRequestPermissionRationale(this,
                     Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
@@ -196,14 +176,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 new AlertDialog.Builder(this)
                         .setTitle("Permission needed")
                         .setMessage("This app needs to write to external storage to find nearby repeaters")
-                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                ActivityCompat.requestPermissions(FindRepeatersActivity.this,
-                                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                                        REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE);
-                            }
-                        })
+                        .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
+                                FindRepeatersActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                                REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE))
                         .create()
                         .show();
 
@@ -216,48 +191,43 @@ public class FindRepeatersActivity extends AppCompatActivity {
                                            @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
-        switch (requestCode) {
-            case REQUEST_LOCATION_PERMISSION_CODE: {
+        if (requestCode == REQUEST_LOCATION_PERMISSION_CODE) {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
                     getGpsLocation();
                 } else {
                     // Permission denied
-                    Log.d("DEBUG", "Warning: Need fine location permission to find nearby repeaters, but user denied it.");
+                    Log.d(TAG, "Warning: Need fine location permission to find nearby repeaters, but user denied it.");
                     showErrorSnackbar("Can't get your GPS location because the permission was denied.");
                 }
-                return;
-            }
-            case REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE: {
+        } else if (requestCode == REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE) {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // Permission granted.
                 } else {
                     // Permission denied
-                    Log.d("DEBUG", "Warning: Need to write to external storage to find nearby repeaters, but user denied it.");
+                    Log.d(TAG, "Warning: Need to write to external storage to find nearby repeaters, but user denied it.");
                     showErrorSnackbar("Can't find nearby repeaters because storage permission was denied.");
                     finishActivity(Activity.RESULT_CANCELED);
                 }
-                return;
-            }
         }
     }
 
     private String[] getDownloadRepeatersUrls() {
         if (radioAudioService.getRadioType() == RadioAudioService.RadioModuleType.VHF) {
             String usVhfURL = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
-                    latitude + "&long=" + longitude + "&distance=25&Dunit=m&band=4&call=&use=OPEN&status_id=1";
+                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=25&Dunit=m&band=4&call=&use=OPEN&status_id=1";
             String internationalVhfURL = "https://www.repeaterbook.com/row_repeaters/downloads/csv/index.php?func=prox2&city=&lat=" +
-                    latitude + "&long=" + longitude + "&distance=40&Dunit=k&band=4&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
-                    latitude + "&long=" + longitude; // Unknown why RepeaterBook requires lat/long twice for int'l, but it fails without this second one (empty list returned).
+                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=40&Dunit=k&band=4&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
+                    latitude + URL_LONGITUDE_PARAMETER + longitude; // RepeaterBook requires latitude/longitude twice for international results.
             return new String[]{usVhfURL, internationalVhfURL};
         } else { // UHF
             String usUhfURL = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
-                    latitude + "&long=" + longitude + "&distance=25&Dunit=m&band=16&band2=&call=&use=OPEN&status_id=1";
+                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=25&Dunit=m&band=16&band2=&call=&use=OPEN&status_id=1";
             String internationalUhfURL = "https://www.repeaterbook.com/row_repeaters/downloads/csv/index.php?func=prox2&city=&lat=" +
-                    latitude + "&long=" + longitude + "&distance=40&Dunit=k&band=16&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
-                    latitude + "&long=" + longitude; // Unknown why RepeaterBook requires lat/long twice for int'l, but it fails without this second one (empty list returned).
+                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=40&Dunit=k&band=16&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
+                    latitude + URL_LONGITUDE_PARAMETER + longitude; // RepeaterBook requires latitude/longitude twice for international results.
             return new String[]{usUhfURL, internationalUhfURL};
         }
     }
@@ -268,24 +238,18 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
         if (downloadUrlIndex < downloadUrls.length) {
             String url = downloadUrls[downloadUrlIndex];
-            Log.d("DEBUG", "Attempting download from URL #" + downloadUrlIndex + ": " + url);
+            Log.d(TAG, "Attempting download from URL #" + downloadUrlIndex + ": " + url);
             webViewForDownloads.loadUrl(url);
+        } else if (isManualDownloadAttempt) {
+            showErrorSnackbar("No nearby repeaters found.");
         } else {
-            if (isManualDownloadAttempt) {
-                showErrorSnackbar("No nearby repeaters found.");
-            } else {
-                Log.d("DEBUG", "Silent download attempt failed, user may not be logged in yet.");
-            }
+            Log.d(TAG, "Silent download attempt failed, user may not be logged in yet.");
         }
     }
 
     private DownloadListener createDownloadListener() {
-        return new DownloadListener() {
-            @Override
-            public void onDownloadStart(String url, String userAgent,
-                                        String contentDisposition, String mimeType,
-                                        long contentLength) {
-                Log.d("DEBUG", "RepeaterBook CSV download started.");
+        return (url, userAgent, contentDisposition, mimeType, contentLength) -> {
+                Log.d(TAG, "RepeaterBook CSV download started.");
 
                 // Fetch cookies to maintain session
                 String cookies = CookieManager.getInstance().getCookie(url);
@@ -303,7 +267,6 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
                 DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                 downloadId = dm.enqueue(request);
-            }
         };
     }
 
@@ -325,7 +288,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                Log.d("DEBUG", "Navigating to: " + url);
+                Log.d(TAG, "Navigating to: " + url);
                 view.loadUrl(url); // Continue loading inside the WebView
                 return true;
             }
@@ -333,7 +296,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 if (nearbyRepeaters == null) {
-                    Log.d("DEBUG", "Page finished loading: " + url + ". Attempting silent download.");
+                    Log.d(TAG, "Page finished loading: " + url + ". Attempting silent download.");
                     isManualDownloadAttempt = false;
                     webViewForDownloads = downloadWebView;
                     downloadUrlIndex = 0;
@@ -349,6 +312,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
     }
 
     /** Alternative method for people who's webview doesn't let us track when login is complete. */
+    @SuppressWarnings("java:S1172") // Called from the layout's android:onClick attribute.
     public void findRepeatersDownloadButtonClicked(View view) {
         isManualDownloadAttempt = true;
         webViewForDownloads = findViewById(R.id.repeaterBookWebView);
@@ -381,16 +345,14 @@ public class FindRepeatersActivity extends AppCompatActivity {
     /**
      * Displays an error snackbar with the given message, and a "Close" action that exits the activity.
      */
+    @SuppressWarnings("javasecurity:S6384") // This sets a fixed result code and never forwards an Intent.
     private void showErrorSnackbar(String msg) {
         errorSnackbar = Snackbar.make(this, findViewById(R.id.firmwareTopLevelView), msg, Snackbar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
-        errorSnackbar.setAction("Close", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                errorSnackbar.dismiss();
-                setResult(Activity.RESULT_CANCELED, getIntent());
-                finish();
-            }
+        errorSnackbar.setAction("Close", view -> {
+            errorSnackbar.dismiss();
+            setResult(Activity.RESULT_CANCELED);
+            finish();
         });
 
         // Make the text of the snackbar larger.
@@ -402,8 +364,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
         errorSnackbar.show();
     }
 
+    @SuppressWarnings({"java:S1172", "javasecurity:S6384"}) // Called from XML; this only sets a fixed result code.
     public void findRepeatersCancelButtonClicked(View view) {
-        setResult(Activity.RESULT_CANCELED, getIntent());
+        setResult(Activity.RESULT_CANCELED);
         finish();
     }
 
@@ -415,13 +378,13 @@ public class FindRepeatersActivity extends AppCompatActivity {
             if (id == downloadId) {
                 DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
                 Uri uri = dm.getUriForDownloadedFile(downloadId);
-                Log.d("DEBUG", "Download complete for URL #" + downloadUrlIndex);
+                Log.d(TAG, "Download complete for URL #" + downloadUrlIndex);
                 try {
                     String csvData = readDownloadedCsvFile(uri);
-                    Log.d("DEBUG", "CSV Contents:\n" + csvData);
+                    Log.d(TAG, "CSV Contents:\n" + csvData);
                     nearbyRepeaters = parseRepeaterList(csvData);
-                    Log.d("DEBUG", "Num repeaters found: " + nearbyRepeaters.size());
-                    if (null == nearbyRepeaters || nearbyRepeaters.size() == 0) {
+                    Log.d(TAG, "Num repeaters found: " + nearbyRepeaters.size());
+                    if (nearbyRepeaters.isEmpty()) {
                         downloadUrlIndex++;
                         attemptNextDownload();
                     } else {
@@ -429,7 +392,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                         promptUserForMemoryGroup();
                     }
                 } catch (Exception e) {
-                    Log.d("DEBUG", "Error while trying to parse repeater CSV file.", e);
+                    Log.d(TAG, "Error while trying to parse repeater CSV file.", e);
                     downloadUrlIndex++;
                     attemptNextDownload();
                 }
@@ -437,23 +400,24 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     };
 
-    private String readDownloadedCsvFile(Uri fileUri) throws Exception {
+    @SuppressWarnings("java:S3398") // Keeping file I/O separate makes the broadcast receiver readable and testable.
+    private String readDownloadedCsvFile(Uri fileUri) throws IOException {
         if (fileUri == null) {
-            throw new Exception("Downloaded CSV file URI is null.");
+            throw new IOException("Downloaded CSV file URI is null.");
         }
         InputStream inputStream = getContentResolver().openInputStream(fileUri);
         if (inputStream == null) {
-            throw new Exception("Could not open input stream for downloaded CSV file.");
+            throw new IOException("Could not open input stream for downloaded CSV file.");
         }
 
         // Read file into a String
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
         StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line).append('\n');
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append('\n');
+            }
         }
-        reader.close();
         return sb.toString();
     }
 
@@ -477,68 +441,78 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     }
 
-    public List<RepeaterInfo> parseRepeaterList(String csvData) throws IOException {
+    public List<RepeaterInfo> parseRepeaterList(String csvData) {
         List<RepeaterInfo> repeaters = new ArrayList<>();
         List<String> records = splitCsvRecords(csvData);
         if (records.isEmpty()) {
             return repeaters;
         }
 
-        // 1) skip header
         String header = records.get(0);
         boolean isUsFormat = header.startsWith("Freq,Input,Offset,Tone,Location");
-        boolean isIntlFormat = header.startsWith("Output Freq,Input Freq,Offset,Uplink Tone");
-
-        if (!isUsFormat && !isIntlFormat) {
+        if (!isUsFormat && !header.startsWith("Output Freq,Input Freq,Offset,Uplink Tone")) {
             return repeaters; // Unknown format
         }
 
-        for (int i = 1; i < records.size(); i++) {
-            String record = records.get(i);
-            if (record.trim().isEmpty()) continue;
-
-            // 2) split into columns, respecting quotes
-            String[] cols = splitCSVLine(record);
-
-            // 3) map to a RepeaterInfo
-            RepeaterInfo r = new RepeaterInfo();
-            if (isUsFormat) {
-                if (cols.length < 12) continue;
-                r.freq     = tryParseDouble(cols[0]);
-                r.input    = tryParseDouble(cols[1]);
-                r.offset   = tryParseDouble(cols[2]);
-                r.tone     = ToneHelper.normalizeTone(cols[3].trim());
-                r.location = cols[4].replace("\n", " ").replace("\r", "");
-                r.state    = cols[5];
-                r.county   = cols[6];
-                r.call     = cols[7];
-                r.use      = cols[8];
-                r.miles    = tryParseDouble(cols[9]);
-                r.bearing  = cols[10];
-                r.degrees  = tryParseDouble(cols[11]);
-            } else { // Intl format
-                if (cols.length < 11) continue;
-                r.freq     = tryParseDouble(cols[0]);
-                r.input    = tryParseDouble(cols[1]);
-                r.offset   = tryParseDouble(cols[2]);
-                r.tone     = ToneHelper.normalizeTone(cols[3].trim());
-                // cols[4] is Downlink Tone, skipping.
-                r.call     = cols[5];
-                r.location = cols[6].replace("\n", " ").replace("\r", "");
-                r.county   = cols[7];
-                r.state    = cols[8];
-                // cols[9] is Status.
-                // cols[10] is Modes.
-            }
-
-            // If this repeater is below or above the frequencies this radio is capable of, skip it.
-            if (radioAudioService == null || r.freq < radioAudioService.getMinRadioFreq() || r.freq > radioAudioService.getMaxRadioFreq()) {
+        for (int recordIndex = 1; recordIndex < records.size(); recordIndex++) {
+            String csvRecord = records.get(recordIndex);
+            if (csvRecord.trim().isEmpty()) {
                 continue;
             }
-
-            repeaters.add(r);
+            String[] cols = splitCSVLine(csvRecord);
+            RepeaterInfo repeater = isUsFormat ? parseUsRepeater(cols) : parseInternationalRepeater(cols);
+            if (repeater != null && isWithinRadioRange(repeater)) {
+                repeaters.add(repeater);
+            }
         }
         return repeaters;
+    }
+
+    private RepeaterInfo parseUsRepeater(String[] cols) {
+        if (cols.length < 12) {
+            return null;
+        }
+        RepeaterInfo repeater = parseCommonRepeaterFields(cols);
+        repeater.location = cleanLocation(cols[4]);
+        repeater.state = cols[5];
+        repeater.county = cols[6];
+        repeater.call = cols[7];
+        repeater.use = cols[8];
+        repeater.miles = tryParseDouble(cols[9]);
+        repeater.bearing = cols[10];
+        repeater.degrees = tryParseDouble(cols[11]);
+        return repeater;
+    }
+
+    private RepeaterInfo parseInternationalRepeater(String[] cols) {
+        if (cols.length < 11) {
+            return null;
+        }
+        RepeaterInfo repeater = parseCommonRepeaterFields(cols);
+        repeater.call = cols[5];
+        repeater.location = cleanLocation(cols[6]);
+        repeater.county = cols[7];
+        repeater.state = cols[8];
+        return repeater;
+    }
+
+    private RepeaterInfo parseCommonRepeaterFields(String[] cols) {
+        RepeaterInfo repeater = new RepeaterInfo();
+        repeater.freq = tryParseDouble(cols[0]);
+        repeater.input = tryParseDouble(cols[1]);
+        repeater.offset = tryParseDouble(cols[2]);
+        repeater.tone = ToneHelper.normalizeTone(cols[3].trim());
+        return repeater;
+    }
+
+    private String cleanLocation(String location) {
+        return location.replace("\n", " ").replace("\r", "");
+    }
+
+    private boolean isWithinRadioRange(RepeaterInfo repeater) {
+        return radioAudioService != null
+                && repeater.freq >= radioAudioService.getMinRadioFreq()
+                && repeater.freq <= radioAudioService.getMaxRadioFreq();
     }
 
     private List<String> splitCsvRecords(String csvData) {
@@ -598,23 +572,18 @@ public class FindRepeatersActivity extends AppCompatActivity {
     }
 
     private void findLocalityAsync(double latitude, double longitude) {
-        Context ctx = this;
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
+        new Thread(() -> {
                 try {
-                    Geocoder geocoder = new Geocoder(ctx, Locale.getDefault());
+                    Geocoder geocoder = new Geocoder(this, Locale.getDefault());
                     List<Address> list = geocoder.getFromLocation(latitude, longitude, 1);
 
                     if (list != null && !list.isEmpty()) {
                         Address addr = list.get(0);
-                        locality     = addr.getLocality(); // e.g. city name
+                        locality = addr.getLocality(); // e.g. city name
                     }
                 } catch (IOException e) {
-                    Log.d("DEBUG", "Exception while trying to get name of user's locality (city).");
-                    e.printStackTrace();
+                    Log.d(TAG, "Exception while trying to get name of user's locality (city).", e);
                 }
-            }
         }).start();
     }
 
@@ -631,7 +600,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         findViewById(R.id.findRepeatersGroupInputHolder).setVisibility(View.VISIBLE);
 
         // If we know the locality (e.g. city), suggest it as a name for the new group.
-        if (null != locality && locality.trim().length() > 0) { // There's a race condition where locality might not be determined by the time we get here. If so, we just don't suggest anything.
+        if (locality != null && !locality.trim().isEmpty()) { // Locality lookup may not have completed yet.
             AutoCompleteTextView autoCompleteTextView = (AutoCompleteTextView) findViewById(R.id.findRepeatersGroupTextInputEditText);
             autoCompleteTextView.setText(locality);
         }
@@ -647,14 +616,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         final Activity activity = this;
         threadPoolExecutor.execute(() -> viewModel.loadDataAsync(() -> {
             List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
-            // Remove any blank memory groups from the list (shouldn't have been saved, ideally).
-            for (int i = 0; i < memoryGroups.size(); i++) {
-                String name = memoryGroups.get(i);
-                if (name == null || name.trim().length() == 0) {
-                    memoryGroups.remove(i);
-                    i--;
-                }
-            }
+            memoryGroups.removeIf(name -> name == null || name.trim().isEmpty());
             activity.runOnUiThread(() -> {
                 AutoCompleteTextView editMemoryGroupTextView = findViewById(R.id.findRepeatersGroupTextInputEditText);
                 ArrayAdapter arrayAdapter = new ArrayAdapter(activity, R.layout.dropdown_item, memoryGroups);
@@ -663,46 +625,43 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }));
     }
 
+    @SuppressWarnings({"java:S1172", "javasecurity:S6384"}) // Called from XML; this only sets a fixed result code.
     public void findRepeatersSaveButtonClicked(View view) {
         String group = ((AutoCompleteTextView) findViewById(R.id.findRepeatersGroupTextInputEditText)).getText().toString().trim();
         final List<ChannelMemory> memoriesToAdd = new ArrayList<>();
 
-        for (int i = 0; i < nearbyRepeaters.size(); i++) {
-            RepeaterInfo r = nearbyRepeaters.get(i);
+        for (RepeaterInfo repeater : nearbyRepeaters) {
 
             ChannelMemory memory = new ChannelMemory();
-            memory.name = r.call + " • " + r.location;
+            memory.name = repeater.call + " • " + repeater.location;
             memory.group = group;
             if (radioAudioService != null) {
-                memory.frequency = radioAudioService.makeSafeHamFreq(String.valueOf(r.freq));
+                memory.frequency = radioAudioService.makeSafeHamFreq(String.valueOf(repeater.freq));
             } else {
-                Log.e("FindRepeatersActivity", "radioAudioService is null. Cannot set frequency.");
+                Log.e(TAG, "radioAudioService is null. Cannot set frequency.");
                 continue; // Skip this repeater if radioAudioService is unavailable
             }
-            if (r.offset < 0) {
+            if (repeater.offset < 0) {
                 memory.offset = ChannelMemory.OFFSET_DOWN;
-            } else if (r.offset > 0) {
+            } else if (repeater.offset > 0) {
                 memory.offset = ChannelMemory.OFFSET_UP;
             } else {
                 memory.offset = ChannelMemory.OFFSET_NONE;
             }
-            memory.txTone = String.valueOf(r.tone);
+            memory.txTone = String.valueOf(repeater.tone);
             memory.rxTone = getString(R.string.none_display);
-            memory.offsetKhz = Math.abs((int) (r.offset * 1000));
+            memory.offsetKhz = Math.abs((int) (repeater.offset * 1000));
             memory.skipDuringScan = false;
 
             memoriesToAdd.add(memory);
         }
 
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                for (int i = 0; i < memoriesToAdd.size(); i++) {
-                    viewModel.getAppDb().channelMemoryDao().insertAll(memoriesToAdd.get(i));
-                }
-                setResult(Activity.RESULT_OK, getIntent());
-                finish();
+        threadPoolExecutor.execute(() -> {
+            for (ChannelMemory memory : memoriesToAdd) {
+                viewModel.getAppDb().channelMemoryDao().insertAll(memory);
             }
+            setResult(Activity.RESULT_OK);
+            finish();
         });
     }
 }
