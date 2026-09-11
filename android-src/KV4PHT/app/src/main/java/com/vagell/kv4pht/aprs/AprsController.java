@@ -276,22 +276,34 @@ public final class AprsController {
     private boolean applyPayload(APRSMessage message, APRSPacket packet, InformationField info,
                                  ObjectField object, WeatherField weather) {
         if (weather != null) {
-            message.type = APRSMessage.WEATHER_TYPE;
-            message.temperature = weather.getTemp() == null ? 0 : weather.getTemp();
-            message.humidity = weather.getHumidity() == null ? 0 : weather.getHumidity();
-            message.pressure = weather.getPressure() == null ? 0 : weather.getPressure();
-            message.rain = weather.getRainLast24Hours() == null ? 0 : weather.getRainLast24Hours();
-            message.snow = weather.getSnowfallLast24Hours() == null ? 0 : weather.getSnowfallLast24Hours();
-            message.windForce = weather.getWindSpeed() == null ? 0 : weather.getWindSpeed();
-            message.windDir = weather.getWindDirection() == null ? "" : Utilities.degressToCardinal(weather.getWindDirection());
+            applyWeather(message, weather);
             return true;
         }
         if (info.getDataTypeIdentifier() == ';') {
-            message.type = APRSMessage.OBJECT_TYPE;
-            if (object != null) message.objName = object.getObjectName();
+            applyObject(message, object);
             return true;
         }
         if (info.getDataTypeIdentifier() != ':') return true;
+        return applyMessage(message, packet, info);
+    }
+
+    private void applyWeather(APRSMessage message, WeatherField weather) {
+        message.type = APRSMessage.WEATHER_TYPE;
+        message.temperature = weather.getTemp() == null ? 0 : weather.getTemp();
+        message.humidity = weather.getHumidity() == null ? 0 : weather.getHumidity();
+        message.pressure = weather.getPressure() == null ? 0 : weather.getPressure();
+        message.rain = weather.getRainLast24Hours() == null ? 0 : weather.getRainLast24Hours();
+        message.snow = weather.getSnowfallLast24Hours() == null ? 0 : weather.getSnowfallLast24Hours();
+        message.windForce = weather.getWindSpeed() == null ? 0 : weather.getWindSpeed();
+        message.windDir = weather.getWindDirection() == null ? "" : Utilities.degressToCardinal(weather.getWindDirection());
+    }
+
+    private void applyObject(APRSMessage message, ObjectField object) {
+        message.type = APRSMessage.OBJECT_TYPE;
+        if (object != null) message.objName = object.getObjectName();
+    }
+
+    private boolean applyMessage(APRSMessage message, APRSPacket packet, InformationField info) {
         message.type = APRSMessage.MESSAGE_TYPE;
         MessagePacket packetMessage = new MessagePacket(info.getRawBytes(), packet.getDestinationCall());
         message.toCallsign = packetMessage.getTargetCallsign();
@@ -387,9 +399,7 @@ public final class AprsController {
     }
 
     private void refreshMessages() {
-        executor.execute(() -> {
-            messages.postValue(repository.loadMessages());
-        });
+        executor.execute(() -> messages.postValue(repository.loadMessages()));
     }
 
     /**
