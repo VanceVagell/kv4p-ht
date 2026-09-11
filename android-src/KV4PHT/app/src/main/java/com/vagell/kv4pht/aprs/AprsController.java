@@ -162,23 +162,30 @@ public final class AprsController {
      * display while preserving their relaying station.</p>
      */
     public void handle(APRSPacket rawPacket) {
-        handle(rawPacket, APRSMessage.SOURCE_UNKNOWN, null);
+        handle(rawPacket, APRSMessage.SOURCE_UNKNOWN, null, null);
     }
 
     /** Processes one decoded packet with its explicit transport source and RF frequency. */
     public void handle(APRSPacket rawPacket, String source, String frequency) {
+        handle(rawPacket, source, frequency, null);
+    }
+
+    /** Processes one decoded packet with its transport metadata and original AX.25 frame bytes. */
+    public void handle(APRSPacket rawPacket, String source, String frequency, byte[] rawAx25) {
         if (isRecentlyDigipeated(rawPacket)) return;
         maybeDigipeat(rawPacket);
+        PacketEnvelope envelope = PacketEnvelope.from(rawPacket, rawAx25);
         PacketContext context = unwrap(rawPacket);
         if (context == null) {
-            storeInvalidRelay(rawPacket, new APRSMessage(), source, frequency);
+            storeInvalidRelay(rawPacket, new APRSMessage(), source, frequency, envelope);
             return;
         }
-        handleDecodedPacket(context, source, frequency);
+        handleDecodedPacket(context, source, frequency, envelope);
     }
 
     /** Converts a parser-validated packet into its durable APRS history representation. */
-    private void handleDecodedPacket(PacketContext context, String source, String frequency) {
+    private void handleDecodedPacket(PacketContext context, String source, String frequency,
+                                     PacketEnvelope envelope) {
         APRSMessage message = new APRSMessage();
         InformationField info = context.info;
         WeatherField weather = (WeatherField) info.getAprsData(APRSTypes.T_WX);
@@ -188,6 +195,7 @@ public final class AprsController {
         message.fromCallsign = context.packet.getSourceCall();
         message.source = source == null ? APRSMessage.SOURCE_UNKNOWN : source;
         message.frequency = frequency;
+        envelope.applyTo(message);
         applyPosition(message, position);
         applyComment(message, context.packet, info, position, object, weather);
         if (!applyPayload(message, context.packet, info, object, weather)) return;
@@ -273,12 +281,14 @@ public final class AprsController {
             : new PacketContext(inner, inner.getPayload(), raw.getSourceCall());
     }
 
-    private void storeInvalidRelay(APRSPacket raw, APRSMessage message, String source, String frequency) {
+    private void storeInvalidRelay(APRSPacket raw, APRSMessage message, String source, String frequency,
+                                   PacketEnvelope envelope) {
         message.type = APRSMessage.UNKNOWN_TYPE;
         message.fromCallsign = raw.getSourceCall();
         message.timestamp = Instant.now().getEpochSecond();
         message.source = source == null ? APRSMessage.SOURCE_UNKNOWN : source;
         message.frequency = frequency;
+        envelope.applyTo(message);
         message.relayCallsign = raw.getSourceCall();
         message.comment = "Raw: " + new String(raw.getPayload().getRawBytes(), java.nio.charset.StandardCharsets.UTF_8);
         save(message);
@@ -446,7 +456,7 @@ public final class AprsController {
      * history; station-to-station messages receive a sequence number and retry schedule.
      */
     public void recordOutgoingMessage(String from, String to, String text, int messageNumber,
-                                      String frequency) {
+                                      String frequency, APRSPacket packet, byte[] rawAx25) {
         APRSMessage message = new APRSMessage();
         message.type = APRSMessage.MESSAGE_TYPE;
         message.fromCallsign = from.toUpperCase().trim();
@@ -455,6 +465,7 @@ public final class AprsController {
         message.timestamp = Instant.now().getEpochSecond();
         message.source = APRSMessage.SOURCE_TX_RF;
         message.frequency = frequency;
+        PacketEnvelope.from(packet, rawAx25).applyTo(message);
         if (requiresAcknowledgement(to)) {
             message.msgNum = messageNumber;
             message.messageIdentifier = String.valueOf(messageNumber);
@@ -481,7 +492,7 @@ public final class AprsController {
 
     /** Records a successfully transmitted position beacon in APRS history. */
     public void recordPositionBeacon(String callsign, double latitude, double longitude,
-                                     String frequency) {
+                                     String frequency, APRSPacket packet, byte[] rawAx25) {
         APRSMessage message = new APRSMessage();
         message.type = APRSMessage.POSITION_TYPE;
         message.fromCallsign = callsign;
@@ -490,6 +501,7 @@ public final class AprsController {
         message.timestamp = Instant.now().getEpochSecond();
         message.source = APRSMessage.SOURCE_TX_RF;
         message.frequency = frequency;
+        PacketEnvelope.from(packet, rawAx25).applyTo(message);
         save(message);
     }
 
@@ -523,6 +535,34 @@ public final class AprsController {
     private boolean isRecentDuplicate(APRSMessage message) {
         return message.type == APRSMessage.MESSAGE_TYPE && message.msgNum != -1
                 && repository.isRecentDuplicate(message.fromCallsign, message.msgBody, message.msgNum);
+    }
+
+    /** Immutable packet-envelope snapshot retained alongside logical APRS history fields. */
+    private static final class PacketEnvelope {
+        private final String destination;
+        private final String path;
+        private final byte[] rawAx25;
+
+        private PacketEnvelope(String destination, String path, byte[] rawAx25) {
+            this.destination = destination;
+            this.path = path;
+            this.rawAx25 = rawAx25;
+        }
+
+        static PacketEnvelope from(APRSPacket packet, byte[] rawAx25) {
+            java.util.List<Digipeater> digipeaters = packet.getDigipeaters();
+            String path = digipeaters == null || digipeaters.isEmpty() ? null
+                : digipeaters.stream().map(Digipeater::toString)
+                    .collect(java.util.stream.Collectors.joining(","));
+            return new PacketEnvelope(packet.getDestinationCall(), path,
+                rawAx25 == null ? null : java.util.Arrays.copyOf(rawAx25, rawAx25.length));
+        }
+
+        void applyTo(APRSMessage message) {
+            message.ax25Destination = destination;
+            message.path = path;
+            message.rawAx25 = rawAx25 == null ? null : java.util.Arrays.copyOf(rawAx25, rawAx25.length);
+        }
     }
 
     private static final class PacketContext {

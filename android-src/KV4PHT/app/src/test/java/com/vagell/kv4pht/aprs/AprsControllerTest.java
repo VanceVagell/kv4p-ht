@@ -1,6 +1,7 @@
 package com.vagell.kv4pht.aprs;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -10,6 +11,7 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
+import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.data.APRSMessage;
 import org.junit.Test;
 import org.junit.Rule;
@@ -26,7 +28,10 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
 
-        controller.recordOutgoingMessage("vk3abc", "vk3def", " hello ", 7, "144.3900");
+        APRSPacket packet = outgoingMessage("vk3abc", "vk3def", " hello ", "7");
+        byte[] rawAx25 = packet.toAX25Frame();
+        controller.recordOutgoingMessage("vk3abc", "vk3def", " hello ", 7, "144.3900",
+            packet, rawAx25);
 
         assertEquals(1, dao.messages.size());
         APRSMessage message = dao.messages.get(0);
@@ -36,6 +41,9 @@ public class AprsControllerTest {
         assertEquals(7, message.msgNum);
         assertEquals(APRSMessage.SOURCE_TX_RF, message.source);
         assertEquals("144.3900", message.frequency);
+        assertEquals("APKVPA", message.ax25Destination);
+        assertEquals("WIDE1-1", message.path);
+        assertArrayEquals(rawAx25, message.rawAx25);
     }
 
     @Test
@@ -43,12 +51,69 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
 
-        controller.handle(directMessage("VK3ABC", "VK3ME", "hello", "7"),
-            APRSMessage.SOURCE_RX_RF, "145.1750");
+        APRSPacket packet = directMessage("VK3ABC", "VK3ME", "hello", "7");
+        byte[] rawAx25 = packet.toAX25Frame();
+        controller.handle(packet, APRSMessage.SOURCE_RX_RF, "145.1750", rawAx25);
 
         APRSMessage message = dao.messages.get(0);
         assertEquals(APRSMessage.SOURCE_RX_RF, message.source);
         assertEquals("145.1750", message.frequency);
+        assertEquals("VK3ME", message.toCallsign);
+        assertEquals("APRS", message.ax25Destination);
+        assertNull(message.path);
+        assertArrayEquals(rawAx25, message.rawAx25);
+    }
+
+    @Test
+    public void recordsRepeatedDigipeaterMarkerInIncomingEnvelope() {
+        FakeDao dao = new FakeDao();
+        AprsController controller = controller(dao);
+        Digipeater repeatedHop = new Digipeater("VK3DIG");
+        repeatedHop.setUsed(true);
+        APRSPacket packet = new APRSPacket("VK3ABC", "APRS",
+            java.util.Collections.singletonList(repeatedHop),
+            MessagePacket.createMessagePayload("VK3ME", "hello", "7"));
+
+        controller.handle(packet, APRSMessage.SOURCE_RX_RF, "145.1750", packet.toAX25Frame());
+
+        assertEquals("VK3DIG*", dao.messages.get(0).path);
+    }
+
+    @Test
+    public void recordsOutgoingPositionEnvelope() {
+        FakeDao dao = new FakeDao();
+        AprsController controller = controller(dao);
+        APRSPacket packet = new APRSPacket("VK3ME", APRSPacket.KV4P_HT_VENDOR_TOCALL,
+            java.util.Collections.singletonList(new Digipeater("WIDE1-1")),
+            "!3751.65S/14458.20E-Test".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        byte[] rawAx25 = packet.toAX25Frame();
+
+        controller.recordPositionBeacon("VK3ME", -37.8608, 144.9700, "144.3900", packet, rawAx25);
+
+        APRSMessage message = dao.messages.get(0);
+        assertEquals(APRSMessage.SOURCE_TX_RF, message.source);
+        assertEquals("APKVPA", message.ax25Destination);
+        assertEquals("WIDE1-1", message.path);
+        assertArrayEquals(rawAx25, message.rawAx25);
+    }
+
+    @Test
+    public void retainsOuterEnvelopeForThirdPartyMessage() throws Exception {
+        FakeDao dao = new FakeDao();
+        AprsController controller = controller(dao);
+        APRSPacket outerPacket = Parser.parse(
+            "RELAY1>APRS,WIDE1-1:}VK3ABC>APRS::VK3ME   :hello{7");
+        byte[] rawAx25 = outerPacket.toAX25Frame();
+
+        controller.handle(outerPacket, APRSMessage.SOURCE_RX_RF, "145.1750", rawAx25);
+
+        APRSMessage message = dao.messages.get(0);
+        assertEquals("VK3ABC", message.fromCallsign);
+        assertEquals("VK3ME", message.toCallsign);
+        assertEquals("RELAY1", message.relayCallsign);
+        assertEquals("APRS", message.ax25Destination);
+        assertEquals("WIDE1-1", message.path);
+        assertArrayEquals(rawAx25, message.rawAx25);
     }
 
     @Test
@@ -195,7 +260,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
 
-        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7, "144.3900");
+        recordOutgoingMessage(controller, "VK3ME", "BLN1CQ", "net starts now", 7);
 
         APRSMessage bulletin = dao.messages.get(0);
         assertEquals(-1, bulletin.msgNum);
@@ -209,7 +274,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         FakeCallbacks callbacks = new FakeCallbacks();
         AprsController controller = controller(dao, callbacks);
-        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7, "144.3900");
+        recordOutgoingMessage(controller, "VK3ME", "BLN1CQ", "net starts now", 7);
 
         controller.tick(Long.MAX_VALUE);
 
@@ -237,7 +302,7 @@ public class AprsControllerTest {
         FakeDao dao = new FakeDao();
         AprsController controller = controller(dao);
 
-        controller.recordOutgoingMessage("VK3ME", "QST", "net starts now", 7, "144.3900");
+        recordOutgoingMessage(controller, "VK3ME", "QST", "net starts now", 7);
 
         APRSMessage groupMessage = dao.messages.get(0);
         assertEquals(-1, groupMessage.msgNum);
@@ -415,6 +480,19 @@ public class AprsControllerTest {
     private APRSPacket directMessage(String source, String destination, String body, String identifier) {
         return new APRSPacket(source, "APRS", java.util.Collections.emptyList(),
             MessagePacket.createMessagePayload(destination, body, identifier));
+    }
+
+    private APRSPacket outgoingMessage(String source, String destination, String body, String identifier) {
+        return new APRSPacket(source, java.util.Collections.singletonList(new Digipeater("WIDE1-1")),
+            MessagePacket.createMessagePayload(destination, body, identifier));
+    }
+
+    private void recordOutgoingMessage(AprsController controller, String source, String destination,
+                                       String body, int messageNumber) {
+        APRSPacket packet = outgoingMessage(source, destination, body,
+            AprsController.requiresAcknowledgement(destination) ? String.valueOf(messageNumber) : null);
+        controller.recordOutgoingMessage(source, destination, body, messageNumber, "144.3900", packet,
+            packet.toAX25Frame());
     }
 
     private void assertRetryState(FakeCallbacks callbacks, APRSMessage message, int retries,

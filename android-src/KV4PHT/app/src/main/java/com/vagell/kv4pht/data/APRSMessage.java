@@ -70,6 +70,18 @@ public class APRSMessage {
     @ColumnInfo(name = "source", defaultValue = "'UNKNOWN'")
     public String source;
 
+    /** AX.25 destination callsign from the frame header, distinct from a message addressee. */
+    @ColumnInfo(name = "ax25_destination")
+    public String ax25Destination;
+
+    /** Comma-separated AX.25 digipeater path, retaining repeated-hop markers. */
+    @ColumnInfo(name = "path")
+    public String path;
+
+    /** Exact AX.25 frame bytes, without KISS or serial transport framing. */
+    @ColumnInfo(name = "raw_ax25")
+    public byte[] rawAx25;
+
     @ColumnInfo(name = "position_lat")
     public double positionLat;
 
