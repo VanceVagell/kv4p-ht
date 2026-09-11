@@ -1,10 +1,14 @@
 package com.vagell.kv4pht.aprs;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
+import com.vagell.kv4pht.aprs.parser.APRSPacket;
+import com.vagell.kv4pht.aprs.parser.Digipeater;
 import com.vagell.kv4pht.data.APRSMessage;
 import org.junit.Test;
 import org.junit.Rule;
@@ -91,6 +95,51 @@ public class AprsControllerTest {
         assertEquals(2, callbacks.beaconCount);
     }
 
+    @Test
+    public void digipeatsWideOneOneUsingOurCallsign() {
+        FakeCallbacks callbacks = new FakeCallbacks();
+        AprsController controller = controller(new FakeDao(), callbacks);
+        controller.setDigipeatingEnabled(true);
+
+        controller.handle(packetWithPath("WIDE1-1"));
+
+        APRSPacket retransmitted = callbacks.lastDigipeatedPacket;
+        assertNotNull(retransmitted);
+        assertEquals("VK3ME", retransmitted.getDigipeaters().get(0).getCallsign());
+        assertTrue(retransmitted.getDigipeaters().get(0).isUsed());
+    }
+
+    @Test
+    public void digipeatsWideOneTwoAndLeavesOneHopAvailable() {
+        FakeCallbacks callbacks = new FakeCallbacks();
+        AprsController controller = controller(new FakeDao(), callbacks);
+        controller.setDigipeatingEnabled(true);
+
+        controller.handle(packetWithPath("WIDE1-2"));
+
+        APRSPacket retransmitted = callbacks.lastDigipeatedPacket;
+        assertNotNull(retransmitted);
+        assertEquals("VK3ME", retransmitted.getDigipeaters().get(0).getCallsign());
+        assertTrue(retransmitted.getDigipeaters().get(0).isUsed());
+        assertEquals("WIDE1", retransmitted.getDigipeaters().get(1).getCallsign());
+        assertEquals("1", retransmitted.getDigipeaters().get(1).getSsid());
+        assertFalse(retransmitted.getDigipeaters().get(1).isUsed());
+    }
+
+    @Test
+    public void doesNotDigipeatUntilEnabledAndSuppressesRepeatedPackets() {
+        FakeCallbacks callbacks = new FakeCallbacks();
+        AprsController controller = controller(new FakeDao(), callbacks);
+        APRSPacket packet = packetWithPath("WIDE1-1");
+
+        controller.handle(packet);
+        controller.setDigipeatingEnabled(true);
+        controller.handle(packet);
+        controller.handle(packet);
+
+        assertEquals(1, callbacks.digipeatCount);
+    }
+
     private AprsController controller(FakeDao dao) {
         return controller(dao, new FakeCallbacks());
     }
@@ -109,23 +158,41 @@ public class AprsControllerTest {
         return message;
     }
 
+    private APRSPacket packetWithPath(String path) {
+        return new APRSPacket("VK3ABC", "APRS", java.util.Collections.singletonList(new Digipeater(path)),
+            ">test".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+    }
+
     private static final class FakeDao implements AprsController.Repository {
         private final List<APRSMessage> messages = new ArrayList<>();
         private boolean duplicate;
         @Override public List<APRSMessage> loadMessages() { return messages; }
         @Override public APRSMessage findOutgoingMessage(String destination, String messageIdentifier) { return null; }
         @Override public void insert(APRSMessage message) { messages.add(message); }
-        @Override public void update(APRSMessage message) { }
+        @Override public void update(APRSMessage message) {
+            // Tests inspect the mutable in-memory message directly after an update.
+        }
         @Override public boolean isRecentDuplicate(String fromCallsign, String msgBody, int msgNum) { return duplicate; }
     }
 
     private static final class FakeCallbacks implements AprsController.Callbacks {
         private int retryCount;
         private int beaconCount;
+        private int digipeatCount;
+        private APRSPacket lastDigipeatedPacket;
         @Override public String getCallsign() { return "VK3ME"; }
-        @Override public void showNotification(String title, String message) { }
-        @Override public void sendAcknowledgement(String destination, int messageNumber) { }
+        @Override public void showNotification(String title, String message) {
+            // Notification presentation is outside this controller test double's scope.
+        }
+        @Override public void sendAcknowledgement(String destination, int messageNumber) {
+            // Acknowledgement transmission is outside this controller test double's scope.
+        }
         @Override public boolean retryMessage(APRSMessage message) { retryCount++; return true; }
         @Override public void requestPositionBeacon() { beaconCount++; }
+        @Override public boolean transmitDigipeatedPacket(APRSPacket packet) {
+            digipeatCount++;
+            lastDigipeatedPacket = packet;
+            return true;
+        }
     }
 }

@@ -19,10 +19,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package com.vagell.kv4pht.ui;
 
 import android.app.Activity;
+import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.ServiceConnection;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -449,6 +451,13 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setAprsBeaconPosition(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_APRS_BEACON_POSITION, Boolean.toString(enabled));
+        if (enabled && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        if (radioAudioService != null) {
+            radioAudioService.setAprsBeaconPosition(enabled);
+        }
     }
 
     private void setAprsBeaconFrequency(String freq) {
@@ -457,14 +466,25 @@ public class SettingsActivity extends AppCompatActivity {
             frequency = "Current";
         }
         saveAppSettingAsync(AppSetting.SETTING_APRS_BEACON_FREQUENCY, frequency);
+        if (radioAudioService != null) {
+            radioAudioService.setAprsBeaconFrequency(frequency);
+        }
     }
 
     private void setAprsPositionAccuracy(String accuracy) {
         saveAppSettingAsync(AppSetting.SETTING_APRS_POSITION_ACCURACY, accuracy);
+        if (radioAudioService != null) {
+            radioAudioService.setAprsPositionAccuracy(accuracy.equals(getString(R.string.exact))
+                ? RadioAudioService.APRS_POSITION_EXACT
+                : RadioAudioService.APRS_POSITION_APPROX);
+        }
     }
 
     private void setAprsIcon(String icon) {
         saveAppSettingAsync(AppSetting.SETTING_APRS_ICON, icon);
+        if (radioAudioService != null) {
+            radioAudioService.setAprsPositionIcon(getAPRSIconFromSettingChoice(getResources(), icon));
+        }
     }
 
     private void setMin2mTxFreq(String freq) {
@@ -501,6 +521,9 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setDigipeatPackets(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_DIGIPEAT_PACKETS, Boolean.toString(enabled));
+        if (radioAudioService != null) {
+            radioAudioService.setDigipeatPackets(enabled);
+        }
     }
 
     public static APRSIconType getAPRSIconFromSettingChoice(Resources resources, String choice) {

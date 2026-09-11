@@ -203,8 +203,6 @@ public class RadioAudioService extends Service {
     @Getter
     @Setter
     private int aprsPositionAccuracy = APRS_POSITION_EXACT;
-    private boolean digipeatPackets = false;
-    private final java.util.Map<String, Long> digipeatDedupCache = new java.util.HashMap<>();
     private int messageNumber = 0;
     private final SecureRandom messageNumberRandom = new SecureRandom();
 
@@ -316,7 +314,7 @@ public class RadioAudioService extends Service {
     }
 
     public void setDigipeatPackets(boolean enabled) {
-        this.digipeatPackets = enabled;
+        aprsController.setDigipeatingEnabled(enabled);
     }
 
     public boolean getAprsBeaconPosition() {
@@ -425,6 +423,11 @@ public class RadioAudioService extends Service {
                             releaseBeaconWakeLock();
                         }
                     });
+                }
+                @Override public boolean transmitDigipeatedPacket(APRSPacket packet) {
+                    if (!isTxAllowed() || getMode() != RadioMode.RX || hostToEsp32 == null) return false;
+                    txAX25Packet(new Packet(packet.toAX25Frame()));
+                    return true;
                 }
             });
 
@@ -1685,17 +1688,6 @@ public class RadioAudioService extends Service {
         try {
             APRSPacket aprsPacket = Parser.parseAX25(packet, offset, len);
 
-            // Deduplicate against recent digipeats (including our own retransmissions)
-            String dedupKey = computeDigipeatDedupKey(aprsPacket);
-            if (isRecentlyDigipeated(dedupKey)) {
-                return;
-            }
-
-            // Attempt to digipeat eligible packets before local processing
-            if (digipeatPackets && mode == RadioMode.RX && isTxAllowed() && !callsign.trim().isEmpty() && hostToEsp32 != null) {
-                maybeDigipeat(aprsPacket, dedupKey);
-            }
-
             aprsController.handle(aprsPacket);
         } catch (Exception e) {
             Log.d(TAG, "Unable to parse an APRS packet, skipping.");
@@ -1860,98 +1852,6 @@ public class RadioAudioService extends Service {
             return -1;
         }
         return messageNumber - 1;
-    }
-
-    private String computeDigipeatDedupKey(APRSPacket packet) {
-        return packet.getSourceCall() + "|" + packet.getDestinationCall() + "|"
-            + java.util.Base64.getEncoder().encodeToString(packet.getPayload().getRawBytes());
-    }
-
-    private boolean isRecentlyDigipeated(String key) {
-        long now = System.currentTimeMillis();
-        Long then = digipeatDedupCache.get(key);
-        if (then != null && now - then < 28_000L) {
-            return true;
-        }
-        digipeatDedupCache.entrySet().removeIf(e -> now - e.getValue() >= 28_000L);
-        return false;
-    }
-
-    private int findFirstUnusedDigipeater(java.util.List<Digipeater> digis) {
-        for (int i = 0; i < digis.size(); i++) {
-            if (!digis.get(i).isUsed()) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private void maybeDigipeat(APRSPacket aprsPacket, String dedupKey) {
-        java.util.List<Digipeater> digis = aprsPacket.getDigipeaters();
-        if (digis == null || digis.isEmpty()) {
-            return;
-        }
-
-        int firstUnusedIndex = findFirstUnusedDigipeater(digis);
-        if (firstUnusedIndex < 0) {
-            return;
-        }
-
-        Digipeater firstUnused = digis.get(firstUnusedIndex);
-        String digiCall = firstUnused.getCallsign();
-        String baseCall = APRSPacket.getBaseCall(digiCall);
-        String ssidStr = APRSPacket.getSsid(firstUnused.toString());
-        int ssid = -1;
-        try {
-            ssid = Integer.parseInt(ssidStr);
-        } catch (NumberFormatException e) {
-            // SSID not numeric
-        }
-
-        boolean isOurCall = baseCall.equalsIgnoreCase(APRSPacket.getBaseCall(callsign));
-
-        // We check for WIDE1 with additional repeats left. WIDE1 is for local fill-in digipeaters, like us.
-        // We don't want to digipeat WIDE2 because that's for things like mountain-top digipeaters.
-        boolean isWide1Alias = baseCall.equalsIgnoreCase("WIDE1") && ssid >= 1 && ssid <= 2;
-
-        if (!isOurCall && !isWide1Alias) {
-            return;
-        }
-
-        java.util.List<Digipeater> newDigis = new java.util.ArrayList<>(digis);
-
-        if (isOurCall) {
-            Digipeater marked = new Digipeater(digiCall);
-            marked.setUsed(true);
-            newDigis.set(firstUnusedIndex, marked);
-        } else {
-            if (ssid == 1) {
-                Digipeater ourDigi = new Digipeater(callsign);
-                ourDigi.setUsed(true);
-                newDigis.set(firstUnusedIndex, ourDigi);
-            } else if (ssid == 2) {
-                Digipeater decremented = new Digipeater(baseCall + "-1");
-                decremented.setUsed(false);
-                newDigis.set(firstUnusedIndex, decremented);
-                Digipeater ourDigi = new Digipeater(callsign);
-                ourDigi.setUsed(true);
-                newDigis.add(firstUnusedIndex, ourDigi);
-            }
-        }
-
-        try {
-            APRSPacket digipeatedPacket = new APRSPacket(
-                aprsPacket.getSourceCall(),
-                aprsPacket.getDestinationCall(),
-                newDigis,
-                aprsPacket.getPayload().getRawBytes()
-            );
-            digipeatedPacket.setComment(aprsPacket.getComment());
-            txAX25Packet(new Packet(digipeatedPacket.toAX25Frame()));
-            digipeatDedupCache.put(dedupKey, System.currentTimeMillis());
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to digipeat packet", e);
-        }
     }
 
     /**

@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.APRSTypes;
+import com.vagell.kv4pht.aprs.parser.Digipeater;
 import com.vagell.kv4pht.aprs.parser.InformationField;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.ObjectField;
@@ -13,25 +14,40 @@ import com.vagell.kv4pht.aprs.parser.Utilities;
 import com.vagell.kv4pht.aprs.parser.WeatherField;
 import com.vagell.kv4pht.data.APRSMessage;
 import com.vagell.kv4pht.data.APRSMessageDao;
-
 import java.util.concurrent.Executor;
 import java.time.Instant;
 
-/** Coordinates APRS message delivery, acknowledgement, de-duplication, and storage. */
+/**
+ * Owns APRS application policy and persistent message state.
+ *
+ * <p>{@code RadioAudioService} supplies radio, notification, and location capabilities through
+ * {@link Callbacks}; it does not parse or persist APRS messages. The controller parses received
+ * packets, de-duplicates and stores them, manages reliable-message retries, schedules position
+ * beacons, and decides whether a received packet is eligible for fill-in digipeating. UI code
+ * observes {@link #getMessages()} and never accesses the APRS message DAO directly.</p>
+ *
+ * <p>Call {@link #tick(long)} from the service's existing serialized polling loop. Persistence
+ * work is dispatched to the executor supplied at construction.</p>
+ */
 public final class AprsController {
     private static final long[] RETRY_DELAYS_MS = {15_000L, 30_000L, 60_000L, 120_000L, 240_000L};
     private static final long FINAL_ACK_GRACE_MS = 30_000L;
     private static final long BEACON_INTERVAL_MS = 5 * 60_000L;
-    /** Persistence boundary for stateful APRS messaging. */
+    /** Persistence boundary for stateful APRS messaging, allowing the policy to be unit tested. */
     public interface Repository {
+        /** Returns every retained APRS record, including messages awaiting acknowledgement. */
         java.util.List<APRSMessage> loadMessages();
+        /** Persists a newly received, sent, or beacon record. */
         void insert(APRSMessage message);
+        /** Persists a changed delivery state or retry deadline. */
         void update(APRSMessage message);
+        /** Finds the locally sent message identified by a received APRS acknowledgement. */
         APRSMessage findOutgoingMessage(String destination, String messageIdentifier);
+        /** Reports whether this received numbered message was retained recently. */
         boolean isRecentDuplicate(String fromCallsign, String messageBody, int messageNumber);
     }
 
-    /** Room-backed repository; all Room access remains outside the controller's state machine. */
+    /** Room-backed repository adapter; Room access remains outside the controller's state machine. */
     public static final class RoomRepository implements Repository {
         private final APRSMessageDao dao;
 
@@ -50,21 +66,43 @@ public final class AprsController {
         }
     }
 
+    /**
+     * Capabilities provided by the service host.
+     *
+     * <p>Callbacks may interact with Android and radio hardware; the controller itself remains
+     * independent of either.</p>
+     */
     public interface Callbacks {
+        /** Returns the configured local callsign, or {@code null} when it is not configured. */
         String getCallsign();
+        /** Presents a notification for an incoming direct message. */
         void showNotification(String title, String message);
+        /** Transmits an APRS acknowledgement after the service's acknowledgement delay. */
         void sendAcknowledgement(String destination, int messageNumber);
+        /** Attempts one retransmission and returns whether it was accepted for RF transmission. */
         boolean retryMessage(APRSMessage message);
+        /** Requests that the service acquire a position and transmit a position beacon. */
         void requestPositionBeacon();
+        /** Attempts RF transmission of the controller's rewritten digipeated packet. */
+        boolean transmitDigipeatedPacket(APRSPacket packet);
     }
 
     private final Repository repository;
     private final Executor executor;
     private final Callbacks callbacks;
     private final MutableLiveData<java.util.List<APRSMessage>> messages = new MutableLiveData<>();
-    private boolean positionBeaconingEnabled;
-    private long nextPositionBeaconAt;
+    private volatile boolean positionBeaconingEnabled;
+    private volatile long nextPositionBeaconAt;
+    private volatile boolean digipeatingEnabled;
+    private final java.util.Map<String, Long> digipeatDedupCache = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /**
+     * Creates and asynchronously publishes the persisted APRS message history.
+     *
+     * @param repository durable APRS-message storage
+     * @param executor serialized executor used for storage and retry work
+     * @param callbacks service-provided radio, notification, and location capabilities
+     */
     public AprsController(Repository repository, Executor executor, Callbacks callbacks) {
         this.repository = repository;
         this.executor = executor;
@@ -72,10 +110,27 @@ public final class AprsController {
         refreshMessages();
     }
 
+    /** Returns the APRS history for the UI to observe. */
     public LiveData<java.util.List<APRSMessage>> getMessages() {
         return messages;
     }
 
+    /** Returns whether periodic position beaconing is currently enabled. */
+    public boolean isPositionBeaconingEnabled() {
+        return positionBeaconingEnabled;
+    }
+
+    /** Enables or disables fill-in digipeating for subsequently received APRS packets. */
+    public void setDigipeatingEnabled(boolean enabled) {
+        digipeatingEnabled = enabled;
+    }
+
+    /**
+     * Notifies and acknowledges a numbered message addressed to the local callsign.
+     *
+     * <p>Messages for other stations remain in history but must not produce local notifications
+     * or acknowledgements.</p>
+     */
     public void notifyAndAcknowledgeDirectMessage(APRSMessage message, APRSPacket packet) {
         String callsign = callbacks.getCallsign();
         if (callsign == null || message.toCallsign == null
@@ -88,13 +143,25 @@ public final class AprsController {
         }
     }
 
+    /**
+     * Processes one decoded RF APRS packet.
+     *
+     * <p>Digipeating is evaluated before local storage. Third-party packets are unwrapped for
+     * display while preserving their relaying station.</p>
+     */
     public void handle(APRSPacket rawPacket) {
-        APRSMessage message = new APRSMessage();
+        maybeDigipeat(rawPacket);
         PacketContext context = unwrap(rawPacket);
         if (context == null) {
-            storeInvalidRelay(rawPacket, message);
+            storeInvalidRelay(rawPacket, new APRSMessage());
             return;
         }
+        handleDecodedPacket(context);
+    }
+
+    /** Converts a parser-validated packet into its durable APRS history representation. */
+    private void handleDecodedPacket(PacketContext context) {
+        APRSMessage message = new APRSMessage();
         InformationField info = context.info;
         WeatherField weather = (WeatherField) info.getAprsData(APRSTypes.T_WX);
         PositionField position = (PositionField) info.getAprsData(APRSTypes.T_POSITION);
@@ -110,6 +177,62 @@ public final class AprsController {
         }
         message.relayCallsign = context.relayCallsign;
         save(message);
+    }
+
+    /** Applies supported fill-in digipeater rules and suppresses a repeated packet for 28 seconds. */
+    private void maybeDigipeat(APRSPacket packet) {
+        String localCallsign = callbacks.getCallsign();
+        if (!digipeatingEnabled || localCallsign == null || localCallsign.trim().isEmpty()) return;
+        String key = packet.getSourceCall() + "|" + packet.getDestinationCall() + "|"
+            + java.util.Base64.getEncoder().encodeToString(packet.getPayload().getRawBytes());
+        long now = System.currentTimeMillis();
+        Long previous = digipeatDedupCache.get(key);
+        digipeatDedupCache.entrySet().removeIf(entry -> now - entry.getValue() >= 28_000L);
+        if (previous != null && now - previous < 28_000L) return;
+
+        java.util.List<Digipeater> digis = packet.getDigipeaters();
+        if (digis == null || digis.isEmpty()) return;
+        int index = firstUnusedDigipeater(digis);
+        if (index < 0) return;
+        Digipeater next = digis.get(index);
+        String baseCall = APRSPacket.getBaseCall(next.getCallsign());
+        int ssid = parseSsid(next);
+        boolean ours = baseCall.equalsIgnoreCase(APRSPacket.getBaseCall(localCallsign));
+        boolean wide1 = baseCall.equalsIgnoreCase("WIDE1") && ssid >= 1 && ssid <= 2;
+        if (!ours && !wide1) return;
+
+        java.util.List<Digipeater> replacement = new java.util.ArrayList<>(digis);
+        if (ours) {
+            replacement.set(index, usedDigipeater(next.getCallsign()));
+        } else if (ssid == 1) {
+            replacement.set(index, usedDigipeater(localCallsign));
+        } else {
+            Digipeater decremented = new Digipeater(baseCall + "-1");
+            replacement.set(index, decremented);
+            replacement.add(index, usedDigipeater(localCallsign));
+        }
+        APRSPacket retransmit = new APRSPacket(packet.getSourceCall(), packet.getDestinationCall(),
+            replacement, packet.getPayload().getRawBytes());
+        retransmit.setComment(packet.getComment());
+        if (callbacks.transmitDigipeatedPacket(retransmit)) {
+            digipeatDedupCache.put(key, now);
+        }
+    }
+
+    private int firstUnusedDigipeater(java.util.List<Digipeater> digis) {
+        for (int i = 0; i < digis.size(); i++) if (!digis.get(i).isUsed()) return i;
+        return -1;
+    }
+
+    private int parseSsid(Digipeater digipeater) {
+        try { return Integer.parseInt(APRSPacket.getSsid(digipeater.toString())); }
+        catch (NumberFormatException ignored) { return -1; }
+    }
+
+    private Digipeater usedDigipeater(String callsign) {
+        Digipeater digipeater = new Digipeater(callsign);
+        digipeater.setUsed(true);
+        return digipeater;
     }
 
     private PacketContext unwrap(APRSPacket raw) {
@@ -187,6 +310,10 @@ public final class AprsController {
         try { return Integer.parseInt(number.trim()); } catch (NumberFormatException e) { return -1; }
     }
 
+    /**
+     * Stores a record unless it is a duplicate; acknowledgement records instead update their
+     * corresponding outgoing message.
+     */
     public void save(APRSMessage message) {
         executor.execute(() -> {
             if (message.wasAcknowledged) {
@@ -202,7 +329,14 @@ public final class AprsController {
         });
     }
 
-    /** Advances reliable-message retries. Called by RadioAudioService's handler loop. */
+    /**
+     * Advances due retry deadlines and periodic position beacon scheduling.
+     *
+     * <p>Called by {@code RadioAudioService}'s serialized handler loop. A failed RF attempt is
+     * retried at the initial retry delay without consuming an attempt.</p>
+     *
+     * @param now current wall-clock time in milliseconds
+     */
     public void tick(long now) {
         executor.execute(() -> {
             for (APRSMessage message : repository.loadMessages()) {
@@ -220,13 +354,15 @@ public final class AprsController {
         });
     }
 
+    /**
+     * Enables or disables periodic position beacons. Enabling schedules the first beacon now.
+     *
+     * @param enabled whether periodic beaconing is enabled
+     * @param now current wall-clock time in milliseconds
+     */
     public void setPositionBeaconingEnabled(boolean enabled, long now) {
         positionBeaconingEnabled = enabled;
         nextPositionBeaconAt = enabled ? now : 0;
-    }
-
-    public boolean isPositionBeaconingEnabled() {
-        return positionBeaconingEnabled;
     }
 
     private void retryOrFail(APRSMessage message, long now) {
@@ -256,6 +392,9 @@ public final class AprsController {
         });
     }
 
+    /**
+     * Records a transmitted numbered message and schedules its acknowledgement retry sequence.
+     */
     public void recordOutgoingMessage(String from, String to, String text, int messageNumber) {
         APRSMessage message = new APRSMessage();
         message.type = APRSMessage.MESSAGE_TYPE;
@@ -272,6 +411,7 @@ public final class AprsController {
         save(message);
     }
 
+    /** Records a successfully transmitted position beacon in APRS history. */
     public void recordPositionBeacon(String callsign, double latitude, double longitude) {
         APRSMessage message = new APRSMessage();
         message.type = APRSMessage.POSITION_TYPE;
