@@ -43,6 +43,7 @@ enum RcvCommand {
   COMMAND_RCV_UNKNOWN    = 0x00,
   COMMAND_HOST_TX_AUDIO  = 0x0C, // [COMMAND_HOST_TX_AUDIO(uint8_t[])]
   COMMAND_HOST_DESIRED_STATE = 0x0D, // [COMMAND_HOST_DESIRED_STATE(HostDesiredState)]
+  COMMAND_HOST_TX_DIGITAL = 0x0E, // [COMMAND_HOST_TX_DIGITAL(7-byte Codec2 1300 frame)]
 };
 
 // Outgoing commands (ESP32 -> Android)
@@ -57,6 +58,7 @@ enum SndCommand {
   COMMAND_RX_AUDIO       = 0x0C, // [COMMAND_RX_AUDIO(int8_t[])]
   COMMAND_WINDOW_UPDATE  = 0x09,
   COMMAND_DEVICE_STATE   = 0x0B, // [COMMAND_DEVICE_STATE(DeviceState)]
+  COMMAND_RX_DIGITAL     = 0x0E, // [COMMAND_RX_DIGITAL(7-byte Codec2 1300 frame)]
 };
 
 // COMMAND_HELLO parameters: Version + initial DeviceState
@@ -73,6 +75,7 @@ REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define FEATURE_HAS_HL      (1 << 0)
 #define FEATURE_HAS_PHY_PTT (1 << 1)
 #define FEATURE_HAS_ESP32_AFSK (1 << 2)
+#define FEATURE_HAS_FREEDV_2400B (1 << 3)
 
 #define HOST_STATE_RADIO_CONFIG_VALID (1 << 0)
 #define HOST_STATE_PTT_REQUESTED      (1 << 1)
@@ -84,6 +87,7 @@ REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define HOST_STATE_FILTER_LOW         (1 << 7)
 #define HOST_STATE_TX_ALLOWED         (1 << 11)
 #define HOST_STATE_ENABLE_STATUS_REPORTS (1 << 12)
+#define HOST_STATE_FREEDV_2400B       (1 << 13)
 
 #define DEVICE_STATE_RADIO_CONFIG_VALID HOST_STATE_RADIO_CONFIG_VALID
 #define DEVICE_STATE_PTT_REQUESTED      HOST_STATE_PTT_REQUESTED
@@ -111,7 +115,8 @@ static constexpr uint16_t HOST_STATE_GLOBAL_FLAG_MASK =
   | HOST_STATE_FILTER_PRE
   | HOST_STATE_FILTER_HIGH
   | HOST_STATE_FILTER_LOW
-  | HOST_STATE_TX_ALLOWED;
+  | HOST_STATE_TX_ALLOWED
+  | HOST_STATE_FREEDV_2400B;
 
 struct ProtocolSession {
   Stream *stream;
@@ -360,6 +365,7 @@ void inline sendDeviceState(const DeviceState &state) {
 }
 
 void inline sendAudio(const uint8_t *data, size_t len) {
+  if (freeDv2400bEnabled()) return;
   if (protocolSessionConnected(protocolUsbSession) && (protocolUsbSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
     sendKv4pVendorFrame(*protocolUsbSession.stream, COMMAND_RX_AUDIO, data, len);
   }
@@ -368,6 +374,19 @@ void inline sendAudio(const uint8_t *data, size_t len) {
   }
   if (protocolHasBleSession() && (protocolBleSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
     sendKv4pVendorFrame(*protocolBleSession.stream, COMMAND_RX_AUDIO, data, len);
+  }
+}
+
+void inline sendDigitalFrame(const uint8_t *data, size_t len) {
+  if (!freeDv2400bEnabled() || len != 7) return;
+  if (protocolSessionConnected(protocolUsbSession) && (protocolUsbSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
+    sendKv4pVendorFrame(*protocolUsbSession.stream, COMMAND_RX_DIGITAL, data, len);
+  }
+  if (protocolHasBtSession() && (protocolBtSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
+    sendKv4pVendorFrame(*protocolBtSession.stream, COMMAND_RX_DIGITAL, data, len);
+  }
+  if (protocolHasBleSession() && (protocolBleSession.flags & HOST_STATE_RX_AUDIO_OPEN)) {
+    sendKv4pVendorFrame(*protocolBleSession.stream, COMMAND_RX_DIGITAL, data, len);
   }
 }
 

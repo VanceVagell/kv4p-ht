@@ -78,9 +78,9 @@ import com.vagell.kv4pht.radio.Protocol.RcvCommand;
 import com.vagell.kv4pht.radio.Protocol.WindowUpdate;
 import com.vagell.kv4pht.ui.MainActivity;
 import com.vagell.kv4pht.ui.ToneHelper;
+import io.github.dkaukov.codec2.Codec2;
 import lombok.Getter;
 import lombok.Setter;
-
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -177,6 +177,15 @@ public class RadioAudioService extends Service {
     private AudioFocusRequest audioFocusRequest;
     private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES];
     private final ImaAdpcm.Encoder txAudioEncoder = new ImaAdpcm.Encoder();
+    private Codec2 codec2;
+    private boolean freeDv2400bEnabled;
+    private final short[] codec2TxPcm = new short[Codec2.PCM_SAMPLES];
+    private final short[] codec2RxPcm = new short[Codec2.PCM_SAMPLES];
+    private final short[] codec2PlaybackPcm = new short[Codec2.PCM_SAMPLES * 2];
+    private final byte[] codec2Frame = new byte[Codec2.FRAME_BYTES];
+    private int codec2TxSamples;
+    private boolean codec2HasPendingInput;
+    private short codec2PendingInput;
     private final AtomicReference<AudioRecord> audioRecord = new AtomicReference<>();
     private volatile boolean voiceCaptureActive;
     private final AtomicInteger voiceCaptureSession = new AtomicInteger();
@@ -275,6 +284,7 @@ public class RadioAudioService extends Service {
         default void txStarted() {}
         default void txEnded() {}
         default void moduleStateChanged(boolean txActive, boolean squelched) {}
+        default void freeDvModeChanged(boolean enabled) {}
         default void chatError(String text) {}
         default void sMeterUpdate(int value) {}
         default void sentAprsBeacon(double latitude, double longitude, String frequencyStr, boolean wasSwitch) {}
@@ -628,6 +638,10 @@ public class RadioAudioService extends Service {
             audioTrack.release();
             audioTrack = null;
         }
+        if (codec2 != null) {
+            codec2.close();
+            codec2 = null;
+        }
         stopVoiceCapture();
 
         if (wakeLock != null && wakeLock.isHeld()) {
@@ -872,6 +886,8 @@ public class RadioAudioService extends Service {
         }
         if (mode == RadioMode.RX && isTxAllowed()) {
             txAudioEncoder.reset();
+            codec2TxSamples = 0;
+            codec2HasPendingInput = false;
             setMode(RadioMode.TX);
             callbacks.sMeterUpdate(0);
             setTxRunAwayTimer();
@@ -1354,6 +1370,23 @@ public class RadioAudioService extends Service {
         return radioModule.hasPhysPttButton();
     }
 
+    public boolean supportsFreeDv2400b() {
+        return radioModule.supportsFreeDv2400b();
+    }
+
+    public synchronized boolean isFreeDv2400bEnabled() {
+        return freeDv2400bEnabled;
+    }
+
+    public synchronized void setFreeDv2400bEnabled(boolean enabled) {
+        enabled = enabled && supportsFreeDv2400b();
+        if (enabled && codec2 == null) codec2 = new Codec2();
+        freeDv2400bEnabled = enabled;
+        codec2TxSamples = 0;
+        codec2HasPendingInput = false;
+        radioModule.setFreeDv2400b(enabled);
+    }
+
     public float getMinRadioFreq() {
         return radioModule.getMinRadioFreq();
     }
@@ -1484,11 +1517,35 @@ public class RadioAudioService extends Service {
         if (sender == null) {
             return; // If connection is lost, just drop the audio frame.
         }
+        if (freeDv2400bEnabled && !dataMode) {
+            sendFreeDvAudio(sender, samples);
+            return;
+        }
         if (!dataMode) {
             applyMicGain(samples, AUDIO_FRAME_SAMPLES);
         }
         int encodedLength = txAudioEncoder.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES, txAudioFrame, 0);
         sender.txAudio(txAudioFrame, encodedLength);
+    }
+
+    private synchronized void sendFreeDvAudio(Protocol.Sender sender, short[] samples) {
+        if (codec2 == null) return;
+        applyMicGain(samples, samples.length);
+        // The app captures at 16 kHz; Codec2 1300 consumes 320 samples at 8 kHz.
+        for (short sample : samples) {
+            if (!codec2HasPendingInput) {
+                codec2PendingInput = sample;
+                codec2HasPendingInput = true;
+                continue;
+            }
+            codec2TxPcm[codec2TxSamples++] = (short) ((codec2PendingInput + sample) / 2);
+            codec2HasPendingInput = false;
+            if (codec2TxSamples == Codec2.PCM_SAMPLES) {
+                codec2.encode(codec2TxPcm, codec2Frame);
+                sender.txDigital(codec2Frame);
+                codec2TxSamples = 0;
+            }
+        }
     }
 
     public boolean isRadioConnected() {
@@ -1548,6 +1605,10 @@ public class RadioAudioService extends Service {
                 handleRxAudio(param, offset, len);
                 break;
 
+            case COMMAND_RX_DIGITAL:
+                handleRxDigital(param, offset, len);
+                break;
+
             case COMMAND_WINDOW_UPDATE:
                 WindowUpdate.from(param, offset, len).ifPresent(windowAck ->
                     hostToEsp32.enlargeFlowControlWindow(windowAck.getSize()));
@@ -1578,6 +1639,7 @@ public class RadioAudioService extends Service {
 
     void handleInitialDeviceState(Protocol.DeviceState state) {
         radioModule.seedFromDeviceState(state);
+        freeDv2400bEnabled = radioModule.isFreeDv2400bEnabled();
         if (state.hasRadioConfig()) {
             activeFrequencyStr = formatFreq(state.getFreqRx());
             activeMemoryId = state.getMemoryId();
@@ -1593,6 +1655,7 @@ public class RadioAudioService extends Service {
 
     private void handleDeviceState(Protocol.DeviceState state) {
         radioModule.updateDeviceState(state);
+        syncFreeDvModeFromDevice();
         syncActiveRadioConfig(state);
         final boolean deviceTxActive = radioModule.isDeviceTxActive();
         callbacks.moduleStateChanged(deviceTxActive, radioModule.isSquelched());
@@ -1615,6 +1678,17 @@ public class RadioAudioService extends Service {
                 callbacks.forcedPttEnd();
             }
         }
+    }
+
+    private void syncFreeDvModeFromDevice() {
+        boolean enabled = radioModule.isFreeDv2400bEnabled();
+        if (enabled && codec2 == null) codec2 = new Codec2();
+        if (freeDv2400bEnabled == enabled) return;
+
+        freeDv2400bEnabled = enabled;
+        codec2TxSamples = 0;
+        codec2HasPendingInput = false;
+        callbacks.freeDvModeChanged(enabled);
     }
 
     private void syncActiveRadioConfig(Protocol.DeviceState state) {
@@ -1653,6 +1727,27 @@ public class RadioAudioService extends Service {
             AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             audioTrack.write(pcm16, 0, decoded, AudioTrack.WRITE_NON_BLOCKING);
             audioManager.requestAudioFocus(audioFocusRequest);
+            ensureAudioPlaying();
+        }
+    }
+
+    private synchronized void handleRxDigital(final ByteBuffer param, final int offset, final int len) {
+        if (!freeDv2400bEnabled || codec2 == null || param == null || !param.hasArray()
+            || len != Codec2.FRAME_BYTES || offset < 0 || param.limit() < offset + len) return;
+        System.arraycopy(param.array(), offset, codec2Frame, 0, Codec2.FRAME_BYTES);
+        decodeAndPlayFreeDvFrame(codec2Frame);
+    }
+
+    private void decodeAndPlayFreeDvFrame(byte[] frame) {
+        if (codec2 == null || frame == null || frame.length < Codec2.FRAME_BYTES) return;
+        codec2.decode(frame, codec2RxPcm);
+        for (int i = 0; i < Codec2.PCM_SAMPLES; i++) {
+            codec2PlaybackPcm[i * 2] = codec2RxPcm[i];
+            codec2PlaybackPcm[i * 2 + 1] = codec2RxPcm[i];
+        }
+        if ((getMode() == RadioMode.RX || getMode() == RadioMode.SCAN) && audioTrack != null) {
+            audioTrack.write(codec2PlaybackPcm, 0, codec2PlaybackPcm.length, AudioTrack.WRITE_NON_BLOCKING);
+            ((AudioManager) getSystemService(Context.AUDIO_SERVICE)).requestAudioFocus(audioFocusRequest);
             ensureAudioPlaying();
         }
     }

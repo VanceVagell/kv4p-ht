@@ -3,6 +3,7 @@
     <string name="app_name">kv4p HT</string>
     <string name="second_fragment_label">第二段</string>
     <string name="voice_display">语音</string>
+    <string name="freedv_2400b_display">2400B</string>
     <string name="aprs_chat_display">APRS聊天</string>
     <string name="memory_name_display">频道名称</string>
     <string name="memory_group_optional_display">频道组（可选）</string>

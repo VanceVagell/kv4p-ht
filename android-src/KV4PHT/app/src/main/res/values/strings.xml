@@ -8,6 +8,7 @@
     <string name="second_fragment_label">Second Fragment</string>
 
     <string name="voice_display">Voice</string>
+    <string name="freedv_2400b_display">2400B</string>
     <string name="aprs_chat_display">APRS chat</string>
     <string name="memory_name_display">Memory name</string>
     <string name="memory_group_optional_display">Memory group (optional)</string>

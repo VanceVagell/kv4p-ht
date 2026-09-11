@@ -274,6 +274,14 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
         });
+        bottomNav.findViewById(R.id.voice_mode).setOnLongClickListener(view -> {
+            if (radioAudioService == null || !radioAudioService.supportsFreeDv2400b()) {
+                return true;
+            }
+            radioAudioService.setFreeDv2400bEnabled(!radioAudioService.isFreeDv2400bEnabled());
+            updateVoiceModeCaption();
+            return true;
+        });
         attachListeners();
         IntentFilter filter = new IntentFilter();
         filter.addAction(ACTION_USB_PERMISSION);
@@ -382,6 +390,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void initialDeviceStateReceived() {
                     runOnUiThread(() -> {
+                        updateVoiceModeCaption();
                         initialRadioUiSynced = false;
                         pendingInitialRadioUiSync = true;
                         trySyncInitialRadioUi();
@@ -448,6 +457,11 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void moduleStateChanged(boolean txActive, boolean squelched) {
                     runOnUiThread(() -> showModuleState(txActive, squelched));
+                }
+
+                @Override
+                public void freeDvModeChanged(boolean enabled) {
+                    runOnUiThread(() -> updateVoiceModeCaption());
                 }
 
                 /**
@@ -540,6 +554,15 @@ public class MainActivity extends AppCompatActivity {
             // TODO if this is unexpected we should probably try to restart the service.
         }
     };
+
+    private void updateVoiceModeCaption() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigationView);
+        boolean digital = radioAudioService != null
+                && radioAudioService.supportsFreeDv2400b()
+                && radioAudioService.isFreeDv2400bEnabled();
+        bottomNav.getMenu().findItem(R.id.voice_mode).setTitle(
+                digital ? R.string.freedv_2400b_display : R.string.voice_display);
+    }
 
     /**
      * Returns the set of runtime permissions required before starting
