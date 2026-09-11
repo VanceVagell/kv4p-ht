@@ -18,12 +18,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.ui;
 
-import static androidx.core.content.ContextCompat.startActivity;
-
 import android.content.Intent;
 import android.icu.text.SimpleDateFormat;
 import android.net.Uri;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -36,7 +33,6 @@ import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.APRSMessage;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -121,14 +117,10 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
 
         // Handle taps on the message's position icon
         final View positionButton = holder.itemView.findViewById(R.id.senderPositionButton);
-        positionButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // Show this location on a map
-                String geoUri = "geo:" + aprsMessage.positionLat + "," + aprsMessage.positionLong + "?q=" + aprsMessage.positionLat + "," + aprsMessage.positionLong;
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(geoUri));
-                v.getContext().startActivity(intent);
-            }
+        positionButton.setOnClickListener(v -> {
+            String geoUri = "geo:" + aprsMessage.positionLat + "," + aprsMessage.positionLong + "?q=" + aprsMessage.positionLat + "," + aprsMessage.positionLong;
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(geoUri));
+            v.getContext().startActivity(intent);
         });
     }
 
@@ -191,7 +183,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             if (null == textViewTimestamp) {
                 return;
             }
-            Calendar calendar = Calendar.getInstance();
             SimpleDateFormat sdf = new SimpleDateFormat("h:mm a MMM d", Locale.ENGLISH);
             textViewTimestamp.setText(sdf.format(new Date(timestamp * 1000)));
         }
@@ -200,7 +191,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             if (null == textViewComment) {
                 return;
             }
-            if (null == comment || comment.trim().length() == 0) {
+            if (null == comment || comment.trim().isEmpty()) {
                 itemView.findViewById(R.id.commentHolder).setVisibility(View.GONE);
             } else {
                 itemView.findViewById(R.id.commentHolder).setVisibility(View.VISIBLE);
@@ -216,11 +207,11 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         }
 
         public void setPositionLat(double posLat) {
-            setHasPosition(posLat != 0 ? true : false);
+            setHasPosition(posLat != 0);
         }
 
         public void setPositionLong(double posLong) {
-            setHasPosition(posLong != 0 ? true : false);
+            setHasPosition(posLong != 0);
         }
 
         public void setTemperature(double temperature) {
@@ -301,20 +292,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         }
 
         public void setRelayCallsign(String relayCallsign) {
-            /* TODO(vagell): The relay callsign UI is disabled for now. Reconsider this in the future,
-                although it works, it makes the status line of messages super long and hard to read,
-                and i'm not sure most people will understand "via" means via inet iGate vs. RF digipeat.
-            if (null == textViewRelayCallsign) {
-                return;
-            }
-            if (null == relayCallsign) {
-                textViewRelayCallsign.setVisibility(View.GONE);
-                textViewRelayViaLabel.setVisibility(View.GONE);
-            } else {
-                textViewRelayCallsign.setVisibility(View.VISIBLE);
-                textViewRelayCallsign.setText(relayCallsign);
-                textViewRelayViaLabel.setVisibility(View.VISIBLE);
-            } */
+            // Relay callsigns are intentionally not displayed: they make the status line hard to read.
         }
     }
 }
