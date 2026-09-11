@@ -20,17 +20,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.x'
 
       - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.platformio/.cache
           key: ${{ runner.os }}-platformio-${{ hashFiles('microcontroller-src/platformio.ini') }}
@@ -48,7 +48,7 @@ jobs:
         run: pio test -e native-tests
 
       - name: Upload firmware for Android build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-firmware-${{ github.event.pull_request.number }}
           path: microcontroller-src/.pio/build/esp32dev-release/firmware.bin
@@ -64,22 +64,22 @@ jobs:
       run:
         working-directory: android-src/KV4PHT
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: 'zulu' # Alternative distribution options are available
       - name: Cache SonarCloud packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
       - name: Cache Gradle packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.gradle/caches
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
@@ -88,7 +88,7 @@ jobs:
         run: chmod +x ./gradlew
       - name: Download PR firmware
         if: github.event_name == 'pull_request'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pr-firmware-${{ github.event.pull_request.number }}
           path: .pr-firmware
@@ -136,17 +136,31 @@ jobs:
           } > PR_CHANGES.md
       - name: Upload PR build
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kv4p-ht-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           path: pr-dist/
           if-no-files-found: error
           retention-days: 14
-      - name: Upload APK
-        if: startsWith(github.ref, 'refs/tags')
-        uses: AButler/upload-release-assets@v3.0
+      # Keep the artifact handoff in-repository rather than relying on the
+      # composite action, whose pinned upload-artifact@v4 runtime is deprecated.
+      - name: Prepare Sonar analysis artifact
+        working-directory: ${{ github.workspace }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          printf '%s\n%s\n%s\n' "$PR_NUMBER" "$PR_HEAD_REF" "$PR_BASE_REF" > pr-event.txt
+          find android-src/KV4PHT -type d -iname '*build' -print0 \
+            | tar --null --files-from=- -cf output.tar
+
+      - name: Upload Sonar analysis artifact
+        uses: actions/upload-artifact@v7
         with:
-          files: "android-src/KV4PHT/app/build/outputs/apk/release/app-release-unsigned.apk;android-src/KV4PHT/app/build/outputs/apk/debug/app-debug.apk"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: 'Prepare Sonar analysis'
-        uses: evaristegalois11/sonar-fork-analysis@v1.2.0
+          name: sonar-artifact
+          path: |
+            pr-event.txt
+            output.tar
+          if-no-files-found: error
+          retention-days: 1

@@ -18,10 +18,10 @@ jobs:
           git config --global filter.lfs.process "git-lfs filter-process --skip"
     
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -37,7 +37,7 @@ jobs:
         working-directory: microcontroller-src
 
       - name: Upload firmware binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-binaries
           path: |
