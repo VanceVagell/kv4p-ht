@@ -137,40 +137,84 @@ public class AprsControllerTest {
     @Test
     public void onlyStationDestinationsRequireAcknowledgement() {
         assertTrue(AprsController.requiresAcknowledgement("VK3ABC"));
+        assertTrue(AprsController.requiresAcknowledgement("VK3ABC-7"));
+        assertFalse(AprsController.requiresAcknowledgement("BLN1CQ"));
         assertFalse(AprsController.requiresAcknowledgement("bln1cq"));
+        assertFalse(AprsController.requiresAcknowledgement("BLN0"));
+        assertFalse(AprsController.requiresAcknowledgement("ALL"));
+        assertFalse(AprsController.requiresAcknowledgement("all"));
+        assertFalse(AprsController.requiresAcknowledgement("QST"));
+        assertFalse(AprsController.requiresAcknowledgement("qst"));
+        assertFalse(AprsController.requiresAcknowledgement("CQ"));
+        assertFalse(AprsController.requiresAcknowledgement("cq"));
         assertFalse(AprsController.requiresAcknowledgement(null));
     }
 
     @Test
-    public void acknowledgementStopsRetriesAndMarksOutgoingMessageDelivered() {
+    public void groupAddressIsRecordedWithoutReliableDeliveryState() {
         FakeDao dao = new FakeDao();
-        APRSMessage outgoing = pendingOutgoingMessage(7);
-        dao.outgoingMessage = outgoing;
         AprsController controller = controller(dao);
 
-        controller.handle(deliveryResponse("ack7"));
+        controller.recordOutgoingMessage("VK3ME", "QST", "net starts now", 7);
 
-        assertTrue(outgoing.wasAcknowledged);
-        assertEquals(APRSMessage.DELIVERY_DELIVERED, outgoing.deliveryState);
-        assertNull(outgoing.nextRetryAt);
-        assertEquals("VK3ME", dao.lastLookupDestination);
+        APRSMessage groupMessage = dao.messages.get(0);
+        assertEquals(-1, groupMessage.msgNum);
+        assertNull(groupMessage.messageIdentifier);
+        assertEquals(APRSMessage.DELIVERY_NONE, groupMessage.deliveryState);
+        assertNull(groupMessage.nextRetryAt);
+    }
+
+    @Test
+    public void acknowledgementOnlyResolvesTheMatchingRemoteStation() {
+        FakeDao dao = new FakeDao();
+        APRSMessage toAbc = pendingOutgoingMessage("VK3ABC", 7);
+        APRSMessage toXyz = pendingOutgoingMessage("VK3XYZ", 7);
+        dao.pendingOutgoingMessages.add(toAbc);
+        dao.pendingOutgoingMessages.add(toXyz);
+        AprsController controller = controller(dao);
+
+        controller.handle(deliveryResponse("VK3ABC", "ack7"));
+
+        assertTrue(toAbc.wasAcknowledged);
+        assertEquals(APRSMessage.DELIVERY_DELIVERED, toAbc.deliveryState);
+        assertNull(toAbc.nextRetryAt);
+        assertEquals(APRSMessage.DELIVERY_PENDING, toXyz.deliveryState);
+        assertEquals("VK3ME", dao.lastLookupLocalCallsign);
+        assertEquals("VK3ABC", dao.lastLookupRemoteCallsign);
         assertEquals("7", dao.lastLookupIdentifier);
     }
 
     @Test
-    public void rejectionStopsRetriesAndMarksOutgoingMessageRejected() {
+    public void rejectionOnlyResolvesTheMatchingRemoteStation() {
         FakeDao dao = new FakeDao();
-        APRSMessage outgoing = pendingOutgoingMessage(7);
-        dao.outgoingMessage = outgoing;
+        APRSMessage toAbc = pendingOutgoingMessage("VK3ABC", 7);
+        APRSMessage toXyz = pendingOutgoingMessage("VK3XYZ", 7);
+        dao.pendingOutgoingMessages.add(toAbc);
+        dao.pendingOutgoingMessages.add(toXyz);
         AprsController controller = controller(dao);
 
-        controller.handle(deliveryResponse("rej7"));
+        controller.handle(deliveryResponse("VK3ABC", "rej7"));
 
-        assertFalse(outgoing.wasAcknowledged);
-        assertEquals(APRSMessage.DELIVERY_REJECTED, outgoing.deliveryState);
-        assertNull(outgoing.nextRetryAt);
-        assertEquals("VK3ME", dao.lastLookupDestination);
+        assertFalse(toAbc.wasAcknowledged);
+        assertEquals(APRSMessage.DELIVERY_REJECTED, toAbc.deliveryState);
+        assertNull(toAbc.nextRetryAt);
+        assertEquals(APRSMessage.DELIVERY_PENDING, toXyz.deliveryState);
+        assertEquals("VK3ME", dao.lastLookupLocalCallsign);
+        assertEquals("VK3ABC", dao.lastLookupRemoteCallsign);
         assertEquals("7", dao.lastLookupIdentifier);
+    }
+
+    @Test
+    public void acknowledgementFromUnknownStationDoesNothing() {
+        FakeDao dao = new FakeDao();
+        APRSMessage outgoing = pendingOutgoingMessage("VK3ABC", 7);
+        dao.pendingOutgoingMessages.add(outgoing);
+        AprsController controller = controller(dao);
+
+        controller.handle(deliveryResponse("VK3XYZ", "ack7"));
+
+        assertEquals(APRSMessage.DELIVERY_PENDING, outgoing.deliveryState);
+        assertFalse(outgoing.wasAcknowledged);
     }
 
     @Test
@@ -249,10 +293,10 @@ public class AprsControllerTest {
         return message;
     }
 
-    private APRSMessage pendingOutgoingMessage(int messageNumber) {
+    private APRSMessage pendingOutgoingMessage(String destination, int messageNumber) {
         APRSMessage message = pendingMessage(1_000L, 5);
         message.fromCallsign = "VK3ME";
-        message.toCallsign = "VK3ABC";
+        message.toCallsign = destination;
         message.msgNum = messageNumber;
         message.messageIdentifier = String.valueOf(messageNumber);
         return message;
@@ -263,8 +307,8 @@ public class AprsControllerTest {
             ">test".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
     }
 
-    private APRSPacket deliveryResponse(String response) {
-        return new APRSPacket("VK3ABC", "APRS", java.util.Collections.emptyList(),
+    private APRSPacket deliveryResponse(String source, String response) {
+        return new APRSPacket(source, "APRS", java.util.Collections.emptyList(),
             MessagePacket.createMessagePayload("VK3ME", response, null));
     }
 
@@ -273,8 +317,9 @@ public class AprsControllerTest {
         private boolean duplicate;
         private int historyLoadCount;
         private int dueMessageLoadCount;
-        private APRSMessage outgoingMessage;
-        private String lastLookupDestination;
+        private final List<APRSMessage> pendingOutgoingMessages = new ArrayList<>();
+        private String lastLookupLocalCallsign;
+        private String lastLookupRemoteCallsign;
         private String lastLookupIdentifier;
         @Override public List<APRSMessage> loadMessages() { historyLoadCount++; return messages; }
         @Override public List<APRSMessage> loadDueReliableMessages(long now) {
@@ -286,10 +331,21 @@ public class AprsControllerTest {
             }
             return dueMessages;
         }
-        @Override public APRSMessage findOutgoingMessage(String destination, String messageIdentifier) {
-            lastLookupDestination = destination;
+        @Override public APRSMessage findPendingOutgoingMessage(String localCallsign,
+                                                                 String remoteCallsign,
+                                                                 String messageIdentifier) {
+            lastLookupLocalCallsign = localCallsign;
+            lastLookupRemoteCallsign = remoteCallsign;
             lastLookupIdentifier = messageIdentifier;
-            return outgoingMessage;
+            for (APRSMessage message : pendingOutgoingMessages) {
+                if (message.deliveryState == APRSMessage.DELIVERY_PENDING
+                        && localCallsign.equals(message.fromCallsign)
+                        && remoteCallsign.equals(message.toCallsign)
+                        && messageIdentifier.equals(message.messageIdentifier)) {
+                    return message;
+                }
+            }
+            return null;
         }
         @Override public void insert(APRSMessage message) { messages.add(message); }
         @Override public void update(APRSMessage message) {

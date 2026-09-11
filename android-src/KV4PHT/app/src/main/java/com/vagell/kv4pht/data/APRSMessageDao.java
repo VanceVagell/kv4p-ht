@@ -35,8 +35,11 @@ public interface APRSMessageDao {
            "AND next_retry_at IS NOT NULL AND next_retry_at <= :now")
     List<APRSMessage> getDueReliableMessages(int pendingState, long now);
 
-    @Query("SELECT * FROM aprs_messages WHERE `from_callsign` = :fromCallsign AND `message_num` = :msgNum ORDER BY `id` DESC LIMIT 1")
-    APRSMessage getMsgToAck(String fromCallsign, int msgNum);
+    @Query("SELECT * FROM aprs_messages WHERE from_callsign = :localCallsign " +
+           "AND to_callsign = :remoteCallsign AND message_identifier = :messageIdentifier " +
+           "AND delivery_state = :pendingState ORDER BY id DESC LIMIT 1")
+    APRSMessage getPendingOutgoingMessage(String localCallsign, String remoteCallsign,
+                                          String messageIdentifier, int pendingState);
 
     @Insert
     void insertAll(APRSMessage... aprsMessages);

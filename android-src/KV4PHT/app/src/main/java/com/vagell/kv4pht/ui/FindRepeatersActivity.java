@@ -30,6 +30,7 @@ import android.graphics.Color;
 import android.location.Address;
 import android.location.Geocoder;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
@@ -170,20 +171,35 @@ public class FindRepeatersActivity extends AppCompatActivity {
             getGpsLocation();
         }
 
-        // External storage permission...
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-                && ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+        requestLegacyStoragePermissionIfNeeded();
+    }
 
-                new AlertDialog.Builder(this)
-                        .setTitle("Permission needed")
-                        .setMessage("This app needs to write to external storage to find nearby repeaters")
-                        .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
-                                FindRepeatersActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                                REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE))
-                        .create()
-                        .show();
-
+    private void requestLegacyStoragePermissionIfNeeded() {
+        if (!requiresLegacyStoragePermission(Build.VERSION.SDK_INT)
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED) {
+            return;
         }
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Permission needed")
+                    .setMessage("This app needs to write to external storage to find nearby repeaters")
+                    .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
+                            FindRepeatersActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                            REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE))
+                    .create()
+                    .show();
+            return;
+        }
+        ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE);
+    }
+
+    /** WRITE_EXTERNAL_STORAGE is needed for public DownloadManager destinations only through API 28. */
+    static boolean requiresLegacyStoragePermission(int sdkInt) {
+        return sdkInt <= Build.VERSION_CODES.P;
     }
 
     @Override

@@ -43,8 +43,9 @@ public final class AprsController {
         void insert(APRSMessage message);
         /** Persists a changed delivery state or retry deadline. */
         void update(APRSMessage message);
-        /** Finds the locally sent message identified by a received APRS acknowledgement. */
-        APRSMessage findOutgoingMessage(String destination, String messageIdentifier);
+        /** Finds the pending local message addressed to the station that sent an ACK or REJ. */
+        APRSMessage findPendingOutgoingMessage(String localCallsign, String remoteCallsign,
+                                                String messageIdentifier);
         /** Reports whether this received numbered message was retained recently. */
         boolean isRecentDuplicate(String fromCallsign, String messageBody, int messageNumber);
     }
@@ -63,8 +64,11 @@ public final class AprsController {
         }
         @Override public void insert(APRSMessage message) { dao.insertAll(message); }
         @Override public void update(APRSMessage message) { dao.update(message); }
-        @Override public APRSMessage findOutgoingMessage(String destination, String messageIdentifier) {
-            return dao.getMsgToAck(destination, Integer.parseInt(messageIdentifier));
+        @Override public APRSMessage findPendingOutgoingMessage(String localCallsign,
+                                                                String remoteCallsign,
+                                                                String messageIdentifier) {
+            return dao.getPendingOutgoingMessage(localCallsign, remoteCallsign, messageIdentifier,
+                APRSMessage.DELIVERY_PENDING);
         }
         @Override public boolean isRecentDuplicate(String fromCallsign, String messageBody, int messageNumber) {
             return dao.isRecentDuplicate(fromCallsign, messageBody, messageNumber);
@@ -322,14 +326,15 @@ public final class AprsController {
         message.type = APRSMessage.MESSAGE_TYPE;
         MessagePacket packetMessage = new MessagePacket(info.getRawBytes(), packet.getDestinationCall());
         message.toCallsign = packetMessage.getTargetCallsign();
-        message.msgNum = parseNumber(packetMessage.getMessageNumber());
+        message.messageIdentifier = packetMessage.getMessageNumber();
+        message.msgNum = parseNumber(message.messageIdentifier);
         if (packetMessage.isAck()) {
             message.wasAcknowledged = true;
-            return message.msgNum != -1;
+            return message.messageIdentifier != null && !message.messageIdentifier.trim().isEmpty();
         }
         if (packetMessage.isRej()) {
             message.deliveryState = APRSMessage.DELIVERY_REJECTED;
-            return message.msgNum != -1;
+            return message.messageIdentifier != null && !message.messageIdentifier.trim().isEmpty();
         }
         message.msgBody = packetMessage.getMessageBody();
         notifyAndAcknowledgeDirectMessage(message, packet);
@@ -450,7 +455,12 @@ public final class AprsController {
 
     /** Returns whether a destination is a station-to-station message address that may ACK. */
     public static boolean requiresAcknowledgement(String destination) {
-        return destination != null && !destination.trim().toUpperCase(java.util.Locale.ROOT).startsWith("BLN");
+        if (destination == null) return false;
+        String normalized = destination.trim().toUpperCase(java.util.Locale.ROOT);
+        return !normalized.startsWith("BLN")
+            && !normalized.equals("ALL")
+            && !normalized.equals("QST")
+            && !normalized.equals("CQ");
     }
 
     /** Records a successfully transmitted position beacon in APRS history. */
@@ -465,7 +475,8 @@ public final class AprsController {
     }
 
     private boolean markAcknowledged(APRSMessage message) {
-        APRSMessage previous = repository.findOutgoingMessage(message.toCallsign, String.valueOf(message.msgNum));
+        APRSMessage previous = repository.findPendingOutgoingMessage(message.toCallsign,
+            message.fromCallsign, message.messageIdentifier);
         if (previous == null) {
             return false;
         }
@@ -478,7 +489,8 @@ public final class AprsController {
     }
 
     private boolean markRejected(APRSMessage message) {
-        APRSMessage previous = repository.findOutgoingMessage(message.toCallsign, String.valueOf(message.msgNum));
+        APRSMessage previous = repository.findPendingOutgoingMessage(message.toCallsign,
+            message.fromCallsign, message.messageIdentifier);
         if (previous == null) {
             return false;
         }
