@@ -106,10 +106,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
         // Listen for file downloads so we can detect when CSV download is done.
         IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        // The receiver is explicitly non-exported, so only this app and privileged system senders
-        // can deliver the DownloadManager completion broadcast.
         ContextCompat.registerReceiver(this, onDownloadComplete, filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED); // NOSONAR java:S5322
+            "android.permission.SEND_DOWNLOAD_COMPLETED_INTENTS", null,
+            ContextCompat.RECEIVER_EXPORTED);
 
         populateMemoryGroups();
         requestPermissions();

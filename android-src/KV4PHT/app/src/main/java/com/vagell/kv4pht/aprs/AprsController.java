@@ -37,6 +37,8 @@ public final class AprsController {
     public interface Repository {
         /** Returns every retained APRS record, including messages awaiting acknowledgement. */
         java.util.List<APRSMessage> loadMessages();
+        /** Returns only reliable messages whose retry deadline has elapsed. */
+        java.util.List<APRSMessage> loadDueReliableMessages(long now);
         /** Persists a newly received, sent, or beacon record. */
         void insert(APRSMessage message);
         /** Persists a changed delivery state or retry deadline. */
@@ -56,6 +58,9 @@ public final class AprsController {
         }
 
         @Override public java.util.List<APRSMessage> loadMessages() { return dao.getAll(); }
+        @Override public java.util.List<APRSMessage> loadDueReliableMessages(long now) {
+            return dao.getDueReliableMessages(APRSMessage.DELIVERY_PENDING, now);
+        }
         @Override public void insert(APRSMessage message) { dao.insertAll(message); }
         @Override public void update(APRSMessage message) { dao.update(message); }
         @Override public APRSMessage findOutgoingMessage(String destination, String messageIdentifier) {
@@ -150,6 +155,7 @@ public final class AprsController {
      * display while preserving their relaying station.</p>
      */
     public void handle(APRSPacket rawPacket) {
+        if (isRecentlyDigipeated(rawPacket)) return;
         maybeDigipeat(rawPacket);
         PacketContext context = unwrap(rawPacket);
         if (context == null) {
@@ -183,12 +189,8 @@ public final class AprsController {
     private void maybeDigipeat(APRSPacket packet) {
         String localCallsign = callbacks.getCallsign();
         if (!digipeatingEnabled || localCallsign == null || localCallsign.trim().isEmpty()) return;
-        String key = packet.getSourceCall() + "|" + packet.getDestinationCall() + "|"
-            + java.util.Base64.getEncoder().encodeToString(packet.getPayload().getRawBytes());
+        String key = digipeatKey(packet);
         long now = System.currentTimeMillis();
-        Long previous = digipeatDedupCache.get(key);
-        digipeatDedupCache.entrySet().removeIf(entry -> now - entry.getValue() >= 28_000L);
-        if (previous != null && now - previous < 28_000L) return;
 
         java.util.List<Digipeater> digis = packet.getDigipeaters();
         if (digis == null || digis.isEmpty()) return;
@@ -217,6 +219,19 @@ public final class AprsController {
         if (callbacks.transmitDigipeatedPacket(retransmit)) {
             digipeatDedupCache.put(key, now);
         }
+    }
+
+    /** Returns whether this is an RF echo of a packet we recently retransmitted. */
+    private boolean isRecentlyDigipeated(APRSPacket packet) {
+        long now = System.currentTimeMillis();
+        digipeatDedupCache.entrySet().removeIf(entry -> now - entry.getValue() >= 28_000L);
+        Long previous = digipeatDedupCache.get(digipeatKey(packet));
+        return previous != null && now - previous < 28_000L;
+    }
+
+    private String digipeatKey(APRSPacket packet) {
+        return packet.getSourceCall() + "|" + packet.getDestinationCall() + "|"
+            + java.util.Base64.getEncoder().encodeToString(packet.getPayload().getRawBytes());
     }
 
     private int firstUnusedDigipeater(java.util.List<Digipeater> digis) {
@@ -312,6 +327,10 @@ public final class AprsController {
             message.wasAcknowledged = true;
             return message.msgNum != -1;
         }
+        if (packetMessage.isRej()) {
+            message.deliveryState = APRSMessage.DELIVERY_REJECTED;
+            return message.msgNum != -1;
+        }
         message.msgBody = packetMessage.getMessageBody();
         notifyAndAcknowledgeDirectMessage(message, packet);
         return true;
@@ -330,6 +349,10 @@ public final class AprsController {
         executor.execute(() -> {
             if (message.wasAcknowledged) {
                 if (!markAcknowledged(message)) {
+                    return;
+                }
+            } else if (message.deliveryState == APRSMessage.DELIVERY_REJECTED) {
+                if (!markRejected(message)) {
                     return;
                 }
             } else if (isRecentDuplicate(message)) {
@@ -351,18 +374,16 @@ public final class AprsController {
      */
     public void tick(long now) {
         executor.execute(() -> {
-            for (APRSMessage message : repository.loadMessages()) {
-                if (message.deliveryState != APRSMessage.DELIVERY_PENDING || message.nextRetryAt == null
-                        || message.nextRetryAt > now) {
-                    continue;
-                }
+            boolean messagesChanged = false;
+            for (APRSMessage message : repository.loadDueReliableMessages(now)) {
                 retryOrFail(message, now);
+                messagesChanged = true;
             }
             if (positionBeaconingEnabled && now >= nextPositionBeaconAt) {
                 nextPositionBeaconAt = now + BEACON_INTERVAL_MS;
                 callbacks.requestPositionBeacon();
             }
-            refreshMessages();
+            if (messagesChanged) refreshMessages();
         });
     }
 
@@ -403,7 +424,8 @@ public final class AprsController {
     }
 
     /**
-     * Records a transmitted numbered message and schedules its acknowledgement retry sequence.
+     * Records a transmitted message. Bulletin destinations are retained as fire-and-forget
+     * history; station-to-station messages receive a sequence number and retry schedule.
      */
     public void recordOutgoingMessage(String from, String to, String text, int messageNumber) {
         APRSMessage message = new APRSMessage();
@@ -412,13 +434,23 @@ public final class AprsController {
         message.toCallsign = to.toUpperCase().trim();
         message.msgBody = text.trim();
         message.timestamp = Instant.now().getEpochSecond();
-        message.msgNum = messageNumber;
-        message.messageIdentifier = String.valueOf(messageNumber);
-        message.deliveryState = APRSMessage.DELIVERY_PENDING;
-        message.retriesRemaining = RETRY_DELAYS_MS.length;
-        message.transmitAttempts = 1;
-        message.nextRetryAt = System.currentTimeMillis() + RETRY_DELAYS_MS[0];
+        if (requiresAcknowledgement(to)) {
+            message.msgNum = messageNumber;
+            message.messageIdentifier = String.valueOf(messageNumber);
+            message.deliveryState = APRSMessage.DELIVERY_PENDING;
+            message.retriesRemaining = RETRY_DELAYS_MS.length;
+            message.transmitAttempts = 1;
+            message.nextRetryAt = System.currentTimeMillis() + RETRY_DELAYS_MS[0];
+        } else {
+            message.msgNum = -1;
+            message.deliveryState = APRSMessage.DELIVERY_NONE;
+        }
         save(message);
+    }
+
+    /** Returns whether a destination is a station-to-station message address that may ACK. */
+    public static boolean requiresAcknowledgement(String destination) {
+        return destination != null && !destination.trim().toUpperCase(java.util.Locale.ROOT).startsWith("BLN");
     }
 
     /** Records a successfully transmitted position beacon in APRS history. */
@@ -439,6 +471,18 @@ public final class AprsController {
         }
         previous.wasAcknowledged = true;
         previous.deliveryState = APRSMessage.DELIVERY_DELIVERED;
+        previous.retriesRemaining = null;
+        previous.nextRetryAt = null;
+        repository.update(previous);
+        return true;
+    }
+
+    private boolean markRejected(APRSMessage message) {
+        APRSMessage previous = repository.findOutgoingMessage(message.toCallsign, String.valueOf(message.msgNum));
+        if (previous == null) {
+            return false;
+        }
+        previous.deliveryState = APRSMessage.DELIVERY_REJECTED;
         previous.retriesRemaining = null;
         previous.nextRetryAt = null;
         repository.update(previous);

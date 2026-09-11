@@ -16,5 +16,7 @@ public class MigrationFrom7To8 extends Migration {
         database.execSQL("ALTER TABLE aprs_messages ADD COLUMN retries_remaining INTEGER");
         database.execSQL("ALTER TABLE aprs_messages ADD COLUMN transmit_attempts INTEGER NOT NULL DEFAULT 0");
         database.execSQL("ALTER TABLE aprs_messages ADD COLUMN next_retry_at INTEGER");
+        database.execSQL("CREATE INDEX IF NOT EXISTS index_aprs_messages_delivery_state_next_retry_at "
+            + "ON aprs_messages (delivery_state, next_retry_at)");
     }
 }

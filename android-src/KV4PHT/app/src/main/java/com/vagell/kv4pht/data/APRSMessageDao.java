@@ -31,6 +31,10 @@ public interface APRSMessageDao {
     @Query("SELECT * FROM aprs_messages")
     List<APRSMessage> getAll();
 
+    @Query("SELECT * FROM aprs_messages WHERE delivery_state = :pendingState " +
+           "AND next_retry_at IS NOT NULL AND next_retry_at <= :now")
+    List<APRSMessage> getDueReliableMessages(int pendingState, long now);
+
     @Query("SELECT * FROM aprs_messages WHERE `from_callsign` = :fromCallsign AND `message_num` = :msgNum ORDER BY `id` DESC LIMIT 1")
     APRSMessage getMsgToAck(String fromCallsign, int msgNum);
 

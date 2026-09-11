@@ -1841,17 +1841,21 @@ public class RadioAudioService extends Service {
         if (messageNumber > APRS_MAX_MESSAGE_NUM) {
             messageNumber = 0;
         }
+        boolean reliable = AprsController.requiresAcknowledgement(targetCallsign);
+        int outgoingMessageNumber = messageNumber;
         try {
-            APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, MessagePacket.createMessagePayload(targetCallsign, outText, String.valueOf(messageNumber++)));
+            String identifier = reliable ? String.valueOf(messageNumber++) : null;
+            APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS,
+                MessagePacket.createMessagePayload(targetCallsign, outText, identifier));
             Packet ax25Packet = new Packet(aprsPacket.toAX25Frame());
             txAX25Packet(ax25Packet);
-            aprsController.recordOutgoingMessage(callsign, targetCallsign, outText, messageNumber - 1);
+            aprsController.recordOutgoingMessage(callsign, targetCallsign, outText, outgoingMessageNumber);
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Error: sending APRS packet", e);
             callbacks.chatError(e.getMessage());
             return -1;
         }
-        return messageNumber - 1;
+        return outgoingMessageNumber;
     }
 
     /**

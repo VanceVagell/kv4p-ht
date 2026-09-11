@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 8,
-    "identityHash": "8185d5c7f8ac916f125fef30e92ff034",
+    "identityHash": "a36b6e31696734c56d742c65f3c32a31",
     "entities": [
       {
         "tableName": "app_settings",
@@ -244,12 +244,24 @@
           "columnNames": [
             "id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_aprs_messages_delivery_state_next_retry_at",
+            "unique": false,
+            "columnNames": [
+              "delivery_state",
+              "next_retry_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_messages_delivery_state_next_retry_at` ON `${TABLE_NAME}` (`delivery_state`, `next_retry_at`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8185d5c7f8ac916f125fef30e92ff034')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a36b6e31696734c56d742c65f3c32a31')"
     ]
   }
 }

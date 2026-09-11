@@ -20,9 +20,13 @@ package com.vagell.kv4pht.data;
 
 import androidx.room.ColumnInfo;
 import androidx.room.Entity;
+import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
-@Entity(tableName = "aprs_messages")
+@Entity(
+    tableName = "aprs_messages",
+    indices = {@Index(value = {"delivery_state", "next_retry_at"})}
+)
 public class APRSMessage {
     public static final int UNKNOWN_TYPE = 0;
     public static final int MESSAGE_TYPE = 1;

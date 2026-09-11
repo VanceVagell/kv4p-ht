@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
+import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.data.APRSMessage;
 import org.junit.Test;
 import org.junit.Rule;
@@ -96,6 +97,83 @@ public class AprsControllerTest {
     }
 
     @Test
+    public void tickDoesNotReloadHistoryWhenNoMessageIsDue() {
+        FakeDao dao = new FakeDao();
+        AprsController controller = controller(dao);
+        int historyLoadsAfterStartup = dao.historyLoadCount;
+
+        controller.tick(1_000L);
+
+        assertEquals(historyLoadsAfterStartup, dao.historyLoadCount);
+        assertEquals(1, dao.dueMessageLoadCount);
+    }
+
+    @Test
+    public void recordsBulletinsWithoutReliableDeliveryState() {
+        FakeDao dao = new FakeDao();
+        AprsController controller = controller(dao);
+
+        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7);
+
+        APRSMessage bulletin = dao.messages.get(0);
+        assertEquals(-1, bulletin.msgNum);
+        assertNull(bulletin.messageIdentifier);
+        assertEquals(APRSMessage.DELIVERY_NONE, bulletin.deliveryState);
+        assertNull(bulletin.nextRetryAt);
+    }
+
+    @Test
+    public void bulletinNeverEntersTheRetryPath() {
+        FakeDao dao = new FakeDao();
+        FakeCallbacks callbacks = new FakeCallbacks();
+        AprsController controller = controller(dao, callbacks);
+        controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts now", 7);
+
+        controller.tick(Long.MAX_VALUE);
+
+        assertEquals(0, callbacks.retryCount);
+    }
+
+    @Test
+    public void onlyStationDestinationsRequireAcknowledgement() {
+        assertTrue(AprsController.requiresAcknowledgement("VK3ABC"));
+        assertFalse(AprsController.requiresAcknowledgement("bln1cq"));
+        assertFalse(AprsController.requiresAcknowledgement(null));
+    }
+
+    @Test
+    public void acknowledgementStopsRetriesAndMarksOutgoingMessageDelivered() {
+        FakeDao dao = new FakeDao();
+        APRSMessage outgoing = pendingOutgoingMessage(7);
+        dao.outgoingMessage = outgoing;
+        AprsController controller = controller(dao);
+
+        controller.handle(deliveryResponse("ack7"));
+
+        assertTrue(outgoing.wasAcknowledged);
+        assertEquals(APRSMessage.DELIVERY_DELIVERED, outgoing.deliveryState);
+        assertNull(outgoing.nextRetryAt);
+        assertEquals("VK3ME", dao.lastLookupDestination);
+        assertEquals("7", dao.lastLookupIdentifier);
+    }
+
+    @Test
+    public void rejectionStopsRetriesAndMarksOutgoingMessageRejected() {
+        FakeDao dao = new FakeDao();
+        APRSMessage outgoing = pendingOutgoingMessage(7);
+        dao.outgoingMessage = outgoing;
+        AprsController controller = controller(dao);
+
+        controller.handle(deliveryResponse("rej7"));
+
+        assertFalse(outgoing.wasAcknowledged);
+        assertEquals(APRSMessage.DELIVERY_REJECTED, outgoing.deliveryState);
+        assertNull(outgoing.nextRetryAt);
+        assertEquals("VK3ME", dao.lastLookupDestination);
+        assertEquals("7", dao.lastLookupIdentifier);
+    }
+
+    @Test
     public void digipeatsWideOneOneUsingOurCallsign() {
         FakeCallbacks callbacks = new FakeCallbacks();
         AprsController controller = controller(new FakeDao(), callbacks);
@@ -140,6 +218,19 @@ public class AprsControllerTest {
         assertEquals(1, callbacks.digipeatCount);
     }
 
+    @Test
+    public void doesNotStoreAnEchoOfOurRecentDigipeat() {
+        FakeDao dao = new FakeDao();
+        AprsController controller = controller(dao, new FakeCallbacks());
+        controller.setDigipeatingEnabled(true);
+        APRSPacket packet = packetWithPath("WIDE1-1");
+
+        controller.handle(packet);
+        controller.handle(packet);
+
+        assertEquals(1, dao.messages.size());
+    }
+
     private AprsController controller(FakeDao dao) {
         return controller(dao, new FakeCallbacks());
     }
@@ -158,16 +249,48 @@ public class AprsControllerTest {
         return message;
     }
 
+    private APRSMessage pendingOutgoingMessage(int messageNumber) {
+        APRSMessage message = pendingMessage(1_000L, 5);
+        message.fromCallsign = "VK3ME";
+        message.toCallsign = "VK3ABC";
+        message.msgNum = messageNumber;
+        message.messageIdentifier = String.valueOf(messageNumber);
+        return message;
+    }
+
     private APRSPacket packetWithPath(String path) {
         return new APRSPacket("VK3ABC", "APRS", java.util.Collections.singletonList(new Digipeater(path)),
             ">test".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
     }
 
+    private APRSPacket deliveryResponse(String response) {
+        return new APRSPacket("VK3ABC", "APRS", java.util.Collections.emptyList(),
+            MessagePacket.createMessagePayload("VK3ME", response, null));
+    }
+
     private static final class FakeDao implements AprsController.Repository {
         private final List<APRSMessage> messages = new ArrayList<>();
         private boolean duplicate;
-        @Override public List<APRSMessage> loadMessages() { return messages; }
-        @Override public APRSMessage findOutgoingMessage(String destination, String messageIdentifier) { return null; }
+        private int historyLoadCount;
+        private int dueMessageLoadCount;
+        private APRSMessage outgoingMessage;
+        private String lastLookupDestination;
+        private String lastLookupIdentifier;
+        @Override public List<APRSMessage> loadMessages() { historyLoadCount++; return messages; }
+        @Override public List<APRSMessage> loadDueReliableMessages(long now) {
+            dueMessageLoadCount++;
+            List<APRSMessage> dueMessages = new ArrayList<>();
+            for (APRSMessage message : messages) {
+                if (message.deliveryState == APRSMessage.DELIVERY_PENDING && message.nextRetryAt != null
+                        && message.nextRetryAt <= now) dueMessages.add(message);
+            }
+            return dueMessages;
+        }
+        @Override public APRSMessage findOutgoingMessage(String destination, String messageIdentifier) {
+            lastLookupDestination = destination;
+            lastLookupIdentifier = messageIdentifier;
+            return outgoingMessage;
+        }
         @Override public void insert(APRSMessage message) { messages.add(message); }
         @Override public void update(APRSMessage message) {
             // Tests inspect the mutable in-memory message directly after an update.
