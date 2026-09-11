@@ -491,11 +491,11 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
 
         for (int recordIndex = 1; recordIndex < records.size(); recordIndex++) {
-            String record = records.get(recordIndex);
-            if (record.trim().isEmpty()) {
+            String csvRecord = records.get(recordIndex);
+            if (csvRecord.trim().isEmpty()) {
                 continue;
             }
-            String[] cols = splitCSVLine(record);
+            String[] cols = splitCSVLine(csvRecord);
             RepeaterInfo repeater = isUsFormat ? parseUsRepeater(cols) : parseInternationalRepeater(cols);
             if (repeater != null && isWithinRadioRange(repeater)) {
                 repeaters.add(repeater);

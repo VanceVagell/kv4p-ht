@@ -100,6 +100,9 @@ import java.util.concurrent.TimeUnit;
  * continues to play even if the phone's screen is off or the user starts another app.
  */
 public class RadioAudioService extends Service {
+    private static final String MEGAHERTZ = " MHz";
+    private static final String MEMORY_FREQUENCY_SUFFIX = MEGAHERTZ + ")";
+    private static final String SIMPLEX_PREFIX = "Simplex ";
 
     // === Constants ===
     private static final String TAG = RadioAudioService.class.getSimpleName();
@@ -579,12 +582,12 @@ public class RadioAudioService extends Service {
             if (memories != null) {
                 for (ChannelMemory memory : memories) {
                     if (memory.memoryId == activeMemoryId) {
-                        return memory.name + " (" + memory.frequency + " MHz)";
+                        return memory.name + " (" + memory.frequency + MEMORY_FREQUENCY_SUFFIX;
                     }
                 }
             }
             if (!activeFrequencyStr.isEmpty()) {
-                return "Memory " + activeMemoryId + " (" + activeFrequencyStr + " MHz)";
+                return "Memory " + activeMemoryId + " (" + activeFrequencyStr + MEMORY_FREQUENCY_SUFFIX;
             }
         }
         return null;
@@ -594,9 +597,9 @@ public class RadioAudioService extends Service {
         if (activeMemoryId == -1 && !activeFrequencyStr.isEmpty()) {
             try {
                 float freq = Float.parseFloat(activeFrequencyStr);
-                return "Simplex " + formatFreq(freq) + " MHz";
+                return SIMPLEX_PREFIX + formatFreq(freq) + MEGAHERTZ;
             } catch (NumberFormatException e) {
-                return "Simplex " + activeFrequencyStr + " MHz";
+                return SIMPLEX_PREFIX + activeFrequencyStr + MEGAHERTZ;
             }
         }
         return null;

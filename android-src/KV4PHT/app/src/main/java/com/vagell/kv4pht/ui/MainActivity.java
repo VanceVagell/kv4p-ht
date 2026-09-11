@@ -105,6 +105,7 @@ import static com.google.android.material.snackbar.Snackbar.LENGTH_LONG;
 import static com.vagell.kv4pht.radio.RadioAudioService.INTENT_OPEN_CHAT;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String EXTRA_MEMORY_ID = "memoryId";
 
     private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
 
@@ -128,7 +129,6 @@ public class MainActivity extends AppCompatActivity {
     private String activeFrequencyStr = "0.0000";
     private String callsign = null;
     private boolean stickyPTT = false;
-    private boolean disableAnimations = false;
     private boolean moduleTxActive = false;
     private int currentSMeterValue = 0;
 
@@ -223,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
             public void onMemoryEdit(ChannelMemory memory) {
                 Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
                 intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
-                intent.putExtra("memoryId", memory.memoryId);
+                intent.putExtra(EXTRA_MEMORY_ID, memory.memoryId);
                 intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType() == RadioAudioService.RadioModuleType.VHF));
                 startActivityForResult(intent, REQUEST_EDIT_MEMORY);
             }
@@ -1023,7 +1023,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyAccessibilitySettings(Map<String, String> settings) {
-        disableAnimations = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_DISABLE_ANIMATIONS, "false"));
+        boolean disableAnimations = Boolean.parseBoolean(settings.getOrDefault(AppSetting.SETTING_DISABLE_ANIMATIONS, "false"));
         if (disableAnimations) {
             ImageView rxAudioView = findViewById(R.id.rxAudioCircle);
             ViewGroup.MarginLayoutParams layoutParams = (ViewGroup.MarginLayoutParams) rxAudioView.getLayoutParams();
@@ -1078,7 +1078,7 @@ public class MainActivity extends AppCompatActivity {
     @SuppressLint("ClickableViewAccessibility")
     private void attachListeners() {
         ImageButton pttButton = findViewById(R.id.pttButton);
-        pttButton.setOnTouchListener((view, event) -> handlePttTouch(view, event));
+        pttButton.setOnTouchListener(this::handlePttTouch);
 
         pttButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1175,7 +1175,8 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            return handlePttPress();
+            handlePttPress();
+            return true;
         }
         if (event.getAction() == MotionEvent.ACTION_UP) {
             handlePttRelease();
@@ -1184,10 +1185,10 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private boolean handlePttPress() {
+    private void handlePttPress() {
         if (radioAudioService != null && !radioAudioService.isTxAllowed()) {
             showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
-            return true;
+            return;
         }
         pttButtonDebounceHandler.removeCallbacksAndMessages(null);
         if (stickyPTT) {
@@ -1195,7 +1196,6 @@ public class MainActivity extends AppCompatActivity {
         } else if (radioAudioService == null || !radioAudioService.isVoiceCaptureActive()) {
             startPttFromButton();
         }
-        return true;
     }
 
     private void toggleStickyPtt() {
@@ -1500,12 +1500,12 @@ public class MainActivity extends AppCompatActivity {
 
     protected void startPttUi(boolean dataMode) {
         if (!dataMode) {
-            ((ImageButton) findViewById(R.id.pttButton)).setBackground(getDrawable(R.drawable.ptt_button_on));
+            findViewById(R.id.pttButton).setBackground(getDrawable(R.drawable.ptt_button_on));
         }
     }
 
     protected void endPttUi() {
-        ((ImageButton) findViewById(R.id.pttButton)).setBackground(getDrawable(R.drawable.ptt_button));
+        findViewById(R.id.pttButton).setBackground(getDrawable(R.drawable.ptt_button));
     }
 
     public void ensurePermissions(List<String> requestedPerms, Consumer<Boolean> callback) {
@@ -1815,10 +1815,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleEditMemoryResult(int resultCode, @Nullable Intent data) {
-        if (resultCode != Activity.RESULT_OK || data == null || !data.hasExtra("memoryId")) {
+        if (resultCode != Activity.RESULT_OK || data == null || !data.hasExtra(EXTRA_MEMORY_ID)) {
             return;
         }
-        int editedMemoryId = data.getIntExtra("memoryId", -1);
+        int editedMemoryId = data.getIntExtra(EXTRA_MEMORY_ID, -1);
         viewModel.loadDataAsync(() -> runOnUiThread(() -> tuneToEditedMemory(editedMemoryId)));
     }
 

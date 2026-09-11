@@ -98,6 +98,8 @@ public class FirmwareActivity extends AppCompatActivity {
         executor.shutdownNow();
     }
 
+    // The View parameter is required by the XML android:onClick contract.
+    @SuppressWarnings("java:S1172")
     public void firmwareCancelButtonClicked(View view) {
         if (flashingTask != null) {
             flashingTask.cancel(true); // sends an interrupt

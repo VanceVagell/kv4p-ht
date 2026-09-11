@@ -327,12 +327,21 @@ public class AddEditMemoryActivity extends AppCompatActivity {
         memory.name = form.name;
         memory.group = form.group;
         memory.frequency = form.frequency;
-        memory.offset = "Down".equals(form.offsetDirection) ? ChannelMemory.OFFSET_DOWN
-                : "Up".equals(form.offsetDirection) ? ChannelMemory.OFFSET_UP : ChannelMemory.OFFSET_NONE;
+        memory.offset = offsetForDirection(form.offsetDirection);
         memory.txTone = form.txTone;
         memory.rxTone = form.rxTone;
         memory.offsetKhz = form.offsetKhzValue;
         memory.skipDuringScan = form.skipDuringScan;
+    }
+
+    private int offsetForDirection(String direction) {
+        if ("Down".equals(direction)) {
+            return ChannelMemory.OFFSET_DOWN;
+        }
+        if ("Up".equals(direction)) {
+            return ChannelMemory.OFFSET_UP;
+        }
+        return ChannelMemory.OFFSET_NONE;
     }
 
     private void saveMemory(ChannelMemory memory) {
