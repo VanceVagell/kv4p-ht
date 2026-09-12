@@ -37,6 +37,8 @@ public class AppSetting {
     public static final String SETTING_APRS_BEACON_POSITION = "aprsBeaconPosition";
     public static final String SETTING_APRS_BEACON_FREQUENCY = "aprsBeaconFrequency";
     public static final String SETTING_APRS_ICON = "aprsIcon";
+    public static final String SETTING_APRS_HISTORY_WINDOW = "aprsHistoryWindow";
+    public static final String SETTING_APRS_DESTINATION_FILTER = "aprsDestinationFilter";
     public static final String SETTING_CALLSIGN = "callsign";
     public static final String SETTING_STICKY_PTT = "stickyPTT";
     public static final String SETTING_DIGIPEAT_PACKETS = "digipeatPackets";

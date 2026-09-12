@@ -70,18 +70,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.aprs.parser.APRSPacket;
-import com.vagell.kv4pht.aprs.parser.APRSTypes;
-import com.vagell.kv4pht.aprs.parser.InformationField;
-import com.vagell.kv4pht.aprs.parser.MessagePacket;
-import com.vagell.kv4pht.aprs.parser.ObjectField;
-import com.vagell.kv4pht.aprs.parser.PositionField;
-import com.vagell.kv4pht.aprs.parser.Utilities;
-import com.vagell.kv4pht.aprs.parser.WeatherField;
-import com.vagell.kv4pht.data.APRSMessage;
+import com.vagell.kv4pht.aprs.AprsController;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
@@ -154,6 +147,7 @@ public class MainActivity extends AppCompatActivity {
 
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
+    private boolean aprsMessagesObserved;
     private boolean radioAudioServiceBound = false;
     private final AtomicBoolean bindingInProgress = new AtomicBoolean(false);
 
@@ -245,20 +239,6 @@ public class MainActivity extends AppCompatActivity {
         aprsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         aprsAdapter = new APRSAdapter();
         aprsRecyclerView.setAdapter(aprsAdapter);
-
-        // Observe the APRS messages LiveData in MainViewModel (so the RecyclerView can populate with the APRS messages)
-        viewModel.getAPRSMessages().observe(this, new Observer<List<APRSMessage>>() {
-            @Override
-            public void onChanged(List<APRSMessage> aprsMessages) {
-                aprsAdapter.setAPRSMessageList(aprsMessages);
-                aprsAdapter.notifyDataSetChanged();
-
-                // Scroll to the bottom when a new message is added
-                if (aprsMessages != null && !aprsMessages.isEmpty()) {
-                    aprsRecyclerView.scrollToPosition(aprsMessages.size() - 1);
-                }
-            }
-        });
 
         // Set up behavior on the bottom nav
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigationView);
@@ -352,11 +332,8 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
-                public void audioTrackCreated() { }
-
-                @Override
-                public void packetReceived(APRSPacket aprsPacket) {
-                    handleChatPacket(aprsPacket);
+                public void audioTrackCreated() {
+                    // Audio playback is managed by RadioAudioService; the activity has no UI work to do.
                 }
 
                 @Override
@@ -493,17 +470,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void sentAprsBeacon(double latitude, double longitude, String frequencyStr, boolean wasSwitch) {
-                    // Show a mock-up of the beacon we sent, in our own chat log
-                    APRSMessage myBeacon = new APRSMessage();
-                    myBeacon.type = APRSMessage.POSITION_TYPE;
-                    myBeacon.fromCallsign = callsign;
-                    myBeacon.positionLat = latitude;
-                    myBeacon.positionLong = longitude;
-                    myBeacon.timestamp = java.time.Instant.now().getEpochSecond();
-                    threadPoolExecutor.execute(() -> {
-                        viewModel.getAppDb().aprsMessageDao().insertAll(myBeacon);
-                        viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
-                    });
+                    // The service-owned APRS controller records the outgoing beacon.
                 }
 
                 @Override
@@ -527,6 +494,16 @@ public class MainActivity extends AppCompatActivity {
                 }
             };
             radioAudioService.setCallbacks(callbacks);
+            if (!aprsMessagesObserved) {
+                radioAudioService.getAprsEvents().observe(MainActivity.this, aprsEvents -> {
+                    aprsAdapter.setAprsEvents(aprsEvents);
+                    aprsAdapter.notifyDataSetChanged();
+                    if (aprsEvents != null && !aprsEvents.isEmpty()) {
+                        aprsRecyclerView.scrollToPosition(aprsEvents.size() - 1);
+                    }
+                });
+                aprsMessagesObserved = true;
+            }
             applySettings(); // Some settings require radioAudioService to exist to apply.
             radioAudioService.setChannelMemories(viewModel.getChannelMemories());
             runOnUiThread(() -> radioAudioService.start());
@@ -536,6 +513,7 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceDisconnected(ComponentName arg0) {
             radioAudioService = null;
             radioAudioServiceBound = false;
+            aprsMessagesObserved = false;
             Log.d("DEBUG", "RadioAudioService disconnected from MainActivity.");
             // TODO if this is unexpected we should probably try to restart the service.
         }
@@ -610,14 +588,18 @@ public class MainActivity extends AppCompatActivity {
         unregisterReceiver(serviceShutdownReceiver);
         try {
             threadPoolExecutor.shutdownNow();
-        } catch (Exception ignored) { }
+        } catch (Exception e) {
+            Log.w("MainActivity", "Unable to shut down the background executor", e);
+        }
 
         try {
             if (radioAudioServiceBound) {
                 unbindService(connection);
                 radioAudioServiceBound = false;
             }
-        } catch (Exception e) { }
+        } catch (Exception e) {
+            Log.w("MainActivity", "Unable to unbind the radio service", e);
+        }
     }
 
     @Override
@@ -640,192 +622,6 @@ public class MainActivity extends AppCompatActivity {
         if (intent != null && intent.getAction() != null && intent.getAction().equals(INTENT_OPEN_CHAT)) {
             showScreen(ScreenType.SCREEN_CHAT);
         }
-    }
-
-    private void handleChatPacket(APRSPacket rawAprsPacket) {
-        // We use duck-typing for APRS messages since the spec is pretty loose with all the ways
-        // you can define different fields and values. Once we know the type, we set aprsMessage.type.
-
-        final APRSPacket aprsPacketFinal;
-        APRSMessage aprsMessage = new APRSMessage();
-        InformationField infoField = rawAprsPacket.getPayload();
-
-        // Handle third-party relayed packets
-        String relayCallsign = null;
-        com.vagell.kv4pht.aprs.parser.ThirdPartyField thirdPartyField = (com.vagell.kv4pht.aprs.parser.ThirdPartyField) infoField.getAprsData(APRSTypes.T_THIRDPARTY);
-        if (thirdPartyField != null) {
-            relayCallsign = rawAprsPacket.getSourceCall();
-            com.vagell.kv4pht.aprs.parser.APRSPacket innerPacket = thirdPartyField.getInnerPacket();
-            if (innerPacket == null || innerPacket.hasFault()) {
-                aprsMessage.type = APRSMessage.UNKNOWN_TYPE;
-                aprsMessage.fromCallsign = rawAprsPacket.getSourceCall();
-                aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
-                aprsMessage.relayCallsign = relayCallsign;
-                try {
-                    aprsMessage.comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
-                } catch (Exception e) { }
-                threadPoolExecutor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
-                        viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
-                    }
-                });
-                return;
-            }
-            aprsPacketFinal = innerPacket;
-            infoField = innerPacket.getPayload();
-        } else {
-            aprsPacketFinal = rawAprsPacket;
-        }
-
-        WeatherField weatherField = (WeatherField) infoField.getAprsData(APRSTypes.T_WX);
-        PositionField positionField = (PositionField) infoField.getAprsData(APRSTypes.T_POSITION);
-        ObjectField objectField = (ObjectField) infoField.getAprsData(APRSTypes.T_OBJECT);
-        aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
-
-        // Get the fromCallsign (all APRS messages must have this)
-        aprsMessage.fromCallsign = aprsPacketFinal.getSourceCall();
-
-        // Get the position, if included.
-        if (null != positionField) {
-            aprsMessage.type = APRSMessage.POSITION_TYPE; // Anything with a position is POSITION_TYPE unless we determine more specific type later.
-            aprsMessage.positionLat = positionField.getPosition().getLatitude();
-            aprsMessage.positionLong = positionField.getPosition().getLongitude();
-        }
-
-        // Try to find a comment (could be at multiple levels in the packet).
-        String comment = aprsPacketFinal.getComment();
-        if (null != infoField && (null == comment || comment.trim().length() == 0)) {
-            comment = infoField.getComment();
-        }
-        if (null != positionField && (null == comment || comment.trim().length() == 0)) {
-            comment = positionField.getComment();
-        }
-        if (null != objectField && (null == comment || comment.trim().length() == 0)) {
-            comment = objectField.getComment();
-        }
-        if (null != weatherField && (null == comment || comment.trim().length() == 0)) {
-            comment = weatherField.getComment();
-        }
-        if (null != comment && comment.trim().length() > 0) {
-            aprsMessage.comment = comment;
-        }
-
-        if (null != weatherField) { // APRS "weather" (i.e. any message with weather data attached)
-            aprsMessage.type = APRSMessage.WEATHER_TYPE;
-            aprsMessage.temperature = (null == weatherField.getTemp()) ? 0 : weatherField.getTemp();
-            aprsMessage.humidity = (null == weatherField.getHumidity()) ? 0 : weatherField.getHumidity();
-            aprsMessage.pressure = (null == weatherField.getPressure()) ? 0 : weatherField.getPressure();
-            aprsMessage.rain = (null == weatherField.getRainLast24Hours()) ? 0 : weatherField.getRainLast24Hours(); // TODO don't ignore other rain measurements
-            aprsMessage.snow = (null == weatherField.getSnowfallLast24Hours()) ? 0 : weatherField.getSnowfallLast24Hours();
-            aprsMessage.windForce = (null == weatherField.getWindSpeed()) ? 0 : weatherField.getWindSpeed();
-            aprsMessage.windDir = (null == weatherField.getWindDirection()) ? "" : Utilities.degressToCardinal(weatherField.getWindDirection());
-
-            // Log.d("DEBUG", "Weather packet received");
-        } else if (infoField.getDataTypeIdentifier() == ':') { // APRS "message" type. What we expect for our text chat.
-            aprsMessage.type = APRSMessage.MESSAGE_TYPE;
-            MessagePacket messagePacket = new MessagePacket(infoField.getRawBytes(), aprsPacketFinal.getDestinationCall());
-            aprsMessage.toCallsign = messagePacket.getTargetCallsign();
-
-            String msgNumStr = messagePacket.getMessageNumber();
-            if (msgNumStr != null && !msgNumStr.trim().isEmpty()) {
-                try {
-                    aprsMessage.msgNum = Integer.parseInt(msgNumStr.trim());
-                } catch (NumberFormatException e) {
-                    aprsMessage.msgNum = -1;
-                }
-            } else {
-                aprsMessage.msgNum = -1;
-            }
-
-            if (messagePacket.isAck()) {
-                aprsMessage.wasAcknowledged = true;
-                if (aprsMessage.msgNum == -1) {
-                    Log.d("DEBUG", "Warning: Bad message number in APRS ack, ignoring: '" + messagePacket.getMessageNumber() + "'");
-                    return;
-                }
-                // Log.d("DEBUG", "Message ack received");
-            } else {
-                aprsMessage.msgBody = messagePacket.getMessageBody();
-                // Log.d("DEBUG", "Message packet received");
-
-                // Handle messages addressed to the current callsign
-                if (callsign != null && aprsMessage.toCallsign != null && aprsMessage.toCallsign.trim().equalsIgnoreCase(callsign.trim())) {
-                    doShowNotification(
-                            RadioAudioService.MESSAGE_NOTIFICATION_CHANNEL_ID,
-                            RadioAudioService.MESSAGE_NOTIFICATION_TO_YOU_ID,
-                            aprsPacketFinal.getSourceCall() + " messaged you",
-                            aprsMessage.msgBody,
-                            RadioAudioService.INTENT_OPEN_CHAT);
-
-                    if (aprsMessage.msgNum != -1) { // APRS spec says only ack if msg num provided
-                        // Send acknowledgment after a delay
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            if (radioAudioService != null) {
-                                radioAudioService.sendAckMessage(aprsPacketFinal.getSourceCall().toUpperCase(), String.valueOf(aprsMessage.msgNum));
-                            }
-                        }, 1000);
-                    }
-                }
-
-            }
-        } else if (infoField.getDataTypeIdentifier() == ';') { // APRS "object"
-            aprsMessage.type = APRSMessage.OBJECT_TYPE;
-            if (null != objectField) {
-                aprsMessage.objName = objectField.getObjectName();
-                // Log.d("DEBUG", "Object packet received");
-            }
-        }
-
-        // If there is a fault in the packet, or the message type is unknown, we at least display the raw contents as a comment.
-        if (aprsPacketFinal.hasFault() || aprsMessage.type == APRSMessage.UNKNOWN_TYPE && (null == comment || comment.trim().length() == 0)) {
-            if (null != infoField) {
-                try {
-                    comment = "Raw: " + new String(infoField.getRawBytes(), "UTF-8");
-                    aprsMessage.comment = comment;
-                } catch (Exception e) { }
-            }
-        }
-
-        aprsMessage.relayCallsign = relayCallsign;
-
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                APRSMessage oldAPRSMessage = null;
-                if (aprsMessage.wasAcknowledged) {
-                    // When this is an ack, we don't insert anything in the DB, we try to find that old message to ack it.
-                    oldAPRSMessage = viewModel.getAppDb().aprsMessageDao().getMsgToAck(aprsMessage.toCallsign, aprsMessage.msgNum);
-                    if (null == oldAPRSMessage) {
-                        Log.d("DEBUG", "Can't ack unknown APRS message from: " + aprsMessage.toCallsign + " with msg number: " + aprsMessage.msgNum);
-                        return;
-                    } else {
-                        // Ack an old message
-                        oldAPRSMessage.wasAcknowledged = true;
-                        viewModel.getAppDb().aprsMessageDao().update(oldAPRSMessage);
-                    }
-                } else {
-                    // Not an ack, add a message
-
-                    // Deduplicate incoming APRS messages with sequence numbers against recent history
-                    if (aprsMessage.type == APRSMessage.MESSAGE_TYPE && aprsMessage.msgNum != -1) {
-                        if (viewModel.getAppDb().aprsMessageDao().isRecentDuplicate(
-                                aprsMessage.fromCallsign,
-                                aprsMessage.msgBody,
-                                aprsMessage.msgNum)) {
-                            Log.d("DEBUG", "Discarding duplicate APRS message from " +
-                                    aprsMessage.fromCallsign + " with msgNum " + aprsMessage.msgNum);
-                            return;
-                        }
-                    }
-
-                    viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
-                }
-
-                viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
-            }
-        });
     }
 
     private enum ScreenType {
@@ -887,7 +683,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showCallsignSnackbar(CharSequence snackbarMsg) {
-        callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+        callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
                 .setAction(R.string.set_now, new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
@@ -936,29 +732,12 @@ public class MainActivity extends AppCompatActivity {
             return; // Nothing to send.
         }
 
-        int msgNum = -1;
         if (radioAudioService != null) {
-            msgNum = radioAudioService.sendChatMessage(targetCallsign, outText);
+            radioAudioService.sendChatMessage(targetCallsign, outText);
         }
 
         ((EditText) findViewById(R.id.textChatInput)).setText("");
         hideKeyboard();
-
-        final APRSMessage aprsMessage = new APRSMessage();
-        aprsMessage.type = APRSMessage.MESSAGE_TYPE;
-        aprsMessage.fromCallsign = callsign.toUpperCase().trim();
-        aprsMessage.toCallsign = targetCallsign.toUpperCase().trim();
-        aprsMessage.msgBody = outText.trim();
-        aprsMessage.timestamp = java.time.Instant.now().getEpochSecond();
-        aprsMessage.msgNum = msgNum;
-
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                viewModel.getAppDb().aprsMessageDao().insertAll(aprsMessage);
-                viewModel.loadDataAsync(() -> runOnUiThread(() -> aprsAdapter.notifyDataSetChanged()));
-            }
-        });
 
     }
 
@@ -1036,42 +815,66 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyAprsSettings(Map<String, String> settings) {
-        String accuracy = settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY);
-        String beacon = settings.get(AppSetting.SETTING_APRS_BEACON_POSITION);
-        String beaconFreq = settings.get(AppSetting.SETTING_APRS_BEACON_FREQUENCY);
-        String aprsIcon = settings.get(AppSetting.SETTING_APRS_ICON);
-
-        if (accuracy != null && radioAudioService != null) {
-            threadPoolExecutor.execute(() -> radioAudioService.setAprsPositionAccuracy(
-                accuracy.equals(getString(R.string.exact)) ?
-                    RadioAudioService.APRS_POSITION_EXACT :
-                    RadioAudioService.APRS_POSITION_APPROX));
+        RadioAudioService service = radioAudioService;
+        if (service == null) {
+            return;
         }
 
-        if (beaconFreq != null && radioAudioService != null) {
-            threadPoolExecutor.execute(() -> radioAudioService.setAprsBeaconFrequency(beaconFreq));
+        applyAprsPositionAccuracy(service, settings.get(AppSetting.SETTING_APRS_POSITION_ACCURACY));
+        applyAprsBeaconFrequency(service, settings.get(AppSetting.SETTING_APRS_BEACON_FREQUENCY));
+        applyAprsBeaconPosition(service, settings.get(AppSetting.SETTING_APRS_BEACON_POSITION));
+        applyAprsIcon(service, settings.get(AppSetting.SETTING_APRS_ICON));
+        applyDigipeatSetting(service, settings.get(AppSetting.SETTING_DIGIPEAT_PACKETS));
+        service.setAprsHistoryWindow(settings.getOrDefault(
+            AppSetting.SETTING_APRS_HISTORY_WINDOW, AprsController.HISTORY_ALL));
+        service.setAprsDestinationFilter(settings.getOrDefault(
+            AppSetting.SETTING_APRS_DESTINATION_FILTER, AprsController.DESTINATION_ALL));
+    }
+
+    private void applyAprsPositionAccuracy(RadioAudioService service, String accuracy) {
+        if (accuracy == null) {
+            return;
+        }
+        int positionAccuracy = accuracy.equals(getString(R.string.exact))
+            ? RadioAudioService.APRS_POSITION_EXACT
+            : RadioAudioService.APRS_POSITION_APPROX;
+        threadPoolExecutor.execute(() -> service.setAprsPositionAccuracy(positionAccuracy));
+    }
+
+    private void applyAprsBeaconFrequency(RadioAudioService service, String beaconFrequency) {
+        if (beaconFrequency != null) {
+            threadPoolExecutor.execute(() -> service.setAprsBeaconFrequency(beaconFrequency));
+        }
+    }
+
+    private void applyAprsBeaconPosition(RadioAudioService service, String beacon) {
+        if (beacon == null) {
+            return;
         }
 
-        if (radioAudioService != null && beacon != null) {
-            boolean enabled = Boolean.parseBoolean(beacon);
-            Runnable action = () -> radioAudioService.setAprsBeaconPosition(enabled);
-            if (enabled) {
-                ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), allGranted -> {
-                    if (Boolean.TRUE.equals(allGranted)) {
-                        threadPoolExecutor.execute(action);
-                    }});
-            } else {
+        boolean enabled = Boolean.parseBoolean(beacon);
+        Runnable action = () -> service.setAprsBeaconPosition(enabled);
+        if (!enabled) {
+            threadPoolExecutor.execute(action);
+            return;
+        }
+
+        ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), allGranted -> {
+            if (Boolean.TRUE.equals(allGranted)) {
                 threadPoolExecutor.execute(action);
             }
-        }
+        });
+    }
 
-        if (radioAudioService != null && aprsIcon != null) {
-            radioAudioService.setAprsPositionIcon(SettingsActivity.getAPRSIconFromSettingChoice(getResources(), aprsIcon));
+    private void applyAprsIcon(RadioAudioService service, String aprsIcon) {
+        if (aprsIcon != null) {
+            service.setAprsPositionIcon(SettingsActivity.getAPRSIconFromSettingChoice(getResources(), aprsIcon));
         }
+    }
 
-        String digipeat = settings.get(AppSetting.SETTING_DIGIPEAT_PACKETS);
-        if (digipeat != null && radioAudioService != null) {
-            radioAudioService.setDigipeatPackets(Boolean.parseBoolean(digipeat));
+    private void applyDigipeatSetting(RadioAudioService service, String digipeat) {
+        if (digipeat != null) {
+            service.setDigipeatPackets(Boolean.parseBoolean(digipeat));
         }
     }
 
@@ -1584,7 +1387,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showUSBSnackbar() {
         CharSequence snackbarMsg = getString(R.string.radio_not_found);
-        usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+        usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
             .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
             .setAnchorView(findViewById(R.id.bottomNavigationView));
 
@@ -1599,7 +1402,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showHandshakeSnackbar() {
         CharSequence snackbarMsg = getString(R.string.handshake_message);
-        usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+        usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
             .setBackgroundTint(getResources().getColor(R.color.primary))
             .setTextColor(getResources().getColor(R.color.medium_gray))
             .setAnchorView(findViewById(R.id.bottomNavigationView));
@@ -1613,7 +1416,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showRadioModuleNotFoundSnackbar() {
         CharSequence snackbarMsg = getString(R.string.module_not_found_message);
-        radioModuleNotFoundSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+        radioModuleNotFoundSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
                 .setAnchorView(findViewById(R.id.bottomNavigationView));
 
@@ -1632,7 +1435,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private void showVersionSnackbar(int firmwareVer) {
         CharSequence snackbarMsg = firmwareVer == -1 ? getString(R.string.no_firmware_installed) : getString(R.string.new_firmware_available);
-        versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, Snackbar.LENGTH_INDEFINITE)
+        versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
                 .setAnchorView(findViewById(R.id.bottomNavigationView));
         if (canFlashFirmware()) {

@@ -37,6 +37,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.KV4PHT"
+        android:usesCleartextTraffic="false"
         tools:targetApi="31">
 
         <activity

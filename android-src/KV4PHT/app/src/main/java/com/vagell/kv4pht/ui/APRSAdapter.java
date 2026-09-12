@@ -30,7 +30,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.data.APRSMessage;
+import com.vagell.kv4pht.data.AprsEvent;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -38,10 +38,10 @@ import java.util.List;
 import java.util.Locale;
 
 public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder> {
-    public List<APRSMessage> aprsMessageList;
+    public List<AprsEvent> aprsEvents;
 
     public APRSAdapter() {
-        this.aprsMessageList = new ArrayList<>();
+        this.aprsEvents = new ArrayList<>();
     }
 
     @NonNull
@@ -50,19 +50,19 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         View itemView = null;
 
         switch (viewType) {
-            case APRSMessage.MESSAGE_TYPE:
+            case AprsEvent.MESSAGE_TYPE:
                 itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.aprs_message, parent, false);
                 break;
-            case APRSMessage.OBJECT_TYPE:
+            case AprsEvent.OBJECT_TYPE:
                 itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.aprs_object, parent, false);
                 break;
-            case APRSMessage.POSITION_TYPE:
+            case AprsEvent.POSITION_TYPE:
                 itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.aprs_position, parent, false);
                 break;
-            case APRSMessage.WEATHER_TYPE:
+            case AprsEvent.WEATHER_TYPE:
                 itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.aprs_weather, parent, false);
                 break;
-            case APRSMessage.UNKNOWN_TYPE:
+            case AprsEvent.UNKNOWN_TYPE:
             default:
                 itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.aprs_unknown, parent, false);
         }
@@ -70,55 +70,58 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         return new APRSViewHolder(itemView);
     }
 
-    public void setAPRSMessageList(List<APRSMessage> aprsMessageList) {
-        this.aprsMessageList = aprsMessageList;
+    public void setAprsEvents(List<AprsEvent> aprsEvents) {
+        this.aprsEvents = aprsEvents;
     }
 
     @Override
     public int getItemViewType(int position) {
-        return aprsMessageList.get(position).type;
+        return aprsEvents.get(position).type;
     }
 
     @Override
     public void onBindViewHolder(@NonNull APRSViewHolder holder, int position) {
-        final APRSMessage aprsMessage = aprsMessageList.get(position);
+        final AprsEvent aprsEvent = aprsEvents.get(position);
 
         // Some default values any message type can have
-        holder.setFromCallsign(aprsMessage.fromCallsign);
-        holder.setTimestamp(aprsMessage.timestamp);
-        holder.setComment(aprsMessage.comment);
-        holder.setPositionLat(aprsMessage.positionLat);
-        holder.setPositionLong(aprsMessage.positionLong);
+        holder.setFromCallsign(aprsEvent.fromCallsign);
+        holder.setTimestamp(aprsEvent.lastSeenMs);
+        holder.setComment(aprsEvent.comment);
+        holder.setPositionLat(aprsEvent.positionLat);
+        holder.setPositionLong(aprsEvent.positionLong);
 
         // Specialized values
-        switch (aprsMessage.type) {
-            case APRSMessage.WEATHER_TYPE:
-                holder.setTemperature(aprsMessage.temperature);
-                holder.setHumidity(aprsMessage.humidity);
-                holder.setPressure(aprsMessage.pressure);
-                holder.setRain(aprsMessage.rain);
-                holder.setSnow(aprsMessage.snow);
-                holder.setWindForce(aprsMessage.windForce);
-                holder.setWindDir(aprsMessage.windDir);
+        switch (aprsEvent.type) {
+            case AprsEvent.WEATHER_TYPE:
+                holder.setTemperature(aprsEvent.temperature);
+                holder.setHumidity(aprsEvent.humidity);
+                holder.setPressure(aprsEvent.pressure);
+                holder.setRain(aprsEvent.rain);
+                holder.setSnow(aprsEvent.snow);
+                holder.setWindForce(aprsEvent.windForce);
+                holder.setWindDir(aprsEvent.windDirection);
                 break;
-            case APRSMessage.MESSAGE_TYPE:
-                holder.setToCallsign(aprsMessage.toCallsign);
-                holder.setMsgBody(aprsMessage.msgBody);
-                holder.setWasAcknowledged(aprsMessage.wasAcknowledged);
+            case AprsEvent.MESSAGE_TYPE:
+                holder.setToCallsign(aprsEvent.toCallsign);
+                holder.setMsgBody(aprsEvent.body);
+                holder.setWasAcknowledged(aprsEvent.deliveryState == AprsEvent.DELIVERY_DELIVERED);
                 break;
-            case APRSMessage.OBJECT_TYPE:
-                holder.setObjName(aprsMessage.objName);
+            case AprsEvent.OBJECT_TYPE:
+                holder.setObjName(aprsEvent.objectName);
                 break;
-            case APRSMessage.POSITION_TYPE: // Can only have default values
-            case APRSMessage.UNKNOWN_TYPE: // Ditto
+            case AprsEvent.POSITION_TYPE: // Can only have default values
+            case AprsEvent.UNKNOWN_TYPE: // Ditto
+                break;
+            default:
                 break;
         }
-        holder.setRelayCallsign(aprsMessage.relayCallsign);
+        holder.setRelayCallsign(aprsEvent.relayCallsign);
 
         // Handle taps on the message's position icon
         final View positionButton = holder.itemView.findViewById(R.id.senderPositionButton);
         positionButton.setOnClickListener(v -> {
-            String geoUri = "geo:" + aprsMessage.positionLat + "," + aprsMessage.positionLong + "?q=" + aprsMessage.positionLat + "," + aprsMessage.positionLong;
+            String geoUri = "geo:" + aprsEvent.positionLat + "," + aprsEvent.positionLong
+                + "?q=" + aprsEvent.positionLat + "," + aprsEvent.positionLong;
             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(geoUri));
             v.getContext().startActivity(intent);
         });
@@ -126,7 +129,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
 
     @Override
     public int getItemCount() {
-        return aprsMessageList.size();
+        return aprsEvents.size();
     }
 
     static class APRSViewHolder extends RecyclerView.ViewHolder {
@@ -184,7 +187,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
                 return;
             }
             SimpleDateFormat sdf = new SimpleDateFormat("h:mm a MMM d", Locale.ENGLISH);
-            textViewTimestamp.setText(sdf.format(new Date(timestamp * 1000)));
+            textViewTimestamp.setText(sdf.format(new Date(timestamp)));
         }
 
         public void setComment(String comment) {

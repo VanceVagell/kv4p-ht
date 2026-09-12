@@ -1,0 +1,398 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 8,
+    "identityHash": "9c779e9e45c4ed0b7881213bcc4ce30a",
+    "entities": [
+      {
+        "tableName": "app_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `value` TEXT, PRIMARY KEY(`name`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "name"
+          ]
+        }
+      },
+      {
+        "tableName": "channel_memories",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`memoryId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT, `frequency` TEXT, `offset` INTEGER NOT NULL, `tx_tone` TEXT, `group` TEXT, `rx_tone` TEXT DEFAULT 'None', `offset_khz` INTEGER NOT NULL DEFAULT 600, `skip_during_scan` INTEGER NOT NULL DEFAULT 0)",
+        "fields": [
+          {
+            "fieldPath": "memoryId",
+            "columnName": "memoryId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "frequency",
+            "columnName": "frequency",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "offset",
+            "columnName": "offset",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "txTone",
+            "columnName": "tx_tone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "group",
+            "columnName": "group",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rxTone",
+            "columnName": "rx_tone",
+            "affinity": "TEXT",
+            "defaultValue": "'None'"
+          },
+          {
+            "fieldPath": "offsetKhz",
+            "columnName": "offset_khz",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "600"
+          },
+          {
+            "fieldPath": "skipDuringScan",
+            "columnName": "skip_during_scan",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "memoryId"
+          ]
+        }
+      },
+      {
+        "tableName": "aprs_packets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `event_id` INTEGER, `timestamp_ms` INTEGER NOT NULL, `source` TEXT DEFAULT 'UNKNOWN', `frequency_hz` INTEGER, `from_callsign` TEXT, `ax25_destination` TEXT, `path` TEXT, `raw_ax25` BLOB)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventId",
+            "columnName": "event_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "timestampMs",
+            "columnName": "timestamp_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "defaultValue": "'UNKNOWN'"
+          },
+          {
+            "fieldPath": "frequencyHz",
+            "columnName": "frequency_hz",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fromCallsign",
+            "columnName": "from_callsign",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ax25Destination",
+            "columnName": "ax25_destination",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rawAx25",
+            "columnName": "raw_ax25",
+            "affinity": "BLOB"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_aprs_packets_event_id",
+            "unique": false,
+            "columnNames": [
+              "event_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_packets_event_id` ON `${TABLE_NAME}` (`event_id`)"
+          },
+          {
+            "name": "index_aprs_packets_timestamp_ms",
+            "unique": false,
+            "columnNames": [
+              "timestamp_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_packets_timestamp_ms` ON `${TABLE_NAME}` (`timestamp_ms`)"
+          },
+          {
+            "name": "index_aprs_packets_from_callsign",
+            "unique": false,
+            "columnNames": [
+              "from_callsign"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_packets_from_callsign` ON `${TABLE_NAME}` (`from_callsign`)"
+          }
+        ]
+      },
+      {
+        "tableName": "aprs_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` INTEGER NOT NULL DEFAULT 0, `first_seen_ms` INTEGER NOT NULL, `last_seen_ms` INTEGER NOT NULL, `packet_count` INTEGER NOT NULL DEFAULT 0, `dedup_key` TEXT, `from_callsign` TEXT, `to_callsign` TEXT, `message_identifier` TEXT, `body` TEXT, `position_lat` REAL NOT NULL, `position_long` REAL NOT NULL, `comment` TEXT, `object_name` TEXT, `temperature` REAL NOT NULL, `humidity` REAL NOT NULL, `pressure` REAL NOT NULL, `rain` REAL NOT NULL, `snow` REAL NOT NULL, `wind_force` INTEGER NOT NULL, `wind_direction` TEXT, `relay_callsign` TEXT, `delivery_state` INTEGER NOT NULL DEFAULT 0, `transmit_attempts` INTEGER NOT NULL DEFAULT 0, `next_retry_at_ms` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "firstSeenMs",
+            "columnName": "first_seen_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSeenMs",
+            "columnName": "last_seen_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "packetCount",
+            "columnName": "packet_count",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "dedupKey",
+            "columnName": "dedup_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fromCallsign",
+            "columnName": "from_callsign",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "toCallsign",
+            "columnName": "to_callsign",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "messageIdentifier",
+            "columnName": "message_identifier",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "positionLat",
+            "columnName": "position_lat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "positionLong",
+            "columnName": "position_long",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "comment",
+            "columnName": "comment",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "objectName",
+            "columnName": "object_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "temperature",
+            "columnName": "temperature",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "humidity",
+            "columnName": "humidity",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pressure",
+            "columnName": "pressure",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rain",
+            "columnName": "rain",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snow",
+            "columnName": "snow",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "windForce",
+            "columnName": "wind_force",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "windDirection",
+            "columnName": "wind_direction",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "relayCallsign",
+            "columnName": "relay_callsign",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deliveryState",
+            "columnName": "delivery_state",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "transmitAttempts",
+            "columnName": "transmit_attempts",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "nextRetryAtMs",
+            "columnName": "next_retry_at_ms",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_aprs_events_last_seen_ms",
+            "unique": false,
+            "columnNames": [
+              "last_seen_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_events_last_seen_ms` ON `${TABLE_NAME}` (`last_seen_ms`)"
+          },
+          {
+            "name": "index_aprs_events_type_to_callsign_last_seen_ms",
+            "unique": false,
+            "columnNames": [
+              "type",
+              "to_callsign",
+              "last_seen_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_events_type_to_callsign_last_seen_ms` ON `${TABLE_NAME}` (`type`, `to_callsign`, `last_seen_ms`)"
+          },
+          {
+            "name": "index_aprs_events_dedup_key_last_seen_ms",
+            "unique": false,
+            "columnNames": [
+              "dedup_key",
+              "last_seen_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_events_dedup_key_last_seen_ms` ON `${TABLE_NAME}` (`dedup_key`, `last_seen_ms`)"
+          },
+          {
+            "name": "index_aprs_events_delivery_state_next_retry_at_ms",
+            "unique": false,
+            "columnNames": [
+              "delivery_state",
+              "next_retry_at_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_events_delivery_state_next_retry_at_ms` ON `${TABLE_NAME}` (`delivery_state`, `next_retry_at_ms`)"
+          },
+          {
+            "name": "index_aprs_events_from_callsign_to_callsign_message_identifier",
+            "unique": false,
+            "columnNames": [
+              "from_callsign",
+              "to_callsign",
+              "message_identifier"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_aprs_events_from_callsign_to_callsign_message_identifier` ON `${TABLE_NAME}` (`from_callsign`, `to_callsign`, `message_identifier`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9c779e9e45c4ed0b7881213bcc4ce30a')"
+    ]
+  }
+}
