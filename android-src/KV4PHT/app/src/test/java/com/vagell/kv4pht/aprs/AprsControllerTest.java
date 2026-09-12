@@ -1,7 +1,7 @@
 package com.vagell.kv4pht.aprs;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -12,564 +12,577 @@ import com.vagell.kv4pht.aprs.parser.APRSPacket;
 import com.vagell.kv4pht.aprs.parser.Digipeater;
 import com.vagell.kv4pht.aprs.parser.MessagePacket;
 import com.vagell.kv4pht.aprs.parser.Parser;
-import com.vagell.kv4pht.data.APRSMessage;
-import org.junit.Test;
-import org.junit.Rule;
-
+import com.vagell.kv4pht.data.AprsEvent;
+import com.vagell.kv4pht.data.AprsPacket;
+import com.vagell.kv4pht.data.AprsSource;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import org.junit.Rule;
+import org.junit.Test;
 
 public class AprsControllerTest {
-    @Rule
-    public InstantTaskExecutorRule instantTaskExecutorRule = new InstantTaskExecutorRule();
+    @Rule public InstantTaskExecutorRule instantTaskExecutorRule = new InstantTaskExecutorRule();
 
-    @Test
-    public void recordsOutgoingMessagesThroughItsDao() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
+    @Test public void incomingMessageCreatesOneEventAndLinkedPacket() {
+        Fixture f = fixture();
+        APRSPacket frame = directMessage("VK3ABC", "VK3ME", "hello", "A7");
+        byte[] raw = frame.toAX25Frame();
 
-        APRSPacket packet = outgoingMessage("vk3abc", "vk3def", " hello ", "7");
-        byte[] rawAx25 = packet.toAX25Frame();
-        controller.recordOutgoingMessage("vk3abc", "vk3def", " hello ", 7, "144.3900",
-            packet, rawAx25);
+        f.controller.handle(frame, AprsSource.RX_RF, 145_175_000L, raw);
 
-        assertEquals(1, dao.messages.size());
-        APRSMessage message = dao.messages.get(0);
-        assertEquals("VK3ABC", message.fromCallsign);
-        assertEquals("VK3DEF", message.toCallsign);
-        assertEquals("hello", message.msgBody);
-        assertEquals(7, message.msgNum);
-        assertEquals(APRSMessage.SOURCE_TX_RF, message.source);
-        assertEquals("144.3900", message.frequency);
-        assertEquals("APKVPA", message.ax25Destination);
-        assertEquals("WIDE1-1", message.path);
-        assertArrayEquals(rawAx25, message.rawAx25);
+        assertEquals(1, f.events.records.size());
+        assertEquals(1, f.packets.records.size());
+        AprsEvent event = f.events.records.get(0);
+        AprsPacket packet = f.packets.records.get(0);
+        assertEquals(AprsEvent.MESSAGE_TYPE, event.type);
+        assertEquals("A7", event.messageIdentifier);
+        assertEquals("hello", event.body);
+        assertEquals(1, event.packetCount);
+        assertEquals(Long.valueOf(event.id), packet.eventId);
+        assertEquals(AprsSource.RX_RF, packet.source);
+        assertEquals(Long.valueOf(145_175_000L), packet.frequencyHz);
+        assertEquals("APRS", packet.ax25Destination);
+        assertNull(packet.path);
+        assertArrayEquals(raw, packet.rawAx25);
     }
 
-    @Test
-    public void recordsReceivedMessagesWithExplicitRfSourceAndFrequency() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
+    @Test public void duplicateMessageCreatesPacketsButOnlyOneEventAndNotification() {
+        Fixture f = fixture();
+        APRSPacket frame = directMessage("VK3ABC", "VK3ME", "hello", "A7");
 
-        APRSPacket packet = directMessage("VK3ABC", "VK3ME", "hello", "7");
-        byte[] rawAx25 = packet.toAX25Frame();
-        controller.handle(packet, APRSMessage.SOURCE_RX_RF, "145.1750", rawAx25);
+        f.controller.handle(frame, AprsSource.RX_RF, 144_390_000L, frame.toAX25Frame());
+        f.controller.handle(frame, AprsSource.RX_RF, 144_390_000L, frame.toAX25Frame());
 
-        APRSMessage message = dao.messages.get(0);
-        assertEquals(APRSMessage.SOURCE_RX_RF, message.source);
-        assertEquals("145.1750", message.frequency);
-        assertEquals("VK3ME", message.toCallsign);
-        assertEquals("APRS", message.ax25Destination);
-        assertNull(message.path);
-        assertArrayEquals(rawAx25, message.rawAx25);
+        assertEquals(2, f.packets.records.size());
+        assertEquals(1, f.events.records.size());
+        assertEquals(2, f.events.records.get(0).packetCount);
+        assertEquals(1, f.callbacks.notificationCount);
+        assertEquals(2, f.callbacks.acknowledgementCount);
     }
 
-    @Test
-    public void recordsRepeatedDigipeaterMarkerInIncomingEnvelope() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
-        Digipeater repeatedHop = new Digipeater("VK3DIG");
-        repeatedHop.setUsed(true);
-        APRSPacket packet = new APRSPacket("VK3ABC", "APRS",
-            java.util.Collections.singletonList(repeatedHop),
+    @Test public void copiesOfPositionViaDifferentPathsCollapseIntoOneEvent() throws Exception {
+        Fixture f = fixture();
+        APRSPacket direct = Parser.parse("VK3ABC>APRS,WIDE1-1:!3751.65S/14458.20E-Test");
+        APRSPacket relayed = Parser.parse("VK3ABC>APRS,VK3DIG*:!3751.65S/14458.20E-Test");
+
+        f.controller.handle(direct, AprsSource.RX_RF, 144_390_000L, direct.toAX25Frame());
+        f.controller.handle(relayed, AprsSource.RX_RF, 144_390_000L, relayed.toAX25Frame());
+
+        assertEquals(2, f.packets.records.size());
+        assertEquals(1, f.events.records.size());
+        assertEquals(AprsEvent.POSITION_TYPE, f.events.records.get(0).type);
+        assertEquals(2, f.events.records.get(0).packetCount);
+    }
+
+    @Test public void weatherAndObjectEachCreateEvents() throws Exception {
+        Fixture f = fixture();
+        APRSPacket weather = Parser.parse("VK3WX>APRS:_10000000c090s010g015t070h50b10130");
+        APRSPacket object = Parser.parse("VK3ABC>APRS:;TESTOBJ  *111111z3751.65S/14458.20E-Test");
+
+        f.controller.handle(weather, AprsSource.RX_RF, 144_390_000L, weather.toAX25Frame());
+        f.controller.handle(object, AprsSource.RX_RF, 144_390_000L, object.toAX25Frame());
+
+        assertEquals(2, f.events.records.size());
+        assertEquals(AprsEvent.WEATHER_TYPE, f.events.records.get(0).type);
+        assertEquals(AprsEvent.OBJECT_TYPE, f.events.records.get(1).type);
+    }
+
+    @Test public void unsupportedPacketIsStoredWithoutEvent() {
+        Fixture f = fixture();
+        APRSPacket frame = packetWithPath("WIDE2-1");
+
+        f.controller.handle(frame, AprsSource.RX_RF, 144_390_000L, frame.toAX25Frame());
+
+        assertEquals(1, f.packets.records.size());
+        assertNull(f.packets.records.get(0).eventId);
+        assertTrue(f.events.records.isEmpty());
+    }
+
+    @Test public void thirdPartyPreservesOuterPacketAndInnerEvent() throws Exception {
+        Fixture f = fixture();
+        APRSPacket outer = Parser.parse(
+            "RELAY1>APKVPA,WIDE1-1:}VK3ABC>APRS::VK3ME    :hello{7");
+        byte[] raw = outer.toAX25Frame();
+
+        f.controller.handle(outer, AprsSource.RX_RF, 145_175_000L, raw);
+
+        AprsPacket packet = f.packets.records.get(0);
+        AprsEvent event = f.events.records.get(0);
+        assertEquals("RELAY1", packet.fromCallsign);
+        assertEquals("APKVPA", packet.ax25Destination);
+        assertEquals("WIDE1-1", packet.path);
+        assertArrayEquals(raw, packet.rawAx25);
+        assertEquals("VK3ABC", event.fromCallsign);
+        assertEquals("RELAY1", event.relayCallsign);
+        assertEquals("VK3ME", event.toCallsign);
+        assertEquals("hello", event.body);
+    }
+
+    @Test public void physicalPacketPathPreservesUsedMarker() {
+        Fixture f = fixture();
+        Digipeater used = new Digipeater("VK3DIG");
+        used.setUsed(true);
+        APRSPacket frame = new APRSPacket("VK3ABC", "APRS", Collections.singletonList(used),
             MessagePacket.createMessagePayload("VK3ME", "hello", "7"));
 
-        controller.handle(packet, APRSMessage.SOURCE_RX_RF, "145.1750", packet.toAX25Frame());
+        f.controller.handle(frame, AprsSource.RX_RF, 145_175_000L, frame.toAX25Frame());
 
-        assertEquals("VK3DIG*", dao.messages.get(0).path);
+        assertEquals("VK3DIG*", f.packets.records.get(0).path);
     }
 
-    @Test
-    public void recordsOutgoingPositionEnvelope() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
-        APRSPacket packet = new APRSPacket("VK3ME", APRSPacket.KV4P_HT_VENDOR_TOCALL,
-            java.util.Collections.singletonList(new Digipeater("WIDE1-1")),
-            "!3751.65S/14458.20E-Test".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-        byte[] rawAx25 = packet.toAX25Frame();
+    @Test public void outgoingChatCreatesEventAndPacket() {
+        Fixture f = fixture();
+        APRSPacket frame = outgoingMessage("VK3ME", "VK3ABC", "hello", "7");
 
-        controller.recordPositionBeacon("VK3ME", -37.8608, 144.9700, "144.3900", packet, rawAx25);
+        f.controller.recordOutgoingMessage("VK3ME", "VK3ABC", "hello", "7",
+            144_390_000L, frame, frame.toAX25Frame());
 
-        APRSMessage message = dao.messages.get(0);
-        assertEquals(APRSMessage.SOURCE_TX_RF, message.source);
-        assertEquals("APKVPA", message.ax25Destination);
-        assertEquals("WIDE1-1", message.path);
-        assertArrayEquals(rawAx25, message.rawAx25);
+        AprsEvent event = f.events.records.get(0);
+        AprsPacket packet = f.packets.records.get(0);
+        assertEquals(AprsEvent.DELIVERY_PENDING, event.deliveryState);
+        assertEquals(1, event.transmitAttempts);
+        assertEquals(1, event.packetCount);
+        assertEquals(Long.valueOf(event.id), packet.eventId);
+        assertEquals(AprsSource.TX_RF, packet.source);
     }
 
-    @Test
-    public void retainsOuterEnvelopeForThirdPartyMessage() throws Exception {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
-        APRSPacket outerPacket = Parser.parse(
-            "RELAY1>APKVPA,WIDE1-1:}VK3ABC>APRS::VK3ME   :hello{7");
-        byte[] rawAx25 = outerPacket.toAX25Frame();
+    @Test public void outgoingPositionCreatesEventAndPacket() {
+        Fixture f = fixture();
+        APRSPacket frame = new APRSPacket("VK3ME",
+            Collections.singletonList(new Digipeater("WIDE1-1")),
+            "!3751.65S/14458.20E-Test".getBytes(StandardCharsets.US_ASCII));
 
-        controller.handle(outerPacket, APRSMessage.SOURCE_RX_RF, "145.1750", rawAx25);
+        f.controller.recordPositionBeacon("VK3ME", -37.8608, 144.9700,
+            144_390_000L, frame, frame.toAX25Frame());
 
-        APRSMessage message = dao.messages.get(0);
-        assertEquals("VK3ABC", message.fromCallsign);
-        assertEquals("VK3ME", message.toCallsign);
-        assertEquals("RELAY1", message.relayCallsign);
-        assertEquals("APKVPA", message.ax25Destination);
-        assertEquals("WIDE1-1", message.path);
-        assertArrayEquals(rawAx25, message.rawAx25);
+        assertEquals(1, f.events.records.size());
+        assertEquals(AprsEvent.POSITION_TYPE, f.events.records.get(0).type);
+        assertEquals(1, f.packets.records.size());
     }
 
-    @Test
-    public void dropsDuplicateIncomingMessages() {
-        FakeDao dao = new FakeDao();
-        dao.duplicate = true;
-        AprsController controller = controller(dao);
-        APRSMessage message = new APRSMessage();
-        message.type = APRSMessage.MESSAGE_TYPE;
-        message.fromCallsign = "VK3ABC";
-        message.msgBody = "test";
-        message.msgNum = 4;
+    @Test public void acknowledgementLinksPacketAndUpdatesOutgoingEvent() {
+        Fixture f = fixture();
+        AprsEvent pending = pendingEvent("VK3ABC", "7", 0L, 1);
+        pending.id = 1;
+        pending.packetCount = 1;
+        f.events.records.add(pending);
 
-        controller.save(message);
+        f.controller.handle(deliveryResponse("VK3ABC", "ack7"), AprsSource.RX_RF,
+            144_390_000L, null);
 
-        assertTrue(dao.messages.isEmpty());
+        assertEquals(AprsEvent.DELIVERY_DELIVERED, pending.deliveryState);
+        assertNull(pending.nextRetryAtMs);
+        assertEquals(2, pending.packetCount);
+        assertEquals(Long.valueOf(pending.id), f.packets.records.get(0).eventId);
     }
 
-    @Test
-    public void tickRetriesPendingMessageAtItsDeadline() {
-        FakeDao dao = new FakeDao();
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(dao, callbacks);
-        APRSMessage message = pendingMessage(100L, 5);
-        dao.messages.add(message);
+    @Test public void rejectionLinksPacketAndStopsRetries() {
+        Fixture f = fixture();
+        AprsEvent pending = pendingEvent("VK3ABC", "7", 0L, 1);
+        pending.id = 1;
+        f.events.records.add(pending);
 
-        controller.tick(100L);
+        f.controller.handle(deliveryResponse("VK3ABC", "rej7"), AprsSource.RX_RF,
+            144_390_000L, null);
 
-        assertEquals(1, callbacks.retryCount);
-        assertEquals(2, message.transmitAttempts);
-        assertEquals(Integer.valueOf(4), message.retriesRemaining);
-        assertEquals(Long.valueOf(30_100L), message.nextRetryAt);
+        assertEquals(AprsEvent.DELIVERY_REJECTED, pending.deliveryState);
+        assertNull(pending.nextRetryAtMs);
     }
 
-    @Test
-    public void tickMarksMessageFailedAfterFinalAcknowledgementGrace() {
-        FakeDao dao = new FakeDao();
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(dao, callbacks);
-        APRSMessage message = pendingMessage(100L, 0);
-        dao.messages.add(message);
+    @Test public void successfulRetriesAddPacketsToSameEvent() {
+        Fixture f = fixture();
+        AprsEvent event = pendingEvent("VK3ABC", "7", 0L, 1);
+        event.id = 1;
+        event.packetCount = 1;
+        f.events.records.add(event);
 
-        controller.tick(100L);
+        f.controller.tick(0L);
 
-        assertEquals(0, callbacks.retryCount);
-        assertEquals(APRSMessage.DELIVERY_FAILED, message.deliveryState);
-        assertNull(message.nextRetryAt);
+        assertEquals(2, event.transmitAttempts);
+        assertEquals(2, event.packetCount);
+        assertEquals(1, f.packets.records.size());
+        assertEquals(Long.valueOf(event.id), f.packets.records.get(0).eventId);
+        assertEquals(Long.valueOf(30_000L), event.nextRetryAtMs);
     }
 
-    @Test
-    public void tickUsesEveryRetryDelayThenFinalAcknowledgementGrace() {
-        FakeDao dao = new FakeDao();
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(dao, callbacks);
-        APRSMessage message = pendingMessage(0L, 5);
-        dao.messages.add(message);
+    @Test public void retrySequenceEndsAfterFinalGracePeriod() {
+        Fixture f = fixture();
+        AprsEvent event = pendingEvent("VK3ABC", "7", 0L, 1);
+        event.id = 1;
+        f.events.records.add(event);
 
-        controller.tick(0L);
-        assertRetryState(callbacks, message, 1, 2, 4, 30_000L);
-        controller.tick(30_000L);
-        assertRetryState(callbacks, message, 2, 3, 3, 90_000L);
-        controller.tick(90_000L);
-        assertRetryState(callbacks, message, 3, 4, 2, 210_000L);
-        controller.tick(210_000L);
-        assertRetryState(callbacks, message, 4, 5, 1, 450_000L);
-        controller.tick(450_000L);
-        assertRetryState(callbacks, message, 5, 6, 0, 480_000L);
-        controller.tick(480_000L);
+        f.controller.tick(0L); assertRetry(event, 2, 30_000L);
+        f.controller.tick(30_000L); assertRetry(event, 3, 90_000L);
+        f.controller.tick(90_000L); assertRetry(event, 4, 210_000L);
+        f.controller.tick(210_000L); assertRetry(event, 5, 450_000L);
+        f.controller.tick(450_000L); assertRetry(event, 6, 480_000L);
+        f.controller.tick(480_000L);
 
-        assertEquals(5, callbacks.retryCount);
-        assertEquals(APRSMessage.DELIVERY_FAILED, message.deliveryState);
-        assertNull(message.nextRetryAt);
+        assertEquals(AprsEvent.DELIVERY_FAILED, event.deliveryState);
+        assertNull(event.nextRetryAtMs);
+        assertEquals(5, f.callbacks.retryCount);
+        assertEquals(5, f.packets.records.size());
     }
 
-    @Test
-    public void failedRetryDoesNotConsumeAnAttempt() {
-        FakeDao dao = new FakeDao();
-        FakeCallbacks callbacks = new FakeCallbacks();
-        callbacks.retrySucceeds = false;
-        AprsController controller = controller(dao, callbacks);
-        APRSMessage message = pendingMessage(100L, 5);
-        dao.messages.add(message);
+    @Test public void failedRfRetryAddsNoPacketOrAttempt() {
+        Fixture f = fixture();
+        f.callbacks.retrySucceeds = false;
+        AprsEvent event = pendingEvent("VK3ABC", "7", 100L, 1);
+        event.id = 1;
+        f.events.records.add(event);
 
-        controller.tick(100L);
+        f.controller.tick(100L);
 
-        assertEquals(1, callbacks.retryCount);
-        assertEquals(1, message.transmitAttempts);
-        assertEquals(Integer.valueOf(5), message.retriesRemaining);
-        assertEquals(Long.valueOf(15_100L), message.nextRetryAt);
+        assertEquals(1, event.transmitAttempts);
+        assertEquals(0, f.packets.records.size());
+        assertEquals(Long.valueOf(15_100L), event.nextRetryAtMs);
     }
 
-    @Test
-    public void restartedControllerRetriesOnlyPersistedPendingMessages() {
-        FakeDao dao = new FakeDao();
-        APRSMessage pending = pendingMessage(0L, 5);
-        APRSMessage delivered = pendingMessage(0L, 5);
-        delivered.deliveryState = APRSMessage.DELIVERY_DELIVERED;
-        APRSMessage rejected = pendingMessage(0L, 5);
-        rejected.deliveryState = APRSMessage.DELIVERY_REJECTED;
-        APRSMessage failed = pendingMessage(0L, 5);
-        failed.deliveryState = APRSMessage.DELIVERY_FAILED;
-        dao.messages.add(pending);
-        dao.messages.add(delivered);
-        dao.messages.add(rejected);
-        dao.messages.add(failed);
+    @Test public void restartRetriesOnlyPersistedPendingEvents() {
+        FakePacketRepository packets = new FakePacketRepository();
+        FakeEventRepository events = new FakeEventRepository();
+        AprsEvent pending = pendingEvent("VK3ABC", "7", 0L, 1);
+        pending.id = 1;
+        events.records.add(pending);
+        events.records.add(terminalEvent(AprsEvent.DELIVERY_DELIVERED));
+        events.records.add(terminalEvent(AprsEvent.DELIVERY_REJECTED));
+        events.records.add(terminalEvent(AprsEvent.DELIVERY_FAILED));
         FakeCallbacks callbacks = new FakeCallbacks();
 
-        controller(dao, callbacks).tick(0L);
+        new AprsController(packets, events, Runnable::run, callbacks).tick(0L);
 
         assertEquals(1, callbacks.retryCount);
         assertEquals(2, pending.transmitAttempts);
-        assertEquals(1, delivered.transmitAttempts);
-        assertEquals(1, rejected.transmitAttempts);
-        assertEquals(1, failed.transmitAttempts);
     }
 
-    @Test
-    public void tickRequestsPositionBeaconOnlyAtConfiguredCadence() {
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(new FakeDao(), callbacks);
+    @Test public void bulletinIsFireAndForget() {
+        Fixture f = fixture();
+        APRSPacket frame = outgoingMessage("VK3ME", "BLN1CQ", "net starts", null);
 
-        controller.setPositionBeaconingEnabled(true, 1_000L);
-        controller.tick(1_000L);
-        controller.tick(1_001L);
-        controller.tick(301_000L);
+        f.controller.recordOutgoingMessage("VK3ME", "BLN1CQ", "net starts", null,
+            144_390_000L, frame, frame.toAX25Frame());
+        f.controller.tick(Long.MAX_VALUE);
 
-        assertEquals(2, callbacks.beaconCount);
+        AprsEvent event = f.events.records.get(0);
+        assertEquals(AprsEvent.DELIVERY_NONE, event.deliveryState);
+        assertNull(event.messageIdentifier);
+        assertNull(event.nextRetryAtMs);
+        assertEquals(0, f.callbacks.retryCount);
     }
 
-    @Test
-    public void tickDoesNotReloadHistoryWhenNoMessageIsDue() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
-        int historyLoadsAfterStartup = dao.historyLoadCount;
+    @Test public void acknowledgementTransmissionAddsPacketWithoutAnotherEvent() {
+        Fixture f = fixture();
+        AprsEvent event = new AprsEvent();
+        event.id = 1;
+        event.packetCount = 1;
+        f.events.records.add(event);
+        APRSPacket ack = outgoingMessage("VK3ME", "VK3ABC", "ack7", null);
 
-        controller.tick(1_000L);
+        f.controller.recordTransmission(event.id, ack, 144_390_000L, ack.toAX25Frame());
 
-        assertEquals(historyLoadsAfterStartup, dao.historyLoadCount);
-        assertEquals(1, dao.dueMessageLoadCount);
+        assertEquals(1, f.events.records.size());
+        assertEquals(2, event.packetCount);
+        assertEquals(Long.valueOf(event.id), f.packets.records.get(0).eventId);
     }
 
-    @Test
-    public void recordsBulletinsWithoutReliableDeliveryState() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
-
-        recordOutgoingMessage(controller, "VK3ME", "BLN1CQ", "net starts now", 7);
-
-        APRSMessage bulletin = dao.messages.get(0);
-        assertEquals(-1, bulletin.msgNum);
-        assertNull(bulletin.messageIdentifier);
-        assertEquals(APRSMessage.DELIVERY_NONE, bulletin.deliveryState);
-        assertNull(bulletin.nextRetryAt);
+    @Test public void beaconCadenceUsesControllerTick() {
+        Fixture f = fixture();
+        f.controller.setPositionBeaconingEnabled(true, 1_000L);
+        f.controller.tick(1_000L);
+        f.controller.tick(1_001L);
+        f.controller.tick(301_000L);
+        assertEquals(2, f.callbacks.beaconCount);
     }
 
-    @Test
-    public void bulletinNeverEntersTheRetryPath() {
-        FakeDao dao = new FakeDao();
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(dao, callbacks);
-        recordOutgoingMessage(controller, "VK3ME", "BLN1CQ", "net starts now", 7);
-
-        controller.tick(Long.MAX_VALUE);
-
-        assertEquals(0, callbacks.retryCount);
+    @Test public void idleTickDoesNotReloadEventFeed() {
+        Fixture f = fixture();
+        int loadsAfterStartup = f.events.loadCount;
+        f.controller.tick(1_000L);
+        assertEquals(loadsAfterStartup, f.events.loadCount);
+        assertEquals(1, f.events.dueLoadCount);
     }
 
-    @Test
-    public void onlyStationDestinationsRequireAcknowledgement() {
-        assertTrue(AprsController.requiresAcknowledgement("VK3ABC"));
+    @Test public void finiteHistoryWindowRefreshesAsEventsAgeOut() {
+        Fixture f = fixture();
+        f.controller.setHistoryWindow(AprsController.HISTORY_ONE_DAY);
+        int loadsAfterSelection = f.events.loadCount;
+
+        f.controller.tick(Long.MAX_VALUE);
+
+        assertEquals(loadsAfterSelection + 1, f.events.loadCount);
+    }
+
+    @Test public void everyHistoryWindowLimitsEventsByLastSeenTime() {
+        Fixture f = fixture();
+        long now = System.currentTimeMillis();
+        long day = 24 * 60 * 60_000L;
+        f.events.records.add(eventAt("today", now - day / 2));
+        f.events.records.add(eventAt("this week", now - 2 * day));
+        f.events.records.add(eventAt("this fortnight", now - 10 * day));
+        f.events.records.add(eventAt("this month", now - 20 * day));
+        f.events.records.add(eventAt("older", now - 40 * day));
+
+        f.controller.setHistoryWindow(AprsController.HISTORY_ONE_DAY);
+        assertEquals(1, f.controller.getEvents().getValue().size());
+        f.controller.setHistoryWindow(AprsController.HISTORY_ONE_WEEK);
+        assertEquals(2, f.controller.getEvents().getValue().size());
+        f.controller.setHistoryWindow(AprsController.HISTORY_TWO_WEEKS);
+        assertEquals(3, f.controller.getEvents().getValue().size());
+        f.controller.setHistoryWindow(AprsController.HISTORY_ONE_MONTH);
+        assertEquals(4, f.controller.getEvents().getValue().size());
+        f.controller.setHistoryWindow(AprsController.HISTORY_ALL);
+        assertEquals(5, f.controller.getEvents().getValue().size());
+    }
+
+    @Test public void mineFilterKeepsBroadcastsMessagesToMeAndNonMessageEvents() {
+        Fixture f = fixture();
+        long now = System.currentTimeMillis();
+        f.events.records.add(messageEvent("VK3ME", "mine", now));
+        f.events.records.add(messageEvent("VK3OTHER", "other", now));
+        f.events.records.add(messageEvent("BLN1CQ", "bulletin", now));
+        f.events.records.add(messageEvent("QST", "qst", now));
+        f.events.records.add(messageEvent("ALL", "all", now));
+        f.events.records.add(messageEvent("CQ", "cq", now));
+        f.events.records.add(eventAt("position", now));
+
+        f.controller.setDestinationFilter(AprsController.DESTINATION_MINE);
+
+        List<AprsEvent> visible = f.controller.getEvents().getValue();
+        assertEquals(6, visible.size());
+        assertFalse(visible.stream().anyMatch(event -> "other".equals(event.body)));
+    }
+
+    @Test public void digipeatAddsTxPacketToSameEventAndSuppressesSecondTransmission() {
+        Fixture f = fixture();
+        f.controller.setDigipeatingEnabled(true);
+        APRSPacket frame = directMessageWithPath("VK3ABC", "VK3ME", "hello", "7", "WIDE1-1");
+
+        f.controller.handle(frame, AprsSource.RX_RF, 144_390_000L, frame.toAX25Frame());
+        f.controller.handle(frame, AprsSource.RX_RF, 144_390_000L, frame.toAX25Frame());
+
+        assertEquals(1, f.callbacks.digipeatCount);
+        assertEquals(3, f.packets.records.size());
+        assertEquals(1, f.events.records.size());
+        assertEquals(3, f.events.records.get(0).packetCount);
+    }
+
+    @Test public void stationAddressRulesRemainCompatible() {
         assertTrue(AprsController.requiresAcknowledgement("VK3ABC-7"));
         assertFalse(AprsController.requiresAcknowledgement("BLN1CQ"));
-        assertFalse(AprsController.requiresAcknowledgement("bln1cq"));
-        assertFalse(AprsController.requiresAcknowledgement("BLN0"));
-        assertFalse(AprsController.requiresAcknowledgement("ALL"));
-        assertFalse(AprsController.requiresAcknowledgement("all"));
         assertFalse(AprsController.requiresAcknowledgement("QST"));
-        assertFalse(AprsController.requiresAcknowledgement("qst"));
+        assertFalse(AprsController.requiresAcknowledgement("ALL"));
         assertFalse(AprsController.requiresAcknowledgement("CQ"));
-        assertFalse(AprsController.requiresAcknowledgement("cq"));
         assertFalse(AprsController.requiresAcknowledgement(null));
     }
 
-    @Test
-    public void groupAddressIsRecordedWithoutReliableDeliveryState() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao);
-
-        recordOutgoingMessage(controller, "VK3ME", "QST", "net starts now", 7);
-
-        APRSMessage groupMessage = dao.messages.get(0);
-        assertEquals(-1, groupMessage.msgNum);
-        assertNull(groupMessage.messageIdentifier);
-        assertEquals(APRSMessage.DELIVERY_NONE, groupMessage.deliveryState);
-        assertNull(groupMessage.nextRetryAt);
-    }
-
-    @Test
-    public void acknowledgementOnlyResolvesTheMatchingRemoteStation() {
-        FakeDao dao = new FakeDao();
-        APRSMessage toAbc = pendingOutgoingMessage("VK3ABC", 7);
-        APRSMessage toXyz = pendingOutgoingMessage("VK3XYZ", 7);
-        dao.pendingOutgoingMessages.add(toAbc);
-        dao.pendingOutgoingMessages.add(toXyz);
-        AprsController controller = controller(dao);
-
-        controller.handle(deliveryResponse("VK3ABC", "ack7"));
-
-        assertTrue(toAbc.wasAcknowledged);
-        assertEquals(APRSMessage.DELIVERY_DELIVERED, toAbc.deliveryState);
-        assertNull(toAbc.nextRetryAt);
-        assertEquals(APRSMessage.DELIVERY_PENDING, toXyz.deliveryState);
-        assertEquals("VK3ME", dao.lastLookupLocalCallsign);
-        assertEquals("VK3ABC", dao.lastLookupRemoteCallsign);
-        assertEquals("7", dao.lastLookupIdentifier);
-    }
-
-    @Test
-    public void rejectionOnlyResolvesTheMatchingRemoteStation() {
-        FakeDao dao = new FakeDao();
-        APRSMessage toAbc = pendingOutgoingMessage("VK3ABC", 7);
-        APRSMessage toXyz = pendingOutgoingMessage("VK3XYZ", 7);
-        dao.pendingOutgoingMessages.add(toAbc);
-        dao.pendingOutgoingMessages.add(toXyz);
-        AprsController controller = controller(dao);
-
-        controller.handle(deliveryResponse("VK3ABC", "rej7"));
-
-        assertFalse(toAbc.wasAcknowledged);
-        assertEquals(APRSMessage.DELIVERY_REJECTED, toAbc.deliveryState);
-        assertNull(toAbc.nextRetryAt);
-        assertEquals(APRSMessage.DELIVERY_PENDING, toXyz.deliveryState);
-        assertEquals("VK3ME", dao.lastLookupLocalCallsign);
-        assertEquals("VK3ABC", dao.lastLookupRemoteCallsign);
-        assertEquals("7", dao.lastLookupIdentifier);
-    }
-
-    @Test
-    public void acknowledgementFromUnknownStationDoesNothing() {
-        FakeDao dao = new FakeDao();
-        APRSMessage outgoing = pendingOutgoingMessage("VK3ABC", 7);
-        dao.pendingOutgoingMessages.add(outgoing);
-        AprsController controller = controller(dao);
-
-        controller.handle(deliveryResponse("VK3XYZ", "ack7"));
-
-        assertEquals(APRSMessage.DELIVERY_PENDING, outgoing.deliveryState);
-        assertFalse(outgoing.wasAcknowledged);
-    }
-
-    @Test
-    public void digipeatsWideOneOneUsingOurCallsign() {
+    private Fixture fixture() {
+        FakePacketRepository packets = new FakePacketRepository();
+        FakeEventRepository events = new FakeEventRepository();
         FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(new FakeDao(), callbacks);
-        controller.setDigipeatingEnabled(true);
-
-        controller.handle(packetWithPath("WIDE1-1"));
-
-        APRSPacket retransmitted = callbacks.lastDigipeatedPacket;
-        assertNotNull(retransmitted);
-        assertEquals("VK3ME", retransmitted.getDigipeaters().get(0).getCallsign());
-        assertTrue(retransmitted.getDigipeaters().get(0).isUsed());
+        return new Fixture(packets, events, callbacks,
+            new AprsController(packets, events, Runnable::run, callbacks));
     }
 
-    @Test
-    public void digipeatsWideOneTwoAndLeavesOneHopAvailable() {
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(new FakeDao(), callbacks);
-        controller.setDigipeatingEnabled(true);
-
-        controller.handle(packetWithPath("WIDE1-2"));
-
-        APRSPacket retransmitted = callbacks.lastDigipeatedPacket;
-        assertNotNull(retransmitted);
-        assertEquals("VK3ME", retransmitted.getDigipeaters().get(0).getCallsign());
-        assertTrue(retransmitted.getDigipeaters().get(0).isUsed());
-        assertEquals("WIDE1", retransmitted.getDigipeaters().get(1).getCallsign());
-        assertEquals("1", retransmitted.getDigipeaters().get(1).getSsid());
-        assertFalse(retransmitted.getDigipeaters().get(1).isUsed());
+    private APRSPacket directMessage(String from, String to, String body, String identifier) {
+        return new APRSPacket(from, "APRS", Collections.emptyList(),
+            MessagePacket.createMessagePayload(to, body, identifier));
     }
 
-    @Test
-    public void doesNotDigipeatUntilEnabledAndSuppressesRepeatedPackets() {
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(new FakeDao(), callbacks);
-        APRSPacket packet = packetWithPath("WIDE1-1");
-
-        controller.handle(packet);
-        controller.setDigipeatingEnabled(true);
-        controller.handle(packet);
-        controller.handle(packet);
-
-        assertEquals(1, callbacks.digipeatCount);
+    private APRSPacket directMessageWithPath(String from, String to, String body,
+                                              String identifier, String path) {
+        return new APRSPacket(from, "APRS", Collections.singletonList(new Digipeater(path)),
+            MessagePacket.createMessagePayload(to, body, identifier));
     }
 
-    @Test
-    public void doesNotStoreAnEchoOfOurRecentDigipeat() {
-        FakeDao dao = new FakeDao();
-        AprsController controller = controller(dao, new FakeCallbacks());
-        controller.setDigipeatingEnabled(true);
-        APRSPacket packet = packetWithPath("WIDE1-1");
-
-        controller.handle(packet);
-        controller.handle(packet);
-
-        assertEquals(1, dao.messages.size());
+    private APRSPacket outgoingMessage(String from, String to, String body, String identifier) {
+        return new APRSPacket(from, Collections.singletonList(new Digipeater("WIDE1-1")),
+            MessagePacket.createMessagePayload(to, body, identifier));
     }
 
-    @Test
-    public void duplicateDirectMessageIsAcknowledgedWithoutAnotherNotification() {
-        FakeDao dao = new FakeDao();
-        FakeCallbacks callbacks = new FakeCallbacks();
-        AprsController controller = controller(dao, callbacks);
-        APRSPacket message = directMessage("VK3ABC", "VK3ME", "hello", "7");
-
-        controller.handle(message);
-        dao.duplicate = true;
-        controller.handle(message);
-
-        assertEquals(1, dao.messages.size());
-        assertEquals(1, callbacks.notificationCount);
-        assertEquals(2, callbacks.acknowledgementCount);
-        assertEquals("VK3ABC", callbacks.lastAcknowledgementDestination);
-        assertEquals(7, callbacks.lastAcknowledgementNumber);
-    }
-
-    private AprsController controller(FakeDao dao) {
-        return controller(dao, new FakeCallbacks());
-    }
-
-    private AprsController controller(FakeDao dao, FakeCallbacks callbacks) {
-        return new AprsController(dao, Runnable::run, callbacks);
-    }
-
-    private APRSMessage pendingMessage(long nextRetryAt, int retriesRemaining) {
-        APRSMessage message = new APRSMessage();
-        message.type = APRSMessage.MESSAGE_TYPE;
-        message.deliveryState = APRSMessage.DELIVERY_PENDING;
-        message.nextRetryAt = nextRetryAt;
-        message.retriesRemaining = retriesRemaining;
-        message.transmitAttempts = 1;
-        return message;
-    }
-
-    private APRSMessage pendingOutgoingMessage(String destination, int messageNumber) {
-        APRSMessage message = pendingMessage(1_000L, 5);
-        message.fromCallsign = "VK3ME";
-        message.toCallsign = destination;
-        message.msgNum = messageNumber;
-        message.messageIdentifier = String.valueOf(messageNumber);
-        return message;
+    private APRSPacket deliveryResponse(String from, String response) {
+        return directMessage(from, "VK3ME", response, null);
     }
 
     private APRSPacket packetWithPath(String path) {
-        return new APRSPacket("VK3ABC", "APRS", java.util.Collections.singletonList(new Digipeater(path)),
-            ">test".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        return new APRSPacket("VK3ABC", "APRS", Collections.singletonList(new Digipeater(path)),
+            ">test".getBytes(StandardCharsets.US_ASCII));
     }
 
-    private APRSPacket deliveryResponse(String source, String response) {
-        return new APRSPacket(source, "APRS", java.util.Collections.emptyList(),
-            MessagePacket.createMessagePayload("VK3ME", response, null));
+    private static AprsEvent pendingEvent(String destination, String identifier,
+                                          long nextRetryAt, int attempts) {
+        AprsEvent event = new AprsEvent();
+        event.type = AprsEvent.MESSAGE_TYPE;
+        event.fromCallsign = "VK3ME";
+        event.toCallsign = destination;
+        event.messageIdentifier = identifier;
+        event.body = "hello";
+        event.deliveryState = AprsEvent.DELIVERY_PENDING;
+        event.nextRetryAtMs = nextRetryAt;
+        event.transmitAttempts = attempts;
+        return event;
     }
 
-    private APRSPacket directMessage(String source, String destination, String body, String identifier) {
-        return new APRSPacket(source, "APRS", java.util.Collections.emptyList(),
-            MessagePacket.createMessagePayload(destination, body, identifier));
+    private static AprsEvent eventAt(String comment, long lastSeenMs) {
+        AprsEvent event = new AprsEvent();
+        event.type = AprsEvent.POSITION_TYPE;
+        event.firstSeenMs = lastSeenMs;
+        event.lastSeenMs = lastSeenMs;
+        event.comment = comment;
+        return event;
     }
 
-    private APRSPacket outgoingMessage(String source, String destination, String body, String identifier) {
-        return new APRSPacket(source, java.util.Collections.singletonList(new Digipeater("WIDE1-1")),
-            MessagePacket.createMessagePayload(destination, body, identifier));
+    private static AprsEvent messageEvent(String destination, String body, long lastSeenMs) {
+        AprsEvent event = eventAt(null, lastSeenMs);
+        event.type = AprsEvent.MESSAGE_TYPE;
+        event.toCallsign = destination;
+        event.body = body;
+        return event;
     }
 
-    private void recordOutgoingMessage(AprsController controller, String source, String destination,
-                                       String body, int messageNumber) {
-        APRSPacket packet = outgoingMessage(source, destination, body,
-            AprsController.requiresAcknowledgement(destination) ? String.valueOf(messageNumber) : null);
-        controller.recordOutgoingMessage(source, destination, body, messageNumber, "144.3900", packet,
-            packet.toAX25Frame());
+    private static AprsEvent terminalEvent(int state) {
+        AprsEvent event = pendingEvent("VK3XYZ", "9", 0L, 1);
+        event.deliveryState = state;
+        return event;
     }
 
-    private void assertRetryState(FakeCallbacks callbacks, APRSMessage message, int retries,
-                                  int attempts, int remaining, long nextRetryAt) {
-        assertEquals(retries, callbacks.retryCount);
-        assertEquals(attempts, message.transmitAttempts);
-        assertEquals(Integer.valueOf(remaining), message.retriesRemaining);
-        assertEquals(Long.valueOf(nextRetryAt), message.nextRetryAt);
+    private void assertRetry(AprsEvent event, int attempts, long nextRetryAt) {
+        assertEquals(attempts, event.transmitAttempts);
+        assertEquals(Long.valueOf(nextRetryAt), event.nextRetryAtMs);
     }
 
-    private static final class FakeDao implements AprsController.Repository {
-        private final List<APRSMessage> messages = new ArrayList<>();
-        private boolean duplicate;
-        private int historyLoadCount;
-        private int dueMessageLoadCount;
-        private final List<APRSMessage> pendingOutgoingMessages = new ArrayList<>();
-        private String lastLookupLocalCallsign;
-        private String lastLookupRemoteCallsign;
-        private String lastLookupIdentifier;
-        @Override public List<APRSMessage> loadMessages() { historyLoadCount++; return messages; }
-        @Override public List<APRSMessage> loadDueReliableMessages(long now) {
-            dueMessageLoadCount++;
-            List<APRSMessage> dueMessages = new ArrayList<>();
-            for (APRSMessage message : messages) {
-                if (message.deliveryState == APRSMessage.DELIVERY_PENDING && message.nextRetryAt != null
-                        && message.nextRetryAt <= now) dueMessages.add(message);
-            }
-            return dueMessages;
+    private static final class Fixture {
+        final FakePacketRepository packets;
+        final FakeEventRepository events;
+        final FakeCallbacks callbacks;
+        final AprsController controller;
+
+        Fixture(FakePacketRepository packets, FakeEventRepository events,
+                FakeCallbacks callbacks, AprsController controller) {
+            this.packets = packets;
+            this.events = events;
+            this.callbacks = callbacks;
+            this.controller = controller;
         }
-        @Override public APRSMessage findPendingOutgoingMessage(String localCallsign,
-                                                                 String remoteCallsign,
-                                                                 String messageIdentifier) {
-            lastLookupLocalCallsign = localCallsign;
-            lastLookupRemoteCallsign = remoteCallsign;
-            lastLookupIdentifier = messageIdentifier;
-            for (APRSMessage message : pendingOutgoingMessages) {
-                if (message.deliveryState == APRSMessage.DELIVERY_PENDING
-                        && localCallsign.equals(message.fromCallsign)
-                        && remoteCallsign.equals(message.toCallsign)
-                        && messageIdentifier.equals(message.messageIdentifier)) {
-                    return message;
-                }
+    }
+
+    private static final class FakePacketRepository implements AprsController.PacketRepository {
+        final List<AprsPacket> records = new ArrayList<>();
+
+        @Override public long insert(AprsPacket packet) {
+            packet.id = records.size() + 1L;
+            records.add(packet);
+            return packet.id;
+        }
+    }
+
+    private static final class FakeEventRepository implements AprsController.EventRepository {
+        final List<AprsEvent> records = new ArrayList<>();
+        int loadCount;
+        int dueLoadCount;
+
+        @Override public List<AprsEvent> loadEvents(long sinceMs, String localCallsign,
+                                                    boolean mineOnly) {
+            loadCount++;
+            List<AprsEvent> visible = new ArrayList<>();
+            for (AprsEvent event : records) {
+                if (event.lastSeenMs < sinceMs) continue;
+                String destination = event.toCallsign;
+                boolean broadcast = destination != null && (destination.startsWith("BLN")
+                    || destination.equals("ALL") || destination.equals("QST")
+                    || destination.equals("CQ"));
+                if (!mineOnly || event.type != AprsEvent.MESSAGE_TYPE
+                        || localCallsign.equals(destination) || broadcast) visible.add(event);
+            }
+            return visible;
+        }
+
+        @Override public List<AprsEvent> loadDueReliableEvents(long now) {
+            dueLoadCount++;
+            List<AprsEvent> due = new ArrayList<>();
+            for (AprsEvent event : records) {
+                if (event.deliveryState == AprsEvent.DELIVERY_PENDING
+                        && event.nextRetryAtMs != null && event.nextRetryAtMs <= now) due.add(event);
+            }
+            return due;
+        }
+
+        @Override public long insert(AprsEvent event) {
+            event.id = records.size() + 1L;
+            records.add(event);
+            return event.id;
+        }
+
+        @Override public void update(AprsEvent event) {
+            // Mutable in-memory records already contain the update.
+        }
+
+        @Override public AprsEvent findById(long id) {
+            for (AprsEvent event : records) {
+                if (event.id == id) return event;
             }
             return null;
         }
-        @Override public void insert(APRSMessage message) { messages.add(message); }
-        @Override public void update(APRSMessage message) {
-            // Tests inspect the mutable in-memory message directly after an update.
+
+        @Override public AprsEvent findRecentByDedupKey(String dedupKey, long sinceMs) {
+            for (int i = records.size() - 1; i >= 0; i--) {
+                AprsEvent event = records.get(i);
+                if (dedupKey.equals(event.dedupKey) && event.lastSeenMs >= sinceMs) return event;
+            }
+            return null;
         }
-        @Override public boolean isRecentDuplicate(String fromCallsign, String msgBody, int msgNum) { return duplicate; }
+
+        @Override public AprsEvent findPendingOutgoingEvent(String local, String remote,
+                                                             String identifier) {
+            for (int i = records.size() - 1; i >= 0; i--) {
+                AprsEvent event = records.get(i);
+                if (event.deliveryState == AprsEvent.DELIVERY_PENDING
+                        && local.equals(event.fromCallsign) && remote.equals(event.toCallsign)
+                        && identifier.equals(event.messageIdentifier)) return event;
+            }
+            return null;
+        }
     }
 
     private static final class FakeCallbacks implements AprsController.Callbacks {
-        private int retryCount;
-        private int beaconCount;
-        private int digipeatCount;
-        private int notificationCount;
-        private int acknowledgementCount;
-        private boolean retrySucceeds = true;
-        private String lastAcknowledgementDestination;
-        private int lastAcknowledgementNumber;
-        private APRSPacket lastDigipeatedPacket;
-        @Override public String getCallsign() { return "VK3ME"; }
+        int retryCount;
+        int beaconCount;
+        int digipeatCount;
+        int notificationCount;
+        int acknowledgementCount;
+        boolean retrySucceeds = true;
+
+        @Override public String getCallsign() {
+            return "VK3ME";
+        }
+
         @Override public void showNotification(String title, String message) {
             notificationCount++;
         }
-        @Override public void sendAcknowledgement(String destination, int messageNumber) {
+
+        @Override public void sendAcknowledgement(String destination, String identifier,
+                                                  long eventId) {
             acknowledgementCount++;
-            lastAcknowledgementDestination = destination;
-            lastAcknowledgementNumber = messageNumber;
         }
-        @Override public boolean retryMessage(APRSMessage message) { retryCount++; return retrySucceeds; }
-        @Override public void requestPositionBeacon() { beaconCount++; }
-        @Override public boolean transmitDigipeatedPacket(APRSPacket packet) {
+
+        @Override public AprsController.Transmission retryMessage(AprsEvent event) {
+            retryCount++;
+            if (!retrySucceeds) return null;
+            APRSPacket packet = new APRSPacket(event.fromCallsign,
+                Collections.singletonList(new Digipeater("WIDE1-1")),
+                MessagePacket.createMessagePayload(event.toCallsign, event.body,
+                    event.messageIdentifier));
+            return new AprsController.Transmission(packet, 144_390_000L, packet.toAX25Frame());
+        }
+
+        @Override public void requestPositionBeacon() {
+            beaconCount++;
+        }
+
+        @Override public AprsController.Transmission transmitDigipeatedPacket(APRSPacket packet) {
             digipeatCount++;
-            lastDigipeatedPacket = packet;
-            return true;
+            return new AprsController.Transmission(packet, 144_390_000L, packet.toAX25Frame());
         }
     }
 }

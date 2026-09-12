@@ -74,6 +74,7 @@ import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.aprs.AprsController;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
@@ -494,11 +495,11 @@ public class MainActivity extends AppCompatActivity {
             };
             radioAudioService.setCallbacks(callbacks);
             if (!aprsMessagesObserved) {
-                radioAudioService.getAprsMessages().observe(MainActivity.this, aprsMessages -> {
-                    aprsAdapter.setAPRSMessageList(aprsMessages);
+                radioAudioService.getAprsEvents().observe(MainActivity.this, aprsEvents -> {
+                    aprsAdapter.setAprsEvents(aprsEvents);
                     aprsAdapter.notifyDataSetChanged();
-                    if (aprsMessages != null && !aprsMessages.isEmpty()) {
-                        aprsRecyclerView.scrollToPosition(aprsMessages.size() - 1);
+                    if (aprsEvents != null && !aprsEvents.isEmpty()) {
+                        aprsRecyclerView.scrollToPosition(aprsEvents.size() - 1);
                     }
                 });
                 aprsMessagesObserved = true;
@@ -824,6 +825,10 @@ public class MainActivity extends AppCompatActivity {
         applyAprsBeaconPosition(service, settings.get(AppSetting.SETTING_APRS_BEACON_POSITION));
         applyAprsIcon(service, settings.get(AppSetting.SETTING_APRS_ICON));
         applyDigipeatSetting(service, settings.get(AppSetting.SETTING_DIGIPEAT_PACKETS));
+        service.setAprsHistoryWindow(settings.getOrDefault(
+            AppSetting.SETTING_APRS_HISTORY_WINDOW, AprsController.HISTORY_ALL));
+        service.setAprsDestinationFilter(settings.getOrDefault(
+            AppSetting.SETTING_APRS_DESTINATION_FILTER, AprsController.DESTINATION_ALL));
     }
 
     private void applyAprsPositionAccuracy(RadioAudioService service, String accuracy) {

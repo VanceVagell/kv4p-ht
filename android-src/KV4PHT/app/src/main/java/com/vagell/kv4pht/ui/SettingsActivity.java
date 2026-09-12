@@ -45,6 +45,7 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.BuildConfig;
 import com.vagell.kv4pht.R;
+import com.vagell.kv4pht.aprs.AprsController;
 import com.vagell.kv4pht.aprs.parser.APRSIconType;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.radio.RadioAudioService;
@@ -233,6 +234,10 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateAprsOptions() {
         setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
+        setDropdownOptions(R.id.aprsHistoryWindowTextView, List.of(
+            "1d", "1w", "2w", "1m", getString(R.string.all)));
+        setDropdownOptions(R.id.aprsDestinationFilterTextView, List.of(
+            getString(R.string.all), getString(R.string.mine)));
     }
 
     private void populateAprsFrequencies() {
@@ -342,6 +347,11 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_ICON, R.id.aprsIconTextView);
+                this.<AutoCompleteTextView>findViewById(R.id.aprsHistoryWindowTextView).setText(
+                    historyWindowLabel(settings.get(AppSetting.SETTING_APRS_HISTORY_WINDOW)), false);
+                this.<AutoCompleteTextView>findViewById(R.id.aprsDestinationFilterTextView).setText(
+                    destinationFilterLabel(
+                        settings.get(AppSetting.SETTING_APRS_DESTINATION_FILTER)), false);
                 setSwitchIfPresent(settings, AppSetting.SETTING_DIGIPEAT_PACKETS, R.id.digipeatPacketsSwitch);
                 setRadioSettingsFromIntent();
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
@@ -367,6 +377,16 @@ public class SettingsActivity extends AppCompatActivity {
             this.<AutoCompleteTextView>findViewById(R.id.rfPowerTextView)
                 .setText(powerOptions[getIntent().getBooleanExtra(EXTRA_RF_POWER_HIGH, true) ? 0 : Math.min(1, powerOptions.length - 1)], false);
         }
+    }
+
+    private String historyWindowLabel(String value) {
+        return value == null || AprsController.HISTORY_ALL.equalsIgnoreCase(value)
+            ? getString(R.string.all) : value;
+    }
+
+    private String destinationFilterLabel(String value) {
+        return value != null && AprsController.DESTINATION_MINE.equalsIgnoreCase(value)
+            ? getString(R.string.mine) : getString(R.string.all);
     }
 
     public void closedCaptionsButtonClicked(View view) {
@@ -433,6 +453,8 @@ public class SettingsActivity extends AppCompatActivity {
         attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
         attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
         attachTextView(R.id.aprsIconTextView, this::setAprsIcon);
+        attachTextView(R.id.aprsHistoryWindowTextView, this::setAprsHistoryWindow);
+        attachTextView(R.id.aprsDestinationFilterTextView, this::setAprsDestinationFilter);
         attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text)));
         attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text)));
         attachTextView(R.id.min70cmFreqTextView, text -> setMin70cmTxFreq(extractPrefix(text)));
@@ -484,6 +506,24 @@ public class SettingsActivity extends AppCompatActivity {
         saveAppSettingAsync(AppSetting.SETTING_APRS_ICON, icon);
         if (radioAudioService != null) {
             radioAudioService.setAprsPositionIcon(getAPRSIconFromSettingChoice(getResources(), icon));
+        }
+    }
+
+    private void setAprsHistoryWindow(String historyWindow) {
+        String value = getString(R.string.all).equals(historyWindow)
+            ? AprsController.HISTORY_ALL : historyWindow;
+        saveAppSettingAsync(AppSetting.SETTING_APRS_HISTORY_WINDOW, value);
+        if (radioAudioService != null) {
+            radioAudioService.setAprsHistoryWindow(value);
+        }
+    }
+
+    private void setAprsDestinationFilter(String destinationFilter) {
+        String value = getString(R.string.mine).equals(destinationFilter)
+            ? AprsController.DESTINATION_MINE : AprsController.DESTINATION_ALL;
+        saveAppSettingAsync(AppSetting.SETTING_APRS_DESTINATION_FILTER, value);
+        if (radioAudioService != null) {
+            radioAudioService.setAprsDestinationFilter(value);
         }
     }
 

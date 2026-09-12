@@ -72,7 +72,8 @@ import com.vagell.kv4pht.aprs.parser.Parser;
 import com.vagell.kv4pht.aprs.parser.Position;
 import com.vagell.kv4pht.aprs.parser.PositionField;
 import com.vagell.kv4pht.data.ChannelMemory;
-import com.vagell.kv4pht.data.APRSMessage;
+import com.vagell.kv4pht.data.AprsEvent;
+import com.vagell.kv4pht.data.AprsSource;
 import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
@@ -317,6 +318,14 @@ public class RadioAudioService extends Service {
         aprsController.setDigipeatingEnabled(enabled);
     }
 
+    public void setAprsHistoryWindow(String historyWindow) {
+        aprsController.setHistoryWindow(historyWindow);
+    }
+
+    public void setAprsDestinationFilter(String destinationFilter) {
+        aprsController.setDestinationFilter(destinationFilter);
+    }
+
     public boolean getAprsBeaconPosition() {
         return aprsController.isPositionBeaconingEnabled();
     }
@@ -380,42 +389,55 @@ public class RadioAudioService extends Service {
         }
     }
 
-    public LiveData<List<APRSMessage>> getAprsMessages() {
-        return aprsController.getMessages();
+    public LiveData<List<AprsEvent>> getAprsEvents() {
+        return aprsController.getEvents();
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
         aprsExecutor = Executors.newSingleThreadExecutor();
-        aprsController = new AprsController(new AprsController.RoomRepository(
-            AppDatabase.getInstance(getApplicationContext()).aprsMessageDao()), aprsExecutor,
+        AppDatabase database = AppDatabase.getInstance(getApplicationContext());
+        aprsController = new AprsController(new AprsController.RoomPacketRepository(
+            database.aprsPacketDao()), new AprsController.RoomEventRepository(
+            database.aprsEventDao()), aprsExecutor,
             new AprsController.Callbacks() {
                 @Override public String getCallsign() { return callsign; }
                 @Override public void showNotification(String title, String message) {
                     callbacks.showNotification(MESSAGE_NOTIFICATION_CHANNEL_ID, MESSAGE_NOTIFICATION_TO_YOU_ID,
                         title, message, INTENT_OPEN_CHAT);
                 }
-                @Override public void sendAcknowledgement(String destination, int messageNumber) {
-                    handler.postDelayed(() -> sendAckMessage(destination, String.valueOf(messageNumber)), 1000);
+                @Override public void sendAcknowledgement(String destination, String messageIdentifier,
+                                                          long eventId) {
+                    handler.postDelayed(() -> sendAckMessage(destination, messageIdentifier, eventId),
+                        1000);
                 }
-                @Override public boolean retryMessage(APRSMessage message) {
+                @Override public AprsController.Transmission retryMessage(AprsEvent event) {
                     if (!isTxAllowed() || getMode() != RadioMode.RX || hostToEsp32 == null) {
-                        return false;
+                        return null;
                     }
                     try {
-                        APRSPacket packet = new APRSPacket(message.fromCallsign, DEFAULT_DIGIPEATERS,
-                            MessagePacket.createMessagePayload(message.toCallsign, message.msgBody,
-                                message.messageIdentifier));
-                        txAX25Packet(new Packet(packet.toAX25Frame()));
-                        return true;
+                        APRSPacket packet = new APRSPacket(event.fromCallsign, DEFAULT_DIGIPEATERS,
+                            MessagePacket.createMessagePayload(event.toCallsign, event.body,
+                                event.messageIdentifier));
+                        byte[] rawAx25 = packet.toAX25Frame();
+                        return txAX25Packet(new Packet(rawAx25))
+                            ? new AprsController.Transmission(packet, activeFrequencyHz(), rawAx25)
+                            : null;
                     } catch (IllegalArgumentException e) {
                         Log.w(TAG, "Unable to retry APRS message", e);
-                        return false;
+                        return null;
                     }
                 }
                 @Override public void requestPositionBeacon() {
                     handler.post(() -> {
+                        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                                != PackageManager.PERMISSION_GRANTED
+                                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                != PackageManager.PERMISSION_GRANTED) {
+                            callbacks.unknownLocation();
+                            return;
+                        }
                         try {
                             acquireBeaconWakeLock();
                             sendPositionBeacon();
@@ -424,10 +446,11 @@ public class RadioAudioService extends Service {
                         }
                     });
                 }
-                @Override public boolean transmitDigipeatedPacket(APRSPacket packet) {
-                    if (!isTxAllowed() || getMode() != RadioMode.RX || hostToEsp32 == null) return false;
-                    txAX25Packet(new Packet(packet.toAX25Frame()));
-                    return true;
+                @Override public AprsController.Transmission transmitDigipeatedPacket(APRSPacket packet) {
+                    if (!isTxAllowed() || getMode() != RadioMode.RX || hostToEsp32 == null) return null;
+                    byte[] rawAx25 = packet.toAX25Frame();
+                    return txAX25Packet(new Packet(rawAx25))
+                        ? new AprsController.Transmission(packet, activeFrequencyHz(), rawAx25) : null;
                 }
             });
 
@@ -1345,6 +1368,14 @@ public class RadioAudioService extends Service {
         }
     }
 
+    private Long activeFrequencyHz() {
+        try {
+            return Math.round(Double.parseDouble(activeFrequencyStr) * 1_000_000d);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     public boolean isHasHighLowPowerSwitch() {
         return radioModule.hasHighLowPowerSwitch();
     }
@@ -1689,7 +1720,7 @@ public class RadioAudioService extends Service {
             byte[] rawAx25 = java.util.Arrays.copyOfRange(packet, offset, offset + len);
             APRSPacket aprsPacket = Parser.parseAX25(packet, offset, len);
 
-            aprsController.handle(aprsPacket, APRSMessage.SOURCE_RX_RF, activeFrequencyStr, rawAx25);
+            aprsController.handle(aprsPacket, AprsSource.RX_RF, activeFrequencyHz(), rawAx25);
         } catch (Exception e) {
             Log.d(TAG, "Unable to parse an APRS packet, skipping.");
         }
@@ -1805,10 +1836,12 @@ public class RadioAudioService extends Service {
             final APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
             byte[] rawAx25 = aprsPacket.toAX25Frame();
-            txAX25Packet(new Packet(rawAx25));
-            aprsController.recordPositionBeacon(callsign, myPos.getLatitude(), myPos.getLongitude(),
-                activeFrequencyStr, aprsPacket, rawAx25);
-            callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), activeFrequencyStr, wasSwitch);
+            if (txAX25Packet(new Packet(rawAx25))) {
+                aprsController.recordPositionBeacon(callsign, myPos.getLatitude(), myPos.getLongitude(),
+                    activeFrequencyHz(), aprsPacket, rawAx25);
+                callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), activeFrequencyStr,
+                    wasSwitch);
+            }
         } catch (Exception e) {
             Log.w(TAG, "Exception while trying to beacon APRS location.", e);
         }
@@ -1821,8 +1854,16 @@ public class RadioAudioService extends Service {
      * @param remoteMessageNum  The message number to acknowledge.
      */
     public void sendAckMessage(String to, String remoteMessageNum) {
-        APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, MessagePacket.createMessagePayload(to, "ack" + remoteMessageNum, null));
-        txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
+        sendAckMessage(to, remoteMessageNum, null);
+    }
+
+    private void sendAckMessage(String to, String remoteMessageNum, Long eventId) {
+        APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS,
+            MessagePacket.createMessagePayload(to, "ack" + remoteMessageNum, null));
+        byte[] rawAx25 = aprsPacket.toAX25Frame();
+        if (txAX25Packet(new Packet(rawAx25))) {
+            aprsController.recordTransmission(eventId, aprsPacket, activeFrequencyHz(), rawAx25);
+        }
     }
 
     /**
@@ -1844,16 +1885,16 @@ public class RadioAudioService extends Service {
             messageNumber = 0;
         }
         boolean reliable = AprsController.requiresAcknowledgement(targetCallsign);
-        int outgoingMessageNumber = reliable ? messageNumber : -1;
         try {
             String identifier = reliable ? String.valueOf(messageNumber++) : null;
             APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS,
                 MessagePacket.createMessagePayload(targetCallsign, outText, identifier));
             byte[] rawAx25 = aprsPacket.toAX25Frame();
             Packet ax25Packet = new Packet(rawAx25);
-            txAX25Packet(ax25Packet);
-            aprsController.recordOutgoingMessage(callsign, targetCallsign, outText, outgoingMessageNumber,
-                activeFrequencyStr, aprsPacket, rawAx25);
+            if (txAX25Packet(ax25Packet)) {
+                aprsController.recordOutgoingMessage(callsign, targetCallsign, outText, identifier,
+                    activeFrequencyHz(), aprsPacket, rawAx25);
+            }
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Error: sending APRS packet", e);
             callbacks.chatError(e.getMessage());
@@ -1866,23 +1907,24 @@ public class RadioAudioService extends Service {
      *
      * @param ax25Packet The AX.25 packet to send.
      */
-    private void txAX25Packet(Packet ax25Packet) {
+    private boolean txAX25Packet(Packet ax25Packet) {
         if (!isTxAllowed()) {
             Log.e(TAG, "Tried to send an AX.25 packet when tx is not allowed, did not send.");
-            return;
+            return false;
         }
         if (getMode() != RadioMode.RX) {
             Log.e(TAG, "Tried to send an AX.25 packet when radio was not in RX mode, did not send.");
-            return;
+            return false;
         }
         Protocol.Sender sender = hostToEsp32;
         if (sender == null) {
             Log.e(TAG, "Tried to send AX.25 packet with no ESP32 connection.");
-            return;
+            return false;
         }
         Log.d(TAG, "Sending AX25 packet: " + ax25Packet);
         sender.txAx25(ax25Packet.bytesWithoutCRC());
         Log.i(TAG, "Send AX25 packet: " + ax25Packet);
+        return true;
     }
 
     public int getAudioTrackSessionId() {

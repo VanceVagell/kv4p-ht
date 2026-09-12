@@ -104,6 +104,10 @@
     <string name="settings">设置</string>
     <string name="beacon_my_position">广播我的位置</string>
     <string name="beacon_to_frequency">信标发射频率</string>
+    <string name="aprs_history_window">历史记录</string>
+    <string name="aprs_message_filter">消息</string>
+    <string name="all">全部</string>
+    <string name="mine">我的</string>
     <string name="beaconing_aprs_on">正在频率 %1$s 发送 APRS 信标...</string>
     <string name="current">当前频率</string>
     <string name="done">完成</string>

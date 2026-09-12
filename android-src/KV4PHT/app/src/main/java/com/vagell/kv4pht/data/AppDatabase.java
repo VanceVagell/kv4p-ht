@@ -32,14 +32,15 @@ import com.vagell.kv4pht.data.migrations.*;
  */
 @Database(
     version = 8,
-    entities = {AppSetting.class, ChannelMemory.class, APRSMessage.class}
+    entities = {AppSetting.class, ChannelMemory.class, AprsPacket.class, AprsEvent.class}
 )
 @SuppressWarnings("java:S6548")
 public abstract class AppDatabase extends RoomDatabase {
 
     public abstract AppSettingDao appSettingDao();
     public abstract ChannelMemoryDao channelMemoryDao();
-    public abstract APRSMessageDao aprsMessageDao();
+    public abstract AprsPacketDao aprsPacketDao();
+    public abstract AprsEventDao aprsEventDao();
 
     // Migrations
     public static final Migration MIGRATION_1_2 = new MigrationFrom1To2();
