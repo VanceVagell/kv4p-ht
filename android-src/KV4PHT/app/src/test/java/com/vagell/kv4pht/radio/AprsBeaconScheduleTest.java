@@ -34,6 +34,17 @@ public class AprsBeaconScheduleTest {
         assertTrue(schedule.isDue(301_000));
     }
 
+    @Test public void enablingAgainPreservesOriginalDeadline() {
+        AprsBeaconSchedule schedule = new AprsBeaconSchedule(300_000);
+        schedule.setEnabled(true);
+        assertTrue(schedule.isDue(1_000));
+
+        schedule.setEnabled(true);
+        assertFalse(schedule.isDue(1_500));
+        assertFalse(schedule.isDue(300_999));
+        assertTrue(schedule.isDue(301_000));
+    }
+
     @Test public void disablingAndReenablingRestartsWithoutCatchUpBursts() {
         AprsBeaconSchedule schedule = new AprsBeaconSchedule(300_000);
         schedule.setEnabled(true);

@@ -19,28 +19,19 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
-/** App-owned cadence for beacons needing asynchronous GPS and RF frequency switching. */
-final class AprsBeaconSchedule {
-    private final long intervalMs;
-    private boolean enabled;
-    private long nextAtMs;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import org.junit.Test;
 
-    AprsBeaconSchedule(long intervalMs) {
-        if (intervalMs <= 0) throw new IllegalArgumentException("Beacon interval must be positive");
-        this.intervalMs = intervalMs;
+public class AprsRfFrequencyPolicyTest {
+    @Test public void explicitRequestRequiresMatchingKnownFrequency() {
+        assertTrue(AprsRfFrequencyPolicy.matches(144390000L, 144390000L));
+        assertFalse(AprsRfFrequencyPolicy.matches(144390000L, 145175000L));
+        assertFalse(AprsRfFrequencyPolicy.matches(144390000L, null));
     }
 
-    void setEnabled(boolean enabled) {
-        if (this.enabled == enabled) {
-            return;
-        }
-        this.enabled = enabled;
-        nextAtMs = 0;
-    }
-
-    boolean isDue(long nowMs) {
-        if (!enabled || nowMs < nextAtMs) return false;
-        nextAtMs = nowMs + intervalMs;
-        return true;
+    @Test public void unspecifiedRequestUsesCurrentFrequency() {
+        assertTrue(AprsRfFrequencyPolicy.matches(null, 145175000L));
+        assertTrue(AprsRfFrequencyPolicy.matches(null, null));
     }
 }

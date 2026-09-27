@@ -35,6 +35,9 @@ import io.github.dkaukov.aprs.AprsSource;
 import io.github.dkaukov.aprs.parser.APRSPacket;
 import io.github.dkaukov.aprs.parser.Parser;
 import java.lang.reflect.Proxy;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -61,7 +64,12 @@ public class RoomAprsRepositoryTest {
             assertEquals(1, fixture.events.size());
             assertEquals(2, fixture.packets.size());
             assertEquals(1, fixture.notifications);
+            assertTrue(fixture.rfSubmissions.isEmpty());
+            fixture.controller.tick(1_000_999L);
+            assertTrue(fixture.rfSubmissions.isEmpty());
+            fixture.controller.tick(1_001_000L);
             assertEquals(2, fixture.rfSubmissions.size());
+            assertEquals(Long.valueOf(144390000L), fixture.requestedFrequencies.get(0));
             assertEquals(2, fixture.repository.findById(1).getPacketCount());
             assertEquals(1, first.getPacketCount());
         });
@@ -70,7 +78,7 @@ public class RoomAprsRepositoryTest {
     @Test public void retriesLoadOnceAndAckReplacesStoredEventWithoutMutatingOldValue() throws Exception {
         Fixture fixture = new Fixture();
         fixture.run(() -> {
-            long now = System.currentTimeMillis();
+            long now = 1_000_000L;
             fixture.controller.tick(now);
             fixture.controller.tick(now + 500);
             assertEquals(1, fixture.pendingLoads);
@@ -136,6 +144,7 @@ public class RoomAprsRepositoryTest {
             fixture.controller.tick(fixture.repository.findById(1).getNextRetryAtMs());
             assertEquals(1, fixture.rfSubmissions.size());
             assertArrayEquals(outgoing.toAX25Frame(), fixture.rfSubmissions.get(0).toAX25Frame());
+            assertEquals(Long.valueOf(144390000L), fixture.requestedFrequencies.get(0));
         });
     }
 
@@ -158,6 +167,7 @@ public class RoomAprsRepositoryTest {
             APRSPacket incoming = Parser.parse("VK3ABC>APRS::VK3ME    :hello{17");
             fixture.controller.handle(incoming, AprsSource.RX_RF, 144390000L,
                 incoming.toAX25Frame());
+            fixture.controller.tick(1_001_000L);
             assertEquals(1, fixture.rfSubmissions.size());
             APRSPacket submitted = fixture.rfSubmissions.get(0);
             APRSPacket expected = Parser.parse("VK3ME>APKVPA,WIDE1-1::VK3ABC   :ack17");
@@ -190,7 +200,7 @@ public class RoomAprsRepositoryTest {
         Fixture fixture = new Fixture();
         fixture.run(() -> {
             BeaconData beacon = BeaconData.builder().latitude(-37.75).longitude(145.125)
-                .symbolTable('/').symbolCode('$').build();
+                .symbolTable('/').symbolCode('$').messagingCapable(true).compressed(true).build();
             assertFalse(fixture.controller.submitPositionBeacon(beacon));
             assertTrue(fixture.events.isEmpty());
             assertTrue(fixture.packets.isEmpty());
@@ -205,6 +215,11 @@ public class RoomAprsRepositoryTest {
             assertEquals("VK3ME", event.getFromCallsign());
             assertEquals(AprsSource.TX_RF, fixture.packets.get(0).source);
             assertEquals("APKVPA", fixture.packets.get(0).ax25Destination);
+            String payload = new String(fixture.rfSubmissions.get(1).getPayload().getRawBytes(),
+                java.nio.charset.StandardCharsets.US_ASCII);
+            assertEquals("=" + new io.github.dkaukov.aprs.parser.Position(
+                -37.75, 145.125, 0, '/', '$').toCompressedString(), payload);
+            assertEquals(null, fixture.requestedFrequencies.get(1));
             fixture.controller.setCallsign("");
             assertFalse(fixture.controller.submitPositionBeacon(beacon));
             assertEquals(1, fixture.events.size());
@@ -219,6 +234,7 @@ public class RoomAprsRepositoryTest {
         final List<AprsPacketEntity> packets = new ArrayList<>();
         final Map<String, AprsFeedItem> projection = new LinkedHashMap<>();
         final List<APRSPacket> rfSubmissions = new ArrayList<>();
+        final List<Long> requestedFrequencies = new ArrayList<>();
         boolean inTransaction;
         boolean failPacketInsert;
         boolean failProjectionWrite;
@@ -316,7 +332,8 @@ public class RoomAprsRepositoryTest {
                         }
                     }
                 });
-            controller = new AprsController(repository, this);
+            controller = new AprsController(repository, this,
+                Clock.fixed(Instant.ofEpochMilli(1_000_000L), ZoneOffset.UTC));
             controller.setCallsign("VK3ME");
             controller.setTxDestination("APKVPA");
         }
@@ -340,12 +357,15 @@ public class RoomAprsRepositoryTest {
             assertNotNull(repository.findById(event.getId()));
             if (forLocal) notifications++;
         }
-        @Override public AprsController.Transmission submitRf(APRSPacket packet) {
+        @Override public AprsController.RfTransmission submitRf(APRSPacket packet, Long frequencyHz) {
             assertSame(worker, Thread.currentThread());
             assertFalse(inTransaction);
             rfSubmissions.add(packet.copy());
-            return acceptRf ? new AprsController.Transmission(packet, 144390000L,
-                packet.toAX25Frame()) : null;
+            requestedFrequencies.add(frequencyHz);
+            AprsController.Transmission transmission = acceptRf
+                ? AprsController.Transmission.builder().packet(packet).frequencyHz(144390000L)
+                    .rawAx25(packet.toAX25Frame()).build() : null;
+            return AprsController.RfTransmission.builder().transmission(transmission).build();
         }
         @Override public BeaconData getBeaconData() { fail("Unexpected beacon"); return null; }
         @Override public boolean submitAprsIs(String tnc2, Runnable onSuccess) {

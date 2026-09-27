@@ -548,8 +548,17 @@ public class RadioAudioService extends Service {
                 event.getBody(), INTENT_OPEN_CHAT));
         }
 
-        @Override public AprsController.Transmission submitRf(APRSPacket packet) {
-            return canTransmitAprs() ? transmitAprsPacket(packet) : null;
+        @Override public AprsController.RfTransmission submitRf(APRSPacket packet, Long requestedFrequencyHz) {
+            Long frequencyHz = activeFrequencyHz();
+            if (!AprsRfFrequencyPolicy.matches(requestedFrequencyHz, frequencyHz)) {
+                Log.d(TAG, "Rejecting APRS RF submission: requested " + requestedFrequencyHz
+                    + " Hz, currently tuned to " + frequencyHz + " Hz");
+                // Tuning away is temporary: keep reliable messages eligible for a later retry.
+                return null;
+            }
+            AprsController.Transmission transmission = canTransmitAprs()
+                ? transmitAprsPacket(packet, frequencyHz) : null;
+            return AprsController.RfTransmission.builder().transmission(transmission).build();
         }
 
         @Override public BeaconData getBeaconData() {
@@ -567,10 +576,11 @@ public class RadioAudioService extends Service {
             return isTxAllowed() && getMode() == RadioMode.RX && hostToEsp32 != null;
         }
 
-        private AprsController.Transmission transmitAprsPacket(APRSPacket packet) {
+        private AprsController.Transmission transmitAprsPacket(APRSPacket packet, Long frequencyHz) {
             byte[] rawAx25 = packet.toAX25Frame();
             return txAX25Packet(new Packet(rawAx25))
-                ? new AprsController.Transmission(packet, activeFrequencyHz(), rawAx25) : null;
+                ? AprsController.Transmission.builder().packet(packet).frequencyHz(frequencyHz)
+                    .rawAx25(rawAx25).build() : null;
         }
     }
 
@@ -1968,7 +1978,8 @@ public class RadioAudioService extends Service {
         final String frequency = activeFrequencyStr;
         final BeaconData beacon = BeaconData.builder()
             .latitude(beaconLatitude).longitude(beaconLongitude)
-            .symbolTable('/').symbolCode(aprsPositionIcon.getCode()).build();
+            .symbolTable('/').symbolCode(aprsPositionIcon.getCode())
+            .messagingCapable(true).compressed(true).build();
         executeAprs(() -> {
             boolean accepted = false;
             try {

@@ -19,28 +19,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
-/** App-owned cadence for beacons needing asynchronous GPS and RF frequency switching. */
-final class AprsBeaconSchedule {
-    private final long intervalMs;
-    private boolean enabled;
-    private long nextAtMs;
+/** Guards submissions that must use the original reception/transmission frequency. */
+final class AprsRfFrequencyPolicy {
+    private AprsRfFrequencyPolicy() { }
 
-    AprsBeaconSchedule(long intervalMs) {
-        if (intervalMs <= 0) throw new IllegalArgumentException("Beacon interval must be positive");
-        this.intervalMs = intervalMs;
-    }
-
-    void setEnabled(boolean enabled) {
-        if (this.enabled == enabled) {
-            return;
-        }
-        this.enabled = enabled;
-        nextAtMs = 0;
-    }
-
-    boolean isDue(long nowMs) {
-        if (!enabled || nowMs < nextAtMs) return false;
-        nextAtMs = nowMs + intervalMs;
-        return true;
+    static boolean matches(Long requestedHz, Long tunedHz) {
+        return requestedHz == null || requestedHz.equals(tunedHz);
     }
 }
