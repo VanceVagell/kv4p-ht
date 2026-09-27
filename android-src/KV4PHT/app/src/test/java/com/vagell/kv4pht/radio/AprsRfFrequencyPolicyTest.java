@@ -20,10 +20,25 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package com.vagell.kv4pht.radio;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class AprsRfFrequencyPolicyTest {
+    @Test public void offsetMemoryUsesTxFrequencyForGuardAndHistory() {
+        Long txHz = AprsRfFrequencyPolicy.toHz(146.340f);
+        assertEquals(Long.valueOf(146340000L), txHz);
+        assertFalse(AprsRfFrequencyPolicy.matches(146940000L, txHz));
+        assertTrue(AprsRfFrequencyPolicy.matches(146340000L, txHz));
+        assertTrue(AprsRfFrequencyPolicy.matches(null, txHz));
+    }
+
+    @Test public void unknownTxFrequencyIsNotReportedAsZero() {
+        assertNull(AprsRfFrequencyPolicy.toHz(0));
+        assertNull(AprsRfFrequencyPolicy.toHz(Float.NaN));
+        assertNull(AprsRfFrequencyPolicy.toHz(Float.POSITIVE_INFINITY));
+    }
     @Test public void explicitRequestRequiresMatchingKnownFrequency() {
         assertTrue(AprsRfFrequencyPolicy.matches(144390000L, 144390000L));
         assertFalse(AprsRfFrequencyPolicy.matches(144390000L, 145175000L));

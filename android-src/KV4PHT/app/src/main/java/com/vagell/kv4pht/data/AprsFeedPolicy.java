@@ -76,9 +76,9 @@ public final class AprsFeedPolicy {
     /** Mirrors the Room mine-filter predicate for app-side settings and unit tests. */
     public static boolean isVisibleToMine(AprsEvent event, String localCallsign) {
         if (event.getType() != AprsEvent.MESSAGE_TYPE) return true;
-        String local = normalizeCallsign(localCallsign);
-        String from = normalizeCallsign(event.getFromCallsign());
-        String destination = normalizeCallsign(event.getToCallsign());
+        String local = normalizeMessageCallsign(localCallsign);
+        String from = normalizeMessageCallsign(event.getFromCallsign());
+        String destination = normalizeMessageCallsign(event.getToCallsign());
         return local.equals(from) || local.equals(destination) || "ALL".equals(destination)
             || "QST".equals(destination) || "CQ".equals(destination)
             || destination.startsWith("BLN");
@@ -86,5 +86,11 @@ public final class AprsFeedPolicy {
 
     public static String normalizeCallsign(String callsign) {
         return callsign == null ? "" : callsign.trim().toUpperCase(Locale.ROOT);
+    }
+
+    static String normalizeMessageCallsign(String callsign) {
+        String normalized = normalizeCallsign(callsign);
+        return normalized.endsWith("-0")
+            ? normalized.substring(0, normalized.length() - 2) : normalized;
     }
 }

@@ -549,12 +549,18 @@ public class RadioAudioService extends Service {
         }
 
         @Override public AprsController.RfTransmission submitRf(APRSPacket packet, Long requestedFrequencyHz) {
-            Long frequencyHz = activeFrequencyHz();
+            if (!canTransmitAprs() || !radioModule.isAppliedStateInSync()) {
+                return null;
+            }
+            Long frequencyHz = activeTxFrequencyHz();
+            if (frequencyHz == null) {
+                return null;
+            }
             if (!AprsRfFrequencyPolicy.matches(requestedFrequencyHz, frequencyHz)) {
                 Log.d(TAG, "Rejecting APRS RF submission: requested " + requestedFrequencyHz
-                    + " Hz, currently tuned to " + frequencyHz + " Hz");
-                // Tuning away is temporary: keep reliable messages eligible for a later retry.
-                return null;
+                    + " Hz, configured TX frequency " + frequencyHz + " Hz");
+                // The app does not automatically retune to the original message frequency.
+                return AprsController.RfTransmission.builder().retryAllowed(false).build();
             }
             AprsController.Transmission transmission = canTransmitAprs()
                 ? transmitAprsPacket(packet, frequencyHz) : null;
@@ -1491,6 +1497,10 @@ public class RadioAudioService extends Service {
         }
     }
 
+    private Long activeTxFrequencyHz() {
+        return AprsRfFrequencyPolicy.toHz(radioModule.getTxFrequency());
+    }
+
     public boolean isHasHighLowPowerSwitch() {
         return radioModule.hasHighLowPowerSwitch();
     }
@@ -2026,10 +2036,10 @@ public class RadioAudioService extends Service {
                 MessagePacket.createMessagePayload(targetCallsign, outText, identifier));
             byte[] rawAx25 = aprsPacket.toAX25Frame();
             Packet ax25Packet = new Packet(rawAx25);
+            Long frequencyHz = activeTxFrequencyHz();
             if (txAX25Packet(ax25Packet)) {
                 APRSPacket queuedPacket = aprsPacket.copy();
                 byte[] queuedFrame = rawAx25.clone();
-                Long frequencyHz = activeFrequencyHz();
                 executeAprs(() -> aprsController.recordOutgoingMessage(senderCallsign,
                     targetCallsign, outText, identifier, frequencyHz, queuedPacket, queuedFrame));
             }
@@ -2046,6 +2056,10 @@ public class RadioAudioService extends Service {
      * @param ax25Packet The AX.25 packet to send.
      */
     private boolean txAX25Packet(Packet ax25Packet) {
+        if (!radioModule.isAppliedStateInSync() || activeTxFrequencyHz() == null) {
+            Log.d(TAG, "Deferring AX.25 transmission until the radio configuration is applied.");
+            return false;
+        }
         if (!isTxAllowed()) {
             Log.e(TAG, "Tried to send an AX.25 packet when tx is not allowed, did not send.");
             return false;

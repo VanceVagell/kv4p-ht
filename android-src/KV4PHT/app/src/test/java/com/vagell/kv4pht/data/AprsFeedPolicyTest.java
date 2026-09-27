@@ -59,6 +59,9 @@ public class AprsFeedPolicyTest {
     @Test public void mineFilterIncludesOwnAndBroadcastMessagesButNotOtherDirectMessages() {
         assertTrue(visible("VK3ME", "VK3OTHER"));
         assertTrue(visible("VK3OTHER", "VK3ME"));
+        assertTrue(visible("VK3ME-0", "VK3OTHER"));
+        assertTrue(visible("VK3OTHER", "VK3ME-0"));
+        assertFalse(visible("VK3OTHER", "VK3ME-1"));
         assertTrue(visible("VK3OTHER", "BLN1CQ"));
         assertTrue(visible("VK3OTHER", "QST"));
         assertFalse(visible("VK3OTHER", "VK3ELSE"));

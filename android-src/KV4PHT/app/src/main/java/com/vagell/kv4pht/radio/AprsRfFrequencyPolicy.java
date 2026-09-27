@@ -23,6 +23,14 @@ package com.vagell.kv4pht.radio;
 final class AprsRfFrequencyPolicy {
     private AprsRfFrequencyPolicy() { }
 
+    static Long toHz(float frequencyMhz) {
+        if (!Float.isFinite(frequencyMhz) || frequencyMhz <= 0) {
+            return null;
+        }
+        // Convert the radio's decimal MHz representation without float rounding noise.
+        return Math.round(Double.parseDouble(Float.toString(frequencyMhz)) * 1_000_000d);
+    }
+
     static boolean matches(Long requestedHz, Long tunedHz) {
         return requestedHz == null || requestedHz.equals(tunedHz);
     }

@@ -35,6 +35,8 @@ public final class AprsFeedRepository {
     private final MutableLiveData<List<AprsFeedRow>> feed = new MutableLiveData<>();
     private volatile String historyWindow = AprsFeedPolicy.HISTORY_ALL;
     private volatile String destinationFilter = AprsFeedPolicy.DESTINATION_ALL;
+    private boolean refreshPending;
+    private boolean refreshDirty;
 
     public AprsFeedRepository(AprsEventDao dao, Executor executor,
                               Supplier<String> callsignSupplier) {
@@ -60,21 +62,48 @@ public final class AprsFeedRepository {
 
     /** Reloads the Android-only UI projection after a repository mutation. */
     public void refresh() {
-        long sinceMs = AprsFeedPolicy.historyStartMs(historyWindow, System.currentTimeMillis());
-        boolean mineOnly = AprsFeedPolicy.DESTINATION_MINE.equals(destinationFilter);
-        String callsign = AprsFeedPolicy.normalizeCallsign(callsignSupplier.get());
+        synchronized (this) {
+            refreshDirty = true;
+            if (refreshPending) return;
+            refreshPending = true;
+        }
+        enqueueRefresh();
+    }
+
+    private void enqueueRefresh() {
         try {
-            executor.execute(() -> {
-                List<RoomAprsFeedRow> rows = mineOnly
-                    ? dao.getMineFeedSince(sinceMs, AprsEvent.MESSAGE_TYPE, callsign,
-                        AprsFeedPolicy.MAX_VISIBLE_EVENTS)
-                    : dao.getFeedSince(sinceMs, AprsFeedPolicy.MAX_VISIBLE_EVENTS);
-                List<AprsFeedRow> mappedRows = new ArrayList<>();
-                for (RoomAprsFeedRow row : rows) mappedRows.add(AprsFeedRow.fromRoom(row));
-                feed.postValue(mappedRows);
-            });
+            executor.execute(this::reloadFeed);
         } catch (RejectedExecutionException ignored) {
+            synchronized (this) {
+                refreshPending = false;
+            }
             // Service shutdown must not turn a committed database write into a reported failure.
+        }
+    }
+
+    private void reloadFeed() {
+        synchronized (this) {
+            refreshDirty = false;
+        }
+        try {
+            long sinceMs = AprsFeedPolicy.historyStartMs(historyWindow, System.currentTimeMillis());
+            boolean mineOnly = AprsFeedPolicy.DESTINATION_MINE.equals(destinationFilter);
+            String callsign = AprsFeedPolicy.normalizeMessageCallsign(callsignSupplier.get());
+            List<RoomAprsFeedRow> rows = mineOnly
+                ? dao.getMineFeedSince(sinceMs, AprsEvent.MESSAGE_TYPE, callsign,
+                    AprsFeedPolicy.MAX_VISIBLE_EVENTS)
+                : dao.getFeedSince(sinceMs, AprsFeedPolicy.MAX_VISIBLE_EVENTS);
+            List<AprsFeedRow> mappedRows = new ArrayList<>();
+            for (RoomAprsFeedRow row : rows) mappedRows.add(AprsFeedRow.fromRoom(row));
+            feed.postValue(mappedRows);
+        } finally {
+            boolean reload;
+            synchronized (this) {
+                reload = refreshDirty;
+                if (!reload) refreshPending = false;
+            }
+            // Yield to queued packet handling instead of looping over full-feed queries.
+            if (reload) enqueueRefresh();
         }
     }
 }

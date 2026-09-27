@@ -39,6 +39,7 @@ public interface AprsEventDao {
         + "FROM aprs_feed f INNER JOIN aprs_events e ON e.id = f.event_id "
         + "WHERE f.sort_time_ms >= :sinceMs AND (e.type != :messageType "
         + "OR e.from_callsign = :localCallsign OR e.to_callsign = :localCallsign "
+        + "OR e.from_callsign = :localCallsign || '-0' OR e.to_callsign = :localCallsign || '-0' "
         + "OR e.to_callsign IN ('ALL', 'QST', 'CQ') "
         + "OR (e.to_callsign >= 'BLN' AND e.to_callsign < 'BLO')) "
         + "ORDER BY f.sort_time_ms DESC, e.id DESC LIMIT :limit) "

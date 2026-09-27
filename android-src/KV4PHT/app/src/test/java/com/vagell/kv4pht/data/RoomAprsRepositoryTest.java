@@ -148,6 +148,24 @@ public class RoomAprsRepositoryTest {
         });
     }
 
+    @Test public void terminalRfRefusalMarksMessageFailedAndStopsRetries() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.run(() -> {
+            APRSPacket outgoing = Parser.parse("VK3ME>APKVPA::VK3ABC   :hello{17");
+            fixture.controller.recordOutgoingMessage("VK3ME", "VK3ABC", "hello", "17",
+                144390000L, outgoing, outgoing.toAX25Frame());
+            fixture.retryAllowed = false;
+            long due = fixture.repository.findById(1).getNextRetryAtMs();
+            fixture.controller.tick(due);
+            AprsEvent failed = fixture.repository.findById(1);
+            assertEquals(AprsEvent.DELIVERY_FAILED, failed.getDeliveryState());
+            assertEquals(1, failed.getTransmitAttempts());
+            assertEquals(1, fixture.packets.size());
+            fixture.controller.tick(due + 600_000);
+            assertEquals(1, fixture.rfSubmissions.size());
+        });
+    }
+
     @Test public void unrelatedIncomingMessageDoesNotNotifyLocalUser() throws Exception {
         Fixture fixture = new Fixture();
         fixture.run(() -> {
@@ -239,6 +257,7 @@ public class RoomAprsRepositoryTest {
         boolean failPacketInsert;
         boolean failProjectionWrite;
         boolean acceptRf;
+        boolean retryAllowed = true;
         boolean acceptIs;
         Runnable isSuccess;
         final List<Runnable> feedRefreshes = new ArrayList<>();
@@ -365,7 +384,8 @@ public class RoomAprsRepositoryTest {
             AprsController.Transmission transmission = acceptRf
                 ? AprsController.Transmission.builder().packet(packet).frequencyHz(144390000L)
                     .rawAx25(packet.toAX25Frame()).build() : null;
-            return AprsController.RfTransmission.builder().transmission(transmission).build();
+            return AprsController.RfTransmission.builder().transmission(transmission)
+                .retryAllowed(retryAllowed).build();
         }
         @Override public BeaconData getBeaconData() { fail("Unexpected beacon"); return null; }
         @Override public boolean submitAprsIs(String tnc2, Runnable onSuccess) {
