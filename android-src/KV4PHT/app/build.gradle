@@ -53,6 +53,7 @@ android {
 }
 
 dependencies {
+    implementation 'io.github.dkaukov:java-aprs:0.2.1'
     implementation project(':usbSerialForAndroid')
     implementation 'androidx.activity:activity:1.13.0'
     implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'], exclude: [])

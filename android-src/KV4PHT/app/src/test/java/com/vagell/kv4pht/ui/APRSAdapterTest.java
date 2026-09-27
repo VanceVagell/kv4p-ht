@@ -24,7 +24,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.data.AprsEvent;
+import io.github.dkaukov.aprs.AprsEvent;
 import org.junit.Test;
 
 public class APRSAdapterTest {
@@ -41,18 +41,20 @@ public class APRSAdapterTest {
     }
 
     @Test public void positionDescriptionsStayOnMapWhileObjectsUseCards() {
-        AprsEvent position = new AprsEvent();
-        position.type = AprsEvent.POSITION_TYPE;
-        position.fromCallsign = "VK3ABC-7";
-        position.comment = "Listening on 146.52";
+        AprsEvent position = AprsEvent.builder()
+            .type(AprsEvent.POSITION_TYPE)
+            .fromCallsign("VK3ABC-7")
+            .comment("Listening on 146.52")
+            .build();
 
-        AprsEvent object = new AprsEvent();
-        object.type = AprsEvent.OBJECT_TYPE;
-        object.objectName = "VK3RPT B";
-        object.comment = "439.150 MHz repeater";
+        AprsEvent object = AprsEvent.builder()
+            .type(AprsEvent.OBJECT_TYPE)
+            .objectName("VK3RPT B")
+            .comment("439.150 MHz repeater")
+            .build();
 
-        assertFalse(APRSAdapter.showCommentInFeed(position.type));
-        assertTrue(APRSAdapter.showCommentInFeed(object.type));
+        assertFalse(APRSAdapter.showCommentInFeed(position.getType()));
+        assertTrue(APRSAdapter.showCommentInFeed(object.getType()));
         assertTrue(APRSAdapter.showCommentInFeed(AprsEvent.STATUS_TYPE));
         assertTrue(APRSAdapter.showCommentInFeed(AprsEvent.STATION_CAPABILITIES_TYPE));
         assertTrue(APRSAdapter.showCommentInFeed(AprsEvent.UNKNOWN_TYPE));

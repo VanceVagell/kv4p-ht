@@ -33,7 +33,7 @@ public interface AprsEventDao {
         + "WHERE f.sort_time_ms >= :sinceMs "
         + "ORDER BY f.sort_time_ms DESC, e.id DESC LIMIT :limit) "
         + "ORDER BY sort_time_ms, id")
-    List<AprsFeedRow> getFeedSince(long sinceMs, int limit);
+    List<RoomAprsFeedRow> getFeedSince(long sinceMs, int limit);
 
     @Query("SELECT * FROM (SELECT f.feed_key, f.sort_time_ms, f.event_count, e.* "
         + "FROM aprs_feed f INNER JOIN aprs_events e ON e.id = f.event_id "
@@ -43,32 +43,28 @@ public interface AprsEventDao {
         + "OR (e.to_callsign >= 'BLN' AND e.to_callsign < 'BLO')) "
         + "ORDER BY f.sort_time_ms DESC, e.id DESC LIMIT :limit) "
         + "ORDER BY sort_time_ms, id")
-    List<AprsFeedRow> getMineFeedSince(long sinceMs, int messageType, String localCallsign,
-                                        int limit);
+    List<RoomAprsFeedRow> getMineFeedSince(long sinceMs, int messageType,
+                                            String localCallsign, int limit);
 
     @Query("SELECT * FROM aprs_events WHERE delivery_state = :pendingState "
-        + "AND next_retry_at_ms IS NOT NULL AND next_retry_at_ms <= :now")
-    List<AprsEvent> getDueReliableEvents(int pendingState, long now);
-
-    @Query("SELECT MIN(next_retry_at_ms) FROM aprs_events WHERE delivery_state = :pendingState "
         + "AND next_retry_at_ms IS NOT NULL")
-    Long getNextReliableRetryAt(int pendingState);
+    List<AprsEventEntity> getPendingReliableEvents(int pendingState);
 
     @Query("SELECT * FROM aprs_events WHERE from_callsign = :localCallsign "
         + "AND to_callsign = :remoteCallsign AND message_identifier = :messageIdentifier "
         + "AND delivery_state = :pendingState ORDER BY id DESC LIMIT 1")
-    AprsEvent getPendingOutgoingEvent(String localCallsign, String remoteCallsign,
-                                      String messageIdentifier, int pendingState);
+    AprsEventEntity getPendingOutgoingEvent(String localCallsign, String remoteCallsign,
+                                            String messageIdentifier, int pendingState);
 
     @Query("SELECT * FROM aprs_events WHERE id = :id LIMIT 1")
-    AprsEvent getById(long id);
+    AprsEventEntity getById(long id);
 
     @Query("SELECT * FROM aprs_events WHERE dedup_key = :dedupKey "
         + "AND last_seen_ms >= :sinceMs ORDER BY last_seen_ms DESC LIMIT 1")
-    AprsEvent getRecentByDedupKey(String dedupKey, long sinceMs);
+    AprsEventEntity getRecentByDedupKey(String dedupKey, long sinceMs);
 
     @Insert
-    long insert(AprsEvent event);
+    long insert(AprsEventEntity event);
 
     @Query("SELECT * FROM aprs_feed WHERE feed_key = :feedKey LIMIT 1")
     AprsFeedItem getFeedItem(String feedKey);
@@ -76,18 +72,21 @@ public interface AprsEventDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void upsertFeedItem(AprsFeedItem item);
 
-    /** Inserts an immutable event and atomically advances its materialized feed slot. */
+    /** Advances the feed projection inside the controller's event/packet transaction. */
     @Transaction
-    default long insertWithFeed(AprsEvent event, String feedKey) {
-        long eventId = insert(event);
-        String resolvedKey = feedKey == null ? "event:" + eventId : feedKey;
+    default void updateEventFeed(AprsEventEntity event, String feedKey) {
+        String resolvedKey = feedKey == null ? "event:" + event.id : feedKey;
         AprsFeedItem current = getFeedItem(resolvedKey);
-        int eventCount = current == null ? 1 : current.eventCount + 1;
+        // Updating an older event must not replace the latest station/object row.
+        if (current != null && current.eventId != event.id
+                && (current.sortTimeMs > event.firstSeenMs
+                    || (current.sortTimeMs == event.firstSeenMs && current.eventId > event.id))) return;
+        int eventCount = current == null ? 1
+            : current.eventCount + (current.eventId == event.id ? 0 : 1);
         upsertFeedItem(new AprsFeedItem(
-            resolvedKey, eventId, event.firstSeenMs, eventCount));
-        return eventId;
+            resolvedKey, event.id, event.firstSeenMs, eventCount));
     }
 
     @Update
-    void update(AprsEvent event);
+    void update(AprsEventEntity event);
 }

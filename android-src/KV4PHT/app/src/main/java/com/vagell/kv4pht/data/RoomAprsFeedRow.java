@@ -18,14 +18,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.data;
 
-/** Transport direction/source values stored with physical APRS packet records. */
-public final class AprsSource {
-    public static final String UNKNOWN = "UNKNOWN";
-    public static final String RX_RF = "RX_RF";
-    public static final String TX_RF = "TX_RF";
-    public static final String RX_APRS_IS = "RX_APRS_IS";
-    public static final String TX_APRS_IS = "TX_APRS_IS";
+import androidx.room.ColumnInfo;
+import androidx.room.Embedded;
 
-    private AprsSource() {
-    }
+/** Joined feed projection consumed by the normal APRS history UI. */
+class RoomAprsFeedRow {
+    @ColumnInfo(name = "feed_key")
+    public String feedKey;
+
+    @ColumnInfo(name = "sort_time_ms")
+    public long sortTimeMs;
+
+    @ColumnInfo(name = "event_count")
+    public int eventCount;
+
+    @Embedded
+    public AprsEventEntity event;
 }

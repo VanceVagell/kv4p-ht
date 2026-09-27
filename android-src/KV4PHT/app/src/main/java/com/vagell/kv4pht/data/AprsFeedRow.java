@@ -18,20 +18,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.data;
 
-import androidx.room.ColumnInfo;
-import androidx.room.Embedded;
+import io.github.dkaukov.aprs.AprsEvent;
 
-/** Joined feed projection consumed by the normal APRS history UI. */
-public class AprsFeedRow {
-    @ColumnInfo(name = "feed_key")
+/** Android UI feed projection over a canonical APRS event. */
+public final class AprsFeedRow {
     public String feedKey;
-
-    @ColumnInfo(name = "sort_time_ms")
     public long sortTimeMs;
-
-    @ColumnInfo(name = "event_count")
     public int eventCount;
-
-    @Embedded
     public AprsEvent event;
+
+    static AprsFeedRow fromRoom(RoomAprsFeedRow row) {
+        AprsFeedRow result = new AprsFeedRow();
+        result.feedKey = row.feedKey;
+        result.sortTimeMs = row.sortTimeMs;
+        result.eventCount = row.eventCount;
+        result.event = AprsPersistenceMapper.toDomain(row.event);
+        return result;
+    }
 }

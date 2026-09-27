@@ -46,9 +46,8 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.vagell.kv4pht.BuildConfig;
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.aprs.AprsController;
-import com.vagell.kv4pht.aprs.AprsIsClient;
-import com.vagell.kv4pht.aprs.parser.APRSIconType;
+import io.github.dkaukov.aprs.AprsIsClient;
+import com.vagell.kv4pht.data.AprsFeedPolicy;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.radio.RadioAudioService;
 
@@ -388,12 +387,12 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private String historyWindowLabel(String value) {
-        return value == null || AprsController.HISTORY_ALL.equalsIgnoreCase(value)
+        return value == null || AprsFeedPolicy.HISTORY_ALL.equalsIgnoreCase(value)
             ? getString(R.string.all) : value;
     }
 
     private String destinationFilterLabel(String value) {
-        if (value != null && AprsController.DESTINATION_MINE.equalsIgnoreCase(value)) {
+        if (value != null && AprsFeedPolicy.DESTINATION_MINE.equalsIgnoreCase(value)) {
             return getString(R.string.aprs_only_mine);
         }
         return getString(R.string.aprs_show_all);
@@ -524,7 +523,7 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setAprsHistoryWindow(String historyWindow) {
         String value = getString(R.string.all).equals(historyWindow)
-            ? AprsController.HISTORY_ALL : historyWindow;
+            ? AprsFeedPolicy.HISTORY_ALL : historyWindow;
         saveAppSettingAsync(AppSetting.SETTING_APRS_HISTORY_WINDOW, value);
         if (radioAudioService != null) {
             radioAudioService.setAprsHistoryWindow(value);
@@ -533,7 +532,7 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setAprsDestinationFilter(String destinationFilter) {
         String value = getString(R.string.aprs_only_mine).equals(destinationFilter)
-            ? AprsController.DESTINATION_MINE : AprsController.DESTINATION_ALL;
+            ? AprsFeedPolicy.DESTINATION_MINE : AprsFeedPolicy.DESTINATION_ALL;
         saveAppSettingAsync(AppSetting.SETTING_APRS_DESTINATION_FILTER, value);
         if (radioAudioService != null) {
             radioAudioService.setAprsDestinationFilter(value);

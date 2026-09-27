@@ -74,8 +74,8 @@ import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.aprs.AprsController;
-import com.vagell.kv4pht.aprs.AprsIsClient;
+import io.github.dkaukov.aprs.AprsIsClient;
+import com.vagell.kv4pht.data.AprsFeedPolicy;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
@@ -852,9 +852,9 @@ public class MainActivity extends AppCompatActivity {
         service.setAprsIgateEnabled(Boolean.parseBoolean(
             settings.getOrDefault(AppSetting.SETTING_APRS_IGATE, DEFAULT_BOOLEAN_FALSE)));
         service.setAprsHistoryWindow(settings.getOrDefault(
-            AppSetting.SETTING_APRS_HISTORY_WINDOW, AprsController.HISTORY_ALL));
+            AppSetting.SETTING_APRS_HISTORY_WINDOW, AprsFeedPolicy.HISTORY_ALL));
         service.setAprsDestinationFilter(settings.getOrDefault(
-            AppSetting.SETTING_APRS_DESTINATION_FILTER, AprsController.DESTINATION_ALL));
+            AppSetting.SETTING_APRS_DESTINATION_FILTER, AprsFeedPolicy.DESTINATION_ALL));
     }
 
     private void applyAprsPositionAccuracy(RadioAudioService service, String accuracy) {

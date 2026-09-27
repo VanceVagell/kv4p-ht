@@ -29,7 +29,7 @@ import androidx.room.PrimaryKey;
 @Entity(
     tableName = "aprs_feed",
     foreignKeys = @ForeignKey(
-        entity = AprsEvent.class,
+        entity = AprsEventEntity.class,
         parentColumns = "id",
         childColumns = "event_id",
         onDelete = ForeignKey.CASCADE

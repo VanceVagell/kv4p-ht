@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-package com.vagell.kv4pht.aprs.parser;
+package com.vagell.kv4pht.ui;
 
 /**
  * A mapping of icon types to the APRS spec icon character used to represent it in a

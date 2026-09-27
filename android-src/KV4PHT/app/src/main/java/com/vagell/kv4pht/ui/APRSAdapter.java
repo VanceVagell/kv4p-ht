@@ -36,7 +36,7 @@ import androidx.core.text.util.LocalePreferences;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.vagell.kv4pht.R;
-import com.vagell.kv4pht.data.AprsEvent;
+import io.github.dkaukov.aprs.AprsEvent;
 import com.vagell.kv4pht.data.AprsFeedRow;
 
 import java.util.ArrayList;
@@ -78,11 +78,11 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
     }
 
     static String mapLabel(AprsEvent event) {
-        if (event.type == AprsEvent.OBJECT_TYPE) {
-            return AprsObjectSummary.from(event.objectName, event.comment).mapLabel;
+        if (event.getType() == AprsEvent.OBJECT_TYPE) {
+            return AprsObjectSummary.from(event.getObjectName(), event.getComment()).mapLabel;
         }
-        String name = trimmed(event.fromCallsign);
-        String description = trimmed(event.comment);
+        String name = trimmed(event.getFromCallsign());
+        String description = trimmed(event.getComment());
         if (name.isEmpty()) return description;
         if (description.isEmpty()) return name;
         return name + ": " + description;
@@ -168,7 +168,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
 
     @Override
     public int getItemViewType(int position) {
-        return aprsFeed.get(position).event.type;
+        return aprsFeed.get(position).event.getType();
     }
 
     @Override
@@ -176,35 +176,35 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         final AprsEvent aprsEvent = aprsFeed.get(position).event;
 
         // Some default values any message type can have
-        holder.setFromCallsign(aprsEvent.fromCallsign);
-        holder.setTimestamp(aprsEvent.firstSeenMs);
-        holder.setComment(showCommentInFeed(aprsEvent.type) ? aprsEvent.comment : null);
-        holder.setPositionLat(aprsEvent.positionLat);
-        holder.setPositionLong(aprsEvent.positionLong);
-        holder.setDigipeated(aprsEvent.digipeated);
-        holder.setInternetOnly(aprsEvent.internetOnly);
+        holder.setFromCallsign(aprsEvent.getFromCallsign());
+        holder.setTimestamp(aprsEvent.getFirstSeenMs());
+        holder.setComment(showCommentInFeed(aprsEvent.getType()) ? aprsEvent.getComment() : null);
+        holder.setPositionLat(aprsEvent.getPositionLat());
+        holder.setPositionLong(aprsEvent.getPositionLong());
+        holder.setDigipeated(aprsEvent.isDigipeated());
+        holder.setInternetOnly(aprsEvent.isInternetOnly());
 
         // Specialized values
-        switch (aprsEvent.type) {
+        switch (aprsEvent.getType()) {
             case AprsEvent.WEATHER_TYPE:
-                holder.setTemperature(aprsEvent.temperature);
-                holder.setHumidity(aprsEvent.humidity);
-                holder.setPressure(aprsEvent.pressure);
-                holder.setRain(aprsEvent.rain);
-                holder.setSnow(aprsEvent.snow);
-                holder.setWindForce(aprsEvent.windForce);
-                holder.setWindDir(aprsEvent.windDirection);
+                holder.setTemperature(aprsEvent.getTemperature());
+                holder.setHumidity(aprsEvent.getHumidity());
+                holder.setPressure(aprsEvent.getPressure());
+                holder.setRain(aprsEvent.getRain());
+                holder.setSnow(aprsEvent.getSnow());
+                holder.setWindForce(aprsEvent.getWindForce());
+                holder.setWindDir(aprsEvent.getWindDirection());
                 break;
             case AprsEvent.MESSAGE_TYPE:
-                holder.setToCallsign(aprsEvent.toCallsign);
-                holder.setMsgBody(aprsEvent.body);
-                holder.setDeliveryState(aprsEvent.deliveryState);
+                holder.setToCallsign(aprsEvent.getToCallsign());
+                holder.setMsgBody(aprsEvent.getBody());
+                holder.setDeliveryState(aprsEvent.getDeliveryState());
                 break;
             case AprsEvent.OBJECT_TYPE:
-                holder.setObjName(aprsEvent.objectName);
+                holder.setObjName(aprsEvent.getObjectName());
                 holder.setComment(AprsObjectSummary.from(
-                    aprsEvent.objectName, aprsEvent.comment).cardText);
-                holder.setObjectSource(aprsEvent.fromCallsign, aprsEvent.objectName);
+                    aprsEvent.getObjectName(), aprsEvent.getComment()).cardText);
+                holder.setObjectSource(aprsEvent.getFromCallsign(), aprsEvent.getObjectName());
                 break;
             case AprsEvent.POSITION_TYPE: // Can only have default values
             case AprsEvent.STATUS_TYPE: // Ditto
@@ -214,12 +214,12 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             default:
                 break;
         }
-        holder.setRelayCallsign(aprsEvent.relayCallsign);
+        holder.setRelayCallsign(aprsEvent.getRelayCallsign());
 
         // Handle taps on the message's position icon
         final View positionButton = holder.itemView.findViewById(R.id.senderPositionButton);
         positionButton.setOnClickListener(v -> {
-            String coordinates = aprsEvent.positionLat + "," + aprsEvent.positionLong;
+            String coordinates = aprsEvent.getPositionLat() + "," + aprsEvent.getPositionLong();
             String label = mapLabel(aprsEvent);
             String mapQuery = label.isEmpty() ? coordinates : coordinates + " (" + label + ")";
             String geoUri = "geo:" + coordinates + "?q=" + Uri.encode(mapQuery);

@@ -21,7 +21,7 @@ package com.vagell.kv4pht.data.migrations;
 import android.database.Cursor;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
-import com.vagell.kv4pht.aprs.parser.StationCapabilitiesField;
+import io.github.dkaukov.aprs.parser.StationCapabilitiesField;
 
 /** Splits legacy APRS events from the physical packet history introduced in version 8. */
 public class MigrationFrom7To8 extends Migration {

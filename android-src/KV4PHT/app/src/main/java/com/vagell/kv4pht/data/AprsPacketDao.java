@@ -26,8 +26,12 @@ import java.util.List;
 @Dao
 public interface AprsPacketDao {
     @Query("SELECT * FROM aprs_packets ORDER BY timestamp_ms")
-    List<AprsPacket> getAll();
+    List<AprsPacketEntity> getAll();
+
+    @Query("SELECT * FROM aprs_packets WHERE event_id = :eventId AND source = 'TX_RF' "
+        + "ORDER BY id LIMIT 1")
+    AprsPacketEntity getInitialRfTransmission(long eventId);
 
     @Insert
-    long insert(AprsPacket packet);
+    long insert(AprsPacketEntity packet);
 }

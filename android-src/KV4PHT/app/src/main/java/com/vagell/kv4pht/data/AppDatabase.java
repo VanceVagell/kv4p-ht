@@ -35,8 +35,8 @@ import com.vagell.kv4pht.data.migrations.*;
     entities = {
         AppSetting.class,
         ChannelMemory.class,
-        AprsPacket.class,
-        AprsEvent.class,
+        AprsPacketEntity.class,
+        AprsEventEntity.class,
         AprsFeedItem.class
     }
 )
