@@ -350,6 +350,14 @@ public class RadioModuleController {
         return lastDeviceState != null && Protocol.DeviceMode.DEVICE_MODE_TX.equals(lastDeviceState.getMode());
     }
 
+    synchronized byte getDesiredBandwidth() {
+        return desiredState.getBw();
+    }
+
+    synchronized byte getDesiredTxTone() {
+        return desiredState.getCtcssTx();
+    }
+
     synchronized boolean didPhysPttChange() {
         return lastPhysPttDown != isPhysPttDown();
     }

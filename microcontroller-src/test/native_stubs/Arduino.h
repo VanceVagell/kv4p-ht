@@ -23,6 +23,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstring>
 #include <cstdio>
 
+#ifndef PI
+#define PI 3.14159265358979323846f
+#endif
+
 inline unsigned long millis() {
   return 0;
 }

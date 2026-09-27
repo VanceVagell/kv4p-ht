@@ -1845,20 +1845,19 @@ public class RadioAudioService extends Service {
     public void sendPositionBeacon() {
         boolean isScanning = getMode() == RadioMode.SCAN;
         boolean isRx = getMode() == RadioMode.RX;
-        boolean isCurrent = CURRENT_FREQUENCY.equals(aprsBeaconFrequency);
 
         if (!isRadioConnected() || !isTxAllowed()) {
             Log.d(TAG, "Skipping position beacon: radio disconnected or tx not allowed.");
             return;
         }
 
-        if (isScanning && isCurrent) {
-            Log.d(TAG, "Skipping position beacon: scanning and set to 'Current' frequency.");
+        if (isScanning) {
+            Log.d(TAG, "Skipping position beacon: scanning is active.");
             return;
         }
 
-        if (!isRx && !isScanning) {
-            Log.d(TAG, "Skipping position beacon: not in RX or SCAN mode.");
+        if (!isRx) {
+            Log.d(TAG, "Skipping position beacon: not in RX mode.");
             return;
         }
 
@@ -1882,44 +1881,34 @@ public class RadioAudioService extends Service {
     private void performPositionBeacon(final double latitude, final double longitude) {
         if (CURRENT_FREQUENCY.equals(aprsBeaconFrequency)) {
             callbacks.startingAprsBeacon(activeFrequencyStr);
-            sendPositionBeacon(latitude, longitude, false);
+            sendPositionBeaconOnActiveChannel(latitude, longitude, activeFrequencyStr);
             return;
         }
 
-        // Frequency switch logic
-        final boolean wasScanning = getMode() == RadioMode.SCAN;
-        final int originalMemoryId = activeMemoryId;
-        final String originalFrequencyStr = activeFrequencyStr;
-        final int savedScanBaseSquelch = scanBaseSquelch;
-
-        callbacks.startingAprsBeacon(aprsBeaconFrequency);
-
-        if (wasScanning) {
-            cancelPendingScanAdvance();
+        final float beaconFrequency;
+        try {
+            beaconFrequency = Float.parseFloat(makeSafeHamFreq(aprsBeaconFrequency));
+        } catch (NumberFormatException e) {
+            Log.w(TAG, "Skipping position beacon: invalid beacon frequency " + aprsBeaconFrequency, e);
+            return;
+        }
+        if (!canTransmitOnFrequency(beaconFrequency) || !isTxAllowed()) {
+            Log.d(TAG, "Skipping position beacon: beacon frequency is not permitted for TX.");
+            return;
         }
 
-        tuneToFreq(aprsBeaconFrequency);
+        callbacks.startingAprsBeacon(aprsBeaconFrequency);
+        sendPositionBeaconOnSideChannel(latitude, longitude, beaconFrequency, aprsBeaconFrequency);
+    }
 
-        // Give it a moment to tune and stabilize
-        handler.postDelayed(() -> {
-            sendPositionBeacon(latitude, longitude, true);
+    private void sendPositionBeaconOnActiveChannel(final double latitude, final double longitude,
+                                                   final String beaconFrequency) {
+        sendPositionBeacon(latitude, longitude, null, beaconFrequency);
+    }
 
-            // Wait for transmission to finish before restoring
-            handler.postDelayed(() -> {
-                if (wasScanning) {
-                    activeMemoryId = originalMemoryId;
-                    scanBaseSquelch = savedScanBaseSquelch;
-                    setMode(RadioMode.SCAN);
-                    nextScan();
-                } else {
-                    if (originalMemoryId != -1) {
-                        tuneToMemory(originalMemoryId);
-                    } else {
-                        tuneToFreq(originalFrequencyStr);
-                    }
-                }
-            }, 3000); // 3 seconds for TX
-        }, 500); // 500ms for tuning
+    private void sendPositionBeaconOnSideChannel(final double latitude, final double longitude,
+                                                 final float txFrequency, final String beaconFrequency) {
+        sendPositionBeacon(latitude, longitude, txFrequency, beaconFrequency);
     }
 
     /**
@@ -1928,9 +1917,11 @@ public class RadioAudioService extends Service {
      *
      * @param latitude  The latitude to beacon.
      * @param longitude The longitude to beacon.
-     * @param wasSwitch True if we switched frequencies for this beacon.
+     * @param txFrequency Frequency for a temporary TX override, or null for the active channel.
+     * @param beaconFrequency Display frequency for this beacon.
      */
-    private void sendPositionBeacon(final double latitude, final double longitude, final boolean wasSwitch) {
+    private void sendPositionBeacon(final double latitude, final double longitude, final Float txFrequency,
+                                    final String beaconFrequency) {
         if (getMode() != RadioMode.RX) {
             Log.d(TAG, "Skipping position beacon because not in RX mode");
             return;
@@ -1945,8 +1936,16 @@ public class RadioAudioService extends Service {
             final PositionField posField = new PositionField(("=" + myPos.toCompressedString()).getBytes(), "", 1);
             final APRSPacket aprsPacket = new APRSPacket(callsign, DEFAULT_DIGIPEATERS, posField.getRawBytes());
             aprsPacket.getPayload().addAprsData(APRSTypes.T_POSITION, posField);
-            txAX25Packet(new Packet(aprsPacket.toAX25Frame()));
-            callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), activeFrequencyStr, wasSwitch);
+            Packet packet = new Packet(aprsPacket.toAX25Frame());
+            if (txFrequency == null) {
+                if (txAX25Packet(packet)) {
+                    callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), beaconFrequency, false);
+                }
+            } else {
+                if (txAX25PacketOnFrequency(packet, txFrequency)) {
+                    callbacks.sentAprsBeacon(myPos.getLatitude(), myPos.getLongitude(), beaconFrequency, false);
+                }
+            }
         } catch (Exception e) {
             Log.w(TAG, "Exception while trying to beacon APRS location.", e);
         }
@@ -2089,23 +2088,44 @@ public class RadioAudioService extends Service {
      *
      * @param ax25Packet The AX.25 packet to send.
      */
-    private void txAX25Packet(Packet ax25Packet) {
+    private boolean txAX25Packet(Packet ax25Packet) {
         if (!isTxAllowed()) {
             Log.e(TAG, "Tried to send an AX.25 packet when tx is not allowed, did not send.");
-            return;
+            return false;
         }
         if (getMode() != RadioMode.RX) {
             Log.e(TAG, "Tried to send an AX.25 packet when radio was not in RX mode, did not send.");
-            return;
+            return false;
         }
         Protocol.Sender sender = hostToEsp32;
         if (sender == null) {
             Log.e(TAG, "Tried to send AX.25 packet with no ESP32 connection.");
-            return;
+            return false;
         }
         Log.d(TAG, "Sending AX25 packet: " + ax25Packet);
         sender.txAx25(ax25Packet.bytesWithoutCRC());
         Log.i(TAG, "Send AX25 packet: " + ax25Packet);
+        return true;
+    }
+
+    private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency) {
+        if (!isTxAllowed() || !canTransmitOnFrequency(txFrequency)) {
+            Log.e(TAG, "Tried to send an AX.25 packet on a disallowed frequency, did not send.");
+            return false;
+        }
+        if (getMode() != RadioMode.RX) {
+            Log.e(TAG, "Tried to send an AX.25 packet when radio was not in RX mode, did not send.");
+            return false;
+        }
+        Protocol.Sender sender = hostToEsp32;
+        if (sender == null) {
+            Log.e(TAG, "Tried to send AX.25 packet with no ESP32 connection.");
+            return false;
+        }
+        sender.txAx25OnFrequency(txFrequency, radioModule.getDesiredBandwidth(), radioModule.getDesiredTxTone(),
+            ax25Packet.bytesWithoutCRC());
+        Log.i(TAG, "Send AX25 packet on " + txFrequency + " MHz: " + ax25Packet);
+        return true;
     }
 
     public int getAudioTrackSessionId() {
