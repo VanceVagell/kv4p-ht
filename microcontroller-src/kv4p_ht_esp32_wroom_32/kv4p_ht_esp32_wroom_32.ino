@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Arduino.h>
 #include <BluetoothSerial.h>
 #include <DRA818.h>
+#include <esp_system.h>
 #include <esp_task_wdt.h>
 #include "globals.h"
 #include "debug.h"
@@ -28,6 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "state.h"
 #include "rxAudio.h"
 #include "txAudio.h"
+#include "ax25TxScheduler.h"
 #include "buttons.h"
 #include "utils.h"
 #include "board.h"
@@ -64,8 +66,16 @@ Kv4pBleKissStream bleKissStream(bleKissConfig());
 bool bluetoothStarted = false;
 bool bluetoothProtocolConnected = false;
 bool bleKissProtocolConnected = false;
-KissParser bluetoothParser(protocolBtSession, &handleCommands, &handleAx25Data);
-KissParser bleKissParser(protocolBleSession, &handleCommands, &handleAx25Data);
+KissParser bluetoothParser(protocolBtSession, &handleCommands, &handleAx25Data,
+  &handleKissParameter);
+KissParser bleKissParser(protocolBleSession, &handleCommands, &handleAx25Data,
+  &handleKissParameter);
+Ax25TxScheduler ax25TxScheduler;
+// SoftSQ needs its 250 ms close/open interval after a retune before its raw
+// HF-noise carrier decision is reliable. Keep a small loop-timing margin.
+static constexpr uint16_t AX25_OVERRIDE_RX_SETTLE_MS = 260;
+bool ax25OverrideChannelPrepared = false;
+uint32_t ax25OverrideChannelReadyAt = 0;
 
 float moduleMinRadioFreq() {
   return hw.rfModuleType == RF_SA818_UHF ? 400.0f : 134.0f;
@@ -498,21 +508,99 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
         esp_task_wdt_reset();
       }
       break;
+    case COMMAND_HOST_TX_AX25:
+      if (param_len > sizeof(Ax25TxOverride) && txAllowedByHost()) {
+        Ax25TxOverride txOverride;
+        memcpy(&txOverride, params, sizeof(txOverride));
+        size_t ax25Len = param_len - sizeof(txOverride);
+        if (isModuleRadioFreq(txOverride.freqTx) && ax25Len <= AX25_MAX_KISS_DATA_LEN
+            && !ax25TxScheduler.enqueue(params + sizeof(txOverride), ax25Len, &txOverride)) {
+          _LOGW("AX.25 TX queue full; dropped frequency-override job");
+        }
+      }
+      break;
   }
 }
 
 void handleAx25Data(uint8_t *ax25, size_t ax25_len) {
-  if (ax25_len > 0 && ax25_len <= PROTO_MTU && txAllowedByHost()) {
-    setMode(MODE_TX);
-    latestRssi = (uint8_t)TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
-    txAudioLevel = TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
-    sendCurrentDeviceState();
-    pulseAprsTxLED();
-    processTxAx25(ax25, ax25_len);
-    setMode(rxIdleMode());
-    sendCurrentDeviceState();
+  if (ax25_len > 0 && ax25_len <= AX25_MAX_KISS_DATA_LEN && txAllowedByHost()) {
+    if (!ax25TxScheduler.enqueue(ax25, ax25_len)) {
+      _LOGW("AX.25 TX queue full; dropped KISS DATA frame");
+    }
+  }
+}
+
+void handleKissParameter(uint8_t command, uint8_t value) {
+  if (command == KISS_CMD_TXDELAY) ax25TxScheduler.setTxDelay(value);
+  else if (command == KISS_CMD_PERSIST) ax25TxScheduler.setPersist(value);
+  else if (command == KISS_CMD_SLOTTIME) ax25TxScheduler.setSlotTime(value);
+}
+
+void prepareAx25TxOverrideChannel(const Ax25TxOverride &txOverride) {
+  drainRadioSerial();
+  // Tune RX to the packet's target before carrier sense. The normal radio
+  // configuration is deliberately marked stale so it is restored after TX.
+  while (!sa818.group(txOverride.bw, txOverride.freqTx, txOverride.freqTx, txOverride.ctcssTx, 0, 0)) {
+    lastDeviceStateError = DEVICE_STATE_ERROR_RADIO_CONFIG_FAILED;
     esp_task_wdt_reset();
   }
+  radioConfigApplied = false;
+  ax25OverrideChannelPrepared = true;
+  ax25OverrideChannelReadyAt = millis() + AX25_OVERRIDE_RX_SETTLE_MS;
+}
+
+void ax25TxLoop() {
+  const Ax25TxJob *pendingJob = ax25TxScheduler.head();
+  if (pendingJob == nullptr) return;
+  bool receiveIdle = mode == MODE_RX || mode == MODE_STOPPED;
+  if (!receiveIdle || !txAllowedByHost()) return;
+  uint32_t now = millis();
+  if (pendingJob->hasTxOverride) {
+    // A host configuration update may have restored the normal radio while
+    // this job was waiting, so prepare the target channel again in that case.
+    if (!ax25OverrideChannelPrepared || radioConfigApplied) {
+      prepareAx25TxOverrideChannel(pendingJob->txOverride);
+      return;
+    }
+    if ((int32_t)(now - ax25OverrideChannelReadyAt) < 0) return;
+  }
+
+  // Use SoftSQ's raw HF-noise decision for RF/voice carrier detection. Audio
+  // CTCSS and UI-squelch choices must not affect CSMA channel access.
+  bool ourTx = mode == MODE_TX;
+  bool afskDcd = afskDemod.carrierDetected();
+  bool rfCarrierDetected = softSquelchEffect.isCarrierDetected();
+  bool channelBusy = ourTx || afskDcd || rfCarrierDetected;
+  bool channelClear = !channelBusy;
+  if (!ax25TxScheduler.ready(now, channelClear, (uint8_t)esp_random())) {
+    return;
+  }
+  const Ax25TxJob *job = ax25TxScheduler.head();
+  if (job == nullptr) return;
+
+  setMode(MODE_TX);
+  latestRssi = (uint8_t)TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
+  txAudioLevel = TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
+  sendCurrentDeviceState();
+  pulseAprsTxLED();
+  bool firstFrame = true;
+  bool sentOverride = job->hasTxOverride;
+  do {
+    const Ax25TxJob *nextJob = ax25TxScheduler.next();
+    bool batchNextStandardFrame = !job->hasTxOverride && nextJob != nullptr && !nextJob->hasTxOverride;
+    processTxAx25(job->data, job->len, firstFrame ? ax25TxScheduler.txDelayMs() : 0,
+                  batchNextStandardFrame ? 0 : TX_AFSK_TAIL_SILENCE_MS);
+    ax25TxScheduler.complete();
+    if (!batchNextStandardFrame) break;
+    job = ax25TxScheduler.head();
+    firstFrame = false;
+  } while (job != nullptr);
+  setMode(rxIdleMode());
+  if (sentOverride) ax25OverrideChannelPrepared = false;
+  // Apply the latest desired normal configuration only after PTT is released.
+  reconcileDesiredState(false);
+  sendCurrentDeviceState();
+  esp_task_wdt_reset();
 }
 
 void rssiLoop() {
@@ -637,6 +725,7 @@ void loop() {
   bluetoothLoop();
   bleKissLoop();
   rxAudioLoop();
+  ax25TxLoop();
   txAudioLoop();
   rssiLoop();
   deviceStateLoop();

@@ -19,6 +19,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 package com.vagell.kv4pht.radio;
 
+import io.github.dkaukov.aprs.AprsController.RfTransmissionPurpose;
+
 /** Guards submissions that must use the original reception/transmission frequency. */
 final class AprsRfFrequencyPolicy {
     private AprsRfFrequencyPolicy() { }
@@ -33,5 +35,17 @@ final class AprsRfFrequencyPolicy {
 
     static boolean matches(Long requestedHz, Long tunedHz) {
         return requestedHz == null || requestedHz.equals(tunedHz);
+    }
+
+    static boolean isTerminalMismatch(Long requestedHz, Long selectedTxHz,
+                                      RfTransmissionPurpose purpose) {
+        return purpose.expectsAcknowledgement() && requestedHz != null && selectedTxHz != null
+            && !matches(requestedHz, selectedTxHz);
+    }
+
+    static Long transmissionFrequency(Long requestedHz, Long selectedTxHz,
+                                      RfTransmissionPurpose purpose) {
+        if (purpose.expectsAcknowledgement()) return selectedTxHz;
+        return requestedHz == null ? selectedTxHz : requestedHz;
     }
 }

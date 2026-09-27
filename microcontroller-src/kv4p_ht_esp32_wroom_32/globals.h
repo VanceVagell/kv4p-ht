@@ -49,14 +49,24 @@ inline void formatBluetoothDeviceName(char *out, size_t outSize) {
   snprintf(out, outSize, "kv4p-%06X", bluetoothDeviceId());
 }
 
-// Firmware AX.25 TX tuning. Lead/tail silence matches the previous Android-side AFSK encoder timing.
+// AX.25 I2S tail lets the final samples drain from the six 512-sample DMA buffers.
 static constexpr size_t TX_AFSK_BLOCK_SAMPLES = 256;
 static constexpr float TX_AFSK_GAIN = 0.8f;
-static constexpr float TX_AFSK_LEAD_SILENCE_MS = 1100.0f;
-static constexpr float TX_AFSK_TAIL_SILENCE_MS = 700.0f;
+static constexpr float TX_AFSK_TAIL_SILENCE_MS = 70.0f;
 
 // Maximum length of the frame
 #define PROTO_MTU 2048
+
+// KISS DATA carries an AX.25 frame without its on-air FCS.  APRS limits the
+// AX.25 information field to 256 octets; the AX.25 address field permits a
+// destination, source, and up to eight digipeaters.
+static constexpr size_t AX25_MAX_ADDRESS_FIELDS = 10;
+static constexpr size_t AX25_ADDRESS_FIELD_LEN = 7;
+static constexpr size_t AX25_UI_HEADER_LEN = 2; // Control + PID
+static constexpr size_t APRS_MAX_INFORMATION_FIELD_LEN = 256;
+static constexpr size_t AX25_MAX_KISS_DATA_LEN =
+  AX25_MAX_ADDRESS_FIELDS * AX25_ADDRESS_FIELD_LEN + AX25_UI_HEADER_LEN +
+  APRS_MAX_INFORMATION_FIELD_LEN;
 
 // Offset to make up for fact that sampling is slightly slower than requested, and we don't want underruns.
 // But if this is set too high, then we get audio skips instead of underruns. So there's a sweet spot.

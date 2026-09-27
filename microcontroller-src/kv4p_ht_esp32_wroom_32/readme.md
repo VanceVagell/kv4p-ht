@@ -76,7 +76,25 @@ All other bytes are written unchanged. The old `0xDEADBEEF` delimiter and top-le
 | KISS Command | Name                   | Description                       |
 | ------------ | ---------------------- | --------------------------------- |
 | `0x00`       | KISS DATA frame        | Transmit AX.25 packet bytes       |
+| `0x01`       | KISS TXDELAY            | Set TX lead time in 10 ms units   |
+| `0x02`       | KISS PERSIST            | Set p-persistence probability     |
+| `0x03`       | KISS SLOTTIME           | Set CSMA slot time in 10 ms units |
 | `0x06`       | KISS SETHARDWARE frame | Carry a kv4p vendor command frame |
+
+Firmware queues exactly two outbound AX.25 jobs in FIFO order. A job waits for a clear carrier,
+then immediately makes a PERSIST decision. A failed decision waits SLOTTIME before sensing again;
+a busy channel restarts CSMA without blocking normal firmware work. A third job is dropped, so the
+higher-level protocol/application must retry or pace traffic. Adjacent ordinary KISS DATA jobs are
+sent under one PTT assertion after winning CSMA; frequency-override jobs are sent separately.
+Defaults are TXDELAY 650 ms, PERSIST 63, and SLOTTIME 100 ms. TXDELAY currently uses the modem's
+fixed flag preamble plus configurable carrier silence; the bundled esp32-afsk API cannot set a
+variable flag preamble at runtime.
+TXDELAY and SLOTTIME are one-byte 10 ms values (65 and 10 by default); PERSIST is a
+one-byte p-persistence probability value from 0 to 255 (63 by default).
+
+Channel busy is `ourTx || afskDcd || rfCarrierDetected`. `afskDcd` is the qualified AFSK flag
+detector. `rfCarrierDetected` is SoftSQ's raw HF-noise decision, independent of CTCSS and UI
+squelch settings.
 
 ## Incoming KV4P Vendor Commands (Android → ESP32)
 
@@ -87,6 +105,13 @@ Audio command ID `0x07` was used by the historical Opus voice stream. Current fi
 | `0x0C`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx 4-bit ADPCM audio data (payload required, flow-controlled) |
 | `0x0D`       | `COMMAND_HOST_DESIRED_STATE` | Desired radio/control state snapshot                     |
 | `0x0E`       | `COMMAND_HOST_TX_DIGITAL` | Receive one 7-byte Codec2 1300 frame for FreeDV 2400B    |
+| `0x0F`       | `COMMAND_HOST_TX_AX25` | Queue an AX.25 job with temporary TX configuration |
+
+`COMMAND_HOST_TX_AX25` payload is packed as `float freqTx`, `uint8 bw`, `uint8 ctcssTx`, then
+the AX.25 bytes. Before CSMA, firmware temporarily tunes both RX and TX to the target frequency,
+waits 260 ms for the receiver and carrier detectors to settle, then senses and transmits on that
+target. This preparation occurs only while the radio is idle and host TX remains allowed.
+After its transmission, firmware restores the latest normal desired radio state.
 
 ## Outgoing KISS Frame Types (ESP32 → Android)
 

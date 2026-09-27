@@ -21,6 +21,7 @@ package com.vagell.kv4pht.data;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
@@ -50,6 +51,47 @@ import org.junit.Test;
 
 /** JVM adapter-contract tests; these do not replace on-device Room migration tests. */
 public class RoomAprsRepositoryTest {
+    @Test public void postMessageOwnsIdentifierPersistenceAndRetryPurpose() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.run(() -> {
+            fixture.acceptRf = true;
+            assertTrue(fixture.controller.postMessage("VK3ABC", "hello", 144390000L));
+            AprsEvent event = fixture.repository.findById(1);
+            assertEquals(AprsEvent.DELIVERY_PENDING, event.getDeliveryState());
+            assertNotNull(event.getMessageIdentifier());
+            assertEquals(1, event.getTransmitAttempts());
+            assertEquals(1, fixture.packets.size());
+            assertEquals(AprsController.RfTransmissionPurpose.OUTGOING_MESSAGE, fixture.purposes.get(0));
+            fixture.controller.tick(event.getNextRetryAtMs());
+            assertEquals(AprsController.RfTransmissionPurpose.RELIABLE_MESSAGE_RETRY, fixture.purposes.get(1));
+            assertArrayEquals(fixture.rfSubmissions.get(0).toAX25Frame(),
+                fixture.rfSubmissions.get(1).toAX25Frame());
+        });
+    }
+
+    @Test public void postBroadcastHasNoIdentifierOrRetries() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.run(() -> {
+            fixture.acceptRf = true;
+            assertTrue(fixture.controller.postMessage("BLN1CQ", "hello", 144390000L));
+            AprsEvent event = fixture.repository.findById(1);
+            assertNull(event.getMessageIdentifier());
+            assertNull(event.getNextRetryAtMs());
+            assertEquals(AprsController.RfTransmissionPurpose.BROADCAST, fixture.purposes.get(0));
+            fixture.controller.tick(2_000_000L);
+            assertEquals(1, fixture.rfSubmissions.size());
+        });
+    }
+
+    @Test public void rejectedInitialPostDoesNotPersistMessageOrPacket() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.run(() -> {
+            assertFalse(fixture.controller.postMessage("VK3ABC", "hello", 144390000L));
+            assertTrue(fixture.events.isEmpty());
+            assertTrue(fixture.packets.isEmpty());
+        });
+    }
+
     @Test public void incomingStorageAndCallbacksFinishOnCallingWorkerBeforeReturn() throws Exception {
         Fixture fixture = new Fixture();
         fixture.run(() -> {
@@ -190,6 +232,8 @@ public class RoomAprsRepositoryTest {
             APRSPacket submitted = fixture.rfSubmissions.get(0);
             APRSPacket expected = Parser.parse("VK3ME>APKVPA,WIDE1-1::VK3ABC   :ack17");
             assertArrayEquals(expected.toAX25Frame(), submitted.toAX25Frame());
+            assertEquals(AprsController.RfTransmissionPurpose.ACKNOWLEDGEMENT, fixture.purposes.get(0));
+            assertEquals(Long.valueOf(144390000L), fixture.requestedFrequencies.get(0));
             assertEquals(2, fixture.packets.size());
             assertEquals(AprsSource.TX_RF, fixture.packets.get(1).source);
             assertEquals(Long.valueOf(1), fixture.packets.get(1).eventId);
@@ -238,6 +282,7 @@ public class RoomAprsRepositoryTest {
             assertEquals("=" + new io.github.dkaukov.aprs.parser.Position(
                 -37.75, 145.125, 0, '/', '$').toCompressedString(), payload);
             assertEquals(null, fixture.requestedFrequencies.get(1));
+            assertEquals(AprsController.RfTransmissionPurpose.POSITION_BEACON, fixture.purposes.get(1));
             fixture.controller.setCallsign("");
             assertFalse(fixture.controller.submitPositionBeacon(beacon));
             assertEquals(1, fixture.events.size());
@@ -253,6 +298,7 @@ public class RoomAprsRepositoryTest {
         final Map<String, AprsFeedItem> projection = new LinkedHashMap<>();
         final List<APRSPacket> rfSubmissions = new ArrayList<>();
         final List<Long> requestedFrequencies = new ArrayList<>();
+        final List<AprsController.RfTransmissionPurpose> purposes = new ArrayList<>();
         boolean inTransaction;
         boolean failPacketInsert;
         boolean failProjectionWrite;
@@ -376,11 +422,13 @@ public class RoomAprsRepositoryTest {
             assertNotNull(repository.findById(event.getId()));
             if (forLocal) notifications++;
         }
-        @Override public AprsController.RfTransmission submitRf(APRSPacket packet, Long frequencyHz) {
+        @Override public AprsController.RfTransmission submitRf(APRSPacket packet, Long frequencyHz,
+                AprsController.RfTransmissionPurpose purpose) {
             assertSame(worker, Thread.currentThread());
             assertFalse(inTransaction);
             rfSubmissions.add(packet.copy());
             requestedFrequencies.add(frequencyHz);
+            purposes.add(purpose);
             AprsController.Transmission transmission = acceptRf
                 ? AprsController.Transmission.builder().packet(packet).frequencyHz(144390000L)
                     .rawAx25(packet.toAX25Frame()).build() : null;

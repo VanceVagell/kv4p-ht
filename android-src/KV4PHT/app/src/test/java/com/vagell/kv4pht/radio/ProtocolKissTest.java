@@ -149,6 +149,52 @@ public class ProtocolKissTest {
     }
 
     @Test
+    public void senderEncodesKissTxDelay() {
+        List<byte[]> frames = new ArrayList<>();
+        Protocol.Sender sender = new Protocol.Sender(frames::add, false);
+
+        sender.setKissTxDelay(75);
+
+        assertEquals(1, frames.size());
+        assertArrayEquals(new byte[]{
+            (byte) Protocol.KISS_FEND,
+            Protocol.KISS_CMD_TXDELAY,
+            75,
+            (byte) Protocol.KISS_FEND,
+        }, frames.get(0));
+    }
+
+    @Test
+    public void senderEncodesAx25FrequencyOverride() {
+        assertEquals(0x0F, Protocol.SndCommand.COMMAND_HOST_TX_AX25.getValue());
+        assertEquals(0x0E, Protocol.SndCommand.COMMAND_HOST_TX_DIGITAL.getValue());
+        List<byte[]> frames = new ArrayList<>();
+        Protocol.Sender sender = new Protocol.Sender(frames::add, false);
+
+        sender.txAx25OnFrequency(144.3900f, Protocol.DRA818_12K5, (byte) 7, new byte[]{0x11, 0x22});
+
+        ByteBuffer overridePayload = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
+        overridePayload.putFloat(144.3900f);
+        overridePayload.put(Protocol.DRA818_12K5);
+        overridePayload.put((byte) 7);
+        overridePayload.put((byte) 0x11);
+        overridePayload.put((byte) 0x22);
+        assertEquals(1, frames.size());
+        assertArrayEquals(buildKissFrame(
+            Protocol.KISS_CMD_SETHARDWARE,
+            buildKv4pVendorPayload(Protocol.SndCommand.COMMAND_HOST_TX_AX25.getValue(), overridePayload.array())),
+            frames.get(0));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void senderRejectsOversizeAx25FrequencyOverride() {
+        Protocol.Sender sender = new Protocol.Sender(frame -> { }, false);
+
+        sender.txAx25OnFrequency(144.3900f, Protocol.DRA818_12K5, (byte) 0,
+            new byte[Protocol.AX25_MAX_KISS_DATA_LEN + 1]);
+    }
+
+    @Test
     public void parserUnescapesDataFrameAndDispatchesAx25() {
         Protocol.KissParser parser = newParser();
         parser.processBytes(new byte[]{
@@ -257,9 +303,9 @@ public class ProtocolKissTest {
     }
 
     @Test
-    public void parserDropsOverMtuDataFrame() {
+    public void parserDropsOversizedAx25DataFrame() {
         Protocol.KissParser parser = newParser();
-        byte[] frame = new byte[Protocol.PROTO_MTU + 4];
+        byte[] frame = new byte[Protocol.AX25_MAX_KISS_DATA_LEN + 4];
         frame[0] = (byte) Protocol.KISS_FEND;
         frame[1] = Protocol.KISS_CMD_DATA;
         for (int i = 2; i < frame.length - 1; i++) {

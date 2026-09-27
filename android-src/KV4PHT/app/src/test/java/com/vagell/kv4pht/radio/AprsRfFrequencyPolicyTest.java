@@ -24,8 +24,30 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
+import io.github.dkaukov.aprs.AprsController.RfTransmissionPurpose;
 
 public class AprsRfFrequencyPolicyTest {
+    @Test public void purposeAcknowledgementPropertyControlsFrequencyPolicy() {
+        for (RfTransmissionPurpose purpose : RfTransmissionPurpose.values()) {
+            boolean reliable = purpose.expectsAcknowledgement();
+            assertEquals(reliable,
+                AprsRfFrequencyPolicy.isTerminalMismatch(146940000L, 146340000L, purpose));
+            assertEquals(Long.valueOf(reliable ? 146340000L : 146940000L),
+                AprsRfFrequencyPolicy.transmissionFrequency(146940000L, 146340000L, purpose));
+            assertFalse(AprsRfFrequencyPolicy.isTerminalMismatch(146340000L, 146340000L, purpose));
+            assertFalse(AprsRfFrequencyPolicy.isTerminalMismatch(146340000L, null, purpose));
+            assertEquals(Long.valueOf(146340000L),
+                AprsRfFrequencyPolicy.transmissionFrequency(null, 146340000L, purpose));
+        }
+    }
+
+    @Test public void acknowledgementUsesReceptionFrequencyAfterTuningAway() {
+        assertEquals(Long.valueOf(145175000L), AprsRfFrequencyPolicy.transmissionFrequency(
+            145175000L, 146340000L, RfTransmissionPurpose.ACKNOWLEDGEMENT));
+        assertFalse(AprsRfFrequencyPolicy.isTerminalMismatch(
+            145175000L, 146340000L, RfTransmissionPurpose.ACKNOWLEDGEMENT));
+    }
+
     @Test public void offsetMemoryUsesTxFrequencyForGuardAndHistory() {
         Long txHz = AprsRfFrequencyPolicy.toHz(146.340f);
         assertEquals(Long.valueOf(146340000L), txHz);

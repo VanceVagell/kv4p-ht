@@ -49,11 +49,11 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:ellipsize="end"
             android:text="12:10pm"
             android:textColor="@android:color/darker_gray"
             android:textSize="16sp"
             android:layout_marginRight="4dp"
+            android:ellipsize="end"
             android:maxLines="1" />
 
         <include layout="@layout/aprs_digipeated_indicator" />

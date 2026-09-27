@@ -93,6 +93,12 @@ public:
     return iirZcr;
   }
 
+  // Raw HF-noise decision for channel access. Unlike isSoftOpen(), this does
+  // not apply the user's CTCSS audio gate or the UI squelch bypass.
+  bool isCarrierDetected() const {
+    return softSqOpen;
+  }
+
   bool isSoftOpen() const {
     if (!ctcssDetector.isDetected()) {
       return false;

@@ -150,11 +150,15 @@ void processTxAudio(uint8_t *src, size_t len) {
   esp_task_wdt_reset();
 }
 
-void processTxAx25(uint8_t *src, size_t len) {
+void processTxAx25(const uint8_t *src, size_t len, float txDelayMs, float txTailMs) {
   if (!src || len == 0) {
     return;
   }
-  afskMod.modulate(src, len, txAfskBlock, TX_AFSK_BLOCK_SAMPLES, TX_AFSK_LEAD_SILENCE_MS, TX_AFSK_TAIL_SILENCE_MS);
+  // esp32-afsk's public API supplies a fixed flag preamble; its runtime lead
+  // parameter is silence, so TXDELAY is currently carrier lead time, not an
+  // exactly sized flag train.
+  afskMod.modulate(src, len, txAfskBlock, TX_AFSK_BLOCK_SAMPLES, txDelayMs,
+    txTailMs);
 }
 
 void processTxDigital(uint8_t *src, size_t len) {
