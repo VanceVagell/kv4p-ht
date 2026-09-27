@@ -23,12 +23,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <driver/dac.h>
 #include <esp_task_wdt.h>
 #include <AfskDemodulator.h>
+#include <FreeDv2400b.h>
 #include <math.h>
 #include "globals.h"
 #include "protocol.h"
 #include "debug.h"
 #include "dsp/audioResampler.h"
 #include "dsp/softSquelchEffect.h"
+#include "freeDvSquelch.h"
 
 class SerialOutput : public AudioOutput {
 public:
@@ -78,6 +80,70 @@ static void onAfskPacketDecoded(const uint8_t *frame, size_t len) {
 
 AfskDemodulator afskDemod(AUDIO_SAMPLE_RATE, 2, onAfskPacketDecoded);
 
+FreeDvSquelch freeDvSquelch;
+uint32_t lastFreeDvFrameAtMs = 0;
+
+static void onFreeDvFrameDecoded(const uint8_t *frame, size_t len,
+                                 const FreeDv2400bDecodeResult &result) {
+  lastFreeDvFrameAtMs = millis();
+  const bool accepted = freeDvSquelch.accept(result);
+  const bool nextSquelched = !freeDvSquelch.open();
+  if (freeDv2400bEnabled() && nextSquelched != squelched) {
+    squelched = nextSquelched;
+    markDeviceStateDirty();
+  }
+  if (frame && len == freedv2400b::PAYLOAD_BYTES && accepted) {
+    sendDigitalFrame(frame, len);
+  }
+}
+
+void freeDvSquelchLoop() {
+  const uint32_t now = millis();
+  if ((uint32_t)(now - lastFreeDvFrameAtMs) <
+      FreeDvSquelch::NO_FRAME_TIMEOUT_MS) return;
+
+  if (freeDv2400bEnabled() && freeDvSquelch.level() != 0 &&
+      freeDvSquelch.open()) {
+    freeDvSquelch.reset();
+    if (!squelched) {
+      squelched = true;
+      markDeviceStateDirty();
+    }
+  }
+}
+
+FreeDv2400bDemodulator freeDvRx(onFreeDvFrameDecoded);
+
+class FreeDvTapEffect : public AudioEffect {
+public:
+  FreeDvTapEffect *clone() override { return new FreeDvTapEffect(*this); }
+  effect_t process(effect_t input) {
+    if (active()) {
+      samples[sampleCount++] = (int16_t)input;
+      if (sampleCount == BUFFER_SAMPLES) {
+        freeDvRx.processSamples(samples, sampleCount);
+        if (freeDv2400bEnabled() && freeDvRx.hasDecodeResult()) {
+          latestRssi = FreeDvSquelch::snrToRssi(
+              freeDvRx.discriminatorSnrDbNow());
+        }
+        sampleCount = 0;
+      }
+    }
+    return input;
+  }
+  void flush() {
+    sampleCount = 0;
+    freeDvRx.reset();
+    freeDvSquelch.reset();
+    if (freeDv2400bEnabled()) squelched = !freeDvSquelch.open();
+    lastFreeDvFrameAtMs = millis();
+  }
+private:
+  static const size_t BUFFER_SAMPLES = 256;
+  int16_t samples[BUFFER_SAMPLES];
+  size_t sampleCount = 0;
+};
+
 class AfskTapEffect : public AudioEffect {
 public:
   AfskTapEffect *clone() override {
@@ -112,6 +178,12 @@ private:
 bool rxStreamConfigured = false;
 AnalogAudioStream in;
 AudioInfo rxInfo(AUDIO_SAMPLE_RATE, 1, 16);
+// The ESP32 ADC/I2S clock was measured about 400 samples/s slow. Request the
+// nominal 48 kHz rate plus that correction so the captured stream is near
+// 48 kHz in real time; the DSP and wire formats remain 48 kHz.
+static const uint32_t RX_ADC_SAMPLE_RATE_CORRECTION = 400;
+static const uint32_t RX_ADC_SAMPLE_RATE =
+    AUDIO_SAMPLE_RATE + RX_ADC_SAMPLE_RATE_CORRECTION;
 AudioInfo rxAudioInfo(AUDIO_WIRE_SAMPLE_RATE, 1, 16);
 SerialOutput rxAudioOutput;
 ADPCMEncoder rxAdpcmEncoder(AV_CODEC_ID_ADPCM_IMA_WAV, AUDIO_FRAME_BYTES);
@@ -124,6 +196,7 @@ Boost mute(0.0);
 Boost gain(16.0);
 DCOffsetRemover dcOffsetRemover(DECAY_TIME, AUDIO_SAMPLE_RATE);
 AfskTapEffect afskTapEffect;
+FreeDvTapEffect freeDvTapEffect;
 SoftSquelchEffect softSquelchEffect(AUDIO_SAMPLE_RATE, ZCR_DECAY_TIME, SQ_CLOSE_DELAY);
 
 inline void injectADCBias() {
@@ -148,7 +221,7 @@ void initI2SRx() {
   config.use_apll = true;
   config.auto_clear = false;
   config.adc_pin = hw.pins.pinAudioIn;
-  config.sample_rate = AUDIO_SAMPLE_RATE * 1.00;
+  config.sample_rate = RX_ADC_SAMPLE_RATE;
   in.begin(config);
   // effects
   effects.clear();
@@ -156,6 +229,8 @@ void initI2SRx() {
   effects.addEffect(dcOffsetRemover);
   effects.addEffect(gain);
   effects.addEffect(afskTapEffect);
+  freeDvTapEffect.setActive(true);
+  effects.addEffect(freeDvTapEffect);
   effects.addEffect(softSquelchEffect);
   effects.addEffect(mute);
   effects.begin(rxInfo);
@@ -170,6 +245,7 @@ void initI2SRx() {
 void endI2SRx() {
   if (rxStreamConfigured) {
     afskTapEffect.flush();
+    freeDvTapEffect.flush();
     rxOut.end();
     effects.end();
     in.end();

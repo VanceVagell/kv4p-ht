@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <AudioTools/AudioCodecs/CodecADPCM.h>
 #include <esp_task_wdt.h>
 #include <AfskModulator.h>
+#include <FreeDv2400b.h>
 #include "globals.h"
 #include "protocol.h"
 #include "state.h"
@@ -91,7 +92,18 @@ static void onAfskTxSamples(const float *samples, size_t count) {
 
 AfskModulator afskMod(AUDIO_SAMPLE_RATE, onAfskTxSamples);
 
+static void onFreeDvTxSamples(const int16_t *samples, size_t count) {
+  if (samples && count && txStreamConfigured) {
+    out.write((const uint8_t *)samples, count * sizeof(int16_t));
+    esp_task_wdt_reset();
+  }
+}
+
+FreeDv2400bModulator freeDvTx(onFreeDvTxSamples);
+int16_t freeDvTxScratch[256];
+
 void initI2STx() {  
+  freeDvTx.setMagnitude(16383);
   auto config = out.defaultConfig(TX_MODE);
   config.copyFrom(txInfo);
   config.pin_data = hw.pins.pinAudioOut;
@@ -119,7 +131,7 @@ void endI2STx() {
     // If left as output, the last PDM bit may hold the line high or low,
     // causing a DC step across the AC-coupling cap and producing a pop.
     // Forcing the pin to high-Z prevents this.
-    pinMode(hw.pins.pinAudioOut, INPUT); 
+    pinMode(hw.pins.pinAudioOut, INPUT);
     // ADPCMDecoder::end() is not safe to re-begin on the pinned adpcm library.
     // Keep the decoder alive across PTT transitions and only stop the hardware output path.
     txUpsample.end();
@@ -143,6 +155,17 @@ void processTxAx25(uint8_t *src, size_t len) {
     return;
   }
   afskMod.modulate(src, len, txAfskBlock, TX_AFSK_BLOCK_SAMPLES, TX_AFSK_LEAD_SILENCE_MS, TX_AFSK_TAIL_SILENCE_MS);
+}
+
+void processTxDigital(uint8_t *src, size_t len) {
+  if (!src || len != freedv2400b::PAYLOAD_BYTES || !txStreamConfigured) return;
+  txWatchDog.onFrame(millis());
+  if (!freeDvTx.modulate(src, len, freeDvTxScratch,
+                         sizeof(freeDvTxScratch) / sizeof(freeDvTxScratch[0]))) {
+    _LOGE("Unable to modulate FreeDV 2400B TX frame");
+    return;
+  }
+  updateTxAudioLevel(1.0f);
 }
 
 void releaseHostPtt() {

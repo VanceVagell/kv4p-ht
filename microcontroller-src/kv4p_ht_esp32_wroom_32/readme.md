@@ -86,6 +86,7 @@ Audio command ID `0x07` was used by the historical Opus voice stream. Current fi
 | ------------ | ----------------------- | -------------------------------------------------------------- |
 | `0x0C`       | `COMMAND_HOST_TX_AUDIO` | Receive Tx 4-bit ADPCM audio data (payload required, flow-controlled) |
 | `0x0D`       | `COMMAND_HOST_DESIRED_STATE` | Desired radio/control state snapshot                     |
+| `0x0E`       | `COMMAND_HOST_TX_DIGITAL` | Receive one 7-byte Codec2 1300 frame for FreeDV 2400B    |
 
 ## Outgoing KISS Frame Types (ESP32 → Android)
 
@@ -109,6 +110,7 @@ Audio command ID `0x07` was used by the historical Opus voice stream. Current fi
 | `0x0C`       | `COMMAND_RX_AUDIO`      | Sends Rx 4-bit ADPCM audio data (payload required) |
 | `0x09`       | `COMMAND_WINDOW_UPDATE` | Updates available receive window            |
 | `0x0B`       | `COMMAND_DEVICE_STATE`  | Applied radio/control state snapshot         |
+| `0x0E`       | `COMMAND_RX_DIGITAL`    | Sends one demodulated 7-byte Codec2 1300 frame |
 
 ## Command Parameters
 
@@ -130,6 +132,7 @@ typedef struct version Version;
 #define FEATURE_HAS_HL      (1 << 0)
 #define FEATURE_HAS_PHY_PTT (1 << 1)
 #define FEATURE_HAS_ESP32_AFSK (1 << 2)
+#define FEATURE_HAS_FREEDV_2400B (1 << 3)
 
 struct hello {
   Version     version;
@@ -166,6 +169,7 @@ typedef struct host_desired_state HostDesiredState;
 #define HOST_STATE_FILTER_LOW         (1 << 7)
 #define HOST_STATE_TX_ALLOWED          (1 << 11)
 #define HOST_STATE_ENABLE_STATUS_REPORTS (1 << 12)
+#define HOST_STATE_FREEDV_2400B          (1 << 13)
 ```
 
 Android sends the full desired-state snapshot whenever one field changes. Firmware applies changed radio/filter/control fields, derives its mode, and marks device state dirty so `deviceStateLoop()` can report the result with `COMMAND_DEVICE_STATE`.
@@ -173,6 +177,8 @@ Android sends the full desired-state snapshot whenever one field changes. Firmwa
 `HOST_STATE_TX_ALLOWED` is a persisted host-controlled safety flag that defaults off. Firmware only accepts transmit requests, including KISS DATA AX.25 frames and host PTT requests, while this flag is set.
 
 `HOST_STATE_ENABLE_STATUS_REPORTS` is a non-persisted session flag that defaults off. kv4p HT Android sets it after HELLO so firmware sends `COMMAND_DEVICE_STATE`; generic KISS TNC hosts can leave it off to receive only standard KISS DATA frames.
+
+`HOST_STATE_FREEDV_2400B` is a non-persisted global flag. When it and a session's `HOST_STATE_RX_AUDIO_OPEN` flag are set, firmware sends 7-byte Codec2 frames on `COMMAND_RX_DIGITAL` instead of ADPCM audio. During host-requested PTT, the host must continuously send 7-byte `COMMAND_HOST_TX_DIGITAL` frames. Each frame represents 320 speech samples at 8 kHz and 1,920 modem samples at 48 kHz (40 ms).
 
 Android treats `DeviceState.appliedSequence` as the acknowledgement for the latest desired-state snapshot. If received device state does not match the last sent desired snapshot, Android may retry the exact same `HostDesiredState` with the same `sequence`. Retries are bounded; they are not new logical state changes and must not increment `sequence`.
 
