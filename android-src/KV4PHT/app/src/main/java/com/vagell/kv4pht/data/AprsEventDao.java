@@ -81,8 +81,13 @@ public interface AprsEventDao {
         if (current != null && current.eventId != event.id
                 && (current.sortTimeMs > event.firstSeenMs
                     || (current.sortTimeMs == event.firstSeenMs && current.eventId > event.id))) return;
-        int eventCount = current == null ? 1
-            : current.eventCount + (current.eventId == event.id ? 0 : 1);
+        int eventCount = 1;
+        if (current != null) {
+            eventCount = current.eventCount;
+            if (current.eventId != event.id) {
+                eventCount++;
+            }
+        }
         upsertFeedItem(new AprsFeedItem(
             resolvedKey, event.id, event.firstSeenMs, eventCount));
     }

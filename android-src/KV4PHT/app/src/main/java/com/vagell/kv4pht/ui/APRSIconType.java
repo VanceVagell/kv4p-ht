@@ -27,7 +27,7 @@ package com.vagell.kv4pht.ui;
  * with an APRS beacon in their car might want a car icon to show up representing them on other
  * people's APRS clients.
  *
- * TODO: If we ever add an APRS map, we'll need to add all the missing types and icons.
+ * Map rendering requires the full APRS symbol tables, not this beacon-settings subset.
  */
 public enum APRSIconType {
     T_PHONE('$'),
