@@ -22,12 +22,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "ax25TxScheduler.h"
 #include "protocol.h"
 
+static bool freeDvEnabledForTest = false;
+bool freeDv2400bEnabled() { return freeDvEnabledForTest; }
+
 static_assert(sizeof(HostDesiredState) == 22, "HostDesiredState wire size must match Android");
 static_assert(sizeof(DeviceState) == 26, "DeviceState wire size must match Android");
 static_assert(sizeof(Version) == 17, "Version wire size must match Android");
 static_assert(sizeof(Hello) == 43, "Hello wire size must match Android");
 static_assert(COMMAND_HOST_TX_AUDIO == 0x0C, "Host TX audio command id must match Android");
 static_assert(COMMAND_RX_AUDIO == 0x0C, "RX audio command id must match Android");
+static_assert(COMMAND_HOST_TX_DIGITAL == 0x0E, "Host digital command id must match Android");
+static_assert(COMMAND_HOST_TX_AX25 == 0x0F, "Host AX.25 override command id must match Android");
+static_assert(COMMAND_RX_DIGITAL == 0x0E, "RX digital command id must match Android");
 
 struct CapturedCommand {
   bool called;
@@ -523,6 +529,25 @@ void test_send_audio_routes_only_to_rx_audio_open_sessions() {
   protocolBtSession = oldBtSession;
 }
 
+void test_global_freedv_mode_selects_digital_routing() {
+  FakeStream usb;
+  ProtocolSession oldUsbSession = protocolUsbSession;
+  const uint8_t payload[] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x70 };
+
+  protocolUsbSession.stream = &usb;
+  protocolUsbSession.connected = true;
+  protocolUsbSession.flags = HOST_STATE_RX_AUDIO_OPEN;
+  freeDvEnabledForTest = true;
+
+  sendAudio(payload, sizeof(payload));
+  TEST_ASSERT_EQUAL(0, usb.writtenLen());
+  sendDigitalFrame(payload, sizeof(payload));
+  TEST_ASSERT_GREATER_THAN(0, usb.writtenLen());
+
+  freeDvEnabledForTest = false;
+  protocolUsbSession = oldUsbSession;
+}
+
 void test_parser_ack_is_written_to_input_stream() {
   resetCaptured();
   const uint8_t frame[] = {
@@ -572,6 +597,7 @@ static int runKissProtocolTests() {
   RUN_TEST(test_send_kiss_data_frame_broadcasts_to_connected_secondary_stream);
   RUN_TEST(test_send_kv4p_vendor_frame_escapes_payload);
   RUN_TEST(test_send_audio_routes_only_to_rx_audio_open_sessions);
+  RUN_TEST(test_global_freedv_mode_selects_digital_routing);
   RUN_TEST(test_parser_ack_is_written_to_input_stream);
   return UNITY_END();
 }

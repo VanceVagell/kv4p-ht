@@ -382,6 +382,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void initialDeviceStateReceived() {
                     runOnUiThread(() -> {
+                        updateVoiceModeCaption();
                         initialRadioUiSynced = false;
                         pendingInitialRadioUiSync = true;
                         trySyncInitialRadioUi();
@@ -448,6 +449,11 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void moduleStateChanged(boolean txActive, boolean squelched) {
                     runOnUiThread(() -> showModuleState(txActive, squelched));
+                }
+
+                @Override
+                public void freeDvModeChanged(boolean enabled) {
+                    runOnUiThread(() -> updateVoiceModeCaption());
                 }
 
                 /**
@@ -540,6 +546,15 @@ public class MainActivity extends AppCompatActivity {
             // TODO if this is unexpected we should probably try to restart the service.
         }
     };
+
+    private void updateVoiceModeCaption() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigationView);
+        boolean digital = radioAudioService != null
+                && radioAudioService.supportsFreeDv2400b()
+                && radioAudioService.isFreeDv2400bEnabled();
+        bottomNav.getMenu().findItem(R.id.voice_mode).setTitle(
+                digital ? R.string.freedv_2400b_display : R.string.voice_display);
+    }
 
     /**
      * Returns the set of runtime permissions required before starting
@@ -1929,6 +1944,7 @@ public class MainActivity extends AppCompatActivity {
             intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
             intent.putExtra("firmwareVersion", radioModule.getFirmwareVersionNumber());
             intent.putExtra(SettingsActivity.EXTRA_RF_POWER_HIGH, radioModule.isHighPowerEnabled());
+            intent.putExtra(SettingsActivity.EXTRA_FREEDV_2400B_ENABLED, radioAudioService.isFreeDv2400bEnabled());
             intent.putExtra(SettingsActivity.EXTRA_BANDWIDTH, radioModule.getBandwidthLabel());
             intent.putExtra(SettingsActivity.EXTRA_SQUELCH, radioModule.getDesiredSquelch());
             intent.putExtra(SettingsActivity.EXTRA_FILTER_PRE, radioModule.isPreEmphasisEnabled());
@@ -1945,6 +1961,8 @@ public class MainActivity extends AppCompatActivity {
         radioAudioService.getRadioModule().beginUpdate();
         try {
             radioAudioService.getRadioModule().setHighPower(data.getBooleanExtra(SettingsActivity.EXTRA_RF_POWER_HIGH, true));
+            radioAudioService.setFreeDv2400bEnabled(
+                data.getBooleanExtra(SettingsActivity.EXTRA_FREEDV_2400B_ENABLED, false));
             radioAudioService.getRadioModule().setBandwidth(data.getStringExtra(SettingsActivity.EXTRA_BANDWIDTH));
             radioAudioService.getRadioModule().setSquelch(data.getIntExtra(SettingsActivity.EXTRA_SQUELCH, radioAudioService.getRadioModule().getDesiredSquelch()));
             radioAudioService.getRadioModule().setFilters(
@@ -1954,6 +1972,7 @@ public class MainActivity extends AppCompatActivity {
         } finally {
             radioAudioService.getRadioModule().endUpdate();
         }
+        updateVoiceModeCaption();
 
         // This simple setting is needed by RadioAudioService, but doesn't need to be sent to the module.
         radioAudioService.setAprsPositionIcon(

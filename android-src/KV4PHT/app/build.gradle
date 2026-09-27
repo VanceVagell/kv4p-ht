@@ -14,14 +14,12 @@ android {
         versionName "2.0.0.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-
         javaCompileOptions {
             annotationProcessorOptions {
                 arguments += ["room.schemaLocation": "$projectDir/schemas".toString()]
             }
         }
     }
-
     signingConfigs {
         debug {
             // Intentionally public and only for installable CI development builds.
@@ -81,5 +79,6 @@ dependencies {
     implementation 'org.projectlombok:lombok:1.18.46'
     annotationProcessor 'org.projectlombok:lombok:1.18.46'
     implementation 'io.github.dkaukov:esp32-flash-lib:1.1.17'
+    implementation("io.github.dkaukov:codec2-android:0.1.1")
     implementation 'dev.bright.slf4android:slf4android:0.1.8'
 }

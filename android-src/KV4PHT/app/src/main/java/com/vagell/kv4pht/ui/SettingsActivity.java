@@ -78,6 +78,7 @@ public class SettingsActivity extends AppCompatActivity {
     private boolean hasHighLowPowerSwitch = false;
     private int firmwareVersion = -1;
     public static final String EXTRA_RF_POWER_HIGH = "rfPowerHigh";
+    public static final String EXTRA_FREEDV_2400B_ENABLED = "freeDv2400bEnabled";
     public static final String EXTRA_BANDWIDTH = "bandwidth";
     public static final String EXTRA_SQUELCH = "squelch";
     public static final String EXTRA_FILTER_PRE = "filterPre";
@@ -268,6 +269,9 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void populateRadioOptions() {
+        setDropdownOptions(R.id.voiceModeTextView,
+            Arrays.asList(getResources().getStringArray(R.array.voice_mode_options)));
+
         AutoCompleteTextView rfPowerTextView = findViewById(R.id.rfPowerTextView);
         rfPowerTextView.setThreshold(1);
         if (hasHighLowPowerSwitch) {
@@ -365,6 +369,13 @@ public class SettingsActivity extends AppCompatActivity {
             this.<AutoCompleteTextView>findViewById(R.id.rfPowerTextView)
                 .setText(powerOptions[getIntent().getBooleanExtra(EXTRA_RF_POWER_HIGH, true) ? 0 : Math.min(1, powerOptions.length - 1)], false);
         }
+
+        String[] voiceModeOptions = getResources().getStringArray(R.array.voice_mode_options);
+        if (voiceModeOptions.length > 0) {
+            this.<AutoCompleteTextView>findViewById(R.id.voiceModeTextView)
+                .setText(voiceModeOptions[getIntent().getBooleanExtra(EXTRA_FREEDV_2400B_ENABLED, false)
+                    ? Math.min(1, voiceModeOptions.length - 1) : 0], false);
+        }
     }
 
     public void closedCaptionsButtonClicked(View view) {
@@ -389,6 +400,7 @@ public class SettingsActivity extends AppCompatActivity {
         doneClicked = true;
         Intent data = new Intent()
             .putExtra(EXTRA_RF_POWER_HIGH, isHighPowerSelected())
+            .putExtra(EXTRA_FREEDV_2400B_ENABLED, isFreeDv2400bSelected())
             .putExtra(EXTRA_BANDWIDTH, this.<AutoCompleteTextView>findViewById(R.id.bandwidthTextView).getText().toString().trim())
             .putExtra(EXTRA_SQUELCH, (int) this.<Slider>findViewById(R.id.squelchSlider).getValue())
             .putExtra(EXTRA_FILTER_PRE, this.<Switch>findViewById(R.id.emphasisSwitch).isChecked())
@@ -402,6 +414,12 @@ public class SettingsActivity extends AppCompatActivity {
         String[] powerOptions = getResources().getStringArray(R.array.rf_power_options);
         String selected = this.<AutoCompleteTextView>findViewById(R.id.rfPowerTextView).getText().toString().trim();
         return powerOptions.length == 0 || selected.equals(powerOptions[0]);
+    }
+
+    private boolean isFreeDv2400bSelected() {
+        String[] voiceModeOptions = getResources().getStringArray(R.array.voice_mode_options);
+        String selected = this.<AutoCompleteTextView>findViewById(R.id.voiceModeTextView).getText().toString().trim();
+        return voiceModeOptions.length > 1 && selected.equals(voiceModeOptions[1]);
     }
 
     private void attachTextView(int viewId, Consumer<String> onTextChanged) {

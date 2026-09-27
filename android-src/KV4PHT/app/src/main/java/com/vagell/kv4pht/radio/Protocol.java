@@ -59,7 +59,8 @@ public final class Protocol {
         COMMAND_SND_UNKNOWN(0x00),
         COMMAND_HOST_TX_AUDIO(0x0C), // [COMMAND_HOST_TX_AUDIO(byte[])]
         COMMAND_HOST_DESIRED_STATE(0x0D),
-        COMMAND_HOST_TX_AX25(0x0E); // [float freqTx, uint8 bw, uint8 ctcssTx, AX.25 bytes]
+        COMMAND_HOST_TX_DIGITAL(0x0E),
+        COMMAND_HOST_TX_AX25(0x0F); // [float freqTx, uint8 bw, uint8 ctcssTx, AX.25 bytes]
         private final int value;
         SndCommand(int value) {
             this.value = value;
@@ -77,7 +78,8 @@ public final class Protocol {
         COMMAND_HELLO(0x06),            // [COMMAND_HELLO(Hello)]
         COMMAND_RX_AUDIO(0x0C),         // [COMMAND_RX_AUDIO(int8_t[])]
         COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
-        COMMAND_DEVICE_STATE(0x0B);
+        COMMAND_DEVICE_STATE(0x0B),
+        COMMAND_RX_DIGITAL(0x0E);
         private static final RcvCommand[] VALUES = values();
         private final int value;
         RcvCommand(int value) {
@@ -125,6 +127,7 @@ public final class Protocol {
     static final int DEVICE_STATE_SQUELCHED = 1 << 10;
     static final int HOST_STATE_TX_ALLOWED = 1 << 11;
     static final int HOST_STATE_ENABLE_STATUS_REPORTS = 1 << 12;
+    static final int HOST_STATE_FREEDV_2400B = 1 << 13;
 
     @Getter
     public enum DeviceMode {
@@ -277,6 +280,7 @@ public final class Protocol {
         private final float maxRadioFreq;
         private final boolean hasHl;
         private final boolean hasPhysPtt;
+        private final boolean hasFreeDv2400b;
         public static Optional<FirmwareVersion> from(final ByteBuffer buffer, int offset, Integer len) {
             return Optional.ofNullable(buffer)
                 .filter(b -> len != null && len == BYTE_LEN && offset >= 0 && b.limit() >= offset + len)
@@ -292,6 +296,7 @@ public final class Protocol {
                         .maxRadioFreq(b.getFloat(offset + 12))
                         .hasHl((features & 0x01) != 0)
                         .hasPhysPtt((features & 0x02) != 0)
+                        .hasFreeDv2400b((features & 0x08) != 0)
                         .build();
                 });
         }
@@ -366,6 +371,10 @@ public final class Protocol {
 
         public void txAudio(byte[] audio, int len) {
             sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO, audio, len);
+        }
+
+        public void txDigital(byte[] frame) {
+            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_DIGITAL, frame, frame.length);
         }
 
         public void txAx25(byte[] ax25Bytes) {
