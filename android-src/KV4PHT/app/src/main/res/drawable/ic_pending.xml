@@ -21,6 +21,17 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M12,2A10,10 0,1 0,12 22A10,10 0,0 0,12 2M13,7H11V13L16.2,16.1L17.2,14.4L13,11.9Z"/>
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,3H17V7L13,12L17,17V21H7V17L11,12L7,7Z"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9,6H15M9,18H15"/>
 </vector>

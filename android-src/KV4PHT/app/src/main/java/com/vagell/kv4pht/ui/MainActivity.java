@@ -149,7 +149,8 @@ public class MainActivity extends AppCompatActivity {
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
     private boolean aprsMessagesObserved;
-    private boolean aprsInitialScrollPending = true;
+    private boolean aprsAutoFollow = true;
+    private boolean aprsUserScrolling;
     private boolean radioAudioServiceBound = false;
     private final AtomicBoolean bindingInProgress = new AtomicBoolean(false);
 
@@ -247,21 +248,21 @@ public class MainActivity extends AppCompatActivity {
         aprsRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) aprsInitialScrollPending = false;
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    aprsUserScrolling = true;
+                    aprsAutoFollow = false;
+                } else if (newState == RecyclerView.SCROLL_STATE_IDLE && aprsUserScrolling) {
+                    aprsUserScrolling = false;
+                    aprsAutoFollow = isAprsFeedAtBottom();
+                }
             }
         });
         aprsRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
-            if (!aprsInitialScrollPending || !aprsRecyclerView.isShown()
+            if (!aprsAutoFollow || aprsUserScrolling || !aprsRecyclerView.isShown()
                     || aprsRecyclerView.getHeight() == 0 || aprsAdapter.getItemCount() == 0) return;
-            int last = aprsAdapter.getItemCount() - 1;
-            View lastRow = aprsLayoutManager.findViewByPosition(last);
-            if (!aprsRecyclerView.hasPendingAdapterUpdates()
-                    && lastRow != null && isAprsBottomVisible(aprsAdapter.getItemCount(),
-                        aprsLayoutManager.findLastVisibleItemPosition(), lastRow.getBottom(),
-                        aprsRecyclerView.getHeight() - aprsRecyclerView.getPaddingBottom())) {
-                aprsInitialScrollPending = false;
-            } else {
-                aprsRecyclerView.scrollToPosition(last);
+            // Preserve follow mode across keyboard resize and asynchronous feed/layout updates.
+            if (!isAprsFeedAtBottom()) {
+                aprsRecyclerView.scrollToPosition(aprsAdapter.getItemCount() - 1);
             }
         });
 
@@ -293,18 +294,6 @@ public class MainActivity extends AppCompatActivity {
 
     /** Defines callbacks for service binding, passed to bindService(). */
     private ServiceConnection connection = new ServiceConnection() {
-        private boolean shouldAutoScrollAprs() {
-            if (!aprsRecyclerView.isShown()
-                    || aprsRecyclerView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) return false;
-            int itemCount = aprsAdapter.getItemCount();
-            if (itemCount == 0) return true;
-            RecyclerView.LayoutManager layoutManager = aprsRecyclerView.getLayoutManager();
-            if (!(layoutManager instanceof LinearLayoutManager)) return false;
-            int lastVisible = ((LinearLayoutManager) layoutManager).findLastVisibleItemPosition();
-            View lastRow = layoutManager.findViewByPosition(itemCount - 1);
-            return lastRow != null && isAprsBottomVisible(itemCount, lastVisible, lastRow.getBottom(),
-                aprsRecyclerView.getHeight() - aprsRecyclerView.getPaddingBottom());
-        }
 
         @Override
         public void onServiceConnected(ComponentName className,
@@ -540,7 +529,7 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.setCallbacks(callbacks);
             if (!aprsMessagesObserved) {
                 radioAudioService.getAprsFeed().observe(MainActivity.this, aprsFeed -> {
-                    boolean autoScroll = aprsInitialScrollPending || shouldAutoScrollAprs();
+                    boolean autoScroll = aprsAutoFollow && !aprsUserScrolling;
                     aprsAdapter.setAprsFeed(aprsFeed);
                     aprsAdapter.notifyDataSetChanged();
                     if (autoScroll && aprsFeed != null && !aprsFeed.isEmpty()) {
@@ -563,6 +552,17 @@ public class MainActivity extends AppCompatActivity {
             // TODO if this is unexpected we should probably try to restart the service.
         }
     };
+
+    private boolean isAprsFeedAtBottom() {
+        int itemCount = aprsAdapter.getItemCount();
+        if (itemCount == 0) return true;
+        RecyclerView.LayoutManager layoutManager = aprsRecyclerView.getLayoutManager();
+        if (!(layoutManager instanceof LinearLayoutManager)) return false;
+        int lastVisible = ((LinearLayoutManager) layoutManager).findLastVisibleItemPosition();
+        View lastRow = layoutManager.findViewByPosition(itemCount - 1);
+        return lastRow != null && isAprsBottomVisible(itemCount, lastVisible, lastRow.getBottom(),
+            aprsRecyclerView.getHeight() - aprsRecyclerView.getPaddingBottom());
+    }
 
     static boolean isAprsBottomVisible(int itemCount, int lastVisiblePosition,
                                        int lastRowBottom, int viewportBottom) {

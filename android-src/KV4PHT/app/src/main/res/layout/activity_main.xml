@@ -361,7 +361,7 @@
             <androidx.appcompat.widget.LinearLayoutCompat
                 android:id="@+id/textModeContainer"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="0dp"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:background="@drawable/rounded_corners"
@@ -377,7 +377,7 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/aprsRecyclerView"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="0dp"
                     android:orientation="vertical"
                     android:layout_weight="1">
 
