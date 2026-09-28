@@ -43,7 +43,6 @@ public class AppSetting {
     public static final String SETTING_STICKY_PTT = "stickyPTT";
     public static final String SETTING_DIGIPEAT_PACKETS = "digipeatPackets";
     public static final String SETTING_APRS_IGATE = "aprsIgate";
-    public static final String SETTING_APRS_IS_SERVER = "aprsIsServer";
     public static final String SETTING_APRS_IS_DISPLAY = "aprsIsDisplay";
 
     public AppSetting(@NonNull String name, String value) {

@@ -43,10 +43,8 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
 import com.vagell.kv4pht.BuildConfig;
 import com.vagell.kv4pht.R;
-import io.github.dkaukov.aprs.AprsIsClient;
 import com.vagell.kv4pht.data.AprsFeedPolicy;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.radio.RadioAudioService;
@@ -236,8 +234,6 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populateAprsOptions() {
         setDropdownOptions(R.id.aprsPositionAccuracyTextView, List.of("Exact", "Approx"));
-        setDropdownOptions(R.id.aprsHistoryWindowTextView, List.of(
-            "1d", "1w", "2w", "1m", getString(R.string.all)));
         setDropdownOptions(R.id.aprsDestinationFilterTextView, List.of(
             getString(R.string.aprs_show_all), getString(R.string.aprs_only_mine)));
     }
@@ -352,8 +348,6 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_POSITION_ACCURACY, R.id.aprsPositionAccuracyTextView);
                 setDropdownIfPresent(settings, AppSetting.SETTING_APRS_ICON, R.id.aprsIconTextView);
-                this.<AutoCompleteTextView>findViewById(R.id.aprsHistoryWindowTextView).setText(
-                    historyWindowLabel(settings.get(AppSetting.SETTING_APRS_HISTORY_WINDOW)), false);
                 this.<AutoCompleteTextView>findViewById(R.id.aprsDestinationFilterTextView).setText(
                     destinationFilterLabel(
                         settings.get(AppSetting.SETTING_APRS_DESTINATION_FILTER)), false);
@@ -361,9 +355,6 @@ public class SettingsActivity extends AppCompatActivity {
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_IGATE, R.id.aprsIgateSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_IS_DISPLAY,
                     R.id.aprsIsDisplaySwitch);
-                this.<TextInputEditText>findViewById(R.id.aprsIsServerEditText).setText(
-                    settings.getOrDefault(AppSetting.SETTING_APRS_IS_SERVER,
-                        AprsIsClient.DEFAULT_SERVER));
                 setRadioSettingsFromIntent();
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_2_M_TX_FREQ, R.id.min2mFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_2_M_TX_FREQ, R.id.max2mFreqTextView, mhz);
@@ -395,11 +386,6 @@ public class SettingsActivity extends AppCompatActivity {
                 .setText(voiceModeOptions[getIntent().getBooleanExtra(EXTRA_FREEDV_2400B_ENABLED, false)
                     ? Math.min(1, voiceModeOptions.length - 1) : 0], false);
         }
-    }
-
-    private String historyWindowLabel(String value) {
-        return value == null || AprsFeedPolicy.HISTORY_ALL.equalsIgnoreCase(value)
-            ? getString(R.string.all) : value;
     }
 
     private String destinationFilterLabel(String value) {
@@ -480,7 +466,6 @@ public class SettingsActivity extends AppCompatActivity {
         attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
         attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
         attachTextView(R.id.aprsIconTextView, this::setAprsIcon);
-        attachTextView(R.id.aprsHistoryWindowTextView, this::setAprsHistoryWindow);
         attachTextView(R.id.aprsDestinationFilterTextView, this::setAprsDestinationFilter);
         attachTextView(R.id.min2mFreqTextView, text -> setMin2mTxFreq(extractPrefix(text)));
         attachTextView(R.id.max2mFreqTextView, text -> setMax2mTxFreq(extractPrefix(text)));
@@ -494,7 +479,6 @@ public class SettingsActivity extends AppCompatActivity {
         attachSwitch(R.id.digipeatPacketsSwitch, this::setDigipeatPackets);
         attachSwitch(R.id.aprsIgateSwitch, this::setAprsIgate);
         attachSwitch(R.id.aprsIsDisplaySwitch, this::setAprsIsDisplay);
-        attachTextView(R.id.aprsIsServerEditText, this::setAprsIsServer);
     }
 
     private void saveAppSettingAsync(String key, String value) {
@@ -539,15 +523,6 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    private void setAprsHistoryWindow(String historyWindow) {
-        String value = getString(R.string.all).equals(historyWindow)
-            ? AprsFeedPolicy.HISTORY_ALL : historyWindow;
-        saveAppSettingAsync(AppSetting.SETTING_APRS_HISTORY_WINDOW, value);
-        if (radioAudioService != null) {
-            radioAudioService.setAprsHistoryWindow(value);
-        }
-    }
-
     private void setAprsDestinationFilter(String destinationFilter) {
         String value = getString(R.string.aprs_only_mine).equals(destinationFilter)
             ? AprsFeedPolicy.DESTINATION_MINE : AprsFeedPolicy.DESTINATION_ALL;
@@ -565,15 +540,6 @@ public class SettingsActivity extends AppCompatActivity {
     private void setAprsIsDisplay(boolean enabled) {
         saveAppSettingAsync(AppSetting.SETTING_APRS_IS_DISPLAY, Boolean.toString(enabled));
         if (radioAudioService != null) radioAudioService.setAprsIsDisplayEnabled(enabled);
-    }
-
-    private void setAprsIsServer(String server) {
-        String normalized = AprsIsClient.normalizeServer(server);
-        TextInputLayout layout = findViewById(R.id.aprsIsServerLayout);
-        layout.setError(normalized == null ? getString(R.string.aprs_is_server_invalid) : null);
-        if (normalized == null) return;
-        saveAppSettingAsync(AppSetting.SETTING_APRS_IS_SERVER, normalized);
-        if (radioAudioService != null) radioAudioService.setAprsIsServer(normalized);
     }
 
     private void setMin2mTxFreq(String freq) {

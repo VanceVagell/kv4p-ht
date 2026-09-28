@@ -51,6 +51,54 @@ import org.junit.Test;
 
 /** JVM adapter-contract tests; these do not replace on-device Room migration tests. */
 public class RoomAprsRepositoryTest {
+    @Test public void localMessagesAndBeaconsMirrorToInternetOnlyAfterRfAcceptance() throws Exception {
+        for (boolean beacon : new boolean[] {false, true}) {
+            Fixture fixture = new Fixture();
+            fixture.run(() -> {
+                fixture.controller.setIgateEnabled(true);
+                fixture.acceptIs = true;
+                assertFalse(postLocal(fixture, beacon));
+                assertTrue(fixture.isSubmissions.isEmpty());
+                fixture.acceptRf = true;
+                assertTrue(postLocal(fixture, beacon));
+                assertEquals(1, fixture.isSubmissions.size());
+                assertTrue(fixture.isSubmissions.get(0).startsWith("VK3ME>APKVPA,TCPIP*:"));
+                assertEquals(1, fixture.packets.size());
+                assertEquals(AprsSource.TX_RF, fixture.packets.get(0).source);
+                assertNotNull(fixture.isSuccess);
+                fixture.isSuccess.run();
+                assertEquals(2, fixture.packets.size());
+                assertEquals(AprsSource.TX_APRS_IS, fixture.packets.get(1).source);
+                assertEquals(fixture.packets.get(0).eventId, fixture.packets.get(1).eventId);
+                assertEquals(1, fixture.events.size());
+            });
+        }
+    }
+
+    @Test public void localInternetMirroringIsOptionalAndDoesNotChangeRfSuccess() throws Exception {
+        for (boolean beacon : new boolean[] {false, true}) {
+            Fixture fixture = new Fixture();
+            fixture.run(() -> {
+                fixture.acceptRf = true;
+                assertTrue(postLocal(fixture, beacon));
+                assertTrue(fixture.isSubmissions.isEmpty());
+                fixture.controller.setIgateEnabled(true);
+                // A disconnected APRS-IS client rejects the copy, not the successful RF submission.
+                assertTrue(postLocal(fixture, beacon));
+                assertEquals(1, fixture.isSubmissions.size());
+                assertNull(fixture.isSuccess);
+                assertEquals(2, fixture.packets.size());
+                for (AprsPacketEntity packet : fixture.packets) assertEquals(AprsSource.TX_RF, packet.source);
+            });
+        }
+    }
+
+    private static boolean postLocal(Fixture fixture, boolean beacon) {
+        return beacon ? fixture.controller.submitPositionBeacon(BeaconData.builder()
+            .latitude(-37.75).longitude(145.125).messagingCapable(true).compressed(true).build())
+            : fixture.controller.postMessage("VK3ABC", "hello", 144390000L);
+    }
+
     @Test public void postMessageOwnsIdentifierPersistenceAndRetryPurpose() throws Exception {
         Fixture fixture = new Fixture();
         fixture.run(() -> {
@@ -299,6 +347,7 @@ public class RoomAprsRepositoryTest {
         final List<APRSPacket> rfSubmissions = new ArrayList<>();
         final List<Long> requestedFrequencies = new ArrayList<>();
         final List<AprsController.RfTransmissionPurpose> purposes = new ArrayList<>();
+        final List<String> isSubmissions = new ArrayList<>();
         boolean inTransaction;
         boolean failPacketInsert;
         boolean failProjectionWrite;
@@ -439,6 +488,7 @@ public class RoomAprsRepositoryTest {
         @Override public boolean submitAprsIs(String tnc2, Runnable onSuccess) {
             assertSame(worker, Thread.currentThread());
             assertFalse(inTransaction);
+            isSubmissions.add(tnc2);
             if (acceptIs) isSuccess = onSuccess;
             return acceptIs;
         }

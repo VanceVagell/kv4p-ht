@@ -289,45 +289,6 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="8dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical"
-                        android:layout_weight="1"
-                        android:fontFamily="@font/jost"
-                        android:labelFor="@id/aprsHistoryWindowTextView"
-                        android:text="@string/aprs_history_window"
-                        android:textColor="@color/primary"
-                        android:textSize="18dp"/>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        android:layout_width="wrap_content"
-                        android:layout_height="40dp"
-                        android:layout_weight="0"
-                        android:padding="0dp"
-                        android:textColorHint="@color/primary_deselected"
-                        app:boxStrokeColor="@color/primary"
-                        app:hintTextColor="@color/primary_deselected">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/aprsHistoryWindowTextView"
-                            android:layout_width="160dp"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:padding="0dp"
-                            android:text="@string/all"
-                            android:textColor="@color/primary"
-                            android:textSize="20dp"/>
-                    </com.google.android.material.textfield.TextInputLayout>
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
                     <TextView
@@ -524,27 +485,6 @@
                     android:textColor="@color/primary"
                     android:textSize="18dp"
                     android:trackTintMode="add" />
-
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/aprsIsServerLayout"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:hint="@string/aprs_is_server"
-                    app:boxStrokeColor="@color/primary"
-                    app:hintTextColor="@color/primary_deselected">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/aprsIsServerEditText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="textUri"
-                        android:maxLines="1"
-                        android:singleLine="true"
-                        android:textColor="@color/primary"
-                        android:textSize="18sp" />
-                </com.google.android.material.textfield.TextInputLayout>
 
                 <TextView
                     android:layout_width="wrap_content"

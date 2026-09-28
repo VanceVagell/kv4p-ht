@@ -95,6 +95,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -254,7 +255,7 @@ public class RadioAudioService extends Service {
     private boolean radioMissingNotified = false;
     private Runnable txTimeoutHandler;
     private LiveData<List<ChannelMemory>> channelMemoriesLiveData = null;
-    private ExecutorService aprsExecutor;
+    private ScheduledExecutorService aprsExecutor;
     private volatile boolean aprsBeaconPosition;
     // Main-handler-owned scheduling preserves GPS and alternate-frequency beaconing.
     private final AprsBeaconSchedule aprsBeaconSchedule = new AprsBeaconSchedule(APRS_BEACON_MINS * 60_000L);
@@ -350,11 +351,6 @@ public class RadioAudioService extends Service {
         if (enabled) refreshAprsIsFilterLocation();
         else if (client != null) client.setFilterLocation(null, null);
         updateAprsIsConnection();
-    }
-
-    public void setAprsIsServer(String server) {
-        AprsIsClient client = aprsIsClient;
-        if (client != null) client.setServer(server);
     }
 
     public void setCallsign(@NonNull String callsign) {
@@ -478,10 +474,11 @@ public class RadioAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        aprsExecutor = Executors.newSingleThreadExecutor();
+        aprsExecutor = Executors.newSingleThreadScheduledExecutor();
         aprsController = createAprsController();
         aprsIsClient = new AprsIsClient("kv4p-ht", BuildConfig.VERSION_NAME,
             packet -> executeAprs(() -> aprsController.handleAprsIsPacket(packet)));
+        aprsIsClient.setServer("rotate.aprs2.net:14580");
 
         // Keep CPU on while service is running so we can play and process audio
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -501,7 +498,17 @@ public class RadioAudioService extends Service {
             NotificationManager nm = getSystemService(NotificationManager.class);
             nm.createNotificationChannel(chan);
         }
+        // Missed ticks do not accumulate: wait after each execution on the ordered APRS worker.
+        aprsExecutor.scheduleWithFixedDelay(this::tickAprsController, 0, 500, TimeUnit.MILLISECONDS);
+    }
 
+    private void tickAprsController() {
+        try {
+            aprsController.tick(System.currentTimeMillis());
+        } catch (RuntimeException e) {
+            // Unhandled exceptions cancel future executions of a scheduled periodic task.
+            Log.w(TAG, "APRS housekeeping tick failed; later ticks remain scheduled", e);
+        }
     }
 
     private AprsController createAprsController() {
@@ -556,7 +563,9 @@ public class RadioAudioService extends Service {
 
         @Override public AprsController.RfTransmission submitRf(APRSPacket packet, Long requestedFrequencyHz,
                 AprsController.RfTransmissionPurpose purpose) {
-            if (!canTransmitAprs()) {
+            boolean dedicatedBeacon = purpose == AprsController.RfTransmissionPurpose.POSITION_BEACON
+                && aprsBeaconTxOverrideMhz != null;
+            if (!canTransmitAprs(dedicatedBeacon)) {
                 return null;
             }
             Long selectedTxHz = activeTxFrequencyHz();
@@ -574,7 +583,7 @@ public class RadioAudioService extends Service {
             Long frequencyHz = AprsRfFrequencyPolicy.transmissionFrequency(targetHz, selectedTxHz, purpose);
             if (frequencyHz == null) return null;
             AprsController.Transmission transmission = transmitAprsPacketOnFrequency(packet,
-                frequencyHz, (float) (frequencyHz / 1_000_000d));
+                frequencyHz, (float) (frequencyHz / 1_000_000d), dedicatedBeacon);
             return AprsController.RfTransmission.builder().transmission(transmission).build();
         }
 
@@ -589,14 +598,15 @@ public class RadioAudioService extends Service {
                 () -> executeAprs(onSuccess));
         }
 
-        private boolean canTransmitAprs() {
-            return isTxAllowed() && getMode() == RadioMode.RX && hostToEsp32 != null;
+        private boolean canTransmitAprs(boolean dedicatedBeacon) {
+            return isTxAllowed() && AprsRfFrequencyPolicy.allowsMode(getMode(), dedicatedBeacon)
+                && hostToEsp32 != null;
         }
 
         private AprsController.Transmission transmitAprsPacketOnFrequency(
-            APRSPacket packet, Long frequencyHz, float txFrequencyMhz) {
+            APRSPacket packet, Long frequencyHz, float txFrequencyMhz, boolean dedicatedBeacon) {
             byte[] rawAx25 = packet.toAX25Frame();
-            return txAX25PacketOnFrequency(new Packet(rawAx25), txFrequencyMhz)
+            return txAX25PacketOnFrequency(new Packet(rawAx25), txFrequencyMhz, dedicatedBeacon)
                 ? AprsController.Transmission.builder().packet(packet).frequencyHz(frequencyHz)
                     .rawAx25(rawAx25).build() : null;
         }
@@ -1160,7 +1170,6 @@ public class RadioAudioService extends Service {
     }
 
     private void reconcileConnections() {
-        executeAprs(() -> aprsController.tick(System.currentTimeMillis()));
         handler.post(this::tickPositionBeacon);
         activeUsbConnectAttemptId = ++usbConnectAttemptSeq;
         Log.d(TAG, connectLog("reconcileConnections(): state=" + connectionStateSummary()));
@@ -1980,26 +1989,18 @@ public class RadioAudioService extends Service {
 
     /**
      * Sends a position beacon via APRS.
-     * This method can only be called when the radio is in RX mode.
+     * Dedicated-frequency beacons may also be sent while scanning via firmware TX override.
      * If Google Play Services are not available, it will call unknownLocation() on the callbacks.
      */
     @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
     public void sendPositionBeacon() {
-        boolean isScanning = getMode() == RadioMode.SCAN;
-        boolean isRx = getMode() == RadioMode.RX;
-
         if (!isRadioConnected() || !isTxAllowed()) {
             Log.d(TAG, "Skipping position beacon: radio disconnected or tx not allowed.");
             return;
         }
 
-        if (isScanning) {
-            Log.d(TAG, "Skipping position beacon: scanning is active.");
-            return;
-        }
-
-        if (!isRx) {
-            Log.d(TAG, "Skipping position beacon: not in RX mode.");
+        if (!AprsRfFrequencyPolicy.allowsMode(getMode(), !CURRENT_FREQUENCY.equals(aprsBeaconFrequency))) {
+            Log.d(TAG, "Skipping position beacon: mode does not allow this beacon frequency.");
             return;
         }
 
@@ -2056,7 +2057,7 @@ public class RadioAudioService extends Service {
 
     /**
      * Sends a position beacon via APRS.
-     * This method can only be called when the radio is in RX mode.
+     * Dedicated-frequency beacons may also be sent while scanning via firmware TX override.
      *
      * @param latitude  The latitude to beacon.
      * @param longitude The longitude to beacon.
@@ -2065,8 +2066,8 @@ public class RadioAudioService extends Service {
      */
     private void sendPositionBeacon(final double latitude, final double longitude, final Float txFrequency,
                                     final String beaconFrequency) {
-        if (getMode() != RadioMode.RX) {
-            Log.d(TAG, "Skipping position beacon because not in RX mode");
+        if (!AprsRfFrequencyPolicy.allowsMode(getMode(), txFrequency != null)) {
+            Log.d(TAG, "Skipping position beacon because mode does not allow this beacon frequency");
             return;
         }
         final boolean isApprox = aprsPositionAccuracy == APRS_POSITION_APPROX;
@@ -2124,13 +2125,13 @@ public class RadioAudioService extends Service {
         });
     }
 
-    private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency) {
+    private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency, boolean dedicatedBeacon) {
         if (!isTxAllowed() || !canTransmitOnFrequency(txFrequency)) {
             Log.e(TAG, "Tried to send an AX.25 packet on a disallowed frequency, did not send.");
             return false;
         }
-        if (getMode() != RadioMode.RX) {
-            Log.e(TAG, "Tried to send an AX.25 packet when radio was not in RX mode, did not send.");
+        if (!AprsRfFrequencyPolicy.allowsMode(getMode(), dedicatedBeacon)) {
+            Log.e(TAG, "Tried to send an AX.25 packet in an unsupported mode, did not send.");
             return false;
         }
         Protocol.Sender sender = hostToEsp32;

@@ -25,6 +25,13 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.junit.Test;
 
 public class MainActivityTest {
+    @Test public void initialScrollFinishesOnlyAtActualBottom() {
+        assertFalse(MainActivity.isAprsBottomVisible(20, 16, 400, 500));
+        assertFalse(MainActivity.isAprsBottomVisible(20, 19, 600, 500));
+        assertTrue(MainActivity.isAprsBottomVisible(20, 19, 500, 500));
+        assertFalse(MainActivity.isAprsBottomVisible(0, RecyclerView.NO_POSITION, 0, 500));
+    }
+
     @Test public void aprsInitialLoadAutoScrolls() {
         assertTrue(MainActivity.shouldAutoScrollAprs(0, RecyclerView.NO_POSITION));
     }

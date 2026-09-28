@@ -39,7 +39,6 @@
 
         <include layout="@layout/aprs_digipeated_indicator" />
 
-        <include layout="@layout/aprs_internet_indicator" />
 
         <TextView
             android:id="@+id/relayViaLabel"

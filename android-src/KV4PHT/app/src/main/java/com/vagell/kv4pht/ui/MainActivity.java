@@ -74,7 +74,6 @@ import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
-import io.github.dkaukov.aprs.AprsIsClient;
 import com.vagell.kv4pht.data.AprsFeedPolicy;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
@@ -151,6 +150,7 @@ public class MainActivity extends AppCompatActivity {
     // The main service that handles USB with the ESP32, incoming and outgoing audio, data, etc.
     private RadioAudioService radioAudioService = null;
     private boolean aprsMessagesObserved;
+    private boolean aprsInitialScrollPending = true;
     private boolean radioAudioServiceBound = false;
     private final AtomicBoolean bindingInProgress = new AtomicBoolean(false);
 
@@ -239,9 +239,32 @@ public class MainActivity extends AppCompatActivity {
 
         // Prepare a RecyclerView for the list APRS messages we've received in the past
         aprsRecyclerView = findViewById(R.id.aprsRecyclerView);
-        aprsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        LinearLayoutManager aprsLayoutManager = new LinearLayoutManager(this);
+        // Anchor the first layout at the latest entry, even if the feed loads while chat is hidden.
+        aprsLayoutManager.setStackFromEnd(true);
+        aprsRecyclerView.setLayoutManager(aprsLayoutManager);
         aprsAdapter = new APRSAdapter();
         aprsRecyclerView.setAdapter(aprsAdapter);
+        aprsRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) aprsInitialScrollPending = false;
+            }
+        });
+        aprsRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (!aprsInitialScrollPending || !aprsRecyclerView.isShown()
+                    || aprsRecyclerView.getHeight() == 0 || aprsAdapter.getItemCount() == 0) return;
+            int last = aprsAdapter.getItemCount() - 1;
+            View lastRow = aprsLayoutManager.findViewByPosition(last);
+            if (!aprsRecyclerView.hasPendingAdapterUpdates()
+                    && lastRow != null && isAprsBottomVisible(aprsAdapter.getItemCount(),
+                        aprsLayoutManager.findLastVisibleItemPosition(), lastRow.getBottom(),
+                        aprsRecyclerView.getHeight() - aprsRecyclerView.getPaddingBottom())) {
+                aprsInitialScrollPending = false;
+            } else {
+                aprsRecyclerView.scrollToPosition(last);
+            }
+        });
 
         // Set up behavior on the bottom nav
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigationView);
@@ -514,7 +537,7 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService.setCallbacks(callbacks);
             if (!aprsMessagesObserved) {
                 radioAudioService.getAprsFeed().observe(MainActivity.this, aprsFeed -> {
-                    boolean autoScroll = shouldAutoScrollAprs();
+                    boolean autoScroll = aprsInitialScrollPending || shouldAutoScrollAprs();
                     aprsAdapter.setAprsFeed(aprsFeed);
                     aprsAdapter.notifyDataSetChanged();
                     if (autoScroll && aprsFeed != null && !aprsFeed.isEmpty()) {
@@ -541,6 +564,12 @@ public class MainActivity extends AppCompatActivity {
     static boolean shouldAutoScrollAprs(int itemCount, int lastVisibleItemPosition) {
         return itemCount == 0 || lastVisibleItemPosition != RecyclerView.NO_POSITION
             && lastVisibleItemPosition >= itemCount - 1 - APRS_AUTO_SCROLL_DISTANCE;
+    }
+
+    static boolean isAprsBottomVisible(int itemCount, int lastVisiblePosition,
+                                       int lastRowBottom, int viewportBottom) {
+        return itemCount > 0 && lastVisiblePosition == itemCount - 1
+            && lastRowBottom <= viewportBottom;
     }
 
     private void updateVoiceModeCaption() {
@@ -860,14 +889,11 @@ public class MainActivity extends AppCompatActivity {
         applyAprsBeaconPosition(service, settings.get(AppSetting.SETTING_APRS_BEACON_POSITION));
         applyAprsIcon(service, settings.get(AppSetting.SETTING_APRS_ICON));
         applyDigipeatSetting(service, settings.get(AppSetting.SETTING_DIGIPEAT_PACKETS));
-        service.setAprsIsServer(settings.getOrDefault(
-            AppSetting.SETTING_APRS_IS_SERVER, AprsIsClient.DEFAULT_SERVER));
         service.setAprsIsDisplayEnabled(Boolean.parseBoolean(
             settings.getOrDefault(AppSetting.SETTING_APRS_IS_DISPLAY, DEFAULT_BOOLEAN_FALSE)));
         service.setAprsIgateEnabled(Boolean.parseBoolean(
             settings.getOrDefault(AppSetting.SETTING_APRS_IGATE, DEFAULT_BOOLEAN_FALSE)));
-        service.setAprsHistoryWindow(settings.getOrDefault(
-            AppSetting.SETTING_APRS_HISTORY_WINDOW, AprsFeedPolicy.HISTORY_ALL));
+        service.setAprsHistoryWindow(AprsFeedPolicy.HISTORY_ALL);
         service.setAprsDestinationFilter(settings.getOrDefault(
             AppSetting.SETTING_APRS_DESTINATION_FILTER, AprsFeedPolicy.DESTINATION_ALL));
     }

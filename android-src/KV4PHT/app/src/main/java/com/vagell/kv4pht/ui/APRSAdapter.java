@@ -182,7 +182,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         holder.setPositionLat(aprsEvent.getPositionLat());
         holder.setPositionLong(aprsEvent.getPositionLong());
         holder.setDigipeated(aprsEvent.isDigipeated());
-        holder.setInternetOnly(aprsEvent.isInternetOnly());
 
         // Specialized values
         switch (aprsEvent.getType()) {
@@ -255,7 +254,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         TextView textViewRelayCallsign;
         TextView textViewRelayViaLabel;
         TextView textViewDigipeated;
-        TextView textViewInternet;
 
         public APRSViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -283,7 +281,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             textViewRelayCallsign = itemView.findViewById(R.id.relayCallsign);
             textViewRelayViaLabel = itemView.findViewById(R.id.relayViaLabel);
             textViewDigipeated = itemView.findViewById(R.id.digipeatedIndicator);
-            textViewInternet = itemView.findViewById(R.id.internetIndicator);
         }
 
         public void setFromCallsign(String fromCallsign) {
@@ -456,10 +453,5 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             }
         }
 
-        public void setInternetOnly(boolean internetOnly) {
-            if (textViewInternet != null) {
-                textViewInternet.setVisibility(internetOnly ? View.VISIBLE : View.GONE);
-            }
-        }
     }
 }

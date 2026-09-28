@@ -105,7 +105,6 @@
     <string name="settings">设置</string>
     <string name="beacon_my_position">广播我的位置</string>
     <string name="beacon_to_frequency">信标发射频率</string>
-    <string name="aprs_history_window">历史记录</string>
     <string name="aprs_message_filter">消息筛选</string>
     <string name="aprs_show_all">显示全部</string>
     <string name="aprs_only_mine">仅显示我的</string>
@@ -114,12 +113,8 @@
     <string name="aprs_delivery_rejected">消息已被拒绝</string>
     <string name="aprs_delivery_failed">消息发送失败</string>
     <string name="aprs_digipeated">已转发</string>
-    <string name="aprs_igate_rf_to_is">将射频数据包转发到 APRS-IS</string>
-    <string name="aprs_is_server">APRS-IS 服务器</string>
-    <string name="aprs_is_server_invalid">请输入主机名或主机名:端口</string>
-    <string name="aprs_is_display">显示附近的 APRS-IS 流量</string>
-    <string name="aprs_internet">IS</string>
-    <string name="aprs_internet_description">APRS-IS</string>
+    <string name="aprs_igate_rf_to_is">iGate（将射频消息上报至互联网）</string>
+    <string name="aprs_is_display">显示附近的 APRS-IS 消息</string>
     <string name="all">全部</string>
     <string name="mine">我的</string>
     <string name="beaconing_aprs_on">正在频率 %1$s 发送 APRS 信标...</string>

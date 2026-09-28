@@ -110,7 +110,6 @@
     <string name="freq_145_1750" translatable="false">145.1750</string>
     <string name="freq_145_8250" translatable="false">145.8250</string>
     <string name="aprs_my_position_icon">My position icon</string>
-    <string name="aprs_history_window">History</string>
     <string name="aprs_message_filter">Message filter</string>
     <string name="aprs_show_all">Show all</string>
     <string name="aprs_only_mine">Only mine</string>
@@ -138,12 +137,8 @@
     <string name="aprs_icon_sailboat">Sailboat</string>
     <string name="aprs_icon_motorboat">Motorboat</string>
     <string name="digipeat_packets">Digipeat (mesh)</string>
-    <string name="aprs_igate_rf_to_is">Gate RF packets to APRS-IS</string>
-    <string name="aprs_is_server">APRS-IS server</string>
-    <string name="aprs_is_server_invalid">Enter a host or host:port</string>
-    <string name="aprs_is_display">Show nearby APRS-IS traffic</string>
-    <string name="aprs_internet">IS</string>
-    <string name="aprs_internet_description">APRS-IS</string>
+    <string name="aprs_igate_rf_to_is">iGate (report RF messages online)</string>
+    <string name="aprs_is_display">Show nearby APRS-IS messages</string>
     <string name="wide" translatable="false">25kHz</string>
     <string name="narrow" translatable="false">12.5kHz</string>
     <string name="done">Done</string>

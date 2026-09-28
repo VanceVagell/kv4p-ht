@@ -44,7 +44,6 @@
 
         <include layout="@layout/aprs_digipeated_indicator" />
 
-        <include layout="@layout/aprs_internet_indicator" />
 
         <ImageButton
             android:id="@+id/senderPositionButton"

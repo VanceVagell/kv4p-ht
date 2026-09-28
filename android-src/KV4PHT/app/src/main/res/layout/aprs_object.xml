@@ -16,9 +16,9 @@
 
         <TextView
             android:id="@+id/objName"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
             android:ellipsize="end"
             android:maxLines="1"
             android:text="147.225+H"
@@ -28,8 +28,10 @@
 
         <TextView
             android:id="@+id/timestamp"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
             android:layout_marginEnd="4dp"
             android:maxLines="1"
             android:text="12:10pm"
@@ -38,7 +40,6 @@
 
         <include layout="@layout/aprs_digipeated_indicator" />
 
-        <include layout="@layout/aprs_internet_indicator" />
 
         <ImageButton
             android:id="@+id/senderPositionButton"
