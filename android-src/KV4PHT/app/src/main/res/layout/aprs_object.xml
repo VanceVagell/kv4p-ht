@@ -15,13 +15,13 @@
         android:orientation="horizontal">
 
         <TextView
-            android:id="@+id/objName"
+            android:id="@+id/fromCallsign"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="147.225+H"
+            android:text="VK3BRT-S"
             android:textColor="@color/primary"
             android:textFontWeight="500"
             android:textSize="16sp" />
@@ -59,6 +59,17 @@
         android:orientation="vertical"
         android:padding="8dp">
 
+        <TextView
+            android:id="@+id/objName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="2dp"
+            android:text="VK3BRT B"
+            android:textColor="@color/primary"
+            android:textFontWeight="500"
+            android:textIsSelectable="true"
+            android:textSize="16sp" />
+
         <LinearLayout
             android:id="@+id/commentHolder"
             android:layout_width="match_parent"
@@ -77,30 +88,5 @@
                 android:textSize="16sp" />
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/objectSourceHolder"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:gravity="start|center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:text="@string/aprs_relay_via"
-                android:textColor="@android:color/darker_gray"
-                android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/fromCallsign"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="KV4P"
-                android:textColor="@android:color/darker_gray"
-                android:textSize="12sp" />
-        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

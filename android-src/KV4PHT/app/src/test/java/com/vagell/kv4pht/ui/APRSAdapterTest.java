@@ -49,6 +49,7 @@ public class APRSAdapterTest {
 
         AprsEvent object = AprsEvent.builder()
             .type(AprsEvent.OBJECT_TYPE)
+            .fromCallsign("VK3RPT-S")
             .objectName("VK3RPT B")
             .comment("439.150 MHz repeater")
             .build();
@@ -60,8 +61,6 @@ public class APRSAdapterTest {
         assertTrue(APRSAdapter.showCommentInFeed(AprsEvent.UNKNOWN_TYPE));
         assertEquals("VK3ABC-7: Listening on 146.52", APRSAdapter.mapLabel(position));
         assertEquals("VK3RPT B · 439.15 MHz", APRSAdapter.mapLabel(object));
-        assertFalse(APRSAdapter.showObjectSource("VK3RPT B", "VK3RPT B"));
-        assertTrue(APRSAdapter.showObjectSource("VK3RPT-S", "VK3RPT B"));
     }
 
     @Test public void convertsAprsWeatherUnitsForMetricLocales() {

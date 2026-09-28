@@ -71,12 +71,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         return eventType != AprsEvent.POSITION_TYPE;
     }
 
-    static boolean showObjectSource(String source, String objectName) {
-        String normalizedSource = trimmed(source);
-        return !normalizedSource.isEmpty()
-            && !normalizedSource.equalsIgnoreCase(trimmed(objectName));
-    }
-
     static String mapLabel(AprsEvent event) {
         if (event.getType() == AprsEvent.OBJECT_TYPE) {
             return AprsObjectSummary.from(event.getObjectName(), event.getComment()).mapLabel;
@@ -203,7 +197,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
                 holder.setObjName(aprsEvent.getObjectName());
                 holder.setComment(AprsObjectSummary.from(
                     aprsEvent.getObjectName(), aprsEvent.getComment()).cardText);
-                holder.setObjectSource(aprsEvent.getFromCallsign(), aprsEvent.getObjectName());
                 break;
             case AprsEvent.POSITION_TYPE: // Can only have default values
             case AprsEvent.STATUS_TYPE: // Ditto
@@ -250,7 +243,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         TextView textViewMsgBody;
         ImageView deliveryStatusIcon;
         TextView textViewObjName;
-        View objectSourceHolder;
         TextView textViewRelayCallsign;
         TextView textViewRelayViaLabel;
         TextView textViewDigipeated;
@@ -277,7 +269,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             textViewMsgBody = itemView.findViewById(R.id.messageBody);
             deliveryStatusIcon = itemView.findViewById(R.id.messageDeliveryStatus);
             textViewObjName = itemView.findViewById(R.id.objName);
-            objectSourceHolder = itemView.findViewById(R.id.objectSourceHolder);
             textViewRelayCallsign = itemView.findViewById(R.id.relayCallsign);
             textViewRelayViaLabel = itemView.findViewById(R.id.relayViaLabel);
             textViewDigipeated = itemView.findViewById(R.id.digipeatedIndicator);
@@ -435,12 +426,6 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
                 return;
             }
             textViewObjName.setText(objName);
-        }
-
-        public void setObjectSource(String source, String objectName) {
-            if (objectSourceHolder == null) return;
-            objectSourceHolder.setVisibility(showObjectSource(source, objectName)
-                ? View.VISIBLE : View.GONE);
         }
 
         public void setRelayCallsign(String relayCallsign) {
