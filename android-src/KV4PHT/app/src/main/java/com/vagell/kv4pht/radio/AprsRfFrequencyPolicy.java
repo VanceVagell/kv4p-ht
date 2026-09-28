@@ -25,8 +25,8 @@ import io.github.dkaukov.aprs.AprsController.RfTransmissionPurpose;
 final class AprsRfFrequencyPolicy {
     private AprsRfFrequencyPolicy() { }
 
-    static boolean allowsMode(RadioMode mode, boolean dedicatedFrequencyBeacon) {
-        return mode == RadioMode.RX || dedicatedFrequencyBeacon && mode == RadioMode.SCAN;
+    static boolean allowsMode(RadioMode mode) {
+        return mode == RadioMode.RX;
     }
 
     static Long toHz(float frequencyMhz) {

@@ -563,9 +563,7 @@ public class RadioAudioService extends Service {
 
         @Override public AprsController.RfTransmission submitRf(APRSPacket packet, Long requestedFrequencyHz,
                 AprsController.RfTransmissionPurpose purpose) {
-            boolean dedicatedBeacon = purpose == AprsController.RfTransmissionPurpose.POSITION_BEACON
-                && aprsBeaconTxOverrideMhz != null;
-            if (!canTransmitAprs(dedicatedBeacon)) {
+            if (!canTransmitAprs()) {
                 return null;
             }
             Long selectedTxHz = activeTxFrequencyHz();
@@ -583,7 +581,7 @@ public class RadioAudioService extends Service {
             Long frequencyHz = AprsRfFrequencyPolicy.transmissionFrequency(targetHz, selectedTxHz, purpose);
             if (frequencyHz == null) return null;
             AprsController.Transmission transmission = transmitAprsPacketOnFrequency(packet,
-                frequencyHz, (float) (frequencyHz / 1_000_000d), dedicatedBeacon);
+                frequencyHz, (float) (frequencyHz / 1_000_000d));
             return AprsController.RfTransmission.builder().transmission(transmission).build();
         }
 
@@ -598,15 +596,15 @@ public class RadioAudioService extends Service {
                 () -> executeAprs(onSuccess));
         }
 
-        private boolean canTransmitAprs(boolean dedicatedBeacon) {
-            return isTxAllowed() && AprsRfFrequencyPolicy.allowsMode(getMode(), dedicatedBeacon)
+        private boolean canTransmitAprs() {
+            return isTxAllowed() && AprsRfFrequencyPolicy.allowsMode(getMode())
                 && hostToEsp32 != null;
         }
 
         private AprsController.Transmission transmitAprsPacketOnFrequency(
-            APRSPacket packet, Long frequencyHz, float txFrequencyMhz, boolean dedicatedBeacon) {
+            APRSPacket packet, Long frequencyHz, float txFrequencyMhz) {
             byte[] rawAx25 = packet.toAX25Frame();
-            return txAX25PacketOnFrequency(new Packet(rawAx25), txFrequencyMhz, dedicatedBeacon)
+            return txAX25PacketOnFrequency(new Packet(rawAx25), txFrequencyMhz)
                 ? AprsController.Transmission.builder().packet(packet).frequencyHz(frequencyHz)
                     .rawAx25(rawAx25).build() : null;
         }
@@ -1989,17 +1987,25 @@ public class RadioAudioService extends Service {
 
     /**
      * Sends a position beacon via APRS.
-     * Dedicated-frequency beacons may also be sent while scanning via firmware TX override.
+     * Beaconing is blocked while scanning, including dedicated-frequency beacons.
      * If Google Play Services are not available, it will call unknownLocation() on the callbacks.
      */
     @RequiresPermission(allOf = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION})
     public void sendPositionBeacon() {
+        // Beaconing while scanning is intentionally skipped.
+        // The firmware can temporarily override frequency for AX.25 TX, but scan
+        // updates may change desired radio state while the override is waiting for
+        // channel access. Keep scan/beacon interaction simple for now.
+        if (getMode() == RadioMode.SCAN) {
+            Log.d(TAG, "Skipping position beacon: scanning is active.");
+            return;
+        }
         if (!isRadioConnected() || !isTxAllowed()) {
             Log.d(TAG, "Skipping position beacon: radio disconnected or tx not allowed.");
             return;
         }
 
-        if (!AprsRfFrequencyPolicy.allowsMode(getMode(), !CURRENT_FREQUENCY.equals(aprsBeaconFrequency))) {
+        if (!AprsRfFrequencyPolicy.allowsMode(getMode())) {
             Log.d(TAG, "Skipping position beacon: mode does not allow this beacon frequency.");
             return;
         }
@@ -2057,7 +2063,7 @@ public class RadioAudioService extends Service {
 
     /**
      * Sends a position beacon via APRS.
-     * Dedicated-frequency beacons may also be sent while scanning via firmware TX override.
+     * Beaconing is blocked while scanning, including dedicated-frequency beacons.
      *
      * @param latitude  The latitude to beacon.
      * @param longitude The longitude to beacon.
@@ -2066,7 +2072,7 @@ public class RadioAudioService extends Service {
      */
     private void sendPositionBeacon(final double latitude, final double longitude, final Float txFrequency,
                                     final String beaconFrequency) {
-        if (!AprsRfFrequencyPolicy.allowsMode(getMode(), txFrequency != null)) {
+        if (!AprsRfFrequencyPolicy.allowsMode(getMode())) {
             Log.d(TAG, "Skipping position beacon because mode does not allow this beacon frequency");
             return;
         }
@@ -2125,12 +2131,12 @@ public class RadioAudioService extends Service {
         });
     }
 
-    private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency, boolean dedicatedBeacon) {
+    private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency) {
         if (!isTxAllowed() || !canTransmitOnFrequency(txFrequency)) {
             Log.e(TAG, "Tried to send an AX.25 packet on a disallowed frequency, did not send.");
             return false;
         }
-        if (!AprsRfFrequencyPolicy.allowsMode(getMode(), dedicatedBeacon)) {
+        if (!AprsRfFrequencyPolicy.allowsMode(getMode())) {
             Log.e(TAG, "Tried to send an AX.25 packet in an unsupported mode, did not send.");
             return false;
         }

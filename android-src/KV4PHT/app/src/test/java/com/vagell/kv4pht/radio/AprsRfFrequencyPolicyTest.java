@@ -27,15 +27,12 @@ import org.junit.Test;
 import io.github.dkaukov.aprs.AprsController.RfTransmissionPurpose;
 
 public class AprsRfFrequencyPolicyTest {
-    @Test public void scanningAllowsOnlyDedicatedFrequencyBeacons() {
-        assertTrue(AprsRfFrequencyPolicy.allowsMode(RadioMode.SCAN, true));
-        assertFalse(AprsRfFrequencyPolicy.allowsMode(RadioMode.SCAN, false));
-        assertTrue(AprsRfFrequencyPolicy.allowsMode(RadioMode.RX, true));
-        assertTrue(AprsRfFrequencyPolicy.allowsMode(RadioMode.RX, false));
+    @Test public void onlyRxAllowsAprsIncludingDedicatedFrequencyBeacons() {
+        assertFalse(AprsRfFrequencyPolicy.allowsMode(RadioMode.SCAN));
+        assertTrue(AprsRfFrequencyPolicy.allowsMode(RadioMode.RX));
         for (RadioMode mode : RadioMode.values()) {
-            if (mode != RadioMode.RX && mode != RadioMode.SCAN) {
-                assertFalse(AprsRfFrequencyPolicy.allowsMode(mode, true));
-                assertFalse(AprsRfFrequencyPolicy.allowsMode(mode, false));
+            if (mode != RadioMode.RX) {
+                assertFalse(AprsRfFrequencyPolicy.allowsMode(mode));
             }
         }
     }
