@@ -102,32 +102,9 @@ public class MigrationFrom7To8 extends Migration {
         database.execSQL("CREATE INDEX IF NOT EXISTS index_aprs_feed_sort_time_ms "
             + "ON aprs_feed (sort_time_ms)");
 
-        // Rebuild the materialized feed from retained v7 history. Messages and unknown events
-        // remain individual rows; station positions, weather, status, capabilities, and objects
-        // retain only their newest event while preserving every event in aprs_events.
-        database.execSQL("CREATE TEMP TABLE aprs_feed_candidates AS SELECT id AS event_id, "
-            + "first_seen_ms AS sort_time_ms, CASE "
-            + "WHEN type = 1 THEN 'message:' || id "
-            + "WHEN type = 3 AND TRIM(COALESCE(from_callsign, '')) != '' "
-            + "THEN 'position:' || UPPER(TRIM(from_callsign)) "
-            + "WHEN type = 4 AND TRIM(COALESCE(from_callsign, '')) != '' "
-            + "THEN 'weather:' || UPPER(TRIM(from_callsign)) "
-            + "WHEN type = 5 AND TRIM(COALESCE(from_callsign, '')) != '' "
-            + "THEN 'status:' || UPPER(TRIM(from_callsign)) "
-            + "WHEN type = 6 AND TRIM(COALESCE(from_callsign, '')) != '' "
-            + "THEN 'capabilities:' || UPPER(TRIM(from_callsign)) "
-            + "WHEN type = 2 AND TRIM(COALESCE(from_callsign, '')) != '' "
-            + "AND TRIM(COALESCE(object_name, '')) != '' THEN 'object:' "
-            + "|| UPPER(TRIM(from_callsign)) || ':' || UPPER(TRIM(object_name)) "
-            + "ELSE 'event:' || id END AS feed_key FROM aprs_events");
+        // Preserve every retained logical event as an individual feed row.
         database.execSQL("INSERT INTO aprs_feed (feed_key, event_id, sort_time_ms, event_count) "
-            + "SELECT candidate.feed_key, candidate.event_id, candidate.sort_time_ms, "
-            + "(SELECT COUNT(*) FROM aprs_feed_candidates counted "
-            + "WHERE counted.feed_key = candidate.feed_key) FROM aprs_feed_candidates candidate "
-            + "WHERE candidate.event_id = (SELECT newest.event_id FROM aprs_feed_candidates newest "
-            + "WHERE newest.feed_key = candidate.feed_key "
-            + "ORDER BY newest.sort_time_ms DESC, newest.event_id DESC LIMIT 1)");
-        database.execSQL("DROP TABLE aprs_feed_candidates");
+            + "SELECT 'event:' || id, id, first_seen_ms, 1 FROM aprs_events");
         database.execSQL("DROP TABLE legacy_aprs_messages");
     }
 

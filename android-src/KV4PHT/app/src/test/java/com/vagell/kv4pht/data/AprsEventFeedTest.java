@@ -27,30 +27,37 @@ import org.junit.Test;
 
 /** Exercises the actual DAO projection policy independently of SQLite/device infrastructure. */
 public class AprsEventFeedTest {
-    @Test public void duplicatesAndDeliveryUpdatesDoNotCountAsNewEvents() {
+    @Test public void repeatedUpdatesKeepOneRowPerEvent() {
         FeedDao dao = new FeedDao();
         AprsEventEntity event = event(1, 100);
-        dao.updateEventFeed(event, "position:VK3ME");
-        dao.updateEventFeed(event, "position:VK3ME");
-        assertEquals(1, dao.getFeedItem("position:VK3ME").eventCount);
-        dao.updateEventFeed(event(2, 200), "position:VK3ME");
-        dao.updateEventFeed(event(1, 100), "position:VK3ME");
-        assertEquals(2, dao.getFeedItem("position:VK3ME").eventId);
-        assertEquals(2, dao.getFeedItem("position:VK3ME").eventCount);
-        assertEquals(200, dao.getFeedItem("position:VK3ME").sortTimeMs);
+        dao.updateEventFeed(event);
+        dao.updateEventFeed(event);
+        dao.updateEventFeed(event(2, 200));
+        dao.updateEventFeed(event);
+        assertEquals(2, dao.feed.size());
+        assertEquals(1, dao.getFeedItem("event:1").eventCount);
+        assertEquals(100, dao.getFeedItem("event:1").sortTimeMs);
+        assertEquals(2, dao.getFeedItem("event:2").eventId);
     }
 
-    @Test public void tiedTimestampsKeepNewestIdAndMessagesHaveIndependentSlots() {
+    @Test public void everyEventTypeRemainsSeparateEvenWithSameSourceAndTimestamp() {
         FeedDao dao = new FeedDao();
-        dao.updateEventFeed(event(2, 100), "position:VK3ME");
-        dao.updateEventFeed(event(1, 100), "position:VK3ME");
-        assertEquals(2, dao.getFeedItem("position:VK3ME").eventId);
-        dao.updateEventFeed(event(3, 300), null);
-        dao.updateEventFeed(event(4, 400), null);
-        dao.updateEventFeed(event(3, 300), null);
-        assertEquals(3, dao.getFeedItem("event:3").eventId);
-        assertEquals(1, dao.getFeedItem("event:3").eventCount);
-        assertEquals(4, dao.getFeedItem("event:4").eventId);
+        int[] types = {0, 1, 2, 3, 4, 5, 6};
+        long id = 0;
+        for (int type : types) {
+            for (int copy = 0; copy < 2; copy++) {
+                AprsEventEntity event = event(++id, 100);
+                event.type = type;
+                event.fromCallsign = "VK3ME";
+                event.objectName = "TEST";
+                dao.updateEventFeed(event);
+            }
+        }
+        assertEquals(14, dao.feed.size());
+        for (AprsFeedItem item : dao.feed.values()) {
+            assertEquals(1, item.eventCount);
+            assertEquals(100, item.sortTimeMs);
+        }
     }
 
     private static AprsEventEntity event(long id, long time) {

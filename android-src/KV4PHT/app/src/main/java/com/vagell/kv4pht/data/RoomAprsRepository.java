@@ -61,7 +61,7 @@ public final class RoomAprsRepository implements AprsRepository {
     }
 
     @Override public void onEventPersisted(AprsEvent event) {
-        dao.updateEventFeed(AprsPersistenceMapper.toEntity(event), AprsFeedPolicy.feedKey(event));
+        dao.updateEventFeed(AprsPersistenceMapper.toEntity(event));
     }
 
     @Override public List<AprsEvent> loadPendingReliableEvents() {

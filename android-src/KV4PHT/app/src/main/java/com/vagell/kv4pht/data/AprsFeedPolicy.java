@@ -35,22 +35,6 @@ public final class AprsFeedPolicy {
 
     private AprsFeedPolicy() { }
 
-    public static String feedKey(AprsEvent event) {
-        String source = normalizeCallsign(event.getFromCallsign());
-        if (source.isEmpty()) return null;
-        switch (event.getType()) {
-            case AprsEvent.POSITION_TYPE: return "position:" + source;
-            case AprsEvent.WEATHER_TYPE: return "weather:" + source;
-            case AprsEvent.STATUS_TYPE: return "status:" + source;
-            case AprsEvent.STATION_CAPABILITIES_TYPE: return "capabilities:" + source;
-            case AprsEvent.OBJECT_TYPE:
-                String objectName = event.getObjectName() == null ? ""
-                    : event.getObjectName().trim().toUpperCase(Locale.ROOT);
-                return objectName.isEmpty() ? null : "object:" + source + ":" + objectName;
-            default: return null;
-        }
-    }
-
     public static String normalizeHistoryWindow(String value) {
         if (HISTORY_ONE_DAY.equalsIgnoreCase(value)) return HISTORY_ONE_DAY;
         if (HISTORY_ONE_WEEK.equalsIgnoreCase(value)) return HISTORY_ONE_WEEK;

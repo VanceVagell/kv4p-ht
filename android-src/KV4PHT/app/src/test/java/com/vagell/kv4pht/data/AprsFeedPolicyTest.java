@@ -20,7 +20,6 @@ package com.vagell.kv4pht.data;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import io.github.dkaukov.aprs.AprsEvent;
@@ -28,21 +27,6 @@ import org.junit.Test;
 
 /** Covers Android-only APRS feed projection policy separately from protocol core tests. */
 public class AprsFeedPolicyTest {
-    @Test public void latestOnlyTypesUseStableSlots() {
-        assertEquals("position:VK3ABC", key(AprsEvent.POSITION_TYPE, "vk3abc", null));
-        assertEquals("weather:VK3ABC", key(AprsEvent.WEATHER_TYPE, "VK3ABC", null));
-        assertEquals("status:VK3ABC", key(AprsEvent.STATUS_TYPE, "VK3ABC", null));
-        assertEquals("capabilities:VK3ABC",
-            key(AprsEvent.STATION_CAPABILITIES_TYPE, "VK3ABC", null));
-        assertEquals("object:VK3ABC:TEST", key(AprsEvent.OBJECT_TYPE, "VK3ABC", "test"));
-    }
-
-    @Test public void messagesUnknownAndUnnamedObjectsRemainIndividualRows() {
-        assertNull(key(AprsEvent.MESSAGE_TYPE, "VK3ABC", null));
-        assertNull(key(AprsEvent.UNKNOWN_TYPE, "VK3ABC", null));
-        assertNull(key(AprsEvent.OBJECT_TYPE, "VK3ABC", "  "));
-    }
-
     @Test public void historyWindowsUseFirstSeenTimeAndKeepAllUnbounded() {
         long now = 50L * 24 * 60 * 60_000L;
         long day = 24 * 60 * 60_000L;
@@ -69,15 +53,6 @@ public class AprsFeedPolicyTest {
             .type(AprsEvent.POSITION_TYPE)
             .build();
         assertTrue(AprsFeedPolicy.isVisibleToMine(position, "VK3ME"));
-    }
-
-    private static String key(int type, String source, String objectName) {
-        AprsEvent event = AprsEvent.builder()
-            .type(type)
-            .fromCallsign(source)
-            .objectName(objectName)
-            .build();
-        return AprsFeedPolicy.feedKey(event);
     }
 
     private static boolean visible(String from, String to) {

@@ -75,22 +75,11 @@ public interface AprsEventDao {
 
     /** Advances the feed projection inside the controller's event/packet transaction. */
     @Transaction
-    default void updateEventFeed(AprsEventEntity event, String feedKey) {
-        String resolvedKey = feedKey == null ? "event:" + event.id : feedKey;
-        AprsFeedItem current = getFeedItem(resolvedKey);
-        // Updating an older event must not replace the latest station/object row.
-        if (current != null && current.eventId != event.id
-                && (current.sortTimeMs > event.firstSeenMs
-                    || (current.sortTimeMs == event.firstSeenMs && current.eventId > event.id))) return;
-        int eventCount = 1;
-        if (current != null) {
-            eventCount = current.eventCount;
-            if (current.eventId != event.id) {
-                eventCount++;
-            }
-        }
+    default void updateEventFeed(AprsEventEntity event) {
+        // Each logical event has its own row; packet duplicates and delivery updates
+        // continue to update that event without adding another feed entry.
         upsertFeedItem(new AprsFeedItem(
-            resolvedKey, event.id, event.firstSeenMs, eventCount));
+            "event:" + event.id, event.id, event.firstSeenMs, 1));
     }
 
     @Update

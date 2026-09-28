@@ -376,7 +376,7 @@ public class RoomAprsRepositoryTest {
                         case "updateEventFeed":
                             assertTrue(inTransaction);
                             AprsEventEntity projected = (AprsEventEntity) args[0];
-                            String key = args[1] == null ? "event:" + projected.id : (String) args[1];
+                            String key = "event:" + projected.id;
                             projection.put(key, new AprsFeedItem(key, projected.id, projected.firstSeenMs, 1));
                             if (failProjectionWrite) throw new IllegalStateException("projection failed");
                             return null;
