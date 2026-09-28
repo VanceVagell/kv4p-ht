@@ -99,7 +99,6 @@ import static com.vagell.kv4pht.radio.RadioAudioService.INTENT_OPEN_CHAT;
 
 public class MainActivity extends AppCompatActivity {
     private static final String DEFAULT_BOOLEAN_FALSE = "false";
-    private static final int APRS_AUTO_SCROLL_DISTANCE = 2;
     private static final String EXTRA_MEMORY_ID = "memoryId";
 
     private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
@@ -295,12 +294,16 @@ public class MainActivity extends AppCompatActivity {
     /** Defines callbacks for service binding, passed to bindService(). */
     private ServiceConnection connection = new ServiceConnection() {
         private boolean shouldAutoScrollAprs() {
+            if (!aprsRecyclerView.isShown()
+                    || aprsRecyclerView.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) return false;
             int itemCount = aprsAdapter.getItemCount();
             if (itemCount == 0) return true;
             RecyclerView.LayoutManager layoutManager = aprsRecyclerView.getLayoutManager();
             if (!(layoutManager instanceof LinearLayoutManager)) return false;
             int lastVisible = ((LinearLayoutManager) layoutManager).findLastVisibleItemPosition();
-            return MainActivity.shouldAutoScrollAprs(itemCount, lastVisible);
+            View lastRow = layoutManager.findViewByPosition(itemCount - 1);
+            return lastRow != null && isAprsBottomVisible(itemCount, lastVisible, lastRow.getBottom(),
+                aprsRecyclerView.getHeight() - aprsRecyclerView.getPaddingBottom());
         }
 
         @Override
@@ -560,11 +563,6 @@ public class MainActivity extends AppCompatActivity {
             // TODO if this is unexpected we should probably try to restart the service.
         }
     };
-
-    static boolean shouldAutoScrollAprs(int itemCount, int lastVisibleItemPosition) {
-        return itemCount == 0 || lastVisibleItemPosition != RecyclerView.NO_POSITION
-            && lastVisibleItemPosition >= itemCount - 1 - APRS_AUTO_SCROLL_DISTANCE;
-    }
 
     static boolean isAprsBottomVisible(int itemCount, int lastVisiblePosition,
                                        int lastRowBottom, int viewportBottom) {

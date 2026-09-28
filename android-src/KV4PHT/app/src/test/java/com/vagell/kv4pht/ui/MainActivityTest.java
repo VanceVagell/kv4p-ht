@@ -32,18 +32,17 @@ public class MainActivityTest {
         assertFalse(MainActivity.isAprsBottomVisible(0, RecyclerView.NO_POSITION, 0, 500));
     }
 
-    @Test public void aprsInitialLoadAutoScrolls() {
-        assertTrue(MainActivity.shouldAutoScrollAprs(0, RecyclerView.NO_POSITION));
-    }
-
-    @Test public void aprsListNearBottomAutoScrolls() {
-        assertTrue(MainActivity.shouldAutoScrollAprs(10, 9));
-        assertTrue(MainActivity.shouldAutoScrollAprs(10, 7));
+    @Test public void aprsListAtBottomAutoFollows() {
+        assertTrue(MainActivity.isAprsBottomVisible(10, 9, 500, 500));
+        assertTrue(MainActivity.isAprsBottomVisible(10, 9, 490, 500));
     }
 
     @Test public void aprsListAwayFromBottomKeepsReadingPosition() {
-        assertFalse(MainActivity.shouldAutoScrollAprs(10, 6));
-        assertFalse(MainActivity.shouldAutoScrollAprs(10, RecyclerView.NO_POSITION));
-        assertFalse(MainActivity.shouldAutoScrollAprs(1, RecyclerView.NO_POSITION));
+        assertFalse(MainActivity.isAprsBottomVisible(10, 6, 500, 500));
+        assertFalse(MainActivity.isAprsBottomVisible(10, 7, 500, 500));
+        assertFalse(MainActivity.isAprsBottomVisible(10, 8, 500, 500));
+        assertFalse(MainActivity.isAprsBottomVisible(10, 9, 501, 500));
+        assertFalse(MainActivity.isAprsBottomVisible(10, RecyclerView.NO_POSITION, 500, 500));
+        assertFalse(MainActivity.isAprsBottomVisible(1, RecyclerView.NO_POSITION, 500, 500));
     }
 }
