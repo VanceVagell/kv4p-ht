@@ -160,6 +160,20 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
         this.aprsFeed = aprsFeed;
     }
 
+    public String getFeedKey(int position) {
+        return aprsFeed != null && position >= 0 && position < aprsFeed.size()
+            ? aprsFeed.get(position).feedKey : null;
+    }
+
+    public int findFeedPosition(String feedKey) {
+        if (aprsFeed != null && feedKey != null) {
+            for (int i = 0; i < aprsFeed.size(); i++) {
+                if (feedKey.equals(aprsFeed.get(i).feedKey)) return i;
+            }
+        }
+        return RecyclerView.NO_POSITION;
+    }
+
     @Override
     public int getItemViewType(int position) {
         return aprsFeed.get(position).event.getType();

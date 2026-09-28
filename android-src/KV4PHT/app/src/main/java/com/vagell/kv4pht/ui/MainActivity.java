@@ -247,6 +247,12 @@ public class MainActivity extends AppCompatActivity {
         aprsRecyclerView.setAdapter(aprsAdapter);
         aprsRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                // Scrolling toward older entries always leaves follow mode, including a fling.
+                if (dy < 0 && aprsUserScrolling) aprsAutoFollow = false;
+            }
+
+            @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
                     aprsUserScrolling = true;
@@ -530,10 +536,24 @@ public class MainActivity extends AppCompatActivity {
             if (!aprsMessagesObserved) {
                 radioAudioService.getAprsFeed().observe(MainActivity.this, aprsFeed -> {
                     boolean autoScroll = aprsAutoFollow && !aprsUserScrolling;
+                    LinearLayoutManager layoutManager =
+                        (LinearLayoutManager) aprsRecyclerView.getLayoutManager();
+                    int anchorPosition = layoutManager.findFirstVisibleItemPosition();
+                    String anchorKey = aprsAdapter.getFeedKey(anchorPosition);
+                    View anchorView = layoutManager.findViewByPosition(anchorPosition);
+                    int anchorOffset = anchorView == null ? 0
+                        : layoutManager.getDecoratedTop(anchorView) - aprsRecyclerView.getPaddingTop();
                     aprsAdapter.setAprsFeed(aprsFeed);
                     aprsAdapter.notifyDataSetChanged();
                     if (autoScroll && aprsFeed != null && !aprsFeed.isEmpty()) {
                         aprsRecyclerView.scrollToPosition(aprsFeed.size() - 1);
+                    } else {
+                        // A full feed refresh can reorder collapsed beacon rows. Preserve the
+                        // actual row being read, rather than its old position or the list end.
+                        int newAnchorPosition = aprsAdapter.findFeedPosition(anchorKey);
+                        if (newAnchorPosition != RecyclerView.NO_POSITION) {
+                            layoutManager.scrollToPositionWithOffset(newAnchorPosition, anchorOffset);
+                        }
                     }
                 });
                 aprsMessagesObserved = true;
