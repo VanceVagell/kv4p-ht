@@ -9,6 +9,12 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 ### v2.0.0.2 (Unreleased, FW: 17)
 
 * Live voice audio changed from Opus on command `0x07` to 16 kHz 4-bit ADPCM on command `0x0C`.
+* Added Bluetooth Classic and BLE KISS transports. Audio-open and status-report flags are now per-session, while radio-control state remains shared.
+* `HOST_STATE_ENABLE_STATUS_REPORTS` makes `COMMAND_DEVICE_STATE` reporting opt-in for a host session, allowing generic KISS TNC hosts to receive only standard KISS DATA frames.
+* Streamed voice TX now requires continuous host audio frames; after 50 missing frames, firmware releases host-requested PTT.
+* Added FreeDV 2400B digital voice negotiation with `FEATURE_HAS_FREEDV_2400B` and `HOST_STATE_FREEDV_2400B`. When enabled, 7-byte Codec2 1300 frames use `COMMAND_HOST_TX_DIGITAL` and `COMMAND_RX_DIGITAL` (`0x0E`) instead of ADPCM audio.
+* Added standard KISS `TXDELAY`, `PERSIST`, and `SLOTTIME` controls. Firmware performs CSMA/p-persistence channel access and queues up to two outbound AX.25 KISS DATA frames.
+* Added `COMMAND_HOST_TX_AX25` (`0x0F`) for AX.25 transmission with a temporary TX frequency, bandwidth, and CTCSS configuration.
 
 ### v2.0.0.0 (FW: 17)
 
