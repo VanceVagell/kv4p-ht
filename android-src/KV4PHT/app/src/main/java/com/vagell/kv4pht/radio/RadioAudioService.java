@@ -2131,6 +2131,8 @@ public class RadioAudioService extends Service {
         });
     }
 
+    // Radio transport and TX safety belong to the service, not its APRS callback adapter.
+    @SuppressWarnings("java:S3398")
     private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency) {
         if (!isTxAllowed() || !canTransmitOnFrequency(txFrequency)) {
             Log.e(TAG, "Tried to send an AX.25 packet on a disallowed frequency, did not send.");
