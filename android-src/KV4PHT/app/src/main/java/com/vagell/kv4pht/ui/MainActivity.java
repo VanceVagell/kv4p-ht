@@ -687,7 +687,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // If we lost reference to the radioAudioService, startAndBindRadioAudioService();
         startAndBindRadioAudioService();
     }
 
