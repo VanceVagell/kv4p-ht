@@ -42,7 +42,6 @@ import android.os.Vibrator;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
-import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;

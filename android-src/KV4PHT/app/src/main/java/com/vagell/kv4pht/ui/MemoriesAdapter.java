@@ -21,7 +21,6 @@ package com.vagell.kv4pht.ui;
 import android.content.Context;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
