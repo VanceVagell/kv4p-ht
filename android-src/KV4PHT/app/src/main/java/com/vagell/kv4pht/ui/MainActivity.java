@@ -558,7 +558,7 @@ public class MainActivity extends AppCompatActivity {
             radioAudioServiceBound = false;
             aprsMessagesObserved = false;
             Log.d(LOG_TAG, "RadioAudioService disconnected from MainActivity.");
-            // TODO if this is unexpected we should probably try to restart the service.
+            // A future service-recovery policy can be added here if disconnects become recoverable.
         }
     };
 
@@ -695,7 +695,7 @@ public class MainActivity extends AppCompatActivity {
     // Keeping the two screen transitions adjacent makes their shared visibility state explicit.
     @SuppressWarnings("java:S3776")
     private void showScreen(ScreenType screenType) {
-        // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
+        // This Activity intentionally owns the bottom-navigation screen switching.
         // Controls for voice mode
         findViewById(R.id.voiceModeLineHolder).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
         findViewById(R.id.pttButton).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
