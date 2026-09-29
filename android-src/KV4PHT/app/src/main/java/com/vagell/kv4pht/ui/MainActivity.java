@@ -100,6 +100,8 @@ import static com.vagell.kv4pht.radio.RadioAudioService.INTENT_OPEN_CHAT;
 public class MainActivity extends AppCompatActivity {
     private static final String DEFAULT_BOOLEAN_FALSE = "false";
     private static final String EXTRA_MEMORY_ID = "memoryId";
+    private static final String EXTRA_REQUEST_CODE = "requestCode";
+    private static final String LOG_TAG = "MainActivity";
 
     private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
 
@@ -219,7 +221,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onMemoryEdit(ChannelMemory memory) {
                 Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
-                intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
+                intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_EDIT_MEMORY);
                 intent.putExtra(EXTRA_MEMORY_ID, memory.memoryId);
                 intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType() == RadioAudioService.RadioModuleType.VHF));
                 startActivityForResult(intent, REQUEST_EDIT_MEMORY);
@@ -568,7 +570,7 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService = null;
             radioAudioServiceBound = false;
             aprsMessagesObserved = false;
-            Log.d("DEBUG", "RadioAudioService disconnected from MainActivity.");
+            Log.d(LOG_TAG, "RadioAudioService disconnected from MainActivity.");
             // TODO if this is unexpected we should probably try to restart the service.
         }
     };
@@ -1127,7 +1129,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateSMeter(int value) {
         if (value < 0 || value > S_METER_MAX_VALUE) {
-            Log.d("DEBUG", "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
+            Log.d(LOG_TAG, "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
             return;
         }
         currentSMeterValue = value;
@@ -1539,7 +1541,7 @@ public class MainActivity extends AppCompatActivity {
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             Thread thread = Thread.currentThread();
-            Log.d("DEBUG", "usbReceiver.onReceive() action=" + intent.getAction()
+            Log.d(LOG_TAG, "usbReceiver.onReceive() action=" + intent.getAction()
                 + " thread=" + thread.getName() + "#" + thread.getId());
 
             String action = intent.getAction();
@@ -1547,7 +1549,7 @@ public class MainActivity extends AppCompatActivity {
                 if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                     if (ACTION_USB_PERMISSION.equals(action)
                         && !intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        Log.w("DEBUG", "USB permission denied by user.");
+                        Log.w(LOG_TAG, "USB permission denied by user.");
                         if (radioAudioService != null) {
                             radioAudioService.onUsbPermissionDenied();
                         }
@@ -1619,7 +1621,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void addMemoryClicked(View view) {
         Intent intent = new Intent("com.vagell.kv4pht.ADD_MEMORY_ACTION");
-        intent.putExtra("requestCode", REQUEST_ADD_MEMORY);
+        intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_ADD_MEMORY);
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
         intent.putExtra("selectedMemoryGroup", selectedMemoryGroup);
         intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RadioModuleType.VHF)));
@@ -1692,7 +1694,7 @@ public class MainActivity extends AppCompatActivity {
                 handleFindRepeatersResult(resultCode);
                 break;
             default:
-                Log.d("DEBUG", "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
+                Log.d(LOG_TAG, "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
         }
     }
 
@@ -1784,7 +1786,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Actually start the firmware activity
         Intent intent = new Intent("com.vagell.kv4pht.FIRMWARE_ACTION");
-        intent.putExtra("requestCode", REQUEST_FIRMWARE);
+        intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_FIRMWARE);
         startActivityForResult(intent, REQUEST_FIRMWARE);
     }
 
@@ -1811,7 +1813,7 @@ public class MainActivity extends AppCompatActivity {
         setScanningUi(false);
 
         Intent intent = new Intent("com.vagell.kv4pht.SETTINGS_ACTION");
-        intent.putExtra("requestCode", REQUEST_SETTINGS);
+        intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_SETTINGS);
         RadioModuleController radioModule = radioAudioService == null ? null : radioAudioService.getRadioModule();
         if (radioAudioService != null && radioAudioService.isRadioConnected() && radioModule != null) {
             intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
@@ -1902,7 +1904,7 @@ public class MainActivity extends AppCompatActivity {
      */
     public void doShowNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
         if (notificationChannelId == null || title == null || message == null) {
-            Log.d("DEBUG", "Unexpected null in showNotification.");
+            Log.d(LOG_TAG, "Unexpected null in showNotification.");
             return;
         }
         // Has the user disallowed notifications?
