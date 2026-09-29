@@ -11,9 +11,19 @@ sonar {
     property "sonar.projectKey", "VanceVagell_kv4p-ht"
     property "sonar.organization", "vancevagell"
     property "sonar.host.url", "https://sonarcloud.io"
-    property "sonar.coverage.jacoco.xmlReportPaths",
-        "${rootProject.buildDir}/reports/jacoco/jacocoTestReport/jacocoTestReport.xml"
   }
+}
+
+// Sonar analyzes Android subprojects independently.  The combined report is
+// written by the root project, so make its absolute path available to each
+// subproject that owns source files.
+subprojects {
+    sonar {
+        properties {
+            property "sonar.coverage.jacoco.xmlReportPaths",
+                "${rootProject.buildDir}/reports/jacoco/jacocoTestReport/jacocoTestReport.xml"
+        }
+    }
 }
 
 tasks.register("jacocoTestReport", JacocoReport) {
