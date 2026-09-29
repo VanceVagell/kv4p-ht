@@ -115,6 +115,10 @@ jobs:
       - name: Extract output artifact
         run: tar -xf output.tar
 
+      - name: Verify JaCoCo coverage report
+        working-directory: android-src/KV4PHT
+        run: test -s build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+
       - name: Read pull request event
         run: |
           echo "pr_number=$(sed '1q;d' pr-event.txt)" >> "$GITHUB_ENV"
@@ -133,6 +137,8 @@ jobs:
           ./gradlew sonar
           -Dsonar.projectKey=VanceVagell_kv4p-ht
           -Dsonar.token=${SONAR_TOKEN}
+          -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+          -Dsonar.java.binaries=app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes,usbSerialForAndroid/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.scm.revision=', github.event.workflow_run.head_sha) || '' }}
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.key=', env.pr_number) || '' }}
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.branch=', env.pr_head_ref) || '' }}
