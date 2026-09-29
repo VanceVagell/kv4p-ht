@@ -21,7 +21,6 @@ package com.vagell.kv4pht.ui;
 import android.content.Intent;
 import android.icu.util.LocaleData;
 import android.icu.util.ULocale;
-import android.icu.text.SimpleDateFormat;
 import android.net.Uri;
 import android.os.Build;
 import android.view.LayoutInflater;
@@ -40,11 +39,16 @@ import io.github.dkaukov.aprs.AprsEvent;
 import com.vagell.kv4pht.data.AprsFeedRow;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder> {
+    private static final DateTimeFormatter TIMESTAMP_FORMATTER =
+        DateTimeFormatter.ofPattern("h:mm a MMM d", Locale.ENGLISH)
+            .withZone(ZoneId.systemDefault());
     public List<AprsFeedRow> aprsFeed;
 
     static DeliveryStatusStyle deliveryStatusStyle(int deliveryState) {
@@ -299,8 +303,7 @@ public class APRSAdapter extends RecyclerView.Adapter<APRSAdapter.APRSViewHolder
             if (null == textViewTimestamp) {
                 return;
             }
-            SimpleDateFormat sdf = new SimpleDateFormat("h:mm a MMM d", Locale.ENGLISH);
-            textViewTimestamp.setText(sdf.format(new Date(timestamp)));
+            textViewTimestamp.setText(TIMESTAMP_FORMATTER.format(Instant.ofEpochMilli(timestamp)));
         }
 
         public void setComment(String comment) {
