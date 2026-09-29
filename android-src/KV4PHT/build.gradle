@@ -2,6 +2,7 @@
 plugins {
     id 'com.android.application' version '9.0.1' apply false
     id 'com.android.library' version '9.0.1' apply false
+    id 'jacoco'
     id "org.sonarqube" version "5.1.0.4882"
 }
 
@@ -10,5 +11,37 @@ sonar {
     property "sonar.projectKey", "VanceVagell_kv4p-ht"
     property "sonar.organization", "vancevagell"
     property "sonar.host.url", "https://sonarcloud.io"
+    property "sonar.coverage.jacoco.xmlReportPaths",
+        "${rootProject.buildDir}/reports/jacoco/jacocoTestReport/jacocoTestReport.xml"
   }
+}
+
+tasks.register("jacocoTestReport", JacocoReport) {
+    dependsOn(":app:testDebugUnitTest", ":usbSerialForAndroid:testDebugUnitTest")
+
+    reports {
+        xml.required = true
+        html.required = true
+    }
+
+    def excludedClasses = [
+        '**/R.class',
+        '**/R$*.class',
+        '**/BuildConfig.*',
+        '**/Manifest*.*'
+    ]
+    def appProject = project(":app")
+    def usbSerialProject = project(":usbSerialForAndroid")
+    classDirectories.setFrom(files(
+        fileTree(dir: "${appProject.buildDir}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: excludedClasses),
+        fileTree(dir: "${usbSerialProject.buildDir}/intermediates/javac/debug/compileDebugJavaWithJavac/classes", excludes: excludedClasses)
+    ))
+    sourceDirectories.setFrom(files(
+        "${appProject.projectDir}/src/main/java",
+        "${usbSerialProject.projectDir}/src/main/java"
+    ))
+    executionData.setFrom(files(
+        "${appProject.buildDir}/outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
+        "${usbSerialProject.buildDir}/outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"
+    ))
 }

@@ -16,6 +16,11 @@ android {
                 'rfc2217_server_nonstandard_baudrates': 'true',   // true    false     false
         ]
     }
+    buildTypes {
+        debug {
+            enableUnitTestCoverage true
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8

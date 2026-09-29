@@ -104,7 +104,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: ./gradlew check -x lint --stacktrace
       - name: Gradle Tests
-        run: ./gradlew test --stacktrace
+        run: ./gradlew jacocoTestReport --stacktrace
       - name: 'Gradle Build'
         run: ./gradlew build -x lint --stacktrace
       - name: Prepare PR build artifact
