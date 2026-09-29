@@ -22,6 +22,8 @@ subprojects {
         properties {
             property "sonar.coverage.jacoco.xmlReportPaths",
                 "${rootProject.buildDir}/reports/jacoco/jacocoTestReport/jacocoTestReport.xml"
+            property "sonar.java.binaries",
+                "${buildDir}/intermediates/javac/debug/compileDebugJavaWithJavac/classes"
         }
     }
 }
