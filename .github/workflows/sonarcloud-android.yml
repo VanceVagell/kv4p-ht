@@ -137,6 +137,7 @@ jobs:
           ./gradlew sonar
           -Dsonar.projectKey=VanceVagell_kv4p-ht
           -Dsonar.token=${SONAR_TOKEN}
+          -Dsonar.coverage.exclusions=
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.scm.revision=', github.event.workflow_run.head_sha) || '' }}
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.key=', env.pr_number) || '' }}
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.branch=', env.pr_head_ref) || '' }}
