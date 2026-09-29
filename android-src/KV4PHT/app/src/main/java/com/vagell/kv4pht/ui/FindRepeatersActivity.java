@@ -603,6 +603,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }).start();
     }
 
+    // Kept as an Activity helper because it coordinates multiple views and workflow stages.
+    @SuppressWarnings("java:S3398")
     private void promptUserForMemoryGroup() {
         // Hide the web view.
         findViewById(R.id.repeaterBookWebView).setVisibility(View.GONE);

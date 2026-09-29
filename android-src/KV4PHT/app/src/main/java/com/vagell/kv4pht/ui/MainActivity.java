@@ -1094,6 +1094,8 @@ public class MainActivity extends AppCompatActivity {
         ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
     }
 
+    // Kept as an Activity helper: it is also useful outside the service callback.
+    @SuppressWarnings("java:S3398")
     private void updateSMeter(int value) {
         if (value < 0 || value > S_METER_MAX_VALUE) {
             Log.d(LOG_TAG, "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
@@ -1433,6 +1435,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showUSBSnackbar() {
         CharSequence snackbarMsg = getString(R.string.radio_not_found);
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
@@ -1448,6 +1452,8 @@ public class MainActivity extends AppCompatActivity {
         usbSnackbar.show();
     }
 
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showHandshakeSnackbar() {
         CharSequence snackbarMsg = getString(R.string.handshake_message);
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
@@ -1462,6 +1468,8 @@ public class MainActivity extends AppCompatActivity {
         usbSnackbar.show();
     }
 
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showRadioModuleNotFoundSnackbar() {
         CharSequence snackbarMsg = getString(R.string.module_not_found_message);
         radioModuleNotFoundSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
@@ -1481,6 +1489,8 @@ public class MainActivity extends AppCompatActivity {
      * Alerts the user to missing or old firmware with the option to flash the latest.
      * @param firmwareVer The currently installed firmware version, or -1 if no firmware installed.
      */
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showVersionSnackbar(int firmwareVer) {
         CharSequence snackbarMsg = getString(firmwareVer == -1
                 ? R.string.no_firmware_installed : R.string.new_firmware_available);
