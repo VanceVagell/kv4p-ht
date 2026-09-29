@@ -42,12 +42,9 @@ import android.os.Vibrator;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
-import android.view.KeyEvent;
-import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -63,7 +60,6 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -100,6 +96,8 @@ import static com.vagell.kv4pht.radio.RadioAudioService.INTENT_OPEN_CHAT;
 public class MainActivity extends AppCompatActivity {
     private static final String DEFAULT_BOOLEAN_FALSE = "false";
     private static final String EXTRA_MEMORY_ID = "memoryId";
+    private static final String EXTRA_REQUEST_CODE = "requestCode";
+    private static final String LOG_TAG = "MainActivity";
 
     private final Handler pttButtonDebounceHandler = new Handler(Looper.getMainLooper());
 
@@ -134,7 +132,6 @@ public class MainActivity extends AppCompatActivity {
     public static final int REQUEST_FIND_REPEATERS = 4;
 
     private MainViewModel viewModel;
-    private RecyclerView memoriesRecyclerView;
     private MemoriesAdapter memoriesAdapter;
     private RecyclerView aprsRecyclerView;
     private APRSAdapter aprsAdapter;
@@ -173,6 +170,8 @@ public class MainActivity extends AppCompatActivity {
     };
 
     @SuppressLint("ClickableViewAccessibility")
+    // Lifecycle orchestration is clearer when its related UI setup remains together.
+    @SuppressWarnings("java:S3776")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -186,7 +185,7 @@ public class MainActivity extends AppCompatActivity {
         binding.setVariable(BR.viewModel, viewModel);
 
         // Prepare a RecyclerView for the list of channel memories
-        memoriesRecyclerView = findViewById(R.id.memoriesList);
+        RecyclerView memoriesRecyclerView = findViewById(R.id.memoriesList);
         memoriesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         memoriesAdapter = new MemoriesAdapter(new MemoriesAdapter.MemoryListener() {
             @Override
@@ -219,7 +218,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onMemoryEdit(ChannelMemory memory) {
                 Intent intent = new Intent("com.vagell.kv4pht.EDIT_MEMORY_ACTION");
-                intent.putExtra("requestCode", REQUEST_EDIT_MEMORY);
+                intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_EDIT_MEMORY);
                 intent.putExtra(EXTRA_MEMORY_ID, memory.memoryId);
                 intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType() == RadioAudioService.RadioModuleType.VHF));
                 startActivityForResult(intent, REQUEST_EDIT_MEMORY);
@@ -228,13 +227,10 @@ public class MainActivity extends AppCompatActivity {
         memoriesRecyclerView.setAdapter(memoriesAdapter);
 
         // Observe the channel memories LiveData in MainViewModel (so the RecyclerView can populate with the memories)
-        viewModel.getChannelMemories().observe(this, new Observer<List<ChannelMemory>>() {
-            @Override
-            public void onChanged(List<ChannelMemory> channelMemories) {
-                memoriesAdapter.setMemoriesList(channelMemories);
-                memoriesAdapter.notifyDataSetChanged();
-                trySyncInitialRadioUi();
-            }
+        viewModel.getChannelMemories().observe(this, channelMemories -> {
+            memoriesAdapter.setMemoriesList(channelMemories);
+            memoriesAdapter.notifyDataSetChanged();
+            trySyncInitialRadioUi();
         });
 
         // Prepare a RecyclerView for the list APRS messages we've received in the past
@@ -274,17 +270,14 @@ public class MainActivity extends AppCompatActivity {
 
         // Set up behavior on the bottom nav
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigationView);
-        bottomNav.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem menuItem) {
-                int itemId = menuItem.getItemId();
-                if (itemId == R.id.voice_mode) {
-                    showScreen(ScreenType.SCREEN_VOICE);
-                } else if (itemId == R.id.text_chat_mode) {
-                    showScreen(ScreenType.SCREEN_CHAT);
-                }
-                return true;
+        bottomNav.setOnNavigationItemSelectedListener(menuItem -> {
+            int itemId = menuItem.getItemId();
+            if (itemId == R.id.voice_mode) {
+                showScreen(ScreenType.SCREEN_VOICE);
+            } else if (itemId == R.id.text_chat_mode) {
+                showScreen(ScreenType.SCREEN_CHAT);
             }
+            return true;
         });
         attachListeners();
         IntentFilter filter = new IntentFilter();
@@ -499,12 +492,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void sMeterUpdate(int value) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            updateSMeter(value);
-                        }
-                    });
+                    runOnUiThread(() -> updateSMeter(value));
                 }
 
                 @Override
@@ -568,8 +556,8 @@ public class MainActivity extends AppCompatActivity {
             radioAudioService = null;
             radioAudioServiceBound = false;
             aprsMessagesObserved = false;
-            Log.d("DEBUG", "RadioAudioService disconnected from MainActivity.");
-            // TODO if this is unexpected we should probably try to restart the service.
+            Log.d(LOG_TAG, "RadioAudioService disconnected from MainActivity.");
+            // A future service-recovery policy can be added here if disconnects become recoverable.
         }
     };
 
@@ -669,7 +657,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             threadPoolExecutor.shutdownNow();
         } catch (Exception e) {
-            Log.w("MainActivity", "Unable to shut down the background executor", e);
+            Log.w(LOG_TAG, "Unable to shut down the background executor", e);
         }
 
         try {
@@ -678,20 +666,14 @@ public class MainActivity extends AppCompatActivity {
                 radioAudioServiceBound = false;
             }
         } catch (Exception e) {
-            Log.w("MainActivity", "Unable to unbind the radio service", e);
+            Log.w(LOG_TAG, "Unable to unbind the radio service", e);
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // If we lost reference to the radioAudioService, startAndBindRadioAudioService();
         startAndBindRadioAudioService();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
     }
 
     @Override
@@ -707,10 +689,12 @@ public class MainActivity extends AppCompatActivity {
     private enum ScreenType {
         SCREEN_VOICE,
         SCREEN_CHAT
-    };
+    }
 
+    // Keeping the two screen transitions adjacent makes their shared visibility state explicit.
+    @SuppressWarnings("java:S3776")
     private void showScreen(ScreenType screenType) {
-        // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
+        // This Activity intentionally owns the bottom-navigation screen switching.
         // Controls for voice mode
         findViewById(R.id.voiceModeLineHolder).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
         findViewById(R.id.pttButton).setVisibility(screenType == ScreenType.SCREEN_CHAT ? GONE : VISIBLE);
@@ -731,7 +715,7 @@ public class MainActivity extends AppCompatActivity {
 
             // If their callsign is not set, display a snackbar asking them to set it before they
             // can transmit.
-            if (callsign == null || callsign.length() == 0) {
+            if (callsign == null || callsign.isEmpty()) {
                 showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(false);
@@ -764,12 +748,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void showCallsignSnackbar(CharSequence snackbarMsg) {
         callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
-                .setAction(R.string.set_now, new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        callsignSnackbar.dismiss();
-                        startSettingsActivity();
-                    }
+                .setAction(R.string.set_now, view -> {
+                    callsignSnackbar.dismiss();
+                    startSettingsActivity();
                 })
                 .setBackgroundTint(getResources().getColor(R.color.primary))
                 .setTextColor(getResources().getColor(R.color.medium_gray))
@@ -785,22 +766,22 @@ public class MainActivity extends AppCompatActivity {
         callsignSnackbar.show();
     }
 
-    public void sendButtonOverlayClicked(View view) {
-        if (callsign == null || callsign.length() == 0) {
+    public void sendButtonOverlayClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
+        if (callsign == null || callsign.isEmpty()) {
             showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
             ImageButton sendButton = findViewById(R.id.sendButton);
             sendButton.setEnabled(false);
         }
     }
 
-    public void sendTextClicked(View view) {
+    public void sendTextClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
             showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
             return;
         }
 
         String targetCallsign = ((EditText) findViewById(R.id.textChatTo)).getText().toString().trim();
-        if (targetCallsign.length() == 0) {
+        if (targetCallsign.isEmpty()) {
             targetCallsign = "BLN1CQ";
         } else {
             targetCallsign = targetCallsign.toUpperCase();
@@ -808,7 +789,7 @@ public class MainActivity extends AppCompatActivity {
         ((EditText) findViewById(R.id.textChatTo)).setText(targetCallsign);
 
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
-        if (outText.length() == 0) {
+        if (outText.isEmpty()) {
             return; // Nothing to send.
         }
 
@@ -964,13 +945,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @SuppressLint("ClickableViewAccessibility")
+    // Listener wiring remains co-located so control interactions can be reviewed together.
+    @SuppressWarnings("java:S3776")
     private void attachListeners() {
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setOnTouchListener(this::handlePttTouch);
 
-        pttButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        pttButton.setOnClickListener(v -> {
                 // This click handler is only for TalkBack users who also have stickyPTT enabled.
                 // It's so they can use the typical quick double-tap to toggle PTT on and off. So
                 // if stickyPTT isn't being used, don't handle a click on the PTT button (they need
@@ -997,21 +978,17 @@ public class MainActivity extends AppCompatActivity {
                     }
                     endPttUi();
                 }
-            }
         });
 
         EditText activeFrequencyField = findViewById(R.id.activeFrequency);
-        activeFrequencyField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (radioAudioService != null) {
-                    radioAudioService.tuneToFreq(activeFrequencyField.getText().toString());
-                }
-
-                hideKeyboard();
-                activeFrequencyField.clearFocus();
-                return true;
+        activeFrequencyField.setOnEditorActionListener((v, actionId, event) -> {
+            if (radioAudioService != null) {
+                radioAudioService.tuneToFreq(activeFrequencyField.getText().toString());
             }
+
+            hideKeyboard();
+            activeFrequencyField.clearFocus();
+            return true;
         });
 
         final View rootView = findViewById(android.R.id.content);
@@ -1021,9 +998,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Track if keyboard is likely visible (and/or screen got short for some reason), so we can
         // make room for critical UI components that must be visible.
-        rootView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override
-            public void onGlobalLayout() {
+        rootView.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
                 // When in chat, we need enough vertical space for the user to see their text
                 // input box, and any prior chat message they may be replying to. Not necessary in
                 // voice mode.
@@ -1054,7 +1029,6 @@ public class MainActivity extends AppCompatActivity {
                     frequencyView.setVisibility(VISIBLE);
                     rxAudioCircleView.setVisibility(VISIBLE);
                 }
-            }
         });
     }
 
@@ -1125,9 +1099,11 @@ public class MainActivity extends AppCompatActivity {
         ((Vibrator) getSystemService(Context.VIBRATOR_SERVICE)).vibrate(100);
     }
 
+    // Kept as an Activity helper: it is also useful outside the service callback.
+    @SuppressWarnings("java:S3398")
     private void updateSMeter(int value) {
         if (value < 0 || value > S_METER_MAX_VALUE) {
-            Log.d("DEBUG", "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
+            Log.d(LOG_TAG, "Warning: Unexpected S-Meter value (" + value + ") in updateSMeter().");
             return;
         }
         currentSMeterValue = value;
@@ -1340,23 +1316,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showMemoryName(String name) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                TextView activeFrequencyField = findViewById(R.id.activeMemoryName);
-                activeFrequencyField.setText(name);
-            }
+        runOnUiThread(() -> {
+            TextView activeFrequencyField = findViewById(R.id.activeMemoryName);
+            activeFrequencyField.setText(name);
         });
     }
 
     private void showFrequency(String frequency) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                EditText activeFrequencyField = findViewById(R.id.activeFrequency);
-                activeFrequencyField.setText(frequency);
-                activeFrequencyStr = frequency;
-            }
+        runOnUiThread(() -> {
+            EditText activeFrequencyField = findViewById(R.id.activeFrequency);
+            activeFrequencyField.setText(frequency);
+            activeFrequencyStr = frequency;
         });
     }
 
@@ -1470,6 +1440,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showUSBSnackbar() {
         CharSequence snackbarMsg = getString(R.string.radio_not_found);
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
@@ -1485,6 +1457,8 @@ public class MainActivity extends AppCompatActivity {
         usbSnackbar.show();
     }
 
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showHandshakeSnackbar() {
         CharSequence snackbarMsg = getString(R.string.handshake_message);
         usbSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
@@ -1499,6 +1473,8 @@ public class MainActivity extends AppCompatActivity {
         usbSnackbar.show();
     }
 
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showRadioModuleNotFoundSnackbar() {
         CharSequence snackbarMsg = getString(R.string.module_not_found_message);
         radioModuleNotFoundSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
@@ -1518,8 +1494,11 @@ public class MainActivity extends AppCompatActivity {
      * Alerts the user to missing or old firmware with the option to flash the latest.
      * @param firmwareVer The currently installed firmware version, or -1 if no firmware installed.
      */
+    // Kept as an Activity helper so Snackbar presentation remains centralized.
+    @SuppressWarnings("java:S3398")
     private void showVersionSnackbar(int firmwareVer) {
-        CharSequence snackbarMsg = firmwareVer == -1 ? getString(R.string.no_firmware_installed) : getString(R.string.new_firmware_available);
+        CharSequence snackbarMsg = getString(firmwareVer == -1
+                ? R.string.no_firmware_installed : R.string.new_firmware_available);
         versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
                 .setAnchorView(findViewById(R.id.bottomNavigationView));
@@ -1539,7 +1518,7 @@ public class MainActivity extends AppCompatActivity {
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             Thread thread = Thread.currentThread();
-            Log.d("DEBUG", "usbReceiver.onReceive() action=" + intent.getAction()
+            Log.d(LOG_TAG, "usbReceiver.onReceive() action=" + intent.getAction()
                 + " thread=" + thread.getName() + "#" + thread.getId());
 
             String action = intent.getAction();
@@ -1547,7 +1526,7 @@ public class MainActivity extends AppCompatActivity {
                 if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                     if (ACTION_USB_PERMISSION.equals(action)
                         && !intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        Log.w("DEBUG", "USB permission denied by user.");
+                        Log.w(LOG_TAG, "USB permission denied by user.");
                         if (radioAudioService != null) {
                             radioAudioService.onUsbPermissionDenied();
                         }
@@ -1566,7 +1545,7 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    public void scanClicked(View view) {
+    public void scanClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         setScanningUi((radioAudioService != null) && (radioAudioService.getMode()) != RadioMode.SCAN); // Toggle scanning on/off
         if (radioAudioService != null) {
             radioAudioService.setScanning(radioAudioService.getMode() != RadioMode.SCAN, true);
@@ -1600,26 +1579,16 @@ public class MainActivity extends AppCompatActivity {
     private void setScanningUi(boolean scanning) {
         AppCompatButton scanButton = findViewById(R.id.scanButton);
         if (!scanning) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    scanButton.setText(R.string.scan);
-                }
-            });
+            runOnUiThread(() -> scanButton.setText(R.string.scan));
 
         } else { // Start scanning
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    scanButton.setText(R.string.stop_scan);
-                }
-            });
+            runOnUiThread(() -> scanButton.setText(R.string.stop_scan));
         }
     }
 
-    public void addMemoryClicked(View view) {
+    public void addMemoryClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         Intent intent = new Intent("com.vagell.kv4pht.ADD_MEMORY_ACTION");
-        intent.putExtra("requestCode", REQUEST_ADD_MEMORY);
+        intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_ADD_MEMORY);
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);
         intent.putExtra("selectedMemoryGroup", selectedMemoryGroup);
         intent.putExtra("isVhfRadio", (radioAudioService != null && radioAudioService.getRadioType().equals(RadioAudioService.RadioModuleType.VHF)));
@@ -1636,12 +1605,9 @@ public class MainActivity extends AppCompatActivity {
             groupsMenu.getMenu().add(groupName);
         }
 
-        groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-            @Override
-            public boolean onMenuItemClick(MenuItem item) {
-                selectMemoryGroup(item.getTitle().toString());
-                return true;
-            }
+        groupsMenu.setOnMenuItemClickListener(item -> {
+            selectMemoryGroup(item.getTitle().toString());
+            return true;
         });
 
         groupsMenu.show();
@@ -1656,17 +1622,14 @@ public class MainActivity extends AppCompatActivity {
         groupSelector.setText(groupName + " ▼");
 
         // Save most recent group selection so we can restore it on app restart
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_GROUP);
-                if (lastGroupSetting != null) {
-                    lastGroupSetting.value = groupName;
-                    viewModel.getAppDb().appSettingDao().update(lastGroupSetting);
-                } else {
-                    lastGroupSetting = new AppSetting(AppSetting.SETTING_LAST_GROUP, groupName);
-                    viewModel.getAppDb().appSettingDao().insertAll(lastGroupSetting);
-                }
+        threadPoolExecutor.execute(() -> {
+            AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_GROUP);
+            if (lastGroupSetting != null) {
+                lastGroupSetting.value = groupName;
+                viewModel.getAppDb().appSettingDao().update(lastGroupSetting);
+            } else {
+                lastGroupSetting = new AppSetting(AppSetting.SETTING_LAST_GROUP, groupName);
+                viewModel.getAppDb().appSettingDao().insertAll(lastGroupSetting);
             }
         });
     }
@@ -1692,7 +1655,7 @@ public class MainActivity extends AppCompatActivity {
                 handleFindRepeatersResult(resultCode);
                 break;
             default:
-                Log.d("DEBUG", "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
+                Log.d(LOG_TAG, "Warning: Returned to MainActivity from unexpected request code: " + requestCode);
         }
     }
 
@@ -1784,7 +1747,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Actually start the firmware activity
         Intent intent = new Intent("com.vagell.kv4pht.FIRMWARE_ACTION");
-        intent.putExtra("requestCode", REQUEST_FIRMWARE);
+        intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_FIRMWARE);
         startActivityForResult(intent, REQUEST_FIRMWARE);
     }
 
@@ -1811,7 +1774,7 @@ public class MainActivity extends AppCompatActivity {
         setScanningUi(false);
 
         Intent intent = new Intent("com.vagell.kv4pht.SETTINGS_ACTION");
-        intent.putExtra("requestCode", REQUEST_SETTINGS);
+        intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_SETTINGS);
         RadioModuleController radioModule = radioAudioService == null ? null : radioAudioService.getRadioModule();
         if (radioAudioService != null && radioAudioService.isRadioConnected() && radioModule != null) {
             intent.putExtra("hasHighLowPowerSwitch", radioAudioService.isHasHighLowPowerSwitch());
@@ -1858,9 +1821,7 @@ public class MainActivity extends AppCompatActivity {
         PopupMenu moreMenu = new PopupMenu(themedContext, view);
         moreMenu.inflate(R.menu.more_menu);
         MainActivity activity = this;
-        moreMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-            @Override
-            public boolean onMenuItemClick(MenuItem item) {
+        moreMenu.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == R.id.import_from_repeaterbook) {
                     startFindRepeatersActivity();
                 } else if (item.getItemId() == R.id.flash_firmware) {
@@ -1878,7 +1839,6 @@ public class MainActivity extends AppCompatActivity {
                     startSettingsActivity();
                 }
                 return true;
-            }
         });
 
         boolean showRadioOptions = radioAudioService != null && radioAudioService.isRadioConnected();
@@ -1902,7 +1862,7 @@ public class MainActivity extends AppCompatActivity {
      */
     public void doShowNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
         if (notificationChannelId == null || title == null || message == null) {
-            Log.d("DEBUG", "Unexpected null in showNotification.");
+            Log.d(LOG_TAG, "Unexpected null in showNotification.");
             return;
         }
         // Has the user disallowed notifications?

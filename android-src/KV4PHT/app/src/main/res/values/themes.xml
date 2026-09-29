@@ -21,7 +21,6 @@
 
     <style name="Custom.PopupMenu" parent="Widget.AppCompat.PopupMenu">
         <item name="android:textSize">20dp</item>
-        <!-- <item name="android:textColor">@color/primary</item> -->
     </style>
 
     <style name="Theme.KV4PHT" parent="Base.Theme.KV4PHT" />

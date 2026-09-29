@@ -41,6 +41,8 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.slider.Slider;
+
+import static com.google.android.material.snackbar.Snackbar.LENGTH_LONG;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.BuildConfig;
@@ -395,12 +397,12 @@ public class SettingsActivity extends AppCompatActivity {
         return getString(R.string.aprs_show_all);
     }
 
-    public void closedCaptionsButtonClicked(View view) {
+    public void closedCaptionsButtonClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         try {
             startActivity(new Intent("com.android.settings.action.live_caption"));
         } catch (ActivityNotFoundException anfe) {
             CharSequence snackbarMsg = "This phone model doesn't support closed captions";
-            Snackbar ccSnackbar = Snackbar.make(findViewById(R.id.settingsTopLevelView), snackbarMsg, Snackbar.LENGTH_LONG)
+            Snackbar ccSnackbar = Snackbar.make(findViewById(R.id.settingsTopLevelView), snackbarMsg, LENGTH_LONG)
                     .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
 
             // Make the text of the snackbar larger.
@@ -413,7 +415,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    public void doneButtonClicked(View view) {
+    public void doneButtonClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         doneClicked = true;
         Intent data = new Intent()
             .putExtra(EXTRA_RF_POWER_HIGH, isHighPowerSelected())
