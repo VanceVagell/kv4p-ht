@@ -657,7 +657,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             threadPoolExecutor.shutdownNow();
         } catch (Exception e) {
-            Log.w("MainActivity", "Unable to shut down the background executor", e);
+            Log.w(LOG_TAG, "Unable to shut down the background executor", e);
         }
 
         try {
@@ -666,7 +666,7 @@ public class MainActivity extends AppCompatActivity {
                 radioAudioServiceBound = false;
             }
         } catch (Exception e) {
-            Log.w("MainActivity", "Unable to unbind the radio service", e);
+            Log.w(LOG_TAG, "Unable to unbind the radio service", e);
         }
     }
 
