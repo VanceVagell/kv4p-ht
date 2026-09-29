@@ -727,7 +727,7 @@ public class MainActivity extends AppCompatActivity {
 
             // If their callsign is not set, display a snackbar asking them to set it before they
             // can transmit.
-            if (callsign == null || callsign.length() == 0) {
+            if (callsign == null || callsign.isEmpty()) {
                 showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
                 ImageButton sendButton = findViewById(R.id.sendButton);
                 sendButton.setEnabled(false);
@@ -782,7 +782,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void sendButtonOverlayClicked(View view) {
-        if (callsign == null || callsign.length() == 0) {
+        if (callsign == null || callsign.isEmpty()) {
             showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
             ImageButton sendButton = findViewById(R.id.sendButton);
             sendButton.setEnabled(false);
@@ -796,7 +796,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String targetCallsign = ((EditText) findViewById(R.id.textChatTo)).getText().toString().trim();
-        if (targetCallsign.length() == 0) {
+        if (targetCallsign.isEmpty()) {
             targetCallsign = "BLN1CQ";
         } else {
             targetCallsign = targetCallsign.toUpperCase();
@@ -804,7 +804,7 @@ public class MainActivity extends AppCompatActivity {
         ((EditText) findViewById(R.id.textChatTo)).setText(targetCallsign);
 
         String outText = ((EditText) findViewById(R.id.textChatInput)).getText().toString();
-        if (outText.length() == 0) {
+        if (outText.isEmpty()) {
             return; // Nothing to send.
         }
 
