@@ -780,7 +780,7 @@ public class MainActivity extends AppCompatActivity {
         callsignSnackbar.show();
     }
 
-    public void sendButtonOverlayClicked(View view) {
+    public void sendButtonOverlayClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         if (callsign == null || callsign.isEmpty()) {
             showCallsignSnackbar(getString(R.string.set_your_callsign_to_send_text_chat));
             ImageButton sendButton = findViewById(R.id.sendButton);
@@ -788,7 +788,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void sendTextClicked(View view) {
+    public void sendTextClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         if (null != radioAudioService && !radioAudioService.isTxAllowed()) {
             showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
             return;
@@ -1562,7 +1562,7 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    public void scanClicked(View view) {
+    public void scanClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         setScanningUi((radioAudioService != null) && (radioAudioService.getMode()) != RadioMode.SCAN); // Toggle scanning on/off
         if (radioAudioService != null) {
             radioAudioService.setScanning(radioAudioService.getMode() != RadioMode.SCAN, true);
@@ -1613,7 +1613,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void addMemoryClicked(View view) {
+    public void addMemoryClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         Intent intent = new Intent("com.vagell.kv4pht.ADD_MEMORY_ACTION");
         intent.putExtra(EXTRA_REQUEST_CODE, REQUEST_ADD_MEMORY);
         intent.putExtra("activeFrequencyStr", activeFrequencyStr);

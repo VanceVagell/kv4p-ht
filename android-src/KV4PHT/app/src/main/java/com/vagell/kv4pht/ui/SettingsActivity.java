@@ -397,7 +397,7 @@ public class SettingsActivity extends AppCompatActivity {
         return getString(R.string.aprs_show_all);
     }
 
-    public void closedCaptionsButtonClicked(View view) {
+    public void closedCaptionsButtonClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         try {
             startActivity(new Intent("com.android.settings.action.live_caption"));
         } catch (ActivityNotFoundException anfe) {
@@ -415,7 +415,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    public void doneButtonClicked(View view) {
+    public void doneButtonClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
         doneClicked = true;
         Intent data = new Intent()
             .putExtra(EXTRA_RF_POWER_HIGH, isHighPowerSelected())
