@@ -42,12 +42,10 @@ import android.os.Vibrator;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
-import android.view.KeyEvent;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -63,7 +61,6 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -229,13 +226,10 @@ public class MainActivity extends AppCompatActivity {
         memoriesRecyclerView.setAdapter(memoriesAdapter);
 
         // Observe the channel memories LiveData in MainViewModel (so the RecyclerView can populate with the memories)
-        viewModel.getChannelMemories().observe(this, new Observer<List<ChannelMemory>>() {
-            @Override
-            public void onChanged(List<ChannelMemory> channelMemories) {
-                memoriesAdapter.setMemoriesList(channelMemories);
-                memoriesAdapter.notifyDataSetChanged();
-                trySyncInitialRadioUi();
-            }
+        viewModel.getChannelMemories().observe(this, channelMemories -> {
+            memoriesAdapter.setMemoriesList(channelMemories);
+            memoriesAdapter.notifyDataSetChanged();
+            trySyncInitialRadioUi();
         });
 
         // Prepare a RecyclerView for the list APRS messages we've received in the past
@@ -275,17 +269,14 @@ public class MainActivity extends AppCompatActivity {
 
         // Set up behavior on the bottom nav
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigationView);
-        bottomNav.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem menuItem) {
-                int itemId = menuItem.getItemId();
-                if (itemId == R.id.voice_mode) {
-                    showScreen(ScreenType.SCREEN_VOICE);
-                } else if (itemId == R.id.text_chat_mode) {
-                    showScreen(ScreenType.SCREEN_CHAT);
-                }
-                return true;
+        bottomNav.setOnNavigationItemSelectedListener(menuItem -> {
+            int itemId = menuItem.getItemId();
+            if (itemId == R.id.voice_mode) {
+                showScreen(ScreenType.SCREEN_VOICE);
+            } else if (itemId == R.id.text_chat_mode) {
+                showScreen(ScreenType.SCREEN_CHAT);
             }
+            return true;
         });
         attachListeners();
         IntentFilter filter = new IntentFilter();
@@ -500,12 +491,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void sMeterUpdate(int value) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            updateSMeter(value);
-                        }
-                    });
+                    runOnUiThread(() -> updateSMeter(value));
                 }
 
                 @Override
@@ -759,12 +745,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void showCallsignSnackbar(CharSequence snackbarMsg) {
         callsignSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
-                .setAction(R.string.set_now, new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        callsignSnackbar.dismiss();
-                        startSettingsActivity();
-                    }
+                .setAction(R.string.set_now, view -> {
+                    callsignSnackbar.dismiss();
+                    startSettingsActivity();
                 })
                 .setBackgroundTint(getResources().getColor(R.color.primary))
                 .setTextColor(getResources().getColor(R.color.medium_gray))
@@ -963,9 +946,7 @@ public class MainActivity extends AppCompatActivity {
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setOnTouchListener(this::handlePttTouch);
 
-        pttButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        pttButton.setOnClickListener(v -> {
                 // This click handler is only for TalkBack users who also have stickyPTT enabled.
                 // It's so they can use the typical quick double-tap to toggle PTT on and off. So
                 // if stickyPTT isn't being used, don't handle a click on the PTT button (they need
@@ -992,21 +973,17 @@ public class MainActivity extends AppCompatActivity {
                     }
                     endPttUi();
                 }
-            }
         });
 
         EditText activeFrequencyField = findViewById(R.id.activeFrequency);
-        activeFrequencyField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
-            @Override
-            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (radioAudioService != null) {
-                    radioAudioService.tuneToFreq(activeFrequencyField.getText().toString());
-                }
-
-                hideKeyboard();
-                activeFrequencyField.clearFocus();
-                return true;
+        activeFrequencyField.setOnEditorActionListener((v, actionId, event) -> {
+            if (radioAudioService != null) {
+                radioAudioService.tuneToFreq(activeFrequencyField.getText().toString());
             }
+
+            hideKeyboard();
+            activeFrequencyField.clearFocus();
+            return true;
         });
 
         final View rootView = findViewById(android.R.id.content);
@@ -1016,9 +993,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Track if keyboard is likely visible (and/or screen got short for some reason), so we can
         // make room for critical UI components that must be visible.
-        rootView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override
-            public void onGlobalLayout() {
+        rootView.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
                 // When in chat, we need enough vertical space for the user to see their text
                 // input box, and any prior chat message they may be replying to. Not necessary in
                 // voice mode.
@@ -1049,7 +1024,6 @@ public class MainActivity extends AppCompatActivity {
                     frequencyView.setVisibility(VISIBLE);
                     rxAudioCircleView.setVisibility(VISIBLE);
                 }
-            }
         });
     }
 
@@ -1335,23 +1309,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showMemoryName(String name) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                TextView activeFrequencyField = findViewById(R.id.activeMemoryName);
-                activeFrequencyField.setText(name);
-            }
+        runOnUiThread(() -> {
+            TextView activeFrequencyField = findViewById(R.id.activeMemoryName);
+            activeFrequencyField.setText(name);
         });
     }
 
     private void showFrequency(String frequency) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                EditText activeFrequencyField = findViewById(R.id.activeFrequency);
-                activeFrequencyField.setText(frequency);
-                activeFrequencyStr = frequency;
-            }
+        runOnUiThread(() -> {
+            EditText activeFrequencyField = findViewById(R.id.activeFrequency);
+            activeFrequencyField.setText(frequency);
+            activeFrequencyStr = frequency;
         });
     }
 
@@ -1596,20 +1564,10 @@ public class MainActivity extends AppCompatActivity {
     private void setScanningUi(boolean scanning) {
         AppCompatButton scanButton = findViewById(R.id.scanButton);
         if (!scanning) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    scanButton.setText(R.string.scan);
-                }
-            });
+            runOnUiThread(() -> scanButton.setText(R.string.scan));
 
         } else { // Start scanning
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    scanButton.setText(R.string.stop_scan);
-                }
-            });
+            runOnUiThread(() -> scanButton.setText(R.string.stop_scan));
         }
     }
 
@@ -1632,12 +1590,9 @@ public class MainActivity extends AppCompatActivity {
             groupsMenu.getMenu().add(groupName);
         }
 
-        groupsMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-            @Override
-            public boolean onMenuItemClick(MenuItem item) {
-                selectMemoryGroup(item.getTitle().toString());
-                return true;
-            }
+        groupsMenu.setOnMenuItemClickListener(item -> {
+            selectMemoryGroup(item.getTitle().toString());
+            return true;
         });
 
         groupsMenu.show();
@@ -1652,17 +1607,14 @@ public class MainActivity extends AppCompatActivity {
         groupSelector.setText(groupName + " ▼");
 
         // Save most recent group selection so we can restore it on app restart
-        threadPoolExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_GROUP);
-                if (lastGroupSetting != null) {
-                    lastGroupSetting.value = groupName;
-                    viewModel.getAppDb().appSettingDao().update(lastGroupSetting);
-                } else {
-                    lastGroupSetting = new AppSetting(AppSetting.SETTING_LAST_GROUP, groupName);
-                    viewModel.getAppDb().appSettingDao().insertAll(lastGroupSetting);
-                }
+        threadPoolExecutor.execute(() -> {
+            AppSetting lastGroupSetting = viewModel.getAppDb().appSettingDao().getByName(AppSetting.SETTING_LAST_GROUP);
+            if (lastGroupSetting != null) {
+                lastGroupSetting.value = groupName;
+                viewModel.getAppDb().appSettingDao().update(lastGroupSetting);
+            } else {
+                lastGroupSetting = new AppSetting(AppSetting.SETTING_LAST_GROUP, groupName);
+                viewModel.getAppDb().appSettingDao().insertAll(lastGroupSetting);
             }
         });
     }
@@ -1854,9 +1806,7 @@ public class MainActivity extends AppCompatActivity {
         PopupMenu moreMenu = new PopupMenu(themedContext, view);
         moreMenu.inflate(R.menu.more_menu);
         MainActivity activity = this;
-        moreMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-            @Override
-            public boolean onMenuItemClick(MenuItem item) {
+        moreMenu.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == R.id.import_from_repeaterbook) {
                     startFindRepeatersActivity();
                 } else if (item.getItemId() == R.id.flash_firmware) {
@@ -1874,7 +1824,6 @@ public class MainActivity extends AppCompatActivity {
                     startSettingsActivity();
                 }
                 return true;
-            }
         });
 
         boolean showRadioOptions = radioAudioService != null && radioAudioService.isRadioConnected();

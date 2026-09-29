@@ -148,24 +148,15 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
         holder.setHighlighted(memory.isHighlighted());
 
         // Handle taps on the memory itself
-        holder.itemView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                memoryListener.onMemoryClick(memory);
-            }
-        });
+        holder.itemView.setOnClickListener(v -> memoryListener.onMemoryClick(memory));
 
         // Handle taps on the memory's menu icon
         final View memoryMenuButton = holder.itemView.findViewById(R.id.memoryMenu);
-        memoryMenuButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        memoryMenuButton.setOnClickListener(v -> {
                 Context themedContext = new ContextThemeWrapper(holder.itemView.getContext(), R.style.Custom_PopupMenu);
                 PopupMenu memoryMenu = new PopupMenu(themedContext, memoryMenuButton);
                 memoryMenu.inflate(R.menu.memory_row_menu);
-                memoryMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-                    @Override
-                    public boolean onMenuItemClick(MenuItem item) {
+                memoryMenu.setOnMenuItemClickListener(item -> {
                         String deleteTitle = themedContext.getString(R.string.delete);
                         String editTitle = themedContext.getString(R.string.edit);
 
@@ -175,10 +166,8 @@ public class MemoriesAdapter extends RecyclerView.Adapter<MemoriesAdapter.Memory
                             memoryListener.onMemoryEdit(memory);
                         }
                         return true;
-                    }
                 });
                 memoryMenu.show();
-            }
         });
     }
 
