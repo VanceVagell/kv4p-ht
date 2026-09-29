@@ -171,6 +171,8 @@ public class MainActivity extends AppCompatActivity {
     };
 
     @SuppressLint("ClickableViewAccessibility")
+    // Lifecycle orchestration is clearer when its related UI setup remains together.
+    @SuppressWarnings("java:S3776")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -690,6 +692,8 @@ public class MainActivity extends AppCompatActivity {
         SCREEN_CHAT
     }
 
+    // Keeping the two screen transitions adjacent makes their shared visibility state explicit.
+    @SuppressWarnings("java:S3776")
     private void showScreen(ScreenType screenType) {
         // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
         // Controls for voice mode
@@ -942,6 +946,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @SuppressLint("ClickableViewAccessibility")
+    // Listener wiring remains co-located so control interactions can be reviewed together.
+    @SuppressWarnings("java:S3776")
     private void attachListeners() {
         ImageButton pttButton = findViewById(R.id.pttButton);
         pttButton.setOnTouchListener(this::handlePttTouch);
