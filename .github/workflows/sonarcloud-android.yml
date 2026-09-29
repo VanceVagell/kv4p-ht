@@ -137,8 +137,8 @@ jobs:
           ./gradlew sonar
           -Dsonar.projectKey=VanceVagell_kv4p-ht
           -Dsonar.token=${SONAR_TOKEN}
-          -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
-          -Dsonar.java.binaries=app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes,usbSerialForAndroid/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
+          -Dsonar.coverage.jacoco.xmlReportPaths=${GITHUB_WORKSPACE}/android-src/KV4PHT/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+          -Dsonar.java.binaries=${GITHUB_WORKSPACE}/android-src/KV4PHT/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes,${GITHUB_WORKSPACE}/android-src/KV4PHT/usbSerialForAndroid/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.scm.revision=', github.event.workflow_run.head_sha) || '' }}
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.key=', env.pr_number) || '' }}
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.pullrequest.branch=', env.pr_head_ref) || '' }}
