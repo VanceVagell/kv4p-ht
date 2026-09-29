@@ -703,7 +703,7 @@ public class MainActivity extends AppCompatActivity {
     private enum ScreenType {
         SCREEN_VOICE,
         SCREEN_CHAT
-    };
+    }
 
     private void showScreen(ScreenType screenType) {
         // TODO The right way to implement the bottom nav toggling the UI would be with Fragments.
