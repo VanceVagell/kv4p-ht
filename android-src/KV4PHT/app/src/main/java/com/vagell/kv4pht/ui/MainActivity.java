@@ -136,7 +136,6 @@ public class MainActivity extends AppCompatActivity {
     public static final int REQUEST_FIND_REPEATERS = 4;
 
     private MainViewModel viewModel;
-    private RecyclerView memoriesRecyclerView;
     private MemoriesAdapter memoriesAdapter;
     private RecyclerView aprsRecyclerView;
     private APRSAdapter aprsAdapter;
@@ -188,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
         binding.setVariable(BR.viewModel, viewModel);
 
         // Prepare a RecyclerView for the list of channel memories
-        memoriesRecyclerView = findViewById(R.id.memoriesList);
+        RecyclerView memoriesRecyclerView = findViewById(R.id.memoriesList);
         memoriesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         memoriesAdapter = new MemoriesAdapter(new MemoriesAdapter.MemoryListener() {
             @Override
