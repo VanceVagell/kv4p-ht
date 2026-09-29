@@ -30,6 +30,7 @@ import android.graphics.Color;
 import android.location.Address;
 import android.location.Geocoder;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
@@ -56,6 +57,7 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.CancellationTokenSource;
+import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
@@ -105,7 +107,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
         // Listen for file downloads so we can detect when CSV download is done.
         IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        registerReceiver(onDownloadComplete, filter, Context.RECEIVER_EXPORTED);
+        ContextCompat.registerReceiver(this, onDownloadComplete, filter,
+            "android.permission.SEND_DOWNLOAD_COMPLETED_INTENTS", null,
+            ContextCompat.RECEIVER_EXPORTED);
 
         populateMemoryGroups();
         requestPermissions();
@@ -167,23 +171,35 @@ public class FindRepeatersActivity extends AppCompatActivity {
             getGpsLocation();
         }
 
-        // External storage permission...
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+        requestLegacyStoragePermissionIfNeeded();
+    }
 
-                new AlertDialog.Builder(this)
-                        .setTitle("Permission needed")
-                        .setMessage("This app needs to write to external storage to find nearby repeaters")
-                        .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
-                                FindRepeatersActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                                REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE))
-                        .create()
-                        .show();
-
-            }
+    private void requestLegacyStoragePermissionIfNeeded() {
+        if (!requiresLegacyStoragePermission(Build.VERSION.SDK_INT)
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED) {
+            return;
         }
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Permission needed")
+                    .setMessage("This app needs to write to external storage to find nearby repeaters")
+                    .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
+                            FindRepeatersActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                            REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE))
+                    .create()
+                    .show();
+            return;
+        }
+        ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE);
+    }
+
+    /** WRITE_EXTERNAL_STORAGE is needed for public DownloadManager destinations only through API 28. */
+    static boolean requiresLegacyStoragePermission(int sdkInt) {
+        return sdkInt <= Build.VERSION_CODES.P;
     }
 
     @Override
@@ -281,8 +297,8 @@ public class FindRepeatersActivity extends AppCompatActivity {
         downloadWebView = new WebView(this);
         downloadWebView.setDownloadListener(createDownloadListener());
 
-        // Enable JavaScript if your webpage needs it
-        webView.getSettings().setJavaScriptEnabled(true);
+        // RepeaterBook's authenticated download page requires JavaScript.
+        webView.getSettings().setJavaScriptEnabled(true); // NOSONAR java:S6362
 
         // Set a WebViewClient to handle page loading inside the app
         webView.setWebViewClient(new WebViewClient() {
@@ -347,7 +363,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
      */
     @SuppressWarnings("javasecurity:S6384") // This sets a fixed result code and never forwards an Intent.
     private void showErrorSnackbar(String msg) {
-        errorSnackbar = Snackbar.make(this, findViewById(R.id.firmwareTopLevelView), msg, Snackbar.LENGTH_INDEFINITE)
+        errorSnackbar = Snackbar.make(this, findViewById(R.id.firmwareTopLevelView), msg, BaseTransientBottomBar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
         errorSnackbar.setAction("Close", view -> {
             errorSnackbar.dismiss();
@@ -400,7 +416,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
         }
     };
 
-    @SuppressWarnings("java:S3398") // Keeping file I/O separate makes the broadcast receiver readable and testable.
+    @SuppressWarnings({"java:S3398", "java:S2583"}) // Keep file I/O separate; ContentResolver can return null despite the analyzer's contract.
     private String readDownloadedCsvFile(Uri fileUri) throws IOException {
         if (fileUri == null) {
             throw new IOException("Downloaded CSV file URI is null.");
@@ -517,16 +533,16 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     private List<String> splitCsvRecords(String csvData) {
         List<String> records = new ArrayList<>();
-        boolean inQuotes = false;
+        boolean insideQuotes = false;
         StringBuilder record = new StringBuilder();
 
         for (int i = 0; i < csvData.length(); i++) {
             char c = csvData.charAt(i);
             if (c == '"') {
-                inQuotes = !inQuotes;
+                insideQuotes = !insideQuotes;
             }
 
-            if (c == '\n' && !inQuotes) {
+            if (c == '\n' && !insideQuotes) {
                 records.add(record.toString());
                 record.setLength(0);
             } else {

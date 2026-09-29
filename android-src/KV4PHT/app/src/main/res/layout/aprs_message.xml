@@ -56,6 +56,9 @@
             android:ellipsize="end"
             android:maxLines="1" />
 
+        <include layout="@layout/aprs_digipeated_indicator" />
+
+
         <TextView
             android:id="@+id/relayViaLabel"
             android:layout_width="wrap_content"
@@ -89,12 +92,12 @@
             android:visibility="gone"/>
 
         <ImageView
-            android:id="@+id/msgAck"
+            android:id="@+id/messageDeliveryStatus"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:background="@drawable/ic_check"
+            android:src="@drawable/ic_check"
             android:alpha="0.8"
-            android:contentDescription="Checkmark, message acknowledged"
+            android:contentDescription="@string/aprs_delivery_delivered"
             android:visibility="gone"/>
 
 

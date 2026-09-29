@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  kv4p HT (see http://kv4p.com)
+  Copyright (C) 2026 Vance Vagell
+  SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -18,10 +23,9 @@
             android:id="@+id/fromCallsign"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="4dp"
-            android:ellipsize="end"
+            android:layout_marginRight="4dp"
             android:maxLines="1"
-            android:text="VK3BRT-S"
+            android:text="VK3VB-B"
             android:textColor="@color/primary"
             android:textFontWeight="500"
             android:textSize="16sp" />
@@ -30,11 +34,11 @@
             android:id="@+id/timestamp"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:layout_marginEnd="4dp"
             android:maxLines="1"
-            android:text="12:10pm"
+            android:text="10:55 PM"
             android:textColor="@android:color/darker_gray"
             android:textSize="16sp" />
 
@@ -47,46 +51,29 @@
             android:layout_height="24dp"
             android:alpha="0.8"
             android:background="@drawable/ic_pin"
-            android:contentDescription="Show object's position"
+            android:contentDescription="Show sender's position"
             android:visibility="gone" />
-
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/commentHolder"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/rounded_bubble"
-        android:orientation="vertical"
-        android:padding="8dp">
+        android:gravity="start|center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
 
         <TextView
-            android:id="@+id/objName"
-            android:layout_width="match_parent"
+            android:id="@+id/comment"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="2dp"
-            android:text="VK3BRT B"
-            android:textColor="@color/primary"
-            android:textFontWeight="500"
+            android:autoLink="web"
+            android:linksClickable="true"
+            android:paddingLeft="24dp"
+            android:text="Powered by WPSD (https://wpsd.radio/)"
+            android:textColor="@android:color/darker_gray"
+            android:textColorLink="@color/primary"
             android:textIsSelectable="true"
             android:textSize="16sp" />
-
-        <LinearLayout
-            android:id="@+id/commentHolder"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="start|center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/comment"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="50m Net Th9PM Mg1StTu"
-                android:textColor="@color/primary"
-                android:textIsSelectable="true"
-                android:textSize="16sp" />
-        </LinearLayout>
-
     </LinearLayout>
 </LinearLayout>

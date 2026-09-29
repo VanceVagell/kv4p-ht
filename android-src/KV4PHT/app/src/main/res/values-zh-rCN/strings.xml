@@ -105,6 +105,18 @@
     <string name="settings">设置</string>
     <string name="beacon_my_position">广播我的位置</string>
     <string name="beacon_to_frequency">信标发射频率</string>
+    <string name="aprs_message_filter">消息筛选</string>
+    <string name="aprs_show_all">显示全部</string>
+    <string name="aprs_only_mine">仅显示我的</string>
+    <string name="aprs_delivery_pending">消息正在等待确认</string>
+    <string name="aprs_delivery_delivered">消息已确认</string>
+    <string name="aprs_delivery_rejected">消息已被拒绝</string>
+    <string name="aprs_delivery_failed">消息发送失败</string>
+    <string name="aprs_digipeated">已转发</string>
+    <string name="aprs_igate_rf_to_is">iGate（将射频消息上报至互联网）</string>
+    <string name="aprs_is_display">显示附近的 APRS-IS 消息</string>
+    <string name="all">全部</string>
+    <string name="mine">我的</string>
     <string name="beaconing_aprs_on">正在频率 %1$s 发送 APRS 信标...</string>
     <string name="current">当前频率</string>
     <string name="done">完成</string>
@@ -134,4 +146,5 @@
     <string name="flash_firmware_message">这将替换您 kv4p HT 上的固件。</string>
     <string name="flash_firmware_button">刷写</string>
     <string name="firmware_flash_requires_usb">请通过 USB 连接电台以刷写固件</string>
+    <string name="aprs_message_not_accepted">APRS 消息未被接受发送。</string>
 </resources>

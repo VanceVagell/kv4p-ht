@@ -1,0 +1,55 @@
+/*
+kv4p HT (see http://kv4p.com)
+Copyright (C) 2024 Vance Vagell
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+
+package com.vagell.kv4pht.radio;
+
+import io.github.dkaukov.aprs.AprsController.RfTransmissionPurpose;
+
+/** Guards submissions that must use the original reception/transmission frequency. */
+final class AprsRfFrequencyPolicy {
+    private AprsRfFrequencyPolicy() { }
+
+    static boolean allowsMode(RadioMode mode) {
+        return mode == RadioMode.RX;
+    }
+
+    static Long toHz(float frequencyMhz) {
+        if (!Float.isFinite(frequencyMhz) || frequencyMhz <= 0) {
+            return null;
+        }
+        // Convert the radio's decimal MHz representation without float rounding noise.
+        return Math.round(Double.parseDouble(Float.toString(frequencyMhz)) * 1_000_000d);
+    }
+
+    static boolean matches(Long requestedHz, Long tunedHz) {
+        return requestedHz == null || requestedHz.equals(tunedHz);
+    }
+
+    static boolean isTerminalMismatch(Long requestedHz, Long selectedTxHz,
+                                      RfTransmissionPurpose purpose) {
+        return purpose.expectsAcknowledgement() && requestedHz != null && selectedTxHz != null
+            && !matches(requestedHz, selectedTxHz);
+    }
+
+    static Long transmissionFrequency(Long requestedHz, Long selectedTxHz,
+                                      RfTransmissionPurpose purpose) {
+        if (purpose.expectsAcknowledgement()) return selectedTxHz;
+        return requestedHz == null ? selectedTxHz : requestedHz;
+    }
+}

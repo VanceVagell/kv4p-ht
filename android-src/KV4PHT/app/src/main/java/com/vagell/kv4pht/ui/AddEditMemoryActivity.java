@@ -66,7 +66,7 @@ public class AddEditMemoryActivity extends AppCompatActivity {
 
         // Setup the title
         TextView titleTextView = findViewById(R.id.addEditToolbarTitle);
-        titleTextView.setText(isAdd ? getString(R.string.add_memory_display) : getString(R.string.edit_memory));
+        titleTextView.setText(getString(isAdd ? R.string.add_memory_display : R.string.edit_memory));
 
         // Hide advanced options until user chooses to show them
         setAdvancedOptionsVisible(false);

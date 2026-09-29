@@ -354,6 +354,10 @@ public class RadioModuleController {
         return desiredState.getBw();
     }
 
+    synchronized float getDesiredTxFrequency() {
+        return desiredState.getFreqTx();
+    }
+
     synchronized byte getDesiredTxTone() {
         return desiredState.getCtcssTx();
     }

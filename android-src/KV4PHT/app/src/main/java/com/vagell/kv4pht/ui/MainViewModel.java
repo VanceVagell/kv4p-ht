@@ -24,7 +24,6 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 
 import androidx.lifecycle.MutableLiveData;
-import com.vagell.kv4pht.data.APRSMessage;
 import com.vagell.kv4pht.data.AppDatabase;
 import com.vagell.kv4pht.data.ChannelMemory;
 import lombok.Getter;
@@ -44,8 +43,6 @@ public class MainViewModel extends AndroidViewModel {
     AtomicBoolean loaded = new AtomicBoolean(false);
     // LiveData holding the list of ChannelMemory objects
     private final MutableLiveData<List<ChannelMemory>> channelMemories = new MutableLiveData<>();
-    // LiveData holding the list of APRSMessage objects
-    private final MutableLiveData<List<APRSMessage>> aprsMessages = new MutableLiveData<>();
     private final ExecutorService databaseExecutor = Executors.newSingleThreadExecutor();
 
     public MainViewModel(@NotNull Application application) {
@@ -55,7 +52,6 @@ public class MainViewModel extends AndroidViewModel {
 
     private void loadData() {
         channelMemories.postValue(getAppDb().channelMemoryDao().getAll());
-        aprsMessages.postValue(getAppDb().aprsMessageDao().getAll());
         loaded.set(true);
     }
 
@@ -64,10 +60,6 @@ public class MainViewModel extends AndroidViewModel {
             loadData();
             callback.run();
         });
-    }
-
-    public LiveData<List<APRSMessage>> getAPRSMessages() {
-        return aprsMessages;
     }
 
     public LiveData<List<ChannelMemory>> getChannelMemories() {
