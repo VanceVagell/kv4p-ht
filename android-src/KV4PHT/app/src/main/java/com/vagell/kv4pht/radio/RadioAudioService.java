@@ -626,7 +626,7 @@ public class RadioAudioService extends Service {
         if (intent != null && ACTION_STOP_SERVICE.equals(intent.getAction())) {
             Intent stopIntent = new Intent(ACTION_SERVICE_STOPPING);
             stopIntent.setPackage(getPackageName());
-            sendBroadcast(stopIntent);
+            sendBroadcast(stopIntent); // NOSONAR S5320: package-scoped and received only by this app.
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
             return START_NOT_STICKY;
