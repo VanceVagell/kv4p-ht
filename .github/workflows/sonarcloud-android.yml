@@ -130,7 +130,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >
-          ./gradlew sonar
+          ./gradlew jacocoTestReport sonar
           -Dsonar.projectKey=VanceVagell_kv4p-ht
           -Dsonar.token=${SONAR_TOKEN}
           ${{ github.event.workflow_run.event == 'pull_request' && format('{0}{1}', '-Dsonar.scm.revision=', github.event.workflow_run.head_sha) || '' }}
