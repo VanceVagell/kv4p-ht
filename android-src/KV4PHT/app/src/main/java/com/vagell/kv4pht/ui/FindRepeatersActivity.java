@@ -534,7 +534,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
     private List<String> splitCsvRecords(String csvData) {
         List<String> records = new ArrayList<>();
         boolean insideQuotes = false;
-        StringBuilder record = new StringBuilder();
+        StringBuilder csvRecord = new StringBuilder();
 
         for (int i = 0; i < csvData.length(); i++) {
             char c = csvData.charAt(i);
@@ -543,14 +543,14 @@ public class FindRepeatersActivity extends AppCompatActivity {
             }
 
             if (c == '\n' && !insideQuotes) {
-                records.add(record.toString());
-                record.setLength(0);
+                records.add(csvRecord.toString());
+                csvRecord.setLength(0);
             } else {
-                record.append(c);
+                csvRecord.append(c);
             }
         }
-        if (record.length() > 0) {
-            records.add(record.toString());
+        if (csvRecord.length() > 0) {
+            records.add(csvRecord.toString());
         }
         return records;
     }
