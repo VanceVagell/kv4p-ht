@@ -1515,7 +1515,8 @@ public class MainActivity extends AppCompatActivity {
      * @param firmwareVer The currently installed firmware version, or -1 if no firmware installed.
      */
     private void showVersionSnackbar(int firmwareVer) {
-        CharSequence snackbarMsg = firmwareVer == -1 ? getString(R.string.no_firmware_installed) : getString(R.string.new_firmware_available);
+        CharSequence snackbarMsg = getString(firmwareVer == -1
+                ? R.string.no_firmware_installed : R.string.new_firmware_available);
         versionSnackbar = Snackbar.make(this, findViewById(R.id.mainTopLevelLayout), snackbarMsg, BaseTransientBottomBar.LENGTH_INDEFINITE)
                 .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE)
                 .setAnchorView(findViewById(R.id.bottomNavigationView));
