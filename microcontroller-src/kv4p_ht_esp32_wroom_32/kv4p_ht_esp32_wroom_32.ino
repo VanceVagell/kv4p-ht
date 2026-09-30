@@ -596,6 +596,13 @@ void ax25TxLoop() {
   latestRssi = (uint8_t)TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
   txAudioLevel = TX_AUDIO_LEVEL_FULL_SCALE_RSSI;
   sendCurrentDeviceState();
+  // BLE state frames are queued until bleKissLoop() runs. AFSK modulation is
+  // synchronous, so flush TX state now rather than delivering it together
+  // with the RX state after the packet finishes.
+  if (protocolHasBleSession()
+      && (protocolBleSession.flags & HOST_STATE_ENABLE_STATUS_REPORTS)) {
+    bleKissStream.flush();
+  }
   pulseAprsTxLED();
   bool firstFrame = true;
   bool sentOverride = job->hasTxOverride;
