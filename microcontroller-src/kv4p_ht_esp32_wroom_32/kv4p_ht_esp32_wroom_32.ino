@@ -549,13 +549,27 @@ void prepareAx25TxOverrideChannel(const Ax25TxOverride &txOverride) {
   ax25OverrideChannelReadyAt = millis() + AX25_OVERRIDE_RX_SETTLE_MS;
 }
 
+// Android sends COMMAND_HOST_TX_AX25 for every APRS packet, including a
+// beacon on the channel that is already configured. Avoid an unnecessary
+// SA818 group command in that case: it would otherwise also force a second
+// group command immediately after PTT is released.
+bool ax25OverrideMatchesActiveChannel(const Ax25TxOverride &txOverride) {
+  static constexpr float FREQ_MATCH_EPSILON_MHZ = 0.0001f;
+  return radioConfigApplied
+    && (desiredState.flags & HOST_STATE_RADIO_CONFIG_VALID)
+    && txOverride.bw == desiredState.bw
+    && txOverride.ctcssTx == desiredState.ctcss_tx
+    && fabsf(txOverride.freqTx - desiredState.freq_tx) < FREQ_MATCH_EPSILON_MHZ
+    && fabsf(txOverride.freqTx - desiredState.freq_rx) < FREQ_MATCH_EPSILON_MHZ;
+}
+
 void ax25TxLoop() {
   const Ax25TxJob *pendingJob = ax25TxScheduler.head();
   if (pendingJob == nullptr) return;
   bool receiveIdle = mode == MODE_RX || mode == MODE_STOPPED;
   if (!receiveIdle || !txAllowedByHost()) return;
   uint32_t now = millis();
-  if (pendingJob->hasTxOverride) {
+  if (pendingJob->hasTxOverride && !ax25OverrideMatchesActiveChannel(pendingJob->txOverride)) {
     // A host configuration update may have restored the normal radio while
     // this job was waiting, so prepare the target channel again in that case.
     if (!ax25OverrideChannelPrepared || radioConfigApplied) {
