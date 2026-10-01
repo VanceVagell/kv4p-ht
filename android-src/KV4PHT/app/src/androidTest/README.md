@@ -1,8 +1,7 @@
 # Manual BLE radio stress test
 
-`BleRadioStressInstrumentedTest` is a manual hardware/instrumented test for BLE voice TX and
-[issue #472](https://github.com/VanceVagell/kv4p-ht/issues/472). It is skipped by default, so it
-does not make normal CI require a kv4p radio.
+`BleRadioStressInstrumentedTest` is a manual hardware/instrumented test for BLE voice TX. It is
+skipped by default, so it does not make normal CI require a kv4p radio.
 
 Before running it, use the normal app to configure the nearby radio on a legal simplex transmit
 frequency, attach an appropriate antenna or dummy load, and leave Bluetooth enabled. Close any
