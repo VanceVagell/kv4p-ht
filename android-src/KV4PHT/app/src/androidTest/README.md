@@ -3,10 +3,10 @@
 `BleRadioStressInstrumentedTest` is a manual hardware/instrumented test for BLE voice TX. It is
 skipped by default, so it does not make normal CI require a kv4p radio.
 
-Before running it, use the normal app to configure the nearby radio on a legal simplex transmit
-frequency, attach an appropriate antenna or dummy load, and leave Bluetooth enabled. Close any
-other kv4p app session that is connected to the radio. The test preserves that selected radio
-configuration; it does not choose a frequency itself.
+Before running it, use the normal app to switch the nearby radio to **Analog** mode and configure
+a legal simplex transmit frequency. Attach an appropriate antenna or dummy load, and leave
+Bluetooth enabled. Close any other kv4p app session that is connected to the radio. The test
+preserves that selected radio configuration; it does not choose a frequency itself.
 
 From Android Studio, create an **Android Instrumented Tests** run configuration for
 `BleRadioStressInstrumentedTest` on a connected physical phone. In **Instrumentation arguments**,

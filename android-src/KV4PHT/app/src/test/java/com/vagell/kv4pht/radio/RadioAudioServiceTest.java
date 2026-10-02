@@ -214,10 +214,20 @@ public class RadioAudioServiceTest {
     }
 
     private static final class TestRadioTransport implements RadioTransport {
-        @Override public void start(Listener listener) {}
-        @Override public void close() {}
+        @Override public void start(Listener listener) {
+            // The test invokes a listener produced by the service directly.
+        }
+
+        @Override public void close() {
+            // This in-memory transport owns no resources.
+        }
+
         @Override public boolean isReady() { return true; }
-        @Override public void writeAsync(byte[] bytes) {}
+
+        @Override public void writeAsync(byte[] bytes) {
+            // Protocol output is outside this lifecycle-callback test's scope.
+        }
+
         @Override public boolean supportsFirmwareFlashing() { return false; }
         @Override public boolean prepareForFirmwareFlashing() { return false; }
         @Override public String getName() { return "test"; }
