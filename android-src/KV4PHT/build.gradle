@@ -3,7 +3,7 @@ plugins {
     id 'com.android.application' version '9.0.1' apply false
     id 'com.android.library' version '9.0.1' apply false
     id 'jacoco'
-    id "org.sonarqube" version "5.1.0.4882"
+    id "org.sonarqube" version "7.3.1.8318"
 }
 
 sonar {

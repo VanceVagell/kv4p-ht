@@ -18,14 +18,14 @@ android {
     }
     buildTypes {
         debug {
-            enableUnitTestCoverage true
+            enableUnitTestCoverage = true
         }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    namespace 'com.hoho.android.usbserial'
+    namespace = 'com.hoho.android.usbserial'
     publishing {
         // if coverage is enabled, change 'release' to 'anyDeviceRelease' or comment out publishing rule
         singleVariant('release') {
@@ -58,9 +58,9 @@ project.afterEvaluate {
                 from components.release
 
                 // values used for local maven repo, jitpack uses github release:
-                groupId 'com.github.mik3y'
-                artifactId 'usb-serial-for-android'
-                version '3.5.2beta'
+                groupId = 'com.github.mik3y'
+                artifactId = 'usb-serial-for-android'
+                version = '3.5.2beta'
             }
         }
     }
