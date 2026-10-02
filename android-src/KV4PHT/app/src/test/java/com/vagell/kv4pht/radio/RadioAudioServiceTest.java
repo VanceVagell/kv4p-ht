@@ -9,6 +9,9 @@ import android.content.Intent;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.data.ChannelMemory;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.junit.Before;
@@ -138,6 +141,96 @@ public class RadioAudioServiceTest {
         service.setFreeDv2400bEnabled(true);
         assertFalse(service.isFreeDv2400bEnabled());
         assertFalse(service.isVoiceCaptureActive());
+    }
+
+    @Test public void productionAndSyntheticPttUseTheirExpectedAudioCapturePaths() throws Exception {
+        Protocol.Sender sender = new Protocol.Sender(bytes -> { }, false);
+        Field senderField = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        senderField.setAccessible(true);
+        senderField.set(service, sender);
+        service.getRadioModule().attachSender(sender);
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("146.5200");
+
+        service.startPttForSyntheticAudio();
+        assertEquals(RadioMode.TX, service.getMode());
+        assertFalse(service.isVoiceCaptureActive());
+        service.endPtt();
+
+        service.startPtt();
+        assertEquals(RadioMode.TX, service.getMode());
+        service.endPtt();
+    }
+
+    @Test public void transportLifecycleNotifiesObservers() throws Exception {
+        RadioAudioService.RadioAudioServiceCallbacks noOpCallbacks =
+            new RadioAudioService.RadioAudioServiceCallbacks() {};
+        noOpCallbacks.radioTransportConnected("test");
+        noOpCallbacks.radioTransportDisconnected("test");
+        noOpCallbacks.radioTransportError("test", "test");
+
+        List<String> events = new ArrayList<>();
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void radioTransportConnected(String name) {
+                events.add("connected:" + name);
+            }
+
+            @Override public void radioTransportDisconnected(String name) {
+                events.add("disconnected:" + name);
+            }
+
+            @Override public void radioTransportError(String name, String detail) {
+                events.add("error:" + name + ":" + detail);
+            }
+        });
+
+        TestRadioTransport connectedTransport = new TestRadioTransport();
+        setActiveTransport(connectedTransport);
+        transportListener(connectedTransport).onReady();
+
+        TestRadioTransport errorTransport = new TestRadioTransport();
+        setActiveTransport(errorTransport);
+        transportListener(errorTransport).onError(new IllegalStateException("test error"));
+
+        TestRadioTransport disconnectedTransport = new TestRadioTransport();
+        setActiveTransport(disconnectedTransport);
+        transportListener(disconnectedTransport).onDisconnected();
+
+        assertEquals(List.of("connected:test", "error:test:java.lang.IllegalStateException: test error",
+            "disconnected:test"), events);
+    }
+
+    private void setActiveTransport(RadioTransport transport) throws Exception {
+        Field transportField = RadioAudioService.class.getDeclaredField("activeTransport");
+        transportField.setAccessible(true);
+        transportField.set(service, transport);
+    }
+
+    private RadioTransport.Listener transportListener(RadioTransport transport) throws Exception {
+        Method listenerFactory = RadioAudioService.class.getDeclaredMethod(
+            "createTransportListener", RadioTransport.class);
+        listenerFactory.setAccessible(true);
+        return (RadioTransport.Listener) listenerFactory.invoke(service, transport);
+    }
+
+    private static final class TestRadioTransport implements RadioTransport {
+        @Override public void start(Listener listener) {
+            // The test invokes a listener produced by the service directly.
+        }
+
+        @Override public void close() {
+            // This in-memory transport owns no resources.
+        }
+
+        @Override public boolean isReady() { return true; }
+
+        @Override public void writeAsync(byte[] bytes) {
+            // Protocol output is outside this lifecycle-callback test's scope.
+        }
+
+        @Override public boolean supportsFirmwareFlashing() { return false; }
+        @Override public boolean prepareForFirmwareFlashing() { return false; }
+        @Override public String getName() { return "test"; }
     }
 
     private void selectBand(Protocol.RfModuleType band, float min, float max) {

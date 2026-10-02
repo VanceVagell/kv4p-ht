@@ -278,6 +278,13 @@ public class RadioAudioService extends Service {
     public interface RadioAudioServiceCallbacks {
         default void radioMissing() {}
         default void radioConnected() {}
+        /**
+         * Reports transport lifecycle details for observers such as the manual BLE hardware test.
+         * BLE error details include a GATT status when the platform supplied one.
+         */
+        default void radioTransportConnected(String transportName) {}
+        default void radioTransportDisconnected(String transportName) {}
+        default void radioTransportError(String transportName, String detail) {}
         default void hideSnackBar() {}
         default void radioModuleHandshake() {}
         default void radioModuleNotFound() {}
@@ -1029,6 +1036,21 @@ public class RadioAudioService extends Service {
     }
 
     public void startPtt() {
+        startPtt(true);
+    }
+
+    /**
+     * Starts normal PTT state transitions without opening {@link AudioRecord}.
+     *
+     * <p>This is package-visible for {@code BleRadioStressInstrumentedTest}. The test supplies
+     * deterministic PCM frames through {@link #sendAudioToESP32(short[], boolean)}, preserving
+     * the production ADPCM, protocol, and transport path while avoiding microphone input.</p>
+     */
+    void startPttForSyntheticAudio() {
+        startPtt(false);
+    }
+
+    private void startPtt(boolean captureMicrophone) {
         if (hostToEsp32 == null) {
             Log.e(TAG, "Attempted to start PTT but hostToEsp32 is null. USB connection likely failed.");
             radioMissing();
@@ -1044,7 +1066,9 @@ public class RadioAudioService extends Service {
             radioModule.pttDown();
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
-            startVoiceCapture();
+            if (captureMicrophone) {
+                startVoiceCapture();
+            }
             callbacks.txStarted();
         } else {
             Log.w(TAG, "Attempted to start PTT when not allowed", new Throwable());
@@ -1293,6 +1317,7 @@ public class RadioAudioService extends Service {
                 if (activeTransport != transport) {
                     return;
                 }
+                callbacks.radioTransportConnected(transport.getName());
                 callbacks.hideSnackBar();
                 hostToEsp32 = new Protocol.Sender(transport::writeAsync);
                 radioModule.attachSender(hostToEsp32);
@@ -1304,6 +1329,7 @@ public class RadioAudioService extends Service {
             public void onDisconnected() {
                 if (activeTransport == transport) {
                     Log.i(TAG, connectLog(transport.getName() + " disconnected"));
+                    callbacks.radioTransportDisconnected(transport.getName());
                     radioMissing();
                 }
             }
@@ -1312,6 +1338,7 @@ public class RadioAudioService extends Service {
             public void onError(Exception error) {
                 if (activeTransport == transport) {
                     Log.w(TAG, connectLog(transport.getName() + " transport error"), error);
+                    callbacks.radioTransportError(transport.getName(), error.toString());
                     if (audioTrack != null) {
                         audioTrack.stop();
                     }
