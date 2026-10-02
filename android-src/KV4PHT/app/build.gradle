@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace 'com.vagell.kv4pht'
+    namespace = 'com.vagell.kv4pht'
     compileSdk 36
 
     defaultConfig {
@@ -32,7 +32,7 @@ android {
 
     buildTypes {
         debug {
-            enableUnitTestCoverage true
+            enableUnitTestCoverage = true
         }
         release {
             minifyEnabled false
@@ -44,9 +44,9 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
     buildFeatures {
-        viewBinding true
-        dataBinding true
-        buildConfig true
+        viewBinding = true
+        dataBinding = true
+        buildConfig = true
     }
     testOptions {
         unitTests.includeAndroidResources = true
