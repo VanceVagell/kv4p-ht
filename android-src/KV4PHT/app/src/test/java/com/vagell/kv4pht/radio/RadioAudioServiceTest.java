@@ -9,6 +9,7 @@ import android.content.Intent;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.data.ChannelMemory;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Locale;
 import org.junit.Before;
@@ -138,6 +139,25 @@ public class RadioAudioServiceTest {
         service.setFreeDv2400bEnabled(true);
         assertFalse(service.isFreeDv2400bEnabled());
         assertFalse(service.isVoiceCaptureActive());
+    }
+
+    @Test public void productionAndSyntheticPttUseTheirExpectedAudioCapturePaths() throws Exception {
+        Protocol.Sender sender = new Protocol.Sender(bytes -> { }, false);
+        Field senderField = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        senderField.setAccessible(true);
+        senderField.set(service, sender);
+        service.getRadioModule().attachSender(sender);
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("146.5200");
+
+        service.startPttForSyntheticAudio();
+        assertEquals(RadioMode.TX, service.getMode());
+        assertFalse(service.isVoiceCaptureActive());
+        service.endPtt();
+
+        service.startPtt();
+        assertEquals(RadioMode.TX, service.getMode());
+        service.endPtt();
     }
 
     private void selectBand(Protocol.RfModuleType band, float min, float max) {

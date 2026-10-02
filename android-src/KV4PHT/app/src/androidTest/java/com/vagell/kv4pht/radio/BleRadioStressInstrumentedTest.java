@@ -25,6 +25,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 
 import org.junit.After;
 import org.junit.Assume;
@@ -237,14 +238,20 @@ public class BleRadioStressInstrumentedTest {
     }
 
     private void sleepUntil(long targetNs) throws InterruptedException {
-        long remainingNs = targetNs - SystemClock.elapsedRealtimeNanos();
-        if (remainingNs > 0) {
-            TimeUnit.NANOSECONDS.sleep(remainingNs);
+        while (true) {
+            long remainingNs = targetNs - SystemClock.elapsedRealtimeNanos();
+            if (remainingNs <= 0) {
+                return;
+            }
+            LockSupport.parkNanos(remainingNs);
+            if (Thread.interrupted()) {
+                throw new InterruptedException();
+            }
         }
     }
 
     private void sleepInterruptibly(long durationMs) throws InterruptedException {
-        Thread.sleep(durationMs);
+        sleepUntil(SystemClock.elapsedRealtimeNanos() + TimeUnit.MILLISECONDS.toNanos(durationMs));
     }
 
     private void log(String message) {
