@@ -1844,6 +1844,21 @@ public class MainActivity extends AppCompatActivity {
                                 .setPositiveButton(getString(R.string.delete), (d, i) -> {
                                     viewModel.deleteGroupAsync(selectedMemoryGroup, () -> viewModel.loadDataAsync(() -> runOnUiThread(() -> {
                                         selectMemoryGroup(getString(R.string.all_memories));
+                                        if (activeMemoryId != -1) {
+                                            boolean found = false;
+                                            if (viewModel.getChannelMemories().getValue() != null) {
+                                                for (com.vagell.kv4pht.data.ChannelMemory m : viewModel.getChannelMemories().getValue()) {
+                                                    if (m.memoryId == activeMemoryId) {
+                                                        found = true;
+                                                        viewModel.highlightMemory(m);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if (!found && radioAudioService != null) {
+                                                radioAudioService.tuneToFreq(activeFrequencyStr);
+                                            }
+                                        }
                                     })));
                                 })
                                 .setNegativeButton(android.R.string.cancel, null)
