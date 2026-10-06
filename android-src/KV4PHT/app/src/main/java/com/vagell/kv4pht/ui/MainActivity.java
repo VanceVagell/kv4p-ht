@@ -231,6 +231,28 @@ public class MainActivity extends AppCompatActivity {
             memoriesAdapter.setMemoriesList(channelMemories);
             memoriesAdapter.notifyDataSetChanged();
             trySyncInitialRadioUi();
+
+            if (activeMemoryId != -1 && channelMemories != null) {
+                boolean found = false;
+                for (com.vagell.kv4pht.data.ChannelMemory memory : channelMemories) {
+                    if (memory.memoryId == activeMemoryId) {
+                        found = true;
+                        viewModel.highlightMemory(memory);
+                        memoriesAdapter.notifyDataSetChanged();
+                        break;
+                    }
+                }
+                if (!found) {
+                    if (radioAudioService != null) {
+                        radioAudioService.tuneToFreq(activeFrequencyStr);
+                    } else {
+                        activeMemoryId = -1;
+                        showMemoryName(getString(R.string.simplex));
+                        viewModel.highlightMemory(null);
+                        memoriesAdapter.notifyDataSetChanged();
+                    }
+                }
+            }
         });
 
         // Prepare a RecyclerView for the list APRS messages we've received in the past
@@ -1844,21 +1866,6 @@ public class MainActivity extends AppCompatActivity {
                                 .setPositiveButton(getString(R.string.delete), (d, i) -> {
                                     viewModel.deleteGroupAsync(selectedMemoryGroup, () -> viewModel.loadDataAsync(() -> runOnUiThread(() -> {
                                         selectMemoryGroup(getString(R.string.all_memories));
-                                        if (activeMemoryId != -1) {
-                                            boolean found = false;
-                                            if (viewModel.getChannelMemories().getValue() != null) {
-                                                for (com.vagell.kv4pht.data.ChannelMemory m : viewModel.getChannelMemories().getValue()) {
-                                                    if (m.memoryId == activeMemoryId) {
-                                                        found = true;
-                                                        viewModel.highlightMemory(m);
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            if (!found && radioAudioService != null) {
-                                                radioAudioService.tuneToFreq(activeFrequencyStr);
-                                            }
-                                        }
                                     })));
                                 })
                                 .setNegativeButton(android.R.string.cancel, null)
