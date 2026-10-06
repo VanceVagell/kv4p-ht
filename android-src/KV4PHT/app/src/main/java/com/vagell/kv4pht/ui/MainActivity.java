@@ -1820,6 +1820,7 @@ public class MainActivity extends AppCompatActivity {
         Context themedContext = new ContextThemeWrapper(this, R.style.Custom_PopupMenu);
         PopupMenu moreMenu = new PopupMenu(themedContext, view);
         moreMenu.inflate(R.menu.more_menu);
+        moreMenu.getMenu().findItem(R.id.delete_group).setVisible(selectedMemoryGroup != null);
         MainActivity activity = this;
         moreMenu.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == R.id.import_from_repeaterbook) {
@@ -1835,6 +1836,19 @@ public class MainActivity extends AppCompatActivity {
                                 // Do nothing.
                             })
                             .show();
+                } else if (item.getItemId() == R.id.delete_group) {
+                    if (selectedMemoryGroup != null) {
+                        new MaterialAlertDialogBuilder(activity)
+                                .setTitle(getString(R.string.delete_group_title, selectedMemoryGroup))
+                                .setMessage(getString(R.string.delete_group_body))
+                                .setPositiveButton(getString(R.string.delete), (d, i) -> {
+                                    viewModel.deleteGroupAsync(selectedMemoryGroup, () -> viewModel.loadDataAsync(() -> runOnUiThread(() -> {
+                                        selectMemoryGroup(getString(R.string.all_memories));
+                                    })));
+                                })
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show();
+                    }
                 } else if (item.getItemId() == R.id.settings) {
                     startSettingsActivity();
                 }
