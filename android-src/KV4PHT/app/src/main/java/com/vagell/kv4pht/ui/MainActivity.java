@@ -231,6 +231,28 @@ public class MainActivity extends AppCompatActivity {
             memoriesAdapter.setMemoriesList(channelMemories);
             memoriesAdapter.notifyDataSetChanged();
             trySyncInitialRadioUi();
+
+            if (activeMemoryId != -1 && channelMemories != null) {
+                boolean found = false;
+                for (com.vagell.kv4pht.data.ChannelMemory memory : channelMemories) {
+                    if (memory.memoryId == activeMemoryId) {
+                        found = true;
+                        viewModel.highlightMemory(memory);
+                        memoriesAdapter.notifyDataSetChanged();
+                        break;
+                    }
+                }
+                if (!found) {
+                    if (radioAudioService != null) {
+                        radioAudioService.tuneToFreq(activeFrequencyStr);
+                    } else {
+                        activeMemoryId = -1;
+                        showMemoryName(getString(R.string.simplex));
+                        viewModel.highlightMemory(null);
+                        memoriesAdapter.notifyDataSetChanged();
+                    }
+                }
+            }
         });
 
         // Prepare a RecyclerView for the list APRS messages we've received in the past
@@ -1820,6 +1842,7 @@ public class MainActivity extends AppCompatActivity {
         Context themedContext = new ContextThemeWrapper(this, R.style.Custom_PopupMenu);
         PopupMenu moreMenu = new PopupMenu(themedContext, view);
         moreMenu.inflate(R.menu.more_menu);
+        moreMenu.getMenu().findItem(R.id.delete_group).setVisible(selectedMemoryGroup != null);
         MainActivity activity = this;
         moreMenu.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == R.id.import_from_repeaterbook) {
@@ -1835,6 +1858,19 @@ public class MainActivity extends AppCompatActivity {
                                 // Do nothing.
                             })
                             .show();
+                } else if (item.getItemId() == R.id.delete_group) {
+                    if (selectedMemoryGroup != null) {
+                        new MaterialAlertDialogBuilder(activity)
+                                .setTitle(getString(R.string.delete_group_title, selectedMemoryGroup))
+                                .setMessage(getString(R.string.delete_group_body))
+                                .setPositiveButton(getString(R.string.delete), (d, i) -> {
+                                    viewModel.deleteGroupAsync(selectedMemoryGroup, () -> viewModel.loadDataAsync(() -> runOnUiThread(() -> {
+                                        selectMemoryGroup(getString(R.string.all_memories));
+                                    })));
+                                })
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show();
+                    }
                 } else if (item.getItemId() == R.id.settings) {
                     startSettingsActivity();
                 }
