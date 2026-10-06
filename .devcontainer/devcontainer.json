@@ -11,7 +11,7 @@
 			"installMaven": "false",
 			"installGradle": "true"
 		},
-		"ghcr.io/nordcominc/devcontainer-features/android-sdk:1": {}
+		"ghcr.io/nordcominc/devcontainer-features/android-sdk:2": {}
 	},
 	"customizations": {
 		"vscode": {
