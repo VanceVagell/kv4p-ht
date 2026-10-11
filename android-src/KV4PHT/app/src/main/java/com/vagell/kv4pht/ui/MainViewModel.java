@@ -81,6 +81,13 @@ public class MainViewModel extends AndroidViewModel {
         getAppDb().channelMemoryDao().delete(memory);
     }
 
+    public void deleteGroupAsync(String groupName, Runnable callback) {
+        databaseExecutor.execute(() -> {
+            getAppDb().channelMemoryDao().deleteByGroup(groupName);
+            callback.run();
+        });
+    }
+
     public void deleteMemoryAsync(ChannelMemory memory, Runnable callback) {
         databaseExecutor.execute(() -> {
             deleteMemory(memory);

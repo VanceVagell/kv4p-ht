@@ -46,6 +46,9 @@ public interface ChannelMemoryDao {
     @Delete
     void delete(ChannelMemory channelMemory);
 
+    @Query("DELETE FROM channel_memories WHERE `group` = :groupName")
+    void deleteByGroup(String groupName);
+
     @Update
     void update(ChannelMemory channelMemory);
 }
