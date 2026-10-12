@@ -853,11 +853,7 @@ public class RadioAudioService extends Service {
         if (CURRENT_FREQUENCY.equals(aprsBeaconFrequency)) {
             return canTransmitOnFrequency(radioModule.getDesiredTxFrequency());
         }
-        try {
-            return canTransmitOnFrequency(Float.parseFloat(makeSafeHamFreq(aprsBeaconFrequency)));
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        return canTransmitOnFrequency(Float.parseFloat(makeSafeHamFreq(aprsBeaconFrequency)));
     }
 
     public void tuneToFreq(String frequencyStr) {

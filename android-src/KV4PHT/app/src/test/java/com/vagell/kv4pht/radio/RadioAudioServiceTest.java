@@ -10,6 +10,7 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -125,6 +126,24 @@ public class RadioAudioServiceTest {
         assertEquals(1, frames.size());
     }
 
+    @Test public void aprsSubmissionUsesModeAndConnectionInsteadOfChannelTxFlag() throws Exception {
+        Class<?> callbackType = Class.forName(RadioAudioService.class.getName() + "$ServiceAprsCallbacks");
+        Constructor<?> constructor = callbackType.getDeclaredConstructor(RadioAudioService.class);
+        constructor.setAccessible(true);
+        Object callbacks = constructor.newInstance(service);
+        Method canTransmit = callbackType.getDeclaredMethod("canTransmitAprs");
+        canTransmit.setAccessible(true);
+        assertFalse((boolean) canTransmit.invoke(callbacks));
+
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        assertFalse(service.isTxAllowed());
+        Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        sender.setAccessible(true);
+        sender.set(service, new Protocol.Sender(frame -> { }, false));
+        assertTrue((boolean) canTransmit.invoke(callbacks));
+    }
+
     @Test public void manualBeaconChecksEffectiveTxFrequency() {
         service.setMode(RadioMode.RX);
         service.tuneToFreq("150.0000");
@@ -136,6 +155,20 @@ public class RadioAudioServiceTest {
         service.tuneToFreq("146.5200");
         service.setAprsBeaconFrequency("Current");
         assertTrue(service.canTransmitPositionBeacon());
+    }
+
+    @Test public void disconnectedPositionBeaconStopsBeforeLocationLookup() {
+        service.sendPositionBeacon();
+        assertFalse(service.isRadioConnected());
+    }
+
+    @Test public void disallowedPositionBeaconStopsBeforeSubmission() throws Exception {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        Method perform = RadioAudioService.class.getDeclaredMethod("performPositionBeacon", double.class, double.class);
+        perform.setAccessible(true);
+        perform.invoke(service, -37.8d, 144.9d);
+        assertFalse(service.canTransmitPositionBeacon());
     }
 
     @Test public void scanningSkipsInvalidSkippedAndOtherBandMemoriesAndWraps() {
