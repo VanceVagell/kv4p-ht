@@ -597,7 +597,7 @@ public class RadioAudioService extends Service {
         }
 
         private boolean canTransmitAprs() {
-            return isTxAllowed() && AprsRfFrequencyPolicy.allowsMode(getMode())
+            return AprsRfFrequencyPolicy.allowsMode(getMode())
                 && hostToEsp32 != null;
         }
 
@@ -847,6 +847,13 @@ public class RadioAudioService extends Service {
 
     public boolean isTxAllowed() {
         return radioModule.isTxAllowed();
+    }
+
+    public boolean canTransmitPositionBeacon() {
+        if (CURRENT_FREQUENCY.equals(aprsBeaconFrequency)) {
+            return canTransmitOnFrequency(radioModule.getDesiredTxFrequency());
+        }
+        return canTransmitOnFrequency(Float.parseFloat(makeSafeHamFreq(aprsBeaconFrequency)));
     }
 
     public void tuneToFreq(String frequencyStr) {
@@ -2000,8 +2007,8 @@ public class RadioAudioService extends Service {
             Log.d(TAG, "Skipping position beacon: scanning is active.");
             return;
         }
-        if (!isRadioConnected() || !isTxAllowed()) {
-            Log.d(TAG, "Skipping position beacon: radio disconnected or tx not allowed.");
+        if (!isRadioConnected()) {
+            Log.d(TAG, "Skipping position beacon: radio disconnected.");
             return;
         }
 
@@ -2029,6 +2036,10 @@ public class RadioAudioService extends Service {
     }
 
     private void performPositionBeacon(final double latitude, final double longitude) {
+        if (!canTransmitPositionBeacon()) {
+            Log.d(TAG, "Skipping position beacon: beacon frequency is not permitted for TX.");
+            return;
+        }
         if (CURRENT_FREQUENCY.equals(aprsBeaconFrequency)) {
             callbacks.startingAprsBeacon(activeFrequencyStr);
             sendPositionBeaconOnActiveChannel(latitude, longitude, activeFrequencyStr);
@@ -2042,11 +2053,6 @@ public class RadioAudioService extends Service {
             Log.w(TAG, "Skipping position beacon: invalid beacon frequency " + aprsBeaconFrequency, e);
             return;
         }
-        if (!canTransmitOnFrequency(beaconFrequency) || !isTxAllowed()) {
-            Log.d(TAG, "Skipping position beacon: beacon frequency is not permitted for TX.");
-            return;
-        }
-
         callbacks.startingAprsBeacon(aprsBeaconFrequency);
         sendPositionBeaconOnSideChannel(latitude, longitude, beaconFrequency, aprsBeaconFrequency);
     }
@@ -2134,7 +2140,7 @@ public class RadioAudioService extends Service {
     // Radio transport and TX safety belong to the service, not its APRS callback adapter.
     @SuppressWarnings("java:S3398")
     private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency) {
-        if (!isTxAllowed() || !canTransmitOnFrequency(txFrequency)) {
+        if (!canTransmitOnFrequency(txFrequency)) {
             Log.e(TAG, "Tried to send an AX.25 packet on a disallowed frequency, did not send.");
             return false;
         }

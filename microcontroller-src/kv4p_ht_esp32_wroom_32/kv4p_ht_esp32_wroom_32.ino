@@ -509,7 +509,7 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
       }
       break;
     case COMMAND_HOST_TX_AX25:
-      if (param_len > sizeof(Ax25TxOverride) && txAllowedByHost()) {
+      if (param_len > sizeof(Ax25TxOverride)) {
         Ax25TxOverride txOverride;
         memcpy(&txOverride, params, sizeof(txOverride));
         size_t ax25Len = param_len - sizeof(txOverride);
@@ -564,10 +564,13 @@ bool ax25OverrideMatchesActiveChannel(const Ax25TxOverride &txOverride) {
 }
 
 void ax25TxLoop() {
+  bool receiveIdle = mode == MODE_RX || mode == MODE_STOPPED;
+  if (!receiveIdle) return;
+  if (ax25TxScheduler.dropDisallowedStandardJobs(txAllowedByHost()) > 0) {
+    _LOGW("Dropped queued KISS DATA frame after TX became disallowed");
+  }
   const Ax25TxJob *pendingJob = ax25TxScheduler.head();
   if (pendingJob == nullptr) return;
-  bool receiveIdle = mode == MODE_RX || mode == MODE_STOPPED;
-  if (!receiveIdle || !txAllowedByHost()) return;
   uint32_t now = millis();
   if (pendingJob->hasTxOverride && !ax25OverrideMatchesActiveChannel(pendingJob->txOverride)) {
     // A host configuration update may have restored the normal radio while

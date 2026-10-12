@@ -9,6 +9,11 @@ import android.content.Intent;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.javAX25.ax25.Packet;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.junit.Before;
@@ -100,6 +105,113 @@ public class RadioAudioServiceTest {
         service.tuneToMemory(memory);
         assertEquals(147f, service.getRadioModule().getDesiredTxFrequency(), 0.0001f);
         assertTrue(service.isTxAllowed());
+    }
+
+    @Test public void ax25OverrideUsesRequestedFrequencyWhenChannelTxIsDisallowed() throws Exception {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        assertFalse(service.isTxAllowed());
+
+        List<byte[]> frames = new ArrayList<>();
+        Field senderField = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        senderField.setAccessible(true);
+        senderField.set(service, new Protocol.Sender(frames::add, false));
+        Method send = RadioAudioService.class.getDeclaredMethod("txAX25PacketOnFrequency", Packet.class, float.class);
+        send.setAccessible(true);
+        Packet packet = new Packet(new byte[16]);
+
+        assertTrue((boolean) send.invoke(service, packet, 146.520f));
+        assertEquals(1, frames.size());
+        assertFalse((boolean) send.invoke(service, packet, 150.000f));
+        assertEquals(1, frames.size());
+    }
+
+    @Test public void aprsSubmissionUsesModeAndConnectionInsteadOfChannelTxFlag() throws Exception {
+        Class<?> callbackType = Class.forName(RadioAudioService.class.getName() + "$ServiceAprsCallbacks");
+        Constructor<?> constructor = callbackType.getDeclaredConstructor(RadioAudioService.class);
+        constructor.setAccessible(true);
+        Object callbacks = constructor.newInstance(service);
+        Method canTransmit = callbackType.getDeclaredMethod("canTransmitAprs");
+        canTransmit.setAccessible(true);
+        assertFalse((boolean) canTransmit.invoke(callbacks));
+
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        assertFalse(service.isTxAllowed());
+        Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        sender.setAccessible(true);
+        sender.set(service, new Protocol.Sender(frame -> { }, false));
+        assertTrue((boolean) canTransmit.invoke(callbacks));
+    }
+
+    @Test public void manualBeaconChecksEffectiveTxFrequency() {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        assertFalse(service.canTransmitPositionBeacon());
+        service.setAprsBeaconFrequency("146.5200");
+        assertTrue(service.canTransmitPositionBeacon());
+        service.setAprsBeaconFrequency("150.0000");
+        assertFalse(service.canTransmitPositionBeacon());
+        service.tuneToFreq("146.5200");
+        service.setAprsBeaconFrequency("Current");
+        assertTrue(service.canTransmitPositionBeacon());
+    }
+
+    @Test public void disconnectedPositionBeaconStopsBeforeLocationLookup() {
+        service.sendPositionBeacon();
+        assertFalse(service.isRadioConnected());
+    }
+
+    @Test public void connectedPositionBeaconContinuesToLocationCheck() throws Exception {
+        service.setMode(RadioMode.RX);
+        Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        sender.setAccessible(true);
+        sender.set(service, new Protocol.Sender(frame -> { }, false));
+        Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
+        transport.setAccessible(true);
+        transport.set(service, new RadioTransport() {
+            @Override public void start(Listener listener) { throw new UnsupportedOperationException(); }
+            @Override public void close() { throw new UnsupportedOperationException(); }
+            @Override public boolean isReady() { return true; }
+            @Override public void writeAsync(byte[] bytes) { throw new UnsupportedOperationException(); }
+            @Override public boolean supportsFirmwareFlashing() { return false; }
+            @Override public boolean prepareForFirmwareFlashing() { return false; }
+            @Override public String getName() { return "test"; }
+        });
+        boolean[] locationUnavailable = {false};
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void unknownLocation() { locationUnavailable[0] = true; }
+        });
+
+        assertTrue(service.isRadioConnected());
+        service.sendPositionBeacon();
+        assertTrue(locationUnavailable[0]);
+    }
+
+    @Test public void disallowedPositionBeaconStopsBeforeSubmission() throws Exception {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        Method perform = RadioAudioService.class.getDeclaredMethod("performPositionBeacon", double.class, double.class);
+        perform.setAccessible(true);
+        perform.invoke(service, -37.8d, 144.9d);
+        assertFalse(service.canTransmitPositionBeacon());
+    }
+
+    @Test public void allowedOverrideBeaconContinuesToSubmission() throws Exception {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        service.setAprsBeaconFrequency("146.5200");
+        List<String> started = new ArrayList<>();
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void startingAprsBeacon(String frequency) { started.add(frequency); }
+        });
+        Method perform = RadioAudioService.class.getDeclaredMethod("performPositionBeacon", double.class, double.class);
+        perform.setAccessible(true);
+
+        perform.invoke(service, -37.8d, 144.9d);
+
+        assertFalse(service.isTxAllowed());
+        assertEquals(List.of("146.5200"), started);
     }
 
     @Test public void scanningSkipsInvalidSkippedAndOtherBandMemoriesAndWraps() {
