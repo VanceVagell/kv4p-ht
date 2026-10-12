@@ -125,6 +125,19 @@ public class RadioAudioServiceTest {
         assertEquals(1, frames.size());
     }
 
+    @Test public void manualBeaconChecksEffectiveTxFrequency() {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        assertFalse(service.canTransmitPositionBeacon());
+        service.setAprsBeaconFrequency("146.5200");
+        assertTrue(service.canTransmitPositionBeacon());
+        service.setAprsBeaconFrequency("150.0000");
+        assertFalse(service.canTransmitPositionBeacon());
+        service.tuneToFreq("146.5200");
+        service.setAprsBeaconFrequency("Current");
+        assertTrue(service.canTransmitPositionBeacon());
+    }
+
     @Test public void scanningSkipsInvalidSkippedAndOtherBandMemoriesAndWraps() {
         ChannelMemory skipped = memory(2, "146.0000");
         skipped.skipDuringScan = true;

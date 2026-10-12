@@ -1561,6 +1561,10 @@ public class MainActivity extends AppCompatActivity {
         if (null == radioAudioService) {
             return;
         }
+        if (!radioAudioService.canTransmitPositionBeacon()) {
+            showSimpleSnackbar(getString(R.string.can_t_tx_outside_ham_band));
+            return;
+        }
         ensurePermissions(List.of(Manifest.permission.ACCESS_FINE_LOCATION), allGranted -> {
             if (Boolean.TRUE.equals(allGranted)) {
                 radioAudioService.sendPositionBeacon();

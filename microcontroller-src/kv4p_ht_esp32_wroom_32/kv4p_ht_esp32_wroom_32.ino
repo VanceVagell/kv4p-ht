@@ -564,10 +564,13 @@ bool ax25OverrideMatchesActiveChannel(const Ax25TxOverride &txOverride) {
 }
 
 void ax25TxLoop() {
+  bool receiveIdle = mode == MODE_RX || mode == MODE_STOPPED;
+  if (!receiveIdle) return;
+  if (ax25TxScheduler.dropDisallowedStandardJobs(txAllowedByHost()) > 0) {
+    _LOGW("Dropped queued KISS DATA frame after TX became disallowed");
+  }
   const Ax25TxJob *pendingJob = ax25TxScheduler.head();
   if (pendingJob == nullptr) return;
-  bool receiveIdle = mode == MODE_RX || mode == MODE_STOPPED;
-  if (!receiveIdle || !ax25TxJobAllowed(pendingJob, txAllowedByHost())) return;
   uint32_t now = millis();
   if (pendingJob->hasTxOverride && !ax25OverrideMatchesActiveChannel(pendingJob->txOverride)) {
     // A host configuration update may have restored the normal radio while

@@ -36,10 +36,6 @@ struct Ax25TxJob {
   Ax25TxOverride txOverride;
 };
 
-inline bool ax25TxJobAllowed(const Ax25TxJob *job, bool txAllowedByHost) {
-  return job != nullptr && (job->hasTxOverride || txAllowedByHost);
-}
-
 /** Allocation-free two-frame KISS AX.25 FIFO and p-persistent CSMA policy. */
 class Ax25TxScheduler {
 public:
@@ -85,6 +81,15 @@ public:
   const Ax25TxJob *head() const { return _count ? &_jobs[_head] : nullptr; }
   const Ax25TxJob *next() const { return _count > 1 ? &_jobs[(_head + 1) % AX25_TX_QUEUE_SIZE] : nullptr; }
   uint8_t count() const { return _count; }
+
+  uint8_t dropDisallowedStandardJobs(bool txAllowedByHost) {
+    uint8_t dropped = 0;
+    while (!txAllowedByHost && _count > 0 && !_jobs[_head].hasTxOverride) {
+      complete();
+      dropped++;
+    }
+    return dropped;
+  }
 
   void complete() {
     if (_count == 0) return;

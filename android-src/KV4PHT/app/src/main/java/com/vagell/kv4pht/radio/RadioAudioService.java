@@ -849,6 +849,17 @@ public class RadioAudioService extends Service {
         return radioModule.isTxAllowed();
     }
 
+    public boolean canTransmitPositionBeacon() {
+        if (CURRENT_FREQUENCY.equals(aprsBeaconFrequency)) {
+            return canTransmitOnFrequency(radioModule.getDesiredTxFrequency());
+        }
+        try {
+            return canTransmitOnFrequency(Float.parseFloat(makeSafeHamFreq(aprsBeaconFrequency)));
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     public void tuneToFreq(String frequencyStr) {
         if (mode == RadioMode.STARTUP) {
             return; // Not fully loaded and initialized yet, don't tune.
@@ -2029,6 +2040,10 @@ public class RadioAudioService extends Service {
     }
 
     private void performPositionBeacon(final double latitude, final double longitude) {
+        if (!canTransmitPositionBeacon()) {
+            Log.d(TAG, "Skipping position beacon: beacon frequency is not permitted for TX.");
+            return;
+        }
         if (CURRENT_FREQUENCY.equals(aprsBeaconFrequency)) {
             callbacks.startingAprsBeacon(activeFrequencyStr);
             sendPositionBeaconOnActiveChannel(latitude, longitude, activeFrequencyStr);
@@ -2042,11 +2057,6 @@ public class RadioAudioService extends Service {
             Log.w(TAG, "Skipping position beacon: invalid beacon frequency " + aprsBeaconFrequency, e);
             return;
         }
-        if (!canTransmitOnFrequency(beaconFrequency)) {
-            Log.d(TAG, "Skipping position beacon: beacon frequency is not permitted for TX.");
-            return;
-        }
-
         callbacks.startingAprsBeacon(aprsBeaconFrequency);
         sendPositionBeaconOnSideChannel(latitude, longitude, beaconFrequency, aprsBeaconFrequency);
     }
