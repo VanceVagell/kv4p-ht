@@ -36,6 +36,10 @@ struct Ax25TxJob {
   Ax25TxOverride txOverride;
 };
 
+inline bool ax25TxJobAllowed(const Ax25TxJob *job, bool txAllowedByHost) {
+  return job != nullptr && (job->hasTxOverride || txAllowedByHost);
+}
+
 /** Allocation-free two-frame KISS AX.25 FIFO and p-persistent CSMA policy. */
 class Ax25TxScheduler {
 public:

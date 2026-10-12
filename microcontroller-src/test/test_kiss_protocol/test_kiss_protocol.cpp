@@ -289,6 +289,18 @@ void test_ax25_scheduler_retains_frequency_override_with_job() {
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 146.520f, scheduler.head()->txOverride.freqTx);
 }
 
+void test_ax25_job_permission_uses_override_instead_of_channel_flag() {
+  Ax25TxScheduler scheduler;
+  const uint8_t frame[] = {0x11};
+  Ax25TxOverride txOverride = {.freqTx = 146.520f, .bw = 1, .ctcssTx = 0};
+  TEST_ASSERT_TRUE(scheduler.enqueue(frame, sizeof(frame)));
+  TEST_ASSERT_FALSE(ax25TxJobAllowed(scheduler.head(), false));
+  TEST_ASSERT_TRUE(ax25TxJobAllowed(scheduler.head(), true));
+  scheduler.complete();
+  TEST_ASSERT_TRUE(scheduler.enqueue(frame, sizeof(frame), &txOverride));
+  TEST_ASSERT_TRUE(ax25TxJobAllowed(scheduler.head(), false));
+}
+
 void test_multiple_complete_frames_in_one_buffer() {
   resetCaptured();
   const uint8_t frames[] = {
@@ -584,6 +596,7 @@ static int runKissProtocolTests() {
   RUN_TEST(test_ax25_scheduler_does_not_restart_head_backoff_when_second_frame_arrives);
   RUN_TEST(test_ax25_scheduler_uses_kiss_txdelay_units);
   RUN_TEST(test_ax25_scheduler_retains_frequency_override_with_job);
+  RUN_TEST(test_ax25_job_permission_uses_override_instead_of_channel_flag);
   RUN_TEST(test_multiple_complete_frames_in_one_buffer);
   RUN_TEST(test_split_frame_across_loop_calls);
   RUN_TEST(test_non_zero_kiss_port_is_ignored);

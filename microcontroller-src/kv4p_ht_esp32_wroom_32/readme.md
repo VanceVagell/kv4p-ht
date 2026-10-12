@@ -202,7 +202,7 @@ typedef struct host_desired_state HostDesiredState;
 
 Android sends the full desired-state snapshot whenever one field changes. Firmware applies changed radio/filter/control fields, derives its mode, and marks device state dirty so `deviceStateLoop()` can report the result with `COMMAND_DEVICE_STATE`.
 
-`HOST_STATE_TX_ALLOWED` is a persisted host-controlled safety flag that defaults off. Firmware only accepts transmit requests, including KISS DATA AX.25 frames and host PTT requests, while this flag is set.
+`HOST_STATE_TX_ALLOWED` is a persisted host-controlled safety flag that defaults off. Firmware only accepts standard KISS DATA AX.25 frames and host PTT requests while this flag is set. Frequency-override AX.25 jobs use the requested frequency instead; the host must validate it before sending.
 
 `HOST_STATE_ENABLE_STATUS_REPORTS` is a non-persisted session flag that defaults off. kv4p HT Android sets it after HELLO so firmware sends `COMMAND_DEVICE_STATE`; generic KISS TNC hosts can leave it off to receive only standard KISS DATA frames.
 

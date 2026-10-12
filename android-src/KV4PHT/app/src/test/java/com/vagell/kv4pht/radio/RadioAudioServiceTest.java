@@ -9,6 +9,10 @@ import android.content.Intent;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.javAX25.ax25.Packet;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.junit.Before;
@@ -100,6 +104,25 @@ public class RadioAudioServiceTest {
         service.tuneToMemory(memory);
         assertEquals(147f, service.getRadioModule().getDesiredTxFrequency(), 0.0001f);
         assertTrue(service.isTxAllowed());
+    }
+
+    @Test public void ax25OverrideUsesRequestedFrequencyWhenChannelTxIsDisallowed() throws Exception {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        assertFalse(service.isTxAllowed());
+
+        List<byte[]> frames = new ArrayList<>();
+        Field senderField = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        senderField.setAccessible(true);
+        senderField.set(service, new Protocol.Sender(frames::add, false));
+        Method send = RadioAudioService.class.getDeclaredMethod("txAX25PacketOnFrequency", Packet.class, float.class);
+        send.setAccessible(true);
+        Packet packet = new Packet(new byte[16]);
+
+        assertTrue((boolean) send.invoke(service, packet, 146.520f));
+        assertEquals(1, frames.size());
+        assertFalse((boolean) send.invoke(service, packet, 150.000f));
+        assertEquals(1, frames.size());
     }
 
     @Test public void scanningSkipsInvalidSkippedAndOtherBandMemoriesAndWraps() {

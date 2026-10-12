@@ -597,7 +597,7 @@ public class RadioAudioService extends Service {
         }
 
         private boolean canTransmitAprs() {
-            return isTxAllowed() && AprsRfFrequencyPolicy.allowsMode(getMode())
+            return AprsRfFrequencyPolicy.allowsMode(getMode())
                 && hostToEsp32 != null;
         }
 
@@ -2000,8 +2000,8 @@ public class RadioAudioService extends Service {
             Log.d(TAG, "Skipping position beacon: scanning is active.");
             return;
         }
-        if (!isRadioConnected() || !isTxAllowed()) {
-            Log.d(TAG, "Skipping position beacon: radio disconnected or tx not allowed.");
+        if (!isRadioConnected()) {
+            Log.d(TAG, "Skipping position beacon: radio disconnected.");
             return;
         }
 
@@ -2042,7 +2042,7 @@ public class RadioAudioService extends Service {
             Log.w(TAG, "Skipping position beacon: invalid beacon frequency " + aprsBeaconFrequency, e);
             return;
         }
-        if (!canTransmitOnFrequency(beaconFrequency) || !isTxAllowed()) {
+        if (!canTransmitOnFrequency(beaconFrequency)) {
             Log.d(TAG, "Skipping position beacon: beacon frequency is not permitted for TX.");
             return;
         }
@@ -2134,7 +2134,7 @@ public class RadioAudioService extends Service {
     // Radio transport and TX safety belong to the service, not its APRS callback adapter.
     @SuppressWarnings("java:S3398")
     private boolean txAX25PacketOnFrequency(Packet ax25Packet, float txFrequency) {
-        if (!isTxAllowed() || !canTransmitOnFrequency(txFrequency)) {
+        if (!canTransmitOnFrequency(txFrequency)) {
             Log.e(TAG, "Tried to send an AX.25 packet on a disallowed frequency, did not send.");
             return false;
         }

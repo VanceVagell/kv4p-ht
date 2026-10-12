@@ -509,7 +509,7 @@ void handleCommands(ProtocolSession &session, RcvCommand command, uint8_t *param
       }
       break;
     case COMMAND_HOST_TX_AX25:
-      if (param_len > sizeof(Ax25TxOverride) && txAllowedByHost()) {
+      if (param_len > sizeof(Ax25TxOverride)) {
         Ax25TxOverride txOverride;
         memcpy(&txOverride, params, sizeof(txOverride));
         size_t ax25Len = param_len - sizeof(txOverride);
@@ -567,7 +567,7 @@ void ax25TxLoop() {
   const Ax25TxJob *pendingJob = ax25TxScheduler.head();
   if (pendingJob == nullptr) return;
   bool receiveIdle = mode == MODE_RX || mode == MODE_STOPPED;
-  if (!receiveIdle || !txAllowedByHost()) return;
+  if (!receiveIdle || !ax25TxJobAllowed(pendingJob, txAllowedByHost())) return;
   uint32_t now = millis();
   if (pendingJob->hasTxOverride && !ax25OverrideMatchesActiveChannel(pendingJob->txOverride)) {
     // A host configuration update may have restored the normal radio while
