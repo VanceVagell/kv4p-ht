@@ -162,6 +162,32 @@ public class RadioAudioServiceTest {
         assertFalse(service.isRadioConnected());
     }
 
+    @Test public void connectedPositionBeaconContinuesToLocationCheck() throws Exception {
+        service.setMode(RadioMode.RX);
+        Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        sender.setAccessible(true);
+        sender.set(service, new Protocol.Sender(frame -> { }, false));
+        Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
+        transport.setAccessible(true);
+        transport.set(service, new RadioTransport() {
+            @Override public void start(Listener listener) { }
+            @Override public void close() { }
+            @Override public boolean isReady() { return true; }
+            @Override public void writeAsync(byte[] bytes) { }
+            @Override public boolean supportsFirmwareFlashing() { return false; }
+            @Override public boolean prepareForFirmwareFlashing() { return false; }
+            @Override public String getName() { return "test"; }
+        });
+        boolean[] locationUnavailable = {false};
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void unknownLocation() { locationUnavailable[0] = true; }
+        });
+
+        assertTrue(service.isRadioConnected());
+        service.sendPositionBeacon();
+        assertTrue(locationUnavailable[0]);
+    }
+
     @Test public void disallowedPositionBeaconStopsBeforeSubmission() throws Exception {
         service.setMode(RadioMode.RX);
         service.tuneToFreq("150.0000");
@@ -169,6 +195,23 @@ public class RadioAudioServiceTest {
         perform.setAccessible(true);
         perform.invoke(service, -37.8d, 144.9d);
         assertFalse(service.canTransmitPositionBeacon());
+    }
+
+    @Test public void allowedOverrideBeaconContinuesToSubmission() throws Exception {
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("150.0000");
+        service.setAprsBeaconFrequency("146.5200");
+        List<String> started = new ArrayList<>();
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void startingAprsBeacon(String frequency) { started.add(frequency); }
+        });
+        Method perform = RadioAudioService.class.getDeclaredMethod("performPositionBeacon", double.class, double.class);
+        perform.setAccessible(true);
+
+        perform.invoke(service, -37.8d, 144.9d);
+
+        assertFalse(service.isTxAllowed());
+        assertEquals(List.of("146.5200"), started);
     }
 
     @Test public void scanningSkipsInvalidSkippedAndOtherBandMemoriesAndWraps() {
