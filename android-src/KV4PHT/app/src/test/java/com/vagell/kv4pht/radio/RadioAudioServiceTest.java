@@ -170,10 +170,10 @@ public class RadioAudioServiceTest {
         Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
         transport.setAccessible(true);
         transport.set(service, new RadioTransport() {
-            @Override public void start(Listener listener) { }
-            @Override public void close() { }
+            @Override public void start(Listener listener) { throw new UnsupportedOperationException(); }
+            @Override public void close() { throw new UnsupportedOperationException(); }
             @Override public boolean isReady() { return true; }
-            @Override public void writeAsync(byte[] bytes) { }
+            @Override public void writeAsync(byte[] bytes) { throw new UnsupportedOperationException(); }
             @Override public boolean supportsFirmwareFlashing() { return false; }
             @Override public boolean prepareForFirmwareFlashing() { return false; }
             @Override public String getName() { return "test"; }
