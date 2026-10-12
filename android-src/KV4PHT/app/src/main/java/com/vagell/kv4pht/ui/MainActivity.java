@@ -487,6 +487,7 @@ public class MainActivity extends AppCompatActivity {
                     TextView snackbarTextView = (TextView) snackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
                     snackbarTextView.setTextSize(20);
 
+                    snackbar.setAnchorViewLayoutListenerEnabled(true);
                     snackbar.show();
                 }
 
@@ -763,6 +764,7 @@ public class MainActivity extends AppCompatActivity {
         TextView snackbarTextView = (TextView) callsignSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
+        callsignSnackbar.setAnchorViewLayoutListenerEnabled(true);
         callsignSnackbar.show();
     }
 
@@ -1454,6 +1456,7 @@ public class MainActivity extends AppCompatActivity {
         TextView snackbarTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
+        usbSnackbar.setAnchorViewLayoutListenerEnabled(true);
         usbSnackbar.show();
     }
 
@@ -1470,6 +1473,7 @@ public class MainActivity extends AppCompatActivity {
         TextView snackbarTextView = (TextView) usbSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
+        usbSnackbar.setAnchorViewLayoutListenerEnabled(true);
         usbSnackbar.show();
     }
 
@@ -1487,6 +1491,7 @@ public class MainActivity extends AppCompatActivity {
         TextView snackbarTextView = (TextView) radioModuleNotFoundSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
+        radioModuleNotFoundSnackbar.setAnchorViewLayoutListenerEnabled(true);
         radioModuleNotFoundSnackbar.show();
     }
 
@@ -1512,6 +1517,7 @@ public class MainActivity extends AppCompatActivity {
         TextView snackbarTextView = (TextView) versionSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
+        versionSnackbar.setAnchorViewLayoutListenerEnabled(true);
         versionSnackbar.show();
     }
 
