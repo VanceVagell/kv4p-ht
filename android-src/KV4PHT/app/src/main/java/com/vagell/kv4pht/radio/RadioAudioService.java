@@ -24,6 +24,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -32,6 +35,7 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFocusRequest;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -195,9 +199,10 @@ public class RadioAudioService extends Service {
     private final AtomicReference<AudioRecord> audioRecord = new AtomicReference<>();
     private volatile boolean voiceCaptureActive;
     private final AtomicInteger voiceCaptureSession = new AtomicInteger();
-    private static final int TX_AUDIO_MIN_BUFFER_SIZE = Math.max(
-            AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT), AUDIO_FRAME_SAMPLES * 2);
+    private boolean bluetoothCaptureRouteActive;
+    private boolean bluetoothCaptureUsesSco;
+    private volatile boolean bluetoothMicRouted;
+    private int previousAudioMode = AudioManager.MODE_NORMAL;
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -422,7 +427,9 @@ public class RadioAudioService extends Service {
                 return;
             }
             radioModule.stop();
-            audioTrack.stop();
+            if (audioTrack != null) {
+                audioTrack.stop();
+            }
             if (!activeTransport.prepareForFirmwareFlashing()) {
                 Log.w(TAG, "USB transport could not enter firmware flashing mode.");
                 return;
@@ -1048,11 +1055,12 @@ public class RadioAudioService extends Service {
             setMode(RadioMode.TX);
             callbacks.sMeterUpdate(0);
             setTxRunAwayTimer();
-            radioModule.pttDown();
             audioTrackVolume = 0.0f;
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
-            startVoiceCapture();
-            callbacks.txStarted();
+            if (!startVoiceCapture(false)) {
+                endPtt();
+                return;
+            }
         } else {
             Log.w(TAG, "Attempted to start PTT when not allowed", new Throwable());
         }
@@ -1073,33 +1081,292 @@ public class RadioAudioService extends Service {
         return voiceCaptureActive;
     }
 
-    private void startVoiceCapture() {
+    private boolean startVoiceCapture(boolean forceInternalMic) {
         if (voiceCaptureActive || checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
-            return;
+            return false;
         }
         int captureSession = voiceCaptureSession.incrementAndGet();
+        bluetoothMicRouted = false;
         releaseAudioRecord();
-        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, AUDIO_SAMPLE_RATE,
+        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        long captureStartedMs = android.os.SystemClock.elapsedRealtime();
+        boolean negotiateBluetooth = !forceInternalMic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && isBluetoothPlaybackRouteActive(audioManager);
+        boolean useBluetooth = !forceInternalMic && !negotiateBluetooth
+                && requestBluetoothCaptureRoute(audioManager);
+        Log.i(TAG, "PTT input route selected in "
+                + (android.os.SystemClock.elapsedRealtime() - captureStartedMs)
+                + " ms; Bluetooth=" + useBluetooth + "; asyncBluetooth=" + negotiateBluetooth);
+        // SCO capture uses 8 kHz; duplicate samples for the 16 kHz radio wire format.
+        int captureRate = useBluetooth && bluetoothCaptureUsesSco ? 8000 : AUDIO_SAMPLE_RATE;
+        int minBufferSize = Math.max(AudioRecord.getMinBufferSize(captureRate,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
+                AUDIO_FRAME_SAMPLES * 2);
+        AudioRecord recorder = new AudioRecord(useBluetooth
+                ? MediaRecorder.AudioSource.VOICE_COMMUNICATION : MediaRecorder.AudioSource.MIC, captureRate,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                TX_AUDIO_MIN_BUFFER_SIZE);
+                minBufferSize);
         if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
             Log.w(TAG, "AudioRecord initialization failed");
             recorder.release();
-            return;
+            releaseBluetoothCaptureRoute();
+            return false;
         }
-        recorder.startRecording();
+        if (forceInternalMic || negotiateBluetooth) {
+            preferBuiltInMic(audioManager, recorder);
+        }
+        try {
+            recorder.startRecording();
+        } catch (IllegalStateException | SecurityException e) {
+            Log.w(TAG, "Could not start voice capture", e);
+            recorder.release();
+            releaseBluetoothCaptureRoute();
+            return false;
+        }
         audioRecord.set(recorder);
         voiceCaptureActive = true;
-        new Thread(() -> captureVoiceAudio(recorder, captureSession), "Radio voice capture").start();
+        Log.i(TAG, "PTT recorder started in "
+                + (android.os.SystemClock.elapsedRealtime() - captureStartedMs) + " ms");
+        if (useBluetooth) {
+            new Thread(() -> waitForBluetoothCapture(recorder, captureSession, captureRate,
+                    captureStartedMs),
+                    "Bluetooth mic routing").start();
+        } else {
+            radioModule.pttDown();
+            callbacks.txStarted();
+            new Thread(() -> captureVoiceAudio(recorder, captureSession, captureRate, false),
+                    "Radio voice capture").start();
+            if (negotiateBluetooth) {
+                handler.post(() -> {
+                    if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
+                        if (requestBluetoothCaptureRoute(audioManager)) {
+                            new Thread(() -> switchToBluetoothMic(audioManager, recorder, captureSession),
+                                    "Bluetooth mic routing").start();
+                        } else {
+                            Log.i(TAG, "Bluetooth microphone unavailable; continuing TX on built-in mic");
+                        }
+                    }
+                });
+            }
+        }
+        return true;
     }
 
-    private void captureVoiceAudio(AudioRecord recorder, int captureSession) {
+    private void preferBuiltInMic(AudioManager audioManager, AudioRecord recorder) {
+        for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
+            if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_MIC) {
+                if (!recorder.setPreferredDevice(device)) {
+                    Log.w(TAG, "Could not select built-in microphone");
+                }
+                return;
+            }
+        }
+        Log.w(TAG, "No built-in microphone available");
+    }
+
+    private void switchToBluetoothMic(AudioManager audioManager, AudioRecord recorder,
+            int captureSession) {
+        long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
+        boolean preferredBluetooth = false;
+        while (isVoiceCaptureSessionActive(recorder, captureSession)
+                && android.os.SystemClock.elapsedRealtime() < deadline) {
+            if (!preferredBluetooth) {
+                for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
+                    if (isBluetoothHeadset(device) && recorder.setPreferredDevice(device)) {
+                        preferredBluetooth = true;
+                        break;
+                    }
+                }
+            }
+            if (isVoiceCaptureSessionActive(recorder, captureSession)
+                    && isBluetoothHeadset(recorder.getRoutedDevice())) {
+                Log.i(TAG, "Switched TX microphone to Bluetooth headset");
+                bluetoothMicRouted = true;
+                return;
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        handler.post(() -> {
+            if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
+                Log.w(TAG, "Bluetooth microphone did not connect; continuing TX on built-in mic");
+                preferBuiltInMic(audioManager, recorder);
+                releaseBluetoothCaptureRoute();
+            }
+        });
+    }
+
+    private boolean isBluetoothHeadset(AudioDeviceInfo device) {
+        return device != null && (device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && device.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET);
+    }
+
+    private boolean isBluetoothMediaOutput(AudioDeviceInfo device) {
+        return device != null && (device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+                || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && device.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET);
+    }
+
+    private boolean isBluetoothPlaybackRouteActive(AudioManager audioManager) {
+        boolean headsetConnected = false;
+        for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            if (isBluetoothMediaOutput(device)) {
+                headsetConnected = true;
+                break;
+            }
+        }
+        if (!headsetConnected) {
+            return false;
+        }
+        AudioDeviceInfo routedDevice = audioTrack == null ? null : audioTrack.getRoutedDevice();
+        return routedDevice == null || isBluetoothMediaOutput(routedDevice);
+    }
+
+    private boolean isHandsFreeProfileConnected() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
+        BluetoothManager bluetoothManager = getSystemService(BluetoothManager.class);
+        BluetoothAdapter adapter = bluetoothManager == null ? null : bluetoothManager.getAdapter();
+        return adapter != null && adapter.getProfileConnectionState(BluetoothProfile.HEADSET)
+                == BluetoothAdapter.STATE_CONNECTED;
+    }
+
+    private boolean requestBluetoothCaptureRoute(AudioManager audioManager) {
+        if (!isBluetoothPlaybackRouteActive(audioManager)) {
+            return false;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            AudioDeviceInfo scoDevice = null;
+            for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
+                if (device.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET
+                        && selectBluetoothCaptureRoute(audioManager, device)) {
+                    return true;
+                }
+                if (device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                    scoDevice = device;
+                }
+            }
+            return scoDevice != null && isHandsFreeProfileConnected()
+                    && selectBluetoothCaptureRoute(audioManager, scoDevice);
+        } else {
+            for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+                if (isBluetoothHeadset(device) && isHandsFreeProfileConnected()) {
+                    previousAudioMode = audioManager.getMode();
+                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    audioManager.startBluetoothSco();
+                    bluetoothCaptureRouteActive = true;
+                    bluetoothCaptureUsesSco = true;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private boolean selectBluetoothCaptureRoute(AudioManager audioManager, AudioDeviceInfo device) {
+        if (!audioManager.setCommunicationDevice(device)) {
+            return false;
+        }
+        bluetoothCaptureRouteActive = true;
+        bluetoothCaptureUsesSco = device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO;
+        Log.i(TAG, "Selected Bluetooth microphone type " + device.getType()
+                + "; audio mode " + audioManager.getMode());
+        return true;
+    }
+
+    private void waitForBluetoothCapture(AudioRecord recorder, int captureSession, int captureRate,
+            long captureStartedMs) {
+        long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
+        while (isVoiceCaptureSessionActive(recorder, captureSession)
+                && android.os.SystemClock.elapsedRealtime() < deadline) {
+            AudioDeviceInfo routedDevice = recorder.getRoutedDevice();
+            if (isBluetoothHeadset(routedDevice)) {
+                handler.post(() -> {
+                    if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
+                        Log.i(TAG, "TX microphone routed to Bluetooth headset in "
+                                + (android.os.SystemClock.elapsedRealtime() - captureStartedMs) + " ms");
+                        radioModule.pttDown();
+                        callbacks.txStarted();
+                        new Thread(() -> captureVoiceAudio(recorder, captureSession, captureRate, true),
+                                "Radio voice capture").start();
+                    }
+                });
+                return;
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        handler.post(() -> {
+            if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
+                Log.w(TAG, "Bluetooth microphone did not connect; retrying PTT with built-in mic");
+                stopVoiceCapture();
+                if (!startVoiceCapture(true)) {
+                    endPtt();
+                }
+            }
+        });
+    }
+
+    private void captureVoiceAudio(AudioRecord recorder, int captureSession, int captureRate,
+            boolean requireBluetooth) {
         short[] audioBuffer = new short[AUDIO_FRAME_SAMPLES];
+        short[] radioFrame = captureRate == AUDIO_SAMPLE_RATE ? audioBuffer
+                : new short[AUDIO_FRAME_SAMPLES];
+        int frameSamples = 0;
         while (isVoiceCaptureSessionActive(recorder, captureSession)) {
             int samples = recorder.read(audioBuffer, 0, AUDIO_FRAME_SAMPLES, AudioRecord.READ_BLOCKING);
-            if (samples == AUDIO_FRAME_SAMPLES && isVoiceCaptureSessionActive(recorder, captureSession)) {
+            if (bluetoothMicRouted) {
+                AudioDeviceInfo routedDevice = recorder.getRoutedDevice();
+                if (routedDevice != null && !isBluetoothHeadset(routedDevice)) {
+                    bluetoothMicRouted = false;
+                    handler.post(() -> {
+                        if (isVoiceCaptureSessionActive(recorder, captureSession)) {
+                            Log.w(TAG, "Bluetooth microphone disconnected; continuing TX on built-in mic");
+                            preferBuiltInMic((AudioManager) getSystemService(Context.AUDIO_SERVICE), recorder);
+                            releaseBluetoothCaptureRoute();
+                        }
+                    });
+                }
+            }
+            if (requireBluetooth && !isBluetoothHeadset(recorder.getRoutedDevice())) {
+                handler.post(() -> {
+                    if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
+                        Log.w(TAG, "Bluetooth microphone disconnected; stopping PTT");
+                        endPtt();
+                    }
+                });
+                return;
+            }
+            if (samples <= 0) {
+                continue;
+            }
+            if (captureRate == AUDIO_SAMPLE_RATE && samples == AUDIO_FRAME_SAMPLES
+                    && isVoiceCaptureSessionActive(recorder, captureSession)) {
                 sendAudioToESP32(audioBuffer, false);
+            } else if (captureRate != AUDIO_SAMPLE_RATE) {
+                for (int i = 0; i < samples && isVoiceCaptureSessionActive(recorder, captureSession); i++) {
+                    for (int duplicate = 0; duplicate < 2; duplicate++) {
+                        radioFrame[frameSamples++] = audioBuffer[i];
+                        if (frameSamples == AUDIO_FRAME_SAMPLES) {
+                            sendAudioToESP32(radioFrame, false);
+                            frameSamples = 0;
+                        }
+                    }
+                }
             }
         }
     }
@@ -1115,8 +1382,32 @@ public class RadioAudioService extends Service {
             return;
         }
         voiceCaptureActive = false;
+        bluetoothMicRouted = false;
         voiceCaptureSession.incrementAndGet();
         releaseAudioRecord();
+        releaseBluetoothCaptureRoute();
+    }
+
+    private void releaseBluetoothCaptureRoute() {
+        if (!bluetoothCaptureRouteActive) {
+            return;
+        }
+        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.clearCommunicationDevice();
+            AudioDeviceInfo currentDevice = audioManager.getCommunicationDevice();
+            Log.i(TAG, "Cleared Bluetooth microphone request; audio mode " + audioManager.getMode()
+                    + ", communication device type "
+                    + (currentDevice == null ? "none" : currentDevice.getType()));
+        } else {
+            audioManager.stopBluetoothSco();
+            if (audioManager.getMode() == AudioManager.MODE_IN_COMMUNICATION) {
+                audioManager.setMode(previousAudioMode);
+            }
+            Log.i(TAG, "Stopped Bluetooth SCO; audio mode " + audioManager.getMode());
+        }
+        bluetoothCaptureRouteActive = false;
+        bluetoothCaptureUsesSco = false;
     }
 
     private void releaseAudioRecord() {

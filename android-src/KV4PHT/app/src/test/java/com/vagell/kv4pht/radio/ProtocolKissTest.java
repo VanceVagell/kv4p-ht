@@ -34,8 +34,51 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class ProtocolKissTest {
+
+    @Test
+    public void stalledFlowControlDoesNotBlockPttOrDeviceStateIndefinitely() throws Exception {
+        List<byte[]> frames = new ArrayList<>();
+        Protocol.Sender sender = new Protocol.Sender(frames::add, true);
+        sender.setFlowControlWindow(0);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> audio = executor.submit(() -> sender.txAudio(new byte[128], 128));
+            Future<?> desiredState = executor.submit(() ->
+                sender.sendDesiredState(Protocol.HostDesiredState.builder().build()));
+            audio.get(1, TimeUnit.SECONDS);
+            desiredState.get(1, TimeUnit.SECONDS);
+
+            sender.setFlowControlWindow(1024);
+            assertEquals(1, frames.size());
+            sender.sendDesiredState(Protocol.HostDesiredState.builder().build());
+            assertEquals(2, frames.size());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void stalledFlowControlSendsLatestDesiredStateWhenWindowReturns() {
+        List<byte[]> frames = new ArrayList<>();
+        Protocol.Sender sender = new Protocol.Sender(frames::add, true);
+        sender.setFlowControlWindow(0);
+        sender.sendDesiredState(Protocol.HostDesiredState.builder().sequence(1).build());
+        Protocol.HostDesiredState latest = Protocol.HostDesiredState.builder().sequence(2).build();
+        sender.sendDesiredState(latest);
+
+        List<byte[]> expected = new ArrayList<>();
+        new Protocol.Sender(expected::add, false).sendDesiredState(latest);
+        sender.setFlowControlWindow(1024);
+
+        assertEquals(1, frames.size());
+        assertArrayEquals(expected.get(0), frames.get(0));
+    }
     private boolean called;
     private int commandCallCount;
     private Protocol.RcvCommand command;
