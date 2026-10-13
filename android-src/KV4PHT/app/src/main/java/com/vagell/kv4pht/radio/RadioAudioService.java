@@ -119,6 +119,7 @@ public class RadioAudioService extends Service {
 
     // === Constants ===
     private static final String TAG = RadioAudioService.class.getSimpleName();
+    private static final String VOICE_CAPTURE_THREAD_NAME = "Radio voice capture";
     private static final String FIRMWARE_TAG = "firmware";
     private static final String APRS_TOCALL = "APKVPA";
     private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
@@ -1060,7 +1061,6 @@ public class RadioAudioService extends Service {
             Optional.ofNullable(audioTrack).ifPresent(t -> t.setVolume(0.0f));
             if (!startVoiceCapture(false)) {
                 endPtt();
-                return;
             }
         } else {
             Log.w(TAG, "Attempted to start PTT when not allowed", new Throwable());
@@ -1095,27 +1095,8 @@ public class RadioAudioService extends Service {
         Log.i(TAG, "PTT input route selected in "
                 + (android.os.SystemClock.elapsedRealtime() - captureStartedMs)
                 + " ms; asyncBluetooth=" + negotiateBluetooth);
-        int captureRate = AUDIO_SAMPLE_RATE;
-        int minBufferSize = Math.max(AudioRecord.getMinBufferSize(captureRate,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
-                AUDIO_FRAME_SAMPLES * 2);
-        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, captureRate,
-                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                minBufferSize);
-        if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
-            Log.w(TAG, "AudioRecord initialization failed");
-            recorder.release();
-            releaseBluetoothCaptureRoute();
-            return false;
-        }
-        if (forceInternalMic || negotiateBluetooth) {
-            preferBuiltInMic(audioManager, recorder);
-        }
-        try {
-            recorder.startRecording();
-        } catch (IllegalStateException | SecurityException e) {
-            Log.w(TAG, "Could not start voice capture", e);
-            recorder.release();
+        AudioRecord recorder = createPhoneRecorder(audioManager, forceInternalMic || negotiateBluetooth);
+        if (recorder == null) {
             releaseBluetoothCaptureRoute();
             return false;
         }
@@ -1125,21 +1106,60 @@ public class RadioAudioService extends Service {
                 + (android.os.SystemClock.elapsedRealtime() - captureStartedMs) + " ms");
         radioModule.pttDown();
         callbacks.txStarted();
-        new Thread(() -> captureVoiceAudio(recorder, captureSession, captureRate, false),
-                "Radio voice capture").start();
+        startCaptureThread(recorder, captureSession, AUDIO_SAMPLE_RATE, false);
         if (negotiateBluetooth) {
-            handler.post(() -> {
-                if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
-                    if (requestBluetoothCaptureRoute(audioManager)) {
-                        new Thread(() -> prepareBluetoothRecorder(audioManager, recorder, captureSession),
-                                "Bluetooth mic routing").start();
-                    } else {
-                        Log.i(TAG, "Bluetooth microphone unavailable; continuing TX on built-in mic");
-                    }
-                }
-            });
+            beginBluetoothHandoff(audioManager, recorder, captureSession);
         }
         return true;
+    }
+
+    private AudioRecord createPhoneRecorder(AudioManager audioManager, boolean preferInternalMic) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            return null;
+        }
+        int minBufferSize = Math.max(AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
+                AUDIO_FRAME_SAMPLES * 2);
+        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, AUDIO_SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                minBufferSize);
+        if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
+            Log.w(TAG, "AudioRecord initialization failed");
+            recorder.release();
+            return null;
+        }
+        if (preferInternalMic) {
+            preferBuiltInMic(audioManager, recorder);
+        }
+        try {
+            recorder.startRecording();
+        } catch (IllegalStateException | SecurityException e) {
+            Log.w(TAG, "Could not start voice capture", e);
+            recorder.release();
+            return null;
+        }
+        return recorder;
+    }
+
+    private void beginBluetoothHandoff(AudioManager audioManager, AudioRecord phoneRecorder,
+            int captureSession) {
+        handler.post(() -> {
+            if (!isVoiceCaptureSessionActive(phoneRecorder, captureSession) || mode != RadioMode.TX) {
+                return;
+            }
+            if (requestBluetoothCaptureRoute(audioManager)) {
+                new Thread(() -> prepareBluetoothRecorder(audioManager, phoneRecorder, captureSession),
+                        "Bluetooth mic routing").start();
+            } else {
+                Log.i(TAG, "Bluetooth microphone unavailable; continuing TX on built-in mic");
+            }
+        });
+    }
+
+    private void startCaptureThread(AudioRecord recorder, int captureSession, int captureRate,
+            boolean requireBluetooth) {
+        new Thread(() -> captureVoiceAudio(recorder, captureSession, captureRate, requireBluetooth),
+                VOICE_CAPTURE_THREAD_NAME).start();
     }
 
     private void preferBuiltInMic(AudioManager audioManager, AudioRecord recorder) {
@@ -1162,57 +1182,81 @@ public class RadioAudioService extends Service {
         while (isVoiceCaptureSessionActive(phoneRecorder, captureSession)
                 && android.os.SystemClock.elapsedRealtime() < deadline) {
             if (bluetoothRecorder == null) {
-                for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
-                    if (isBluetoothHeadset(device)) {
-                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                                != PackageManager.PERMISSION_GRANTED) {
-                            break;
-                        }
-                        int bufferSize = Math.max(AudioRecord.getMinBufferSize(bluetoothRate,
-                                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
-                                AUDIO_FRAME_SAMPLES * 2);
-                        AudioRecord candidate = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                                bluetoothRate, AudioFormat.CHANNEL_IN_MONO,
-                                AudioFormat.ENCODING_PCM_16BIT, bufferSize);
-                        if (candidate.getState() != AudioRecord.STATE_INITIALIZED
-                                || !candidate.setPreferredDevice(device)) {
-                            candidate.release();
-                            break;
-                        }
-                        try {
-                            candidate.startRecording();
-                            bluetoothRecorder = candidate;
-                        } catch (IllegalStateException | SecurityException e) {
-                            Log.w(TAG, "Could not start Bluetooth voice capture", e);
-                            candidate.release();
-                        }
-                        break;
-                    }
-                }
+                bluetoothRecorder = createBluetoothRecorder(audioManager, bluetoothRate);
             }
             if (bluetoothRecorder != null && isBluetoothHeadset(bluetoothRecorder.getRoutedDevice())) {
-                AudioRecord readyRecorder = bluetoothRecorder;
-                handler.post(() -> {
-                    if (isVoiceCaptureSessionActive(phoneRecorder, captureSession) && mode == RadioMode.TX) {
-                        audioRecord.set(readyRecorder);
-                        Log.i(TAG, "Switched TX microphone to separate Bluetooth recorder");
-                        new Thread(() -> captureVoiceAudio(readyRecorder, captureSession, bluetoothRate, true),
-                                "Radio voice capture").start();
-                        releaseRecorder(phoneRecorder);
-                    } else {
-                        releaseRecorder(readyRecorder);
-                    }
-                });
+                handOffToBluetooth(phoneRecorder, bluetoothRecorder, captureSession, bluetoothRate);
                 return;
             }
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            if (!waitForBluetoothRoute()) {
                 break;
             }
         }
         releaseRecorder(bluetoothRecorder);
+        onBluetoothRouteUnavailable(phoneRecorder, captureSession);
+    }
+
+    private AudioRecord createBluetoothRecorder(AudioManager audioManager, int bluetoothRate) {
+        AudioDeviceInfo device = findBluetoothInput(audioManager);
+        if (device == null || checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            return null;
+        }
+        int bufferSize = Math.max(AudioRecord.getMinBufferSize(bluetoothRate,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
+                AUDIO_FRAME_SAMPLES * 2);
+        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                bluetoothRate, AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT, bufferSize);
+        if (recorder.getState() != AudioRecord.STATE_INITIALIZED
+                || !recorder.setPreferredDevice(device)) {
+            recorder.release();
+            return null;
+        }
+        try {
+            recorder.startRecording();
+            return recorder;
+        } catch (IllegalStateException | SecurityException e) {
+            Log.w(TAG, "Could not start Bluetooth voice capture", e);
+            recorder.release();
+            return null;
+        }
+    }
+
+    private AudioDeviceInfo findBluetoothInput(AudioManager audioManager) {
+        for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
+            if (isBluetoothHeadset(device)) {
+                return device;
+            }
+        }
+        return null;
+    }
+
+    private void handOffToBluetooth(AudioRecord phoneRecorder, AudioRecord bluetoothRecorder,
+            int captureSession, int bluetoothRate) {
+        handler.post(() -> {
+            if (isVoiceCaptureSessionActive(phoneRecorder, captureSession) && mode == RadioMode.TX) {
+                audioRecord.set(bluetoothRecorder);
+                Log.i(TAG, "Switched TX microphone to separate Bluetooth recorder");
+                startCaptureThread(bluetoothRecorder, captureSession, bluetoothRate, true);
+                releaseRecorder(phoneRecorder);
+            } else {
+                releaseRecorder(bluetoothRecorder);
+            }
+        });
+    }
+
+    private boolean waitForBluetoothRoute() {
+        try {
+            Thread.sleep(50);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private void onBluetoothRouteUnavailable(AudioRecord phoneRecorder, int captureSession) {
         handler.post(() -> {
             if (isVoiceCaptureSessionActive(phoneRecorder, captureSession) && mode == RadioMode.TX) {
                 Log.w(TAG, "Bluetooth microphone did not connect; continuing TX on built-in mic");
@@ -1265,28 +1309,39 @@ public class RadioAudioService extends Service {
             return false;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            AudioDeviceInfo scoDevice = null;
-            for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
-                if (device.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET
-                        && selectBluetoothCaptureRoute(audioManager, device)) {
-                    return true;
-                }
-                if (device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
-                    scoDevice = device;
-                }
+            return requestModernBluetoothRoute(audioManager);
+        }
+        return requestLegacyBluetoothRoute(audioManager);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private boolean requestModernBluetoothRoute(AudioManager audioManager) {
+        AudioDeviceInfo scoDevice = null;
+        for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
+            if (device.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET
+                    && selectBluetoothCaptureRoute(audioManager, device)) {
+                return true;
             }
-            return scoDevice != null && isHandsFreeProfileConnected()
-                    && selectBluetoothCaptureRoute(audioManager, scoDevice);
-        } else {
-            for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
-                if (isBluetoothHeadset(device) && isHandsFreeProfileConnected()) {
-                    previousAudioMode = audioManager.getMode();
-                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-                    audioManager.startBluetoothSco();
-                    bluetoothCaptureRouteActive = true;
-                    bluetoothCaptureUsesSco = true;
-                    return true;
-                }
+            if (device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                scoDevice = device;
+            }
+        }
+        return scoDevice != null && isHandsFreeProfileConnected()
+                && selectBluetoothCaptureRoute(audioManager, scoDevice);
+    }
+
+    private boolean requestLegacyBluetoothRoute(AudioManager audioManager) {
+        if (!isHandsFreeProfileConnected()) {
+            return false;
+        }
+        for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            if (isBluetoothHeadset(device)) {
+                previousAudioMode = audioManager.getMode();
+                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                audioManager.startBluetoothSco();
+                bluetoothCaptureRouteActive = true;
+                bluetoothCaptureUsesSco = true;
+                return true;
             }
         }
         return false;
@@ -1313,35 +1368,46 @@ public class RadioAudioService extends Service {
         while (isVoiceCaptureSessionActive(recorder, captureSession)) {
             int samples = recorder.read(audioBuffer, 0, AUDIO_FRAME_SAMPLES, AudioRecord.READ_BLOCKING);
             if (requireBluetooth && !isBluetoothHeadset(recorder.getRoutedDevice())) {
-                handler.post(() -> {
-                    if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
-                        Log.w(TAG, "Bluetooth microphone disconnected; returning TX to built-in mic");
-                        stopVoiceCapture();
-                        if (!startVoiceCapture(true)) {
-                            endPtt();
-                        }
-                    }
-                });
+                onBluetoothCaptureLost(recorder, captureSession);
                 return;
             }
-            if (samples <= 0) {
-                continue;
+            if (samples > 0) {
+                frameSamples = sendCapturedAudio(recorder, captureSession, captureRate,
+                        audioBuffer, samples, radioFrame, frameSamples);
             }
-            if (captureRate == AUDIO_SAMPLE_RATE && samples == AUDIO_FRAME_SAMPLES
-                    && isVoiceCaptureSessionActive(recorder, captureSession)) {
+        }
+    }
+
+    private void onBluetoothCaptureLost(AudioRecord recorder, int captureSession) {
+        handler.post(() -> {
+            if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
+                Log.w(TAG, "Bluetooth microphone disconnected; returning TX to built-in mic");
+                stopVoiceCapture();
+                if (!startVoiceCapture(true)) {
+                    endPtt();
+                }
+            }
+        });
+    }
+
+    private int sendCapturedAudio(AudioRecord recorder, int captureSession, int captureRate,
+            short[] audioBuffer, int samples, short[] radioFrame, int frameSamples) {
+        if (captureRate == AUDIO_SAMPLE_RATE) {
+            if (samples == AUDIO_FRAME_SAMPLES && isVoiceCaptureSessionActive(recorder, captureSession)) {
                 sendAudioToESP32(audioBuffer, false);
-            } else if (captureRate != AUDIO_SAMPLE_RATE) {
-                for (int i = 0; i < samples && isVoiceCaptureSessionActive(recorder, captureSession); i++) {
-                    for (int duplicate = 0; duplicate < 2; duplicate++) {
-                        radioFrame[frameSamples++] = audioBuffer[i];
-                        if (frameSamples == AUDIO_FRAME_SAMPLES) {
-                            sendAudioToESP32(radioFrame, false);
-                            frameSamples = 0;
-                        }
-                    }
+            }
+            return frameSamples;
+        }
+        for (int i = 0; i < samples && isVoiceCaptureSessionActive(recorder, captureSession); i++) {
+            for (int duplicate = 0; duplicate < 2; duplicate++) {
+                radioFrame[frameSamples++] = audioBuffer[i];
+                if (frameSamples == AUDIO_FRAME_SAMPLES) {
+                    sendAudioToESP32(radioFrame, false);
+                    frameSamples = 0;
                 }
             }
         }
+        return frameSamples;
     }
 
     private boolean isVoiceCaptureSessionActive(AudioRecord recorder, int captureSession) {
