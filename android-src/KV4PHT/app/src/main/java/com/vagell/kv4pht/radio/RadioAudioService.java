@@ -201,7 +201,6 @@ public class RadioAudioService extends Service {
     private final AtomicInteger voiceCaptureSession = new AtomicInteger();
     private boolean bluetoothCaptureRouteActive;
     private boolean bluetoothCaptureUsesSco;
-    private volatile boolean bluetoothMicRouted;
     private int previousAudioMode = AudioManager.MODE_NORMAL;
 
     // === USB / Serial ===
@@ -1087,7 +1086,6 @@ public class RadioAudioService extends Service {
             return false;
         }
         int captureSession = voiceCaptureSession.incrementAndGet();
-        bluetoothMicRouted = false;
         releaseAudioRecord();
         AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         long captureStartedMs = android.os.SystemClock.elapsedRealtime();
@@ -1141,7 +1139,7 @@ public class RadioAudioService extends Service {
                 handler.post(() -> {
                     if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
                         if (requestBluetoothCaptureRoute(audioManager)) {
-                            new Thread(() -> switchToBluetoothMic(audioManager, recorder, captureSession),
+                            new Thread(() -> prepareBluetoothRecorder(audioManager, recorder, captureSession),
                                     "Bluetooth mic routing").start();
                         } else {
                             Log.i(TAG, "Bluetooth microphone unavailable; continuing TX on built-in mic");
@@ -1165,37 +1163,68 @@ public class RadioAudioService extends Service {
         Log.w(TAG, "No built-in microphone available");
     }
 
-    private void switchToBluetoothMic(AudioManager audioManager, AudioRecord recorder,
+    private void prepareBluetoothRecorder(AudioManager audioManager, AudioRecord phoneRecorder,
             int captureSession) {
         long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
-        boolean preferredBluetooth = false;
-        while (isVoiceCaptureSessionActive(recorder, captureSession)
+        AudioRecord bluetoothRecorder = null;
+        int bluetoothRate = bluetoothCaptureUsesSco ? 8000 : AUDIO_SAMPLE_RATE;
+        while (isVoiceCaptureSessionActive(phoneRecorder, captureSession)
                 && android.os.SystemClock.elapsedRealtime() < deadline) {
-            if (!preferredBluetooth) {
+            if (bluetoothRecorder == null) {
                 for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
-                    if (isBluetoothHeadset(device) && recorder.setPreferredDevice(device)) {
-                        preferredBluetooth = true;
+                    if (isBluetoothHeadset(device)) {
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                                != PackageManager.PERMISSION_GRANTED) {
+                            break;
+                        }
+                        int bufferSize = Math.max(AudioRecord.getMinBufferSize(bluetoothRate,
+                                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
+                                AUDIO_FRAME_SAMPLES * 2);
+                        AudioRecord candidate = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                                bluetoothRate, AudioFormat.CHANNEL_IN_MONO,
+                                AudioFormat.ENCODING_PCM_16BIT, bufferSize);
+                        if (candidate.getState() != AudioRecord.STATE_INITIALIZED
+                                || !candidate.setPreferredDevice(device)) {
+                            candidate.release();
+                            break;
+                        }
+                        try {
+                            candidate.startRecording();
+                            bluetoothRecorder = candidate;
+                        } catch (IllegalStateException | SecurityException e) {
+                            Log.w(TAG, "Could not start Bluetooth voice capture", e);
+                            candidate.release();
+                        }
                         break;
                     }
                 }
             }
-            if (isVoiceCaptureSessionActive(recorder, captureSession)
-                    && isBluetoothHeadset(recorder.getRoutedDevice())) {
-                Log.i(TAG, "Switched TX microphone to Bluetooth headset");
-                bluetoothMicRouted = true;
+            if (bluetoothRecorder != null && isBluetoothHeadset(bluetoothRecorder.getRoutedDevice())) {
+                AudioRecord readyRecorder = bluetoothRecorder;
+                handler.post(() -> {
+                    if (isVoiceCaptureSessionActive(phoneRecorder, captureSession) && mode == RadioMode.TX) {
+                        audioRecord.set(readyRecorder);
+                        Log.i(TAG, "Switched TX microphone to separate Bluetooth recorder");
+                        new Thread(() -> captureVoiceAudio(readyRecorder, captureSession, bluetoothRate, true),
+                                "Radio voice capture").start();
+                        releaseRecorder(phoneRecorder);
+                    } else {
+                        releaseRecorder(readyRecorder);
+                    }
+                });
                 return;
             }
             try {
                 Thread.sleep(50);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
+                break;
             }
         }
+        releaseRecorder(bluetoothRecorder);
         handler.post(() -> {
-            if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
+            if (isVoiceCaptureSessionActive(phoneRecorder, captureSession) && mode == RadioMode.TX) {
                 Log.w(TAG, "Bluetooth microphone did not connect; continuing TX on built-in mic");
-                preferBuiltInMic(audioManager, recorder);
                 releaseBluetoothCaptureRoute();
             }
         });
@@ -1329,24 +1358,14 @@ public class RadioAudioService extends Service {
         int frameSamples = 0;
         while (isVoiceCaptureSessionActive(recorder, captureSession)) {
             int samples = recorder.read(audioBuffer, 0, AUDIO_FRAME_SAMPLES, AudioRecord.READ_BLOCKING);
-            if (bluetoothMicRouted) {
-                AudioDeviceInfo routedDevice = recorder.getRoutedDevice();
-                if (routedDevice != null && !isBluetoothHeadset(routedDevice)) {
-                    bluetoothMicRouted = false;
-                    handler.post(() -> {
-                        if (isVoiceCaptureSessionActive(recorder, captureSession)) {
-                            Log.w(TAG, "Bluetooth microphone disconnected; continuing TX on built-in mic");
-                            preferBuiltInMic((AudioManager) getSystemService(Context.AUDIO_SERVICE), recorder);
-                            releaseBluetoothCaptureRoute();
-                        }
-                    });
-                }
-            }
             if (requireBluetooth && !isBluetoothHeadset(recorder.getRoutedDevice())) {
                 handler.post(() -> {
                     if (isVoiceCaptureSessionActive(recorder, captureSession) && mode == RadioMode.TX) {
-                        Log.w(TAG, "Bluetooth microphone disconnected; stopping PTT");
-                        endPtt();
+                        Log.w(TAG, "Bluetooth microphone disconnected; returning TX to built-in mic");
+                        stopVoiceCapture();
+                        if (!startVoiceCapture(true)) {
+                            endPtt();
+                        }
                     }
                 });
                 return;
@@ -1382,7 +1401,6 @@ public class RadioAudioService extends Service {
             return;
         }
         voiceCaptureActive = false;
-        bluetoothMicRouted = false;
         voiceCaptureSession.incrementAndGet();
         releaseAudioRecord();
         releaseBluetoothCaptureRoute();
@@ -1412,6 +1430,10 @@ public class RadioAudioService extends Service {
 
     private void releaseAudioRecord() {
         AudioRecord recorder = audioRecord.getAndSet(null);
+        releaseRecorder(recorder);
+    }
+
+    private void releaseRecorder(AudioRecord recorder) {
         if (recorder == null) {
             return;
         }
