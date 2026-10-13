@@ -33,6 +33,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -78,6 +79,51 @@ public class ProtocolKissTest {
 
         assertEquals(1, frames.size());
         assertArrayEquals(expected.get(0), frames.get(0));
+    }
+
+    @Test
+    public void digitalFrameWaitsForWindowUpdate() throws Exception {
+        List<byte[]> frames = Collections.synchronizedList(new ArrayList<>());
+        Protocol.Sender sender = new Protocol.Sender(frames::add, true);
+        sender.setFlowControlWindow(0);
+        Thread writer = new Thread(() -> sender.txDigital(new byte[]{1, 2, 3}));
+        writer.start();
+        try {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+            while (writer.getState() != Thread.State.WAITING && System.nanoTime() < deadline) {
+                Thread.sleep(1);
+            }
+            assertEquals(Thread.State.WAITING, writer.getState());
+            assertTrue(frames.isEmpty());
+
+            sender.enlargeFlowControlWindow(1024);
+            writer.join(1000);
+            assertFalse(writer.isAlive());
+            assertEquals(1, frames.size());
+        } finally {
+            writer.interrupt();
+            writer.join(1000);
+        }
+    }
+
+    @Test
+    public void enlargingWindowFlushesPendingDesiredStateBeforeLaterAudio() {
+        List<byte[]> frames = new ArrayList<>();
+        Protocol.Sender sender = new Protocol.Sender(frames::add, true);
+        sender.setFlowControlWindow(0);
+        Protocol.HostDesiredState state = Protocol.HostDesiredState.builder().sequence(7).build();
+        sender.sendDesiredState(state);
+
+        sender.enlargeFlowControlWindow(1024);
+        sender.txAudio(new byte[128], 128);
+
+        List<byte[]> expected = new ArrayList<>();
+        Protocol.Sender unrestricted = new Protocol.Sender(expected::add, false);
+        unrestricted.sendDesiredState(state);
+        unrestricted.txAudio(new byte[128], 128);
+        assertEquals(2, frames.size());
+        assertArrayEquals(expected.get(0), frames.get(0));
+        assertArrayEquals(expected.get(1), frames.get(1));
     }
     private boolean called;
     private int commandCallCount;

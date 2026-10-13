@@ -394,6 +394,21 @@ public class RadioAudioServiceTest {
         assertFalse(service.isVoiceCaptureActive());
     }
 
+    @Test public void pttReleasesRadioWhenMicrophonePermissionIsRevoked() throws Exception {
+        Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        sender.setAccessible(true);
+        sender.set(service, new Protocol.Sender(frame -> { }, false));
+        service.setMode(RadioMode.RX);
+        service.tuneToFreq("146.5200");
+        Shadows.shadowOf((Application) service.getApplicationContext())
+                .denyPermissions(Manifest.permission.RECORD_AUDIO);
+
+        service.startPtt();
+
+        assertEquals(RadioMode.RX, service.getMode());
+        assertFalse(service.isVoiceCaptureActive());
+    }
+
     @Test @Config(sdk = 32) public void cancelledPttReleasesLateBluetoothRecorder() throws Exception {
         AudioManager audioManager = service.getSystemService(AudioManager.class);
         Shadows.shadowOf(audioManager).setInputDevices(List.of(
