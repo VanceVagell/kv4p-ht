@@ -287,6 +287,17 @@ public class RadioAudioServiceTest {
         assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
     }
 
+    @Test @Config(sdk = 32) public void bleMediaOutputCanUseBleMicrophone() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+
+        assertTrue(requestBluetoothCaptureRoute(audioManager));
+        assertEquals(AudioDeviceInfo.TYPE_BLE_HEADSET, audioManager.getCommunicationDevice().getType());
+        releaseBluetoothCaptureRoute();
+    }
+
     @Test @Config(sdk = 32) public void scoCommunicationDeviceUsedWhenBleIsUnavailable() throws Exception {
         AudioManager audioManager = service.getSystemService(AudioManager.class);
         ShadowAudioManager audio = Shadows.shadowOf(audioManager);
@@ -310,6 +321,57 @@ public class RadioAudioServiceTest {
 
         assertFalse(requestBluetoothCaptureRoute(audioManager));
         assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
+    }
+
+    @Test @Config(sdk = 32) public void bluetoothRoutingRequiresConnectPermissionForSco() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
+        audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)));
+        Shadows.shadowOf(BluetoothAdapter.getDefaultAdapter()).setProfileConnectionState(
+                BluetoothProfile.HEADSET, BluetoothAdapter.STATE_CONNECTED);
+        Shadows.shadowOf((Application) service.getApplicationContext())
+                .denyPermissions(Manifest.permission.BLUETOOTH_CONNECT);
+
+        assertFalse(requestBluetoothCaptureRoute(audioManager));
+        assertNull(audioManager.getCommunicationDevice());
+    }
+
+    @Test public void legacyScoNeedsHeadsetOutputEvenWhenProfileIsConnected() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
+        Shadows.shadowOf(BluetoothAdapter.getDefaultAdapter()).setProfileConnectionState(
+                BluetoothProfile.HEADSET, BluetoothAdapter.STATE_CONNECTED);
+
+        assertFalse(requestBluetoothCaptureRoute(audioManager));
+        assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
+    }
+
+    @Test @Config(sdk = 32) public void bluetoothRecorderNeedsAHeadsetInputAndMicPermission()
+            throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        Shadows.shadowOf(audioManager).setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
+        assertNull(createBluetoothRecorder(audioManager));
+
+        Shadows.shadowOf(audioManager).setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        Shadows.shadowOf((Application) service.getApplicationContext())
+                .denyPermissions(Manifest.permission.RECORD_AUDIO);
+        assertNull(createBluetoothRecorder(audioManager));
+    }
+
+    @Test public void phoneRecorderStillStartsIfBuiltInMicCannotBeEnumerated() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        Shadows.shadowOf(audioManager).setInputDevices(List.of());
+
+        AudioRecord recorder = createPhoneRecorder(audioManager, true);
+        assertNotNull(recorder);
+        try {
+            assertNull(recorder.getPreferredDevice());
+        } finally {
+            recorder.stop();
+            recorder.release();
+        }
     }
 
     @Test public void interruptedBluetoothWaitStopsPromptly() throws Exception {
@@ -353,6 +415,38 @@ public class RadioAudioServiceTest {
         } finally {
             phoneRecorder.stop();
             phoneRecorder.release();
+        }
+    }
+
+    @Test @Config(sdk = 32) public void activePttHandsOffToBluetoothRecorder() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        Shadows.shadowOf(audioManager).setInputDevices(List.of(
+                audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC),
+                audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        AudioRecord phoneRecorder = createPhoneRecorder(audioManager, true);
+        AudioRecord bluetoothRecorder = createBluetoothRecorder(audioManager);
+        assertNotNull(phoneRecorder);
+        assertNotNull(bluetoothRecorder);
+        Field active = RadioAudioService.class.getDeclaredField("voiceCaptureActive");
+        active.setAccessible(true);
+        active.set(service, true);
+        Field current = RadioAudioService.class.getDeclaredField("audioRecord");
+        current.setAccessible(true);
+        @SuppressWarnings("unchecked") AtomicReference<AudioRecord> selected =
+                (AtomicReference<AudioRecord>) current.get(service);
+        selected.set(phoneRecorder);
+        service.setMode(RadioMode.TX);
+        try {
+            invokeService("handOffToBluetooth",
+                    new Class<?>[]{AudioRecord.class, AudioRecord.class, int.class, int.class},
+                    phoneRecorder, bluetoothRecorder, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE);
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+            assertSame(bluetoothRecorder, currentRecorder());
+            assertEquals(AudioRecord.STATE_UNINITIALIZED, phoneRecorder.getState());
+            assertTrue(service.isVoiceCaptureActive());
+        } finally {
+            stopVoiceCapture();
         }
     }
 
@@ -409,6 +503,25 @@ public class RadioAudioServiceTest {
         } finally {
             stopVoiceCapture();
             assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
+        }
+    }
+
+    @Test public void pttKeepsPhoneMicWhenBluetoothHandsFreeIsUnavailable() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
+        service.setMode(RadioMode.TX);
+        try {
+            assertTrue(startVoiceCapture(false));
+            AudioRecord phoneRecorder = currentRecorder();
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+            assertSame(phoneRecorder, currentRecorder());
+            assertTrue(service.isVoiceCaptureActive());
+            assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
+        } finally {
+            stopVoiceCapture();
         }
     }
 
