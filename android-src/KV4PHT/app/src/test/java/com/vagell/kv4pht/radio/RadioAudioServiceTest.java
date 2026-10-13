@@ -37,6 +37,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.AudioDeviceInfoBuilder;
 import org.robolectric.shadows.ShadowAudioManager;
+import org.robolectric.shadows.ShadowAudioTrack;
 import org.robolectric.shadows.ShadowBluetoothAdapter;
 import org.robolectric.Shadows;
 import org.robolectric.util.ReflectionHelpers;
@@ -323,6 +324,21 @@ public class RadioAudioServiceTest {
         assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
     }
 
+    @Test @Config(sdk = 32) public void rejectedCommunicationDeviceKeepsMediaRoute() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
+        audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        audio.lockCommunicationDevice(true);
+        try {
+            assertFalse(requestBluetoothCaptureRoute(audioManager));
+            assertNull(audioManager.getCommunicationDevice());
+            assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
+        } finally {
+            audio.lockCommunicationDevice(false);
+        }
+    }
+
     @Test @Config(sdk = 32) public void bluetoothRoutingRequiresConnectPermissionForSco() throws Exception {
         AudioManager audioManager = service.getSystemService(AudioManager.class);
         ShadowAudioManager audio = Shadows.shadowOf(audioManager);
@@ -485,6 +501,40 @@ public class RadioAudioServiceTest {
         Shadows.shadowOf(audioManager).setOutputDevices(List.of());
 
         assertFalse(requestBluetoothCaptureRoute(audioManager));
+        assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
+    }
+
+    @Test @Config(sdk = 32) public void speakerPlaybackDoesNotTriggerBluetoothMicNegotiation()
+            throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        Shadows.shadowOf(audioManager).setOutputDevices(List.of(
+                audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP),
+                audioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)));
+        invokeService("initAudioTrack", new Class<?>[0]);
+        ShadowAudioTrack.setRoutedDevice(audioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER));
+        try {
+            assertFalse(requestBluetoothCaptureRoute(audioManager));
+            assertNull(audioManager.getCommunicationDevice());
+        } finally {
+            ShadowAudioTrack.setRoutedDevice(null);
+        }
+    }
+
+    @Test public void releasedPttDoesNotStartLateBluetoothNegotiation() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP),
+                audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO)));
+        Shadows.shadowOf(BluetoothAdapter.getDefaultAdapter()).setProfileConnectionState(
+                BluetoothProfile.HEADSET, BluetoothAdapter.STATE_CONNECTED);
+        service.setMode(RadioMode.TX);
+
+        assertTrue(startVoiceCapture(false));
+        stopVoiceCapture();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        assertFalse(service.isVoiceCaptureActive());
         assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
     }
 

@@ -91,7 +91,7 @@ public class ProtocolKissTest {
         try {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
             while (writer.getState() != Thread.State.WAITING && System.nanoTime() < deadline) {
-                Thread.sleep(1);
+                Thread.yield();
             }
             assertEquals(Thread.State.WAITING, writer.getState());
             assertTrue(frames.isEmpty());
