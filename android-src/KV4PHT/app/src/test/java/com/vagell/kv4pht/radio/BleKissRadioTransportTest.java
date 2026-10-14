@@ -50,9 +50,9 @@ public class BleKissRadioTransportTest {
         ReflectionHelpers.setField(transport, "gatt", gatt);
         List<Exception> errors = new ArrayList<>();
         ReflectionHelpers.setField(transport, "listener", new RadioTransport.Listener() {
-            @Override public void onBytes(byte[] bytes) { }
-            @Override public void onReady() { }
-            @Override public void onDisconnected() { }
+            @Override public void onBytes(byte[] bytes) { /* MTU negotiation sends no inbound data. */ }
+            @Override public void onReady() { /* Readiness is unrelated to the MTU assertion. */ }
+            @Override public void onDisconnected() { /* This test closes the transport itself. */ }
             @Override public void onError(Exception error) { errors.add(error); }
         });
         BluetoothGattCallback callback = ReflectionHelpers.getField(transport, "gattCallback");

@@ -1386,22 +1386,27 @@ public class RadioAudioService extends Service {
                 onBluetoothCaptureLost(recorder, captureSession);
                 return;
             }
-            if (samples <= 0) continue;
-            if (framesToSkip > 0) {
-                framesToSkip--;
-                skippedFrames++;
-                if (framesToSkip == 0) {
-                    Log.i(TAG, "BLE TX discarded " + skippedFrames
-                            + " initial AudioRecord frames before sending audio");
+            if (samples > 0) {
+                if (framesToSkip > 0) {
+                    framesToSkip--;
+                    skippedFrames++;
+                    logInitialBleFramesSkipped(framesToSkip, skippedFrames);
+                } else {
+                    frameSamples = sendCapturedAudio(recorder, captureSession, captureRate,
+                            audioBuffer, samples, radioFrame, frameSamples);
                 }
-                continue;
             }
-            frameSamples = sendCapturedAudio(recorder, captureSession, captureRate,
-                    audioBuffer, samples, radioFrame, frameSamples);
         }
         if (framesToSkip > 0 && skippedFrames > 0) {
             Log.i(TAG, "BLE TX ended after discarding " + skippedFrames
                     + " of " + configuredFramesToSkip + " initial AudioRecord frames");
+        }
+    }
+
+    private void logInitialBleFramesSkipped(int framesRemaining, int skippedFrames) {
+        if (framesRemaining == 0) {
+            Log.i(TAG, "BLE TX discarded " + skippedFrames
+                    + " initial AudioRecord frames before sending audio");
         }
     }
 
