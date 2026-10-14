@@ -276,6 +276,33 @@ public class RadioAudioServiceTest {
         assertFalse(service.isVoiceCaptureActive());
     }
 
+    @Test public void firmwareFlashingRequiresSuccessfulUsbPreparation() {
+        boolean[] prepared = {false};
+        int[] attempts = {0};
+        setActiveTransport(new RadioTransport() {
+            @Override public void start(Listener listener) { throw new UnsupportedOperationException(); }
+            @Override public void close() { }
+            @Override public boolean isReady() { return true; }
+            @Override public void writeAsync(byte[] bytes) { throw new UnsupportedOperationException(); }
+            @Override public boolean supportsFirmwareFlashing() { return true; }
+            @Override public boolean prepareForFirmwareFlashing() {
+                attempts[0]++;
+                return prepared[0];
+            }
+            @Override public String getName() { return "USB test transport"; }
+        });
+
+        assertTrue(service.canFlashFirmware());
+        service.setMode(RadioMode.FLASHING);
+        assertEquals(1, attempts[0]);
+        assertEquals(RadioMode.STARTUP, service.getMode());
+
+        prepared[0] = true;
+        service.setMode(RadioMode.FLASHING);
+        assertEquals(2, attempts[0]);
+        assertEquals(RadioMode.FLASHING, service.getMode());
+    }
+
     @Test @Config(sdk = 32) public void bleMicRouteDoesNotSwitchMediaAudioMode() throws Exception {
         AudioManager audioManager = service.getSystemService(AudioManager.class);
         ShadowAudioManager audio = Shadows.shadowOf(audioManager);
@@ -721,6 +748,38 @@ public class RadioAudioServiceTest {
         }
     }
 
+    @Test @Config(sdk = 32) public void blePttFallsBackToPhoneMicWhenHeadsetRecorderIsUnavailable()
+            throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
+        audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        setActiveTransport(new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
+        int[] started = {0};
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void txStarted() { started[0]++; }
+        });
+        service.setMode(RadioMode.TX);
+        assertTrue(requestBluetoothCaptureRoute(audioManager));
+        ReflectionHelpers.setField(service, "bluetoothCaptureNegotiating", true);
+
+        try {
+            invokeService("completeBluetoothRecorderBeforeBleTx",
+                    new Class<?>[]{AudioRecord.class, int.class, int.class},
+                    null, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE);
+
+            assertEquals(1, started[0]);
+            assertTrue(service.isVoiceCaptureActive());
+            assertNotNull(currentRecorder());
+            assertNull(audioManager.getCommunicationDevice());
+        } finally {
+            service.endPtt();
+        }
+        assertFalse(service.isVoiceCaptureActive());
+        assertNull(currentRecorder());
+    }
+
     @Test public void largeBleMtuBatchesTwoVoiceBlocksAndSmallMtuUsesSingleBlocks() throws Exception {
         List<byte[]> frames = new ArrayList<>();
         Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
@@ -739,10 +798,13 @@ public class RadioAudioServiceTest {
         assertEquals(1, frames.size());
         assertEquals(RadioAudioService.AUDIO_FRAME_BYTES * 2 + 9, frames.get(0).length);
 
+        service.sendAudioToESP32(samples, false);
+        assertEquals(1, frames.size());
         payloadSize.setInt(ble, 244);
         service.sendAudioToESP32(samples, false);
-        assertEquals(2, frames.size());
+        assertEquals(3, frames.size());
         assertEquals(RadioAudioService.AUDIO_FRAME_BYTES + 9, frames.get(1).length);
+        assertEquals(RadioAudioService.AUDIO_FRAME_BYTES + 9, frames.get(2).length);
     }
 
     @Test public void voiceTxDoesNotBlockIncomingFlowControlUpdate() throws Exception {
