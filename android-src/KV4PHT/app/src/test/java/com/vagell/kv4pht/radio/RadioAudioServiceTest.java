@@ -4,6 +4,7 @@ import android.Manifest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -192,9 +193,7 @@ public class RadioAudioServiceTest {
         Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
         sender.setAccessible(true);
         sender.set(service, new Protocol.Sender(frame -> { }, false));
-        Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
-        transport.setAccessible(true);
-        transport.set(service, new RadioTransport() {
+        setActiveTransport(new RadioTransport() {
             @Override public void start(Listener listener) { throw new UnsupportedOperationException(); }
             @Override public void close() { throw new UnsupportedOperationException(); }
             @Override public boolean isReady() { return true; }
@@ -641,9 +640,7 @@ public class RadioAudioServiceTest {
         audio.setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
         audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
         audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
-        Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
-        transport.setAccessible(true);
-        transport.set(service, new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
+        setActiveTransport(new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
         int[] started = {0};
         service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
             @Override public void txStarted() { started[0]++; }
@@ -674,8 +671,7 @@ public class RadioAudioServiceTest {
                 audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
         audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
         audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
-        ReflectionHelpers.setField(service, "activeTransport",
-                new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
+        setActiveTransport(new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
         Protocol.Sender sender = new Protocol.Sender(frame -> { }, false);
         ReflectionHelpers.setField(service, "hostToEsp32", sender);
         service.getRadioModule().attachSender(sender);
@@ -683,8 +679,9 @@ public class RadioAudioServiceTest {
         int initialSequence = desiredState().getSequence();
         int[] started = {0};
         int[] ended = {0};
+        CountDownLatch startedSignal = new CountDownLatch(1);
         service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
-            @Override public void txStarted() { started[0]++; }
+            @Override public void txStarted() { started[0]++; startedSignal.countDown(); }
             @Override public void txEnded() { ended[0]++; }
         });
         service.setMode(RadioMode.TX);
@@ -696,15 +693,15 @@ public class RadioAudioServiceTest {
             assertFalse(service.isVoiceCaptureActive());
             assertTrue(routedService.created.await(1, TimeUnit.SECONDS));
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
-            while (!service.isVoiceCaptureActive() && System.nanoTime() < deadline) {
+            while (startedSignal.getCount() != 0 && System.nanoTime() < deadline) {
                 Shadows.shadowOf(Looper.getMainLooper()).idle();
-                Thread.sleep(1);
+                startedSignal.await(1, TimeUnit.MILLISECONDS);
             }
 
             assertTrue(service.isVoiceCaptureActive());
             assertEquals(1, started[0]);
             assertEquals(initialSequence + 1, desiredState().getSequence());
-            assertTrue((desiredState().getFlags() & Protocol.HOST_STATE_PTT_REQUESTED) != 0);
+            assertNotEquals(0, desiredState().getFlags() & Protocol.HOST_STATE_PTT_REQUESTED);
             assertSame(routedService.recorder, currentRecorder());
             assertTrue(routedService.recorder.readStarted.await(1, TimeUnit.SECONDS));
             assertEquals(AudioDeviceInfo.TYPE_BLE_HEADSET,
@@ -733,9 +730,7 @@ public class RadioAudioServiceTest {
         Field payloadSize = BleKissRadioTransport.class.getDeclaredField("attPayloadSize");
         payloadSize.setAccessible(true);
         payloadSize.setInt(ble, 514);
-        Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
-        transport.setAccessible(true);
-        transport.set(service, ble);
+        setActiveTransport(ble);
         short[] samples = new short[RadioAudioService.AUDIO_FRAME_SAMPLES];
 
         service.sendAudioToESP32(samples, false);
@@ -755,13 +750,19 @@ public class RadioAudioServiceTest {
         Protocol.Sender sender = new Protocol.Sender(frame -> sentFrames.incrementAndGet());
         sender.setFlowControlWindow(0);
         ReflectionHelpers.setField(service, "hostToEsp32", sender);
-        Thread captureThread = new Thread(() -> service.sendAudioToESP32(
-                new short[RadioAudioService.AUDIO_FRAME_SAMPLES], false));
+        CountDownLatch captureDone = new CountDownLatch(1);
+        Thread captureThread = new Thread(() -> {
+            try {
+                service.sendAudioToESP32(new short[RadioAudioService.AUDIO_FRAME_SAMPLES], false);
+            } finally {
+                captureDone.countDown();
+            }
+        });
         captureThread.start();
         long deadline = System.nanoTime() + 1_000_000_000L;
         while (captureThread.getState() != Thread.State.TIMED_WAITING
-                && System.nanoTime() < deadline) {
-            Thread.sleep(1);
+                && captureDone.getCount() != 0 && System.nanoTime() < deadline) {
+            captureDone.await(1, TimeUnit.MILLISECONDS);
         }
         assertEquals(Thread.State.TIMED_WAITING, captureThread.getState());
 
@@ -830,6 +831,11 @@ public class RadioAudioServiceTest {
         @SuppressWarnings("unchecked") AtomicReference<AudioRecord> selected =
                 (AtomicReference<AudioRecord>) current.get(service);
         return selected.get();
+    }
+
+    private void setActiveTransport(RadioTransport transport) {
+        AtomicReference<RadioTransport> active = ReflectionHelpers.getField(service, "activeTransport");
+        active.set(transport);
     }
 
     private int captureSession() throws Exception {

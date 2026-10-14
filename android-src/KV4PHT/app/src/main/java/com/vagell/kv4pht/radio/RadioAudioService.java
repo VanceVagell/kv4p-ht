@@ -209,7 +209,7 @@ public class RadioAudioService extends Service {
 
     // === USB / Serial ===
     private UsbManager usbManager;
-    private volatile RadioTransport activeTransport;
+    private final AtomicReference<RadioTransport> activeTransport = new AtomicReference<>();
     private boolean usbPermissionRequestPending = false;
     @Getter
     private Protocol.Sender hostToEsp32;
@@ -425,7 +425,9 @@ public class RadioAudioService extends Service {
 
     public void setMode(RadioMode mode) {
         if (mode == RadioMode.FLASHING) {
-            if (!canFlashFirmware()) {
+            RadioTransport transport = activeTransport.get();
+            if (transport == null || !transport.isReady()
+                    || !transport.supportsFirmwareFlashing()) {
                 Log.w(TAG, "Firmware flashing requires USB serial; current transport is not flash-capable.");
                 return;
             }
@@ -433,7 +435,7 @@ public class RadioAudioService extends Service {
             if (audioTrack != null) {
                 audioTrack.stop();
             }
-            if (!activeTransport.prepareForFirmwareFlashing()) {
+            if (!transport.prepareForFirmwareFlashing()) {
                 Log.w(TAG, "USB transport could not enter firmware flashing mode.");
                 return;
             }
@@ -1099,7 +1101,8 @@ public class RadioAudioService extends Service {
         AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         long captureStartedMs = android.os.SystemClock.elapsedRealtime();
         boolean negotiateBluetooth = !forceInternalMic && isBluetoothPlaybackRouteActive(audioManager);
-        boolean waitForBluetooth = negotiateBluetooth && activeTransport instanceof BleKissRadioTransport;
+        boolean waitForBluetooth = negotiateBluetooth
+                && activeTransport.get() instanceof BleKissRadioTransport;
         Log.i(TAG, "PTT input route selected in "
                 + (android.os.SystemClock.elapsedRealtime() - captureStartedMs)
                 + " ms; bluetooth=" + negotiateBluetooth + ", waitBeforeBleTx=" + waitForBluetooth);
@@ -1176,45 +1179,53 @@ public class RadioAudioService extends Service {
     }
 
     private void prepareBluetoothRecorderBeforeBleTx(AudioManager audioManager, int captureSession) {
-        long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
-        AudioRecord bluetoothRecorder = null;
         int bluetoothRate = bluetoothCaptureUsesSco ? 8000 : AUDIO_SAMPLE_RATE;
+        AudioRecord readyRecorder = waitForBluetoothRecorder(audioManager, captureSession, bluetoothRate);
+        handler.post(() -> completeBluetoothRecorderBeforeBleTx(readyRecorder, captureSession, bluetoothRate));
+    }
+
+    private AudioRecord waitForBluetoothRecorder(AudioManager audioManager, int captureSession,
+            int bluetoothRate) {
+        long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
+        AudioRecord recorder = null;
         while (voiceCaptureSession.get() == captureSession
                 && android.os.SystemClock.elapsedRealtime() < deadline) {
-            if (bluetoothRecorder == null) {
-                bluetoothRecorder = createBluetoothRecorder(audioManager, bluetoothRate);
+            if (recorder == null) {
+                recorder = createBluetoothRecorder(audioManager, bluetoothRate);
             }
-            if (bluetoothRecorder != null && isBluetoothHeadset(bluetoothRecorder.getRoutedDevice())) {
-                break;
+            if (recorder != null && isBluetoothHeadset(recorder.getRoutedDevice())) {
+                return recorder;
             }
             if (!waitForBluetoothRoute()) {
-                break;
+                return recorder;
             }
         }
-        AudioRecord readyRecorder = bluetoothRecorder;
-        handler.post(() -> {
-            if (voiceCaptureSession.get() != captureSession
-                    || !bluetoothCaptureNegotiating || mode != RadioMode.TX) {
-                releaseRecorder(readyRecorder);
-                return;
+        return recorder;
+    }
+
+    private void completeBluetoothRecorderBeforeBleTx(AudioRecord readyRecorder, int captureSession,
+            int bluetoothRate) {
+        if (voiceCaptureSession.get() != captureSession
+                || !bluetoothCaptureNegotiating || mode != RadioMode.TX) {
+            releaseRecorder(readyRecorder);
+            return;
+        }
+        bluetoothCaptureNegotiating = false;
+        if (readyRecorder != null && isBluetoothHeadset(readyRecorder.getRoutedDevice())) {
+            audioRecord.set(readyRecorder);
+            voiceCaptureActive = true;
+            Log.i(TAG, "Bluetooth microphone ready; starting BLE PTT");
+            radioModule.pttDown();
+            callbacks.txStarted();
+            startCaptureThread(readyRecorder, captureSession, bluetoothRate, true);
+        } else {
+            releaseRecorder(readyRecorder);
+            Log.w(TAG, "Bluetooth microphone unavailable; starting BLE PTT on built-in mic");
+            releaseBluetoothCaptureRoute();
+            if (!startVoiceCapture(true)) {
+                endPtt();
             }
-            bluetoothCaptureNegotiating = false;
-            if (readyRecorder != null && isBluetoothHeadset(readyRecorder.getRoutedDevice())) {
-                audioRecord.set(readyRecorder);
-                voiceCaptureActive = true;
-                Log.i(TAG, "Bluetooth microphone ready; starting BLE PTT");
-                radioModule.pttDown();
-                callbacks.txStarted();
-                startCaptureThread(readyRecorder, captureSession, bluetoothRate, true);
-            } else {
-                releaseRecorder(readyRecorder);
-                Log.w(TAG, "Bluetooth microphone unavailable; starting BLE PTT on built-in mic");
-                releaseBluetoothCaptureRoute();
-                if (!startVoiceCapture(true)) {
-                    endPtt();
-                }
-            }
-        });
+        }
     }
 
     private void startCaptureThread(AudioRecord recorder, int captureSession, int captureRate,
@@ -1552,9 +1563,10 @@ public class RadioAudioService extends Service {
     }
 
     private boolean isConnectionReady() {
+        RadioTransport transport = activeTransport.get();
         return hostToEsp32 != null
-            && activeTransport != null
-            && activeTransport.isReady();
+            && transport != null
+            && transport.isReady();
     }
 
     private void closePortAndReset() {
@@ -1563,8 +1575,7 @@ public class RadioAudioService extends Service {
         abandonAudioFocus();
         radioModule.detachSender();
         hostToEsp32 = null;
-        RadioTransport transport = activeTransport;
-        activeTransport = null;
+        RadioTransport transport = activeTransport.getAndSet(null);
         if (transport != null) {
             try {
                 transport.close();
@@ -1585,7 +1596,7 @@ public class RadioAudioService extends Service {
             return;
         }
         if (device.isPresent()) {
-            if (activeTransport instanceof BleKissRadioTransport) {
+            if (activeTransport.get() instanceof BleKissRadioTransport) {
                 closePortAndReset();
             }
             setMode(RadioMode.STARTUP);
@@ -1595,7 +1606,7 @@ public class RadioAudioService extends Service {
             setupSerialConnection();
             return;
         }
-        if (activeTransport == null) {
+        if (activeTransport.get() == null) {
             setMode(RadioMode.STARTUP);
             clearRadioTypeAndLimits();
             notifyRadioMissing();
@@ -1678,13 +1689,13 @@ public class RadioAudioService extends Service {
             // Ignore, may not be supported on all devices.
         }
         RadioTransport transport = new UsbSerialRadioTransport(serialPort, handler);
-        activeTransport = transport;
+        activeTransport.set(transport);
         transport.start(createTransportListener(transport));
     }
 
     private void attemptBleConnect() {
         RadioTransport transport = new BleKissRadioTransport(this, handler);
-        activeTransport = transport;
+        activeTransport.set(transport);
         transport.start(createTransportListener(transport));
     }
 
@@ -1697,7 +1708,7 @@ public class RadioAudioService extends Service {
 
             @Override
             public void onReady() {
-                if (activeTransport != transport) {
+                if (activeTransport.get() != transport) {
                     return;
                 }
                 callbacks.hideSnackBar();
@@ -1709,7 +1720,7 @@ public class RadioAudioService extends Service {
 
             @Override
             public void onDisconnected() {
-                if (activeTransport == transport) {
+                if (activeTransport.get() == transport) {
                     Log.i(TAG, connectLog(transport.getName() + " disconnected"));
                     radioMissing();
                 }
@@ -1717,7 +1728,7 @@ public class RadioAudioService extends Service {
 
             @Override
             public void onError(Exception error) {
-                if (activeTransport == transport) {
+                if (activeTransport.get() == transport) {
                     Log.w(TAG, connectLog(transport.getName() + " transport error"), error);
                     if (audioTrack != null) {
                         audioTrack.stop();
@@ -1857,10 +1868,11 @@ public class RadioAudioService extends Service {
     }
 
     private String connectionStateSummary() {
+        RadioTransport transport = activeTransport.get();
         return "mode=" + mode
             + ",hostToEsp32=" + (hostToEsp32 != null)
-            + ",activeTransport=" + (activeTransport != null ? activeTransport.getName() : "null")
-            + ",activeTransportReady=" + (activeTransport != null && activeTransport.isReady())
+            + ",activeTransport=" + (transport != null ? transport.getName() : "null")
+            + ",activeTransportReady=" + (transport != null && transport.isReady())
             + ",usbPermissionPending=" + usbPermissionRequestPending
             + ",radioMissingNotified=" + radioMissingNotified;
     }
@@ -2101,7 +2113,7 @@ public class RadioAudioService extends Service {
             if (!dataMode) {
                 applyMicGain(samples, AUDIO_FRAME_SAMPLES);
             }
-            RadioTransport transport = activeTransport;
+            RadioTransport transport = activeTransport.get();
             boolean batch = !dataMode && transport instanceof BleKissRadioTransport
                     && ((BleKissRadioTransport) transport).supportsBatchedTxAudio();
             if (!batch && pendingTxAudioBytes != 0) {
@@ -2155,14 +2167,16 @@ public class RadioAudioService extends Service {
     }
 
     public boolean canFlashFirmware() {
-        return activeTransport != null
-            && activeTransport.isReady()
-            && activeTransport.supportsFirmwareFlashing();
+        RadioTransport transport = activeTransport.get();
+        return transport != null
+            && transport.isReady()
+            && transport.supportsFirmwareFlashing();
     }
 
     public UsbSerialPort getSerialPort() {
-        if (activeTransport instanceof UsbSerialRadioTransport) {
-            return ((UsbSerialRadioTransport) activeTransport).getSerialPort();
+        RadioTransport transport = activeTransport.get();
+        if (transport instanceof UsbSerialRadioTransport) {
+            return ((UsbSerialRadioTransport) transport).getSerialPort();
         }
         return null;
     }
