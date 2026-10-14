@@ -93,6 +93,7 @@ import lombok.Getter;
 import lombok.Setter;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -186,7 +187,8 @@ public class RadioAudioService extends Service {
     private float audioTrackVolume = 0.0f;
     private AudioFocusRequest audioFocusRequest;
     private boolean hasAudioFocus = false;
-    private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES];
+    private final byte[] txAudioFrame = new byte[AUDIO_FRAME_BYTES * 2];
+    private int pendingTxAudioBytes;
     private final ImaAdpcm.Encoder txAudioEncoder = new ImaAdpcm.Encoder();
     private Codec2 codec2;
     private boolean freeDv2400bEnabled;
@@ -199,6 +201,7 @@ public class RadioAudioService extends Service {
     private short codec2PendingInput;
     private final AtomicReference<AudioRecord> audioRecord = new AtomicReference<>();
     private volatile boolean voiceCaptureActive;
+    private boolean bluetoothCaptureNegotiating;
     private final AtomicInteger voiceCaptureSession = new AtomicInteger();
     private boolean bluetoothCaptureRouteActive;
     private boolean bluetoothCaptureUsesSco;
@@ -206,7 +209,7 @@ public class RadioAudioService extends Service {
 
     // === USB / Serial ===
     private UsbManager usbManager;
-    private RadioTransport activeTransport;
+    private volatile RadioTransport activeTransport;
     private boolean usbPermissionRequestPending = false;
     @Getter
     private Protocol.Sender hostToEsp32;
@@ -1051,7 +1054,10 @@ public class RadioAudioService extends Service {
             return;
         }
         if (mode == RadioMode.RX && isTxAllowed()) {
-            txAudioEncoder.reset();
+            synchronized (this) {
+                txAudioEncoder.reset();
+                pendingTxAudioBytes = 0;
+            }
             codec2TxSamples = 0;
             codec2HasPendingInput = false;
             setMode(RadioMode.TX);
@@ -1083,7 +1089,8 @@ public class RadioAudioService extends Service {
     }
 
     private boolean startVoiceCapture(boolean forceInternalMic) {
-        if (voiceCaptureActive || checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+        if (voiceCaptureActive || bluetoothCaptureNegotiating
+                || checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
             return false;
         }
@@ -1092,9 +1099,21 @@ public class RadioAudioService extends Service {
         AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         long captureStartedMs = android.os.SystemClock.elapsedRealtime();
         boolean negotiateBluetooth = !forceInternalMic && isBluetoothPlaybackRouteActive(audioManager);
+        boolean waitForBluetooth = negotiateBluetooth && activeTransport instanceof BleKissRadioTransport;
         Log.i(TAG, "PTT input route selected in "
                 + (android.os.SystemClock.elapsedRealtime() - captureStartedMs)
-                + " ms; asyncBluetooth=" + negotiateBluetooth);
+                + " ms; bluetooth=" + negotiateBluetooth + ", waitBeforeBleTx=" + waitForBluetooth);
+        if (waitForBluetooth && requestBluetoothCaptureRoute(audioManager)) {
+            bluetoothCaptureNegotiating = true;
+            new Thread(() -> prepareBluetoothRecorderBeforeBleTx(audioManager, captureSession),
+                    "Bluetooth mic routing").start();
+            return true;
+        }
+        if (waitForBluetooth) {
+            releaseBluetoothCaptureRoute();
+            forceInternalMic = true;
+            negotiateBluetooth = false;
+        }
         AudioRecord recorder = createPhoneRecorder(audioManager, forceInternalMic || negotiateBluetooth);
         if (recorder == null) {
             releaseBluetoothCaptureRoute();
@@ -1152,6 +1171,48 @@ public class RadioAudioService extends Service {
                         "Bluetooth mic routing").start();
             } else {
                 Log.i(TAG, "Bluetooth microphone unavailable; continuing TX on built-in mic");
+            }
+        });
+    }
+
+    private void prepareBluetoothRecorderBeforeBleTx(AudioManager audioManager, int captureSession) {
+        long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
+        AudioRecord bluetoothRecorder = null;
+        int bluetoothRate = bluetoothCaptureUsesSco ? 8000 : AUDIO_SAMPLE_RATE;
+        while (voiceCaptureSession.get() == captureSession
+                && android.os.SystemClock.elapsedRealtime() < deadline) {
+            if (bluetoothRecorder == null) {
+                bluetoothRecorder = createBluetoothRecorder(audioManager, bluetoothRate);
+            }
+            if (bluetoothRecorder != null && isBluetoothHeadset(bluetoothRecorder.getRoutedDevice())) {
+                break;
+            }
+            if (!waitForBluetoothRoute()) {
+                break;
+            }
+        }
+        AudioRecord readyRecorder = bluetoothRecorder;
+        handler.post(() -> {
+            if (voiceCaptureSession.get() != captureSession
+                    || !bluetoothCaptureNegotiating || mode != RadioMode.TX) {
+                releaseRecorder(readyRecorder);
+                return;
+            }
+            bluetoothCaptureNegotiating = false;
+            if (readyRecorder != null && isBluetoothHeadset(readyRecorder.getRoutedDevice())) {
+                audioRecord.set(readyRecorder);
+                voiceCaptureActive = true;
+                Log.i(TAG, "Bluetooth microphone ready; starting BLE PTT");
+                radioModule.pttDown();
+                callbacks.txStarted();
+                startCaptureThread(readyRecorder, captureSession, bluetoothRate, true);
+            } else {
+                releaseRecorder(readyRecorder);
+                Log.w(TAG, "Bluetooth microphone unavailable; starting BLE PTT on built-in mic");
+                releaseBluetoothCaptureRoute();
+                if (!startVoiceCapture(true)) {
+                    endPtt();
+                }
             }
         });
     }
@@ -1417,11 +1478,13 @@ public class RadioAudioService extends Service {
     }
 
     private void stopVoiceCapture() {
-        if (!voiceCaptureActive && audioRecord.get() == null) {
+        if (!voiceCaptureActive && audioRecord.get() == null && !bluetoothCaptureNegotiating) {
             return;
         }
         voiceCaptureActive = false;
+        bluetoothCaptureNegotiating = false;
         voiceCaptureSession.incrementAndGet();
+        discardPendingTxAudio();
         releaseAudioRecord();
         releaseBluetoothCaptureRoute();
     }
@@ -2021,19 +2084,50 @@ public class RadioAudioService extends Service {
     }
 
     public void sendAudioToESP32(short[] samples, boolean dataMode) {
-        Protocol.Sender sender = hostToEsp32;
-        if (sender == null) {
-            return; // If connection is lost, just drop the audio frame.
+        Protocol.Sender sender;
+        byte[] pendingFrame = null;
+        byte[] currentFrame = null;
+        synchronized (this) {
+            sender = hostToEsp32;
+            if (sender == null) {
+                pendingTxAudioBytes = 0;
+                return; // If connection is lost, just drop the audio frame.
+            }
+            if (freeDv2400bEnabled && !dataMode) {
+                pendingTxAudioBytes = 0;
+                sendFreeDvAudio(sender, samples);
+                return;
+            }
+            if (!dataMode) {
+                applyMicGain(samples, AUDIO_FRAME_SAMPLES);
+            }
+            RadioTransport transport = activeTransport;
+            boolean batch = !dataMode && transport instanceof BleKissRadioTransport
+                    && ((BleKissRadioTransport) transport).supportsBatchedTxAudio();
+            if (!batch && pendingTxAudioBytes != 0) {
+                pendingFrame = Arrays.copyOf(txAudioFrame, pendingTxAudioBytes);
+                pendingTxAudioBytes = 0;
+            }
+            int encodedLength = txAudioEncoder.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES,
+                    txAudioFrame, pendingTxAudioBytes);
+            if (batch && pendingTxAudioBytes == 0) {
+                pendingTxAudioBytes = encodedLength;
+            } else {
+                currentFrame = Arrays.copyOf(txAudioFrame, pendingTxAudioBytes + encodedLength);
+                pendingTxAudioBytes = 0;
+            }
         }
-        if (freeDv2400bEnabled && !dataMode) {
-            sendFreeDvAudio(sender, samples);
-            return;
+        // Incoming window updates also use the service lock. Never hold it while TX waits for credit.
+        if (pendingFrame != null) {
+            sender.txAudio(pendingFrame, pendingFrame.length);
         }
-        if (!dataMode) {
-            applyMicGain(samples, AUDIO_FRAME_SAMPLES);
+        if (currentFrame != null) {
+            sender.txAudio(currentFrame, currentFrame.length);
         }
-        int encodedLength = txAudioEncoder.encodeBlock(samples, 0, AUDIO_FRAME_SAMPLES, txAudioFrame, 0);
-        sender.txAudio(txAudioFrame, encodedLength);
+    }
+
+    private synchronized void discardPendingTxAudio() {
+        pendingTxAudioBytes = 0;
     }
 
     private synchronized void sendFreeDvAudio(Protocol.Sender sender, short[] samples) {

@@ -15,6 +15,7 @@ import android.app.Application;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.os.Handler;
 import android.os.Looper;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import androidx.lifecycle.MutableLiveData;
@@ -628,6 +629,83 @@ public class RadioAudioServiceTest {
             stopVoiceCapture();
         }
         assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
+    }
+
+    @Test @Config(sdk = 32) public void blePttWaitsForBluetoothMicBeforeKeying() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
+        audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
+        transport.setAccessible(true);
+        transport.set(service, new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
+        int[] started = {0};
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void txStarted() { started[0]++; }
+        });
+        service.setMode(RadioMode.TX);
+
+        assertTrue(startVoiceCapture(false));
+        try {
+            assertFalse(service.isVoiceCaptureActive());
+            assertNull(currentRecorder());
+            assertEquals(0, started[0]);
+            assertEquals(AudioDeviceInfo.TYPE_BLE_HEADSET,
+                    audioManager.getCommunicationDevice().getType());
+        } finally {
+            stopVoiceCapture();
+        }
+        assertNull(audioManager.getCommunicationDevice());
+    }
+
+    @Test public void largeBleMtuBatchesTwoVoiceBlocksAndSmallMtuUsesSingleBlocks() throws Exception {
+        List<byte[]> frames = new ArrayList<>();
+        Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
+        sender.setAccessible(true);
+        sender.set(service, new Protocol.Sender(frames::add, false));
+        BleKissRadioTransport ble = new BleKissRadioTransport(service, new Handler(Looper.getMainLooper()));
+        Field payloadSize = BleKissRadioTransport.class.getDeclaredField("attPayloadSize");
+        payloadSize.setAccessible(true);
+        payloadSize.setInt(ble, 514);
+        Field transport = RadioAudioService.class.getDeclaredField("activeTransport");
+        transport.setAccessible(true);
+        transport.set(service, ble);
+        short[] samples = new short[RadioAudioService.AUDIO_FRAME_SAMPLES];
+
+        service.sendAudioToESP32(samples, false);
+        assertEquals(0, frames.size());
+        service.sendAudioToESP32(samples, false);
+        assertEquals(1, frames.size());
+        assertEquals(RadioAudioService.AUDIO_FRAME_BYTES * 2 + 9, frames.get(0).length);
+
+        payloadSize.setInt(ble, 244);
+        service.sendAudioToESP32(samples, false);
+        assertEquals(2, frames.size());
+        assertEquals(RadioAudioService.AUDIO_FRAME_BYTES + 9, frames.get(1).length);
+    }
+
+    @Test public void voiceTxDoesNotBlockIncomingFlowControlUpdate() throws Exception {
+        AtomicInteger sentFrames = new AtomicInteger();
+        Protocol.Sender sender = new Protocol.Sender(frame -> sentFrames.incrementAndGet());
+        sender.setFlowControlWindow(0);
+        ReflectionHelpers.setField(service, "hostToEsp32", sender);
+        Thread captureThread = new Thread(() -> service.sendAudioToESP32(
+                new short[RadioAudioService.AUDIO_FRAME_SAMPLES], false));
+        captureThread.start();
+        long deadline = System.nanoTime() + 1_000_000_000L;
+        while (captureThread.getState() != Thread.State.TIMED_WAITING
+                && System.nanoTime() < deadline) {
+            Thread.sleep(1);
+        }
+        assertEquals(Thread.State.TIMED_WAITING, captureThread.getState());
+
+        synchronized (service) {
+            sender.enlargeFlowControlWindow(1024);
+        }
+        captureThread.join(1000);
+        assertFalse(captureThread.isAlive());
+        assertEquals(1, sentFrames.get());
     }
 
     @Test @Config(sdk = 32) public void scoSamplesFillRadioFrameWithoutLosingBoundarySample() throws Exception {
