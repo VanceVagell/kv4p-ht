@@ -616,6 +616,42 @@ public class RadioAudioServiceTest {
         assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
     }
 
+    @Test @Config(sdk = 32) public void beepFindsHeadsetOutputWhileCommunicationRouteIsPending()
+            throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        AudioDeviceInfo headsetInput = audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET);
+        AudioDeviceInfo headsetOutput = audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET);
+        audio.setAvailableCommunicationDevices(List.of(headsetOutput));
+
+        assertTrue(audioManager.setCommunicationDevice(headsetOutput));
+        assertSame(headsetOutput, invokeService("findBluetoothTxBeepOutput",
+                new Class<?>[]{AudioManager.class, AudioDeviceInfo.class}, audioManager, headsetInput));
+        audioManager.clearCommunicationDevice();
+
+        assertSame(headsetOutput, invokeService("findBluetoothTxBeepOutput",
+                new Class<?>[]{AudioManager.class, AudioDeviceInfo.class}, audioManager, headsetInput));
+
+        audio.setAvailableCommunicationDevices(List.of());
+        audio.setOutputDevices(List.of(headsetOutput));
+        assertSame(headsetOutput, invokeService("findBluetoothTxBeepOutput",
+                new Class<?>[]{AudioManager.class, AudioDeviceInfo.class}, audioManager, headsetInput));
+
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)));
+        assertNull(invokeService("findBluetoothTxBeepOutput",
+                new Class<?>[]{AudioManager.class, AudioDeviceInfo.class}, audioManager, headsetInput));
+    }
+
+    @Test @Config(sdk = 28) public void beepFindsLegacyScoOutput() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        AudioDeviceInfo headsetInput = audioInputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO);
+        AudioDeviceInfo headsetOutput = audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_SCO);
+        Shadows.shadowOf(audioManager).setOutputDevices(List.of(headsetOutput));
+
+        assertSame(headsetOutput, invokeService("findBluetoothTxBeepOutput",
+                new Class<?>[]{AudioManager.class, AudioDeviceInfo.class}, audioManager, headsetInput));
+    }
+
     @Test @Config(sdk = 32) public void blePttWaitsForBluetoothMicBeforeKeying() throws Exception {
         AudioManager audioManager = service.getSystemService(AudioManager.class);
         ShadowAudioManager audio = Shadows.shadowOf(audioManager);
@@ -743,6 +779,38 @@ public class RadioAudioServiceTest {
         }
         assertFalse(service.isVoiceCaptureActive());
         assertNull(currentRecorder());
+    }
+
+    @Test @Config(sdk = 32) public void lostBluetoothMicRestartsPttOnBuiltInMic() throws Exception {
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        Shadows.shadowOf(audioManager).setInputDevices(List.of(
+                audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
+        FiniteAudioRecord headsetRecorder = new FiniteAudioRecord(service);
+        @SuppressWarnings("unchecked") AtomicReference<AudioRecord> selected =
+                ReflectionHelpers.getField(service, "audioRecord");
+        selected.set(headsetRecorder);
+        ReflectionHelpers.setField(service, "voiceCaptureActive", true);
+        service.setMode(RadioMode.TX);
+        int[] started = {0};
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void txStarted() { started[0]++; }
+        });
+
+        try {
+            invokeService("captureVoiceAudio",
+                    new Class<?>[]{AudioRecord.class, int.class, int.class, boolean.class},
+                    headsetRecorder, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE, true);
+            assertSame(headsetRecorder, currentRecorder());
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+            assertEquals(1, started[0]);
+            assertTrue(service.isVoiceCaptureActive());
+            assertNotEquals(headsetRecorder, currentRecorder());
+            assertEquals(AudioDeviceInfo.TYPE_BUILTIN_MIC,
+                    currentRecorder().getPreferredDevice().getType());
+        } finally {
+            service.endPtt();
+        }
     }
 
     @Test public void largeBleMtuBatchesTwoVoiceBlocksAndSmallMtuUsesSingleBlocks() throws Exception {

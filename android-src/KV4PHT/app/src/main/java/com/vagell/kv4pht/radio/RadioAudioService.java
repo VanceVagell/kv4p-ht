@@ -1386,19 +1386,18 @@ public class RadioAudioService extends Service {
                 onBluetoothCaptureLost(recorder, captureSession);
                 return;
             }
-            if (samples > 0) {
-                if (framesToSkip > 0) {
-                    framesToSkip--;
-                    skippedFrames++;
-                    if (framesToSkip == 0) {
-                        Log.i(TAG, "BLE TX discarded " + skippedFrames
-                                + " initial AudioRecord frames before sending audio");
-                    }
-                    continue;
+            if (samples <= 0) continue;
+            if (framesToSkip > 0) {
+                framesToSkip--;
+                skippedFrames++;
+                if (framesToSkip == 0) {
+                    Log.i(TAG, "BLE TX discarded " + skippedFrames
+                            + " initial AudioRecord frames before sending audio");
                 }
-                frameSamples = sendCapturedAudio(recorder, captureSession, captureRate,
-                        audioBuffer, samples, radioFrame, frameSamples);
+                continue;
             }
+            frameSamples = sendCapturedAudio(recorder, captureSession, captureRate,
+                    audioBuffer, samples, radioFrame, frameSamples);
         }
         if (framesToSkip > 0 && skippedFrames > 0) {
             Log.i(TAG, "BLE TX ended after discarding " + skippedFrames
@@ -1411,30 +1410,15 @@ public class RadioAudioService extends Service {
         AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         AudioDeviceInfo routedInput = recorder.getRoutedDevice();
         if (!isBluetoothHeadset(routedInput)) return;
-        AudioDeviceInfo headset = null;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            headset = audioManager.getCommunicationDevice();
-            if (headset == null || headset.getType() != routedInput.getType()) {
-                for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
-                    if (device.getType() == routedInput.getType()) {
-                        headset = device;
-                        break;
-                    }
-                }
-            }
-        }
-        if (headset == null || headset.getType() != routedInput.getType()) {
-            for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
-                if (device.getType() == routedInput.getType()) {
-                    headset = device;
-                    break;
-                }
-            }
-        }
-        if (!isBluetoothHeadset(headset)) {
+        AudioDeviceInfo headset = findBluetoothTxBeepOutput(audioManager, routedInput);
+        if (headset == null) {
             Log.w(TAG, "Bluetooth TX ready beep skipped: no output for input type " + routedInput.getType());
             return;
         }
+        playBluetoothTxReadyBeepOnOutput(headset);
+    }
+
+    private short[] createBluetoothTxReadyBeepSamples() {
         int leadInSamples = AUDIO_SAMPLE_RATE * 300 / 1000;
         int toneSamples = AUDIO_SAMPLE_RATE * 70 / 1000;
         short[] samples = new short[leadInSamples + toneSamples];
@@ -1445,6 +1429,11 @@ public class RadioAudioService extends Service {
             samples[leadInSamples + i] = (short) (Short.MAX_VALUE * level
                     * Math.sin(2 * Math.PI * 880 * i / AUDIO_SAMPLE_RATE));
         }
+        return samples;
+    }
+
+    private void playBluetoothTxReadyBeepOnOutput(AudioDeviceInfo headset) {
+        short[] samples = createBluetoothTxReadyBeepSamples();
         AudioTrack beepTrack = null;
         try {
             beepTrack = new AudioTrack.Builder()
@@ -1473,12 +1462,7 @@ public class RadioAudioService extends Service {
                     + ", preferred=" + preferred + ", samples written=" + written);
             if (written != samples.length) return;
             AudioTrack track = beepTrack;
-            handler.postDelayed(() -> {
-                AudioDeviceInfo routed = track.getRoutedDevice();
-                Log.i(TAG, "Bluetooth TX ready beep routed to "
-                        + (routed == null ? "unknown" : routed.getType()));
-                if (routed != null && !isBluetoothHeadset(routed)) track.stop();
-            }, 50);
+            handler.postDelayed(() -> checkBluetoothTxReadyBeepRoute(track), 50);
             handler.postDelayed(track::release, 900);
             beepTrack = null;
         } catch (RuntimeException error) {
@@ -1486,6 +1470,31 @@ public class RadioAudioService extends Service {
         } finally {
             if (beepTrack != null) beepTrack.release();
         }
+    }
+
+    private void checkBluetoothTxReadyBeepRoute(AudioTrack track) {
+        AudioDeviceInfo routed = track.getRoutedDevice();
+        Log.i(TAG, "Bluetooth TX ready beep routed to "
+                + (routed == null ? "unknown" : routed.getType()));
+        if (routed != null && !isBluetoothHeadset(routed)) track.stop();
+    }
+
+    private AudioDeviceInfo findBluetoothTxBeepOutput(AudioManager audioManager, AudioDeviceInfo routedInput) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            AudioDeviceInfo selected = audioManager.getCommunicationDevice();
+            if (selected != null && selected.getType() == routedInput.getType()) return selected;
+            for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
+                if (device.getType() == routedInput.getType()) {
+                    return device;
+                }
+            }
+        }
+        for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            if (device.getType() == routedInput.getType()) {
+                return device;
+            }
+        }
+        return null;
     }
 
     private void onBluetoothCaptureLost(AudioRecord recorder, int captureSession) {
