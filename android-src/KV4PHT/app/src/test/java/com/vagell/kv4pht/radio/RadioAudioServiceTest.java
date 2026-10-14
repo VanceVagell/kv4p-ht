@@ -460,58 +460,14 @@ public class RadioAudioServiceTest {
 
     @Test @Config(sdk = 32) public void cancelledPttReleasesLateBluetoothRecorder() throws Exception {
         AudioManager audioManager = service.getSystemService(AudioManager.class);
-        Shadows.shadowOf(audioManager).setInputDevices(List.of(
-                audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC),
-                audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
-        AudioRecord phoneRecorder = createPhoneRecorder(audioManager, true);
+        Shadows.shadowOf(audioManager).setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
         AudioRecord bluetoothRecorder = createBluetoothRecorder(audioManager);
-        assertNotNull(phoneRecorder);
         assertNotNull(bluetoothRecorder);
-        try {
-            Method handoff = RadioAudioService.class.getDeclaredMethod("handOffToBluetooth",
-                    AudioRecord.class, AudioRecord.class, int.class, int.class);
-            handoff.setAccessible(true);
-            handoff.invoke(service, phoneRecorder, bluetoothRecorder, 0, RadioAudioService.AUDIO_SAMPLE_RATE);
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
-
-            assertEquals(AudioRecord.STATE_UNINITIALIZED, bluetoothRecorder.getState());
-            assertFalse(service.isVoiceCaptureActive());
-        } finally {
-            phoneRecorder.stop();
-            phoneRecorder.release();
-        }
-    }
-
-    @Test @Config(sdk = 32) public void activePttHandsOffToBluetoothRecorder() throws Exception {
-        AudioManager audioManager = service.getSystemService(AudioManager.class);
-        Shadows.shadowOf(audioManager).setInputDevices(List.of(
-                audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC),
-                audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
-        AudioRecord phoneRecorder = createPhoneRecorder(audioManager, true);
-        AudioRecord bluetoothRecorder = createBluetoothRecorder(audioManager);
-        assertNotNull(phoneRecorder);
-        assertNotNull(bluetoothRecorder);
-        Field active = RadioAudioService.class.getDeclaredField("voiceCaptureActive");
-        active.setAccessible(true);
-        active.set(service, true);
-        Field current = RadioAudioService.class.getDeclaredField("audioRecord");
-        current.setAccessible(true);
-        @SuppressWarnings("unchecked") AtomicReference<AudioRecord> selected =
-                (AtomicReference<AudioRecord>) current.get(service);
-        selected.set(phoneRecorder);
-        service.setMode(RadioMode.TX);
-        try {
-            invokeService("handOffToBluetooth",
-                    new Class<?>[]{AudioRecord.class, AudioRecord.class, int.class, int.class},
-                    phoneRecorder, bluetoothRecorder, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE);
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
-
-            assertSame(bluetoothRecorder, currentRecorder());
-            assertEquals(AudioRecord.STATE_UNINITIALIZED, phoneRecorder.getState());
-            assertTrue(service.isVoiceCaptureActive());
-        } finally {
-            stopVoiceCapture();
-        }
+        invokeService("completeBluetoothRecorder",
+                new Class<?>[]{AudioRecord.class, int.class, int.class},
+                bluetoothRecorder, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE);
+        assertEquals(AudioRecord.STATE_UNINITIALIZED, bluetoothRecorder.getState());
+        assertFalse(service.isVoiceCaptureActive());
     }
 
     @Test public void legacyScoRouteRestoresPreviousAudioMode() throws Exception {
@@ -571,7 +527,7 @@ public class RadioAudioServiceTest {
         assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
     }
 
-    @Test public void pttStartsOnPhoneMicBeforeLegacyScoNegotiation() throws Exception {
+    @Test public void usbPttWaitsForLegacyScoBeforeKeying() throws Exception {
         AudioManager audioManager = service.getSystemService(AudioManager.class);
         ShadowAudioManager audio = Shadows.shadowOf(audioManager);
         audio.setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)));
@@ -586,18 +542,17 @@ public class RadioAudioServiceTest {
         service.setMode(RadioMode.TX);
         try {
             assertTrue(startVoiceCapture(false));
+            assertEquals(0, started[0]);
+            assertFalse(service.isVoiceCaptureActive());
+            assertNull(currentRecorder());
+            assertEquals(AudioManager.MODE_IN_COMMUNICATION, audioManager.getMode());
+            invokeService("completeBluetoothRecorder",
+                    new Class<?>[]{AudioRecord.class, int.class, int.class},
+                    null, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE);
             assertEquals(1, started[0]);
             assertTrue(service.isVoiceCaptureActive());
+            assertNotNull(currentRecorder());
             assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
-            assertEquals(AudioManager.MODE_IN_COMMUNICATION, audioManager.getMode());
-            Method unavailable = RadioAudioService.class.getDeclaredMethod("onBluetoothRouteUnavailable",
-                    AudioRecord.class, int.class);
-            unavailable.setAccessible(true);
-            unavailable.invoke(service, currentRecorder(), captureSession());
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
-            assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
-            assertTrue(service.isVoiceCaptureActive());
         } finally {
             stopVoiceCapture();
             assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
@@ -647,14 +602,12 @@ public class RadioAudioServiceTest {
         service.setMode(RadioMode.TX);
         try {
             assertTrue(startVoiceCapture(false));
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
             assertEquals(AudioDeviceInfo.TYPE_BLE_HEADSET, audioManager.getCommunicationDevice().getType());
             assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
-            Method lost = RadioAudioService.class.getDeclaredMethod("onBluetoothCaptureLost",
-                    AudioRecord.class, int.class);
-            lost.setAccessible(true);
-            lost.invoke(service, currentRecorder(), captureSession());
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertFalse(service.isVoiceCaptureActive());
+            invokeService("completeBluetoothRecorder",
+                    new Class<?>[]{AudioRecord.class, int.class, int.class},
+                    null, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE);
             assertTrue(service.isVoiceCaptureActive());
             assertEquals(AudioManager.MODE_NORMAL, audioManager.getMode());
         } finally {
@@ -690,6 +643,14 @@ public class RadioAudioServiceTest {
     }
 
     @Test @Config(sdk = 32) public void blePttKeysOnceAfterHeadsetMicRoutesAndReleasesIt() throws Exception {
+        assertPttKeysOnceAfterHeadsetMicRoutesAndReleasesIt(true);
+    }
+
+    @Test @Config(sdk = 32) public void usbPttKeysOnceAfterHeadsetMicRoutesAndReleasesIt() throws Exception {
+        assertPttKeysOnceAfterHeadsetMicRoutesAndReleasesIt(false);
+    }
+
+    private void assertPttKeysOnceAfterHeadsetMicRoutesAndReleasesIt(boolean useBle) throws Exception {
         RoutedBluetoothService routedService = Robolectric.buildService(RoutedBluetoothService.class).get();
         service = routedService;
         Shadows.shadowOf((Application) service.getApplicationContext())
@@ -700,7 +661,9 @@ public class RadioAudioServiceTest {
                 audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
         audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
         audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
-        setActiveTransport(new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
+        if (useBle) {
+            setActiveTransport(new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
+        }
         Protocol.Sender sender = new Protocol.Sender(frame -> { }, false);
         ReflectionHelpers.setField(service, "hostToEsp32", sender);
         service.getRadioModule().attachSender(sender);
@@ -767,7 +730,7 @@ public class RadioAudioServiceTest {
         ReflectionHelpers.setField(service, "bluetoothCaptureNegotiating", true);
 
         try {
-            invokeService("completeBluetoothRecorderBeforeBleTx",
+            invokeService("completeBluetoothRecorder",
                     new Class<?>[]{AudioRecord.class, int.class, int.class},
                     null, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE);
 
@@ -807,6 +770,40 @@ public class RadioAudioServiceTest {
         assertEquals(3, frames.size());
         assertEquals(RadioAudioService.AUDIO_FRAME_BYTES + 9, frames.get(1).length);
         assertEquals(RadioAudioService.AUDIO_FRAME_BYTES + 9, frames.get(2).length);
+    }
+
+    @Test public void bleCaptureSkipsConfiguredInitialReadsWithoutChangingOtherTransports()
+            throws Exception {
+        List<byte[]> frames = new ArrayList<>();
+        ReflectionHelpers.setField(service, "hostToEsp32", new Protocol.Sender(frames::add, false));
+        BleKissRadioTransport ble = new BleKissRadioTransport(service, new Handler(Looper.getMainLooper()));
+        setActiveTransport(ble);
+        service.setBleTxInitialFramesToSkip(2);
+
+        captureFourAudioReads();
+        assertEquals(2, frames.size());
+
+        frames.clear();
+        setActiveTransport(null);
+        captureFourAudioReads();
+        assertEquals(4, frames.size());
+    }
+
+    private void captureFourAudioReads() throws Exception {
+        FiniteAudioRecord recorder = new FiniteAudioRecord(service);
+        @SuppressWarnings("unchecked") AtomicReference<AudioRecord> selected =
+                ReflectionHelpers.getField(service, "audioRecord");
+        selected.set(recorder);
+        ReflectionHelpers.setField(service, "voiceCaptureActive", true);
+        try {
+            invokeService("captureVoiceAudio",
+                    new Class<?>[]{AudioRecord.class, int.class, int.class, boolean.class},
+                    recorder, captureSession(), RadioAudioService.AUDIO_SAMPLE_RATE, false);
+            assertEquals(5, recorder.reads);
+        } finally {
+            selected.set(null);
+            recorder.release();
+        }
     }
 
     @Test public void voiceTxDoesNotBlockIncomingFlowControlUpdate() throws Exception {
@@ -964,6 +961,28 @@ public class RadioAudioServiceTest {
         @Override public void release() {
             released = true;
             super.release();
+        }
+    }
+
+    private static class FiniteAudioRecord extends AudioRecord {
+        private final RadioAudioService service;
+        int reads;
+
+        FiniteAudioRecord(RadioAudioService service) {
+            super(MediaRecorder.AudioSource.MIC, RadioAudioService.AUDIO_SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                    RadioAudioService.AUDIO_FRAME_SAMPLES * 2);
+            this.service = service;
+        }
+
+        @Override public int read(short[] data, int offset, int size, int readMode) {
+            reads++;
+            if (reads > 4) {
+                ReflectionHelpers.setField(service, "voiceCaptureActive", false);
+                return 0;
+            }
+            for (int i = 0; i < size; i++) data[offset + i] = (short) reads;
+            return size;
         }
     }
 

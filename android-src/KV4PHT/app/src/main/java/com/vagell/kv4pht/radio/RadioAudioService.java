@@ -141,6 +141,7 @@ public class RadioAudioService extends Service {
     private static final int RX_AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
     public static final int AUDIO_FRAME_SAMPLES = 249; // One 128-byte mono IMA ADPCM audio block at 16kHz
     public static final int AUDIO_FRAME_BYTES = ImaAdpcm.encodedSize(AUDIO_FRAME_SAMPLES);
+    private static final int DEFAULT_BLE_TX_INITIAL_FRAMES_TO_SKIP = 25;
     private static final int RX_AUDIO_MIN_BUFFER_SIZE =
             Math.max(AudioTrack.getMinBufferSize(
                     AUDIO_SAMPLE_RATE,
@@ -203,9 +204,14 @@ public class RadioAudioService extends Service {
     private volatile boolean voiceCaptureActive;
     private boolean bluetoothCaptureNegotiating;
     private final AtomicInteger voiceCaptureSession = new AtomicInteger();
-    private boolean bluetoothCaptureRouteActive;
+    private volatile boolean bluetoothCaptureRouteActive;
     private boolean bluetoothCaptureUsesSco;
     private int previousAudioMode = AudioManager.MODE_NORMAL;
+    private volatile int bleTxInitialFramesToSkip = DEFAULT_BLE_TX_INITIAL_FRAMES_TO_SKIP;
+
+    public void setBleTxInitialFramesToSkip(int frames) {
+        bleTxInitialFramesToSkip = Math.max(0, frames);
+    }
 
     // === USB / Serial ===
     private UsbManager usbManager;
@@ -1101,23 +1107,17 @@ public class RadioAudioService extends Service {
         AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         long captureStartedMs = android.os.SystemClock.elapsedRealtime();
         boolean negotiateBluetooth = !forceInternalMic && isBluetoothPlaybackRouteActive(audioManager);
-        boolean waitForBluetooth = negotiateBluetooth
-                && activeTransport.get() instanceof BleKissRadioTransport;
         Log.i(TAG, "PTT input route selected in "
                 + (android.os.SystemClock.elapsedRealtime() - captureStartedMs)
-                + " ms; bluetooth=" + negotiateBluetooth + ", waitBeforeBleTx=" + waitForBluetooth);
-        if (waitForBluetooth && requestBluetoothCaptureRoute(audioManager)) {
+                + " ms; bluetooth=" + negotiateBluetooth);
+        if (negotiateBluetooth && requestBluetoothCaptureRoute(audioManager)) {
             bluetoothCaptureNegotiating = true;
-            new Thread(() -> prepareBluetoothRecorderBeforeBleTx(audioManager, captureSession),
+            new Thread(() -> prepareBluetoothRecorder(audioManager, captureSession),
                     "Bluetooth mic routing").start();
             return true;
         }
-        if (waitForBluetooth) {
-            releaseBluetoothCaptureRoute();
-            forceInternalMic = true;
-            negotiateBluetooth = false;
-        }
-        AudioRecord recorder = createPhoneRecorder(audioManager, forceInternalMic || negotiateBluetooth);
+        releaseBluetoothCaptureRoute();
+        AudioRecord recorder = createPhoneRecorder(audioManager, true);
         if (recorder == null) {
             releaseBluetoothCaptureRoute();
             return false;
@@ -1129,9 +1129,6 @@ public class RadioAudioService extends Service {
         radioModule.pttDown();
         callbacks.txStarted();
         startCaptureThread(recorder, captureSession, AUDIO_SAMPLE_RATE, false);
-        if (negotiateBluetooth) {
-            beginBluetoothHandoff(audioManager, recorder, captureSession);
-        }
         return true;
     }
 
@@ -1163,25 +1160,10 @@ public class RadioAudioService extends Service {
         return recorder;
     }
 
-    private void beginBluetoothHandoff(AudioManager audioManager, AudioRecord phoneRecorder,
-            int captureSession) {
-        handler.post(() -> {
-            if (!isVoiceCaptureSessionActive(phoneRecorder, captureSession) || mode != RadioMode.TX) {
-                return;
-            }
-            if (requestBluetoothCaptureRoute(audioManager)) {
-                new Thread(() -> prepareBluetoothRecorder(audioManager, phoneRecorder, captureSession),
-                        "Bluetooth mic routing").start();
-            } else {
-                Log.i(TAG, "Bluetooth microphone unavailable; continuing TX on built-in mic");
-            }
-        });
-    }
-
-    private void prepareBluetoothRecorderBeforeBleTx(AudioManager audioManager, int captureSession) {
+    private void prepareBluetoothRecorder(AudioManager audioManager, int captureSession) {
         int bluetoothRate = bluetoothCaptureUsesSco ? 8000 : AUDIO_SAMPLE_RATE;
         AudioRecord readyRecorder = waitForBluetoothRecorder(audioManager, captureSession, bluetoothRate);
-        handler.post(() -> completeBluetoothRecorderBeforeBleTx(readyRecorder, captureSession, bluetoothRate));
+        handler.post(() -> completeBluetoothRecorder(readyRecorder, captureSession, bluetoothRate));
     }
 
     private AudioRecord waitForBluetoothRecorder(AudioManager audioManager, int captureSession,
@@ -1203,7 +1185,7 @@ public class RadioAudioService extends Service {
         return recorder;
     }
 
-    private void completeBluetoothRecorderBeforeBleTx(AudioRecord readyRecorder, int captureSession,
+    private void completeBluetoothRecorder(AudioRecord readyRecorder, int captureSession,
             int bluetoothRate) {
         if (voiceCaptureSession.get() != captureSession
                 || !bluetoothCaptureNegotiating || mode != RadioMode.TX) {
@@ -1214,13 +1196,15 @@ public class RadioAudioService extends Service {
         if (readyRecorder != null && isBluetoothHeadset(readyRecorder.getRoutedDevice())) {
             audioRecord.set(readyRecorder);
             voiceCaptureActive = true;
-            Log.i(TAG, "Bluetooth microphone ready; starting BLE PTT");
+            Log.i(TAG, "Bluetooth microphone ready; starting PTT");
             radioModule.pttDown();
             callbacks.txStarted();
             startCaptureThread(readyRecorder, captureSession, bluetoothRate, true);
+            new Thread(() -> playBluetoothTxReadyBeep(readyRecorder, captureSession),
+                    "Bluetooth TX ready beep").start();
         } else {
             releaseRecorder(readyRecorder);
-            Log.w(TAG, "Bluetooth microphone unavailable; starting BLE PTT on built-in mic");
+            Log.w(TAG, "Bluetooth microphone unavailable; starting PTT on built-in mic");
             releaseBluetoothCaptureRoute();
             if (!startVoiceCapture(true)) {
                 endPtt();
@@ -1244,28 +1228,6 @@ public class RadioAudioService extends Service {
             }
         }
         Log.w(TAG, "No built-in microphone available");
-    }
-
-    private void prepareBluetoothRecorder(AudioManager audioManager, AudioRecord phoneRecorder,
-            int captureSession) {
-        long deadline = android.os.SystemClock.elapsedRealtime() + 2000;
-        AudioRecord bluetoothRecorder = null;
-        int bluetoothRate = bluetoothCaptureUsesSco ? 8000 : AUDIO_SAMPLE_RATE;
-        while (isVoiceCaptureSessionActive(phoneRecorder, captureSession)
-                && android.os.SystemClock.elapsedRealtime() < deadline) {
-            if (bluetoothRecorder == null) {
-                bluetoothRecorder = createBluetoothRecorder(audioManager, bluetoothRate);
-            }
-            if (bluetoothRecorder != null && isBluetoothHeadset(bluetoothRecorder.getRoutedDevice())) {
-                handOffToBluetooth(phoneRecorder, bluetoothRecorder, captureSession, bluetoothRate);
-                return;
-            }
-            if (!waitForBluetoothRoute()) {
-                break;
-            }
-        }
-        releaseRecorder(bluetoothRecorder);
-        onBluetoothRouteUnavailable(phoneRecorder, captureSession);
     }
 
     protected AudioRecord createBluetoothRecorder(AudioManager audioManager, int bluetoothRate) {
@@ -1304,20 +1266,6 @@ public class RadioAudioService extends Service {
         return null;
     }
 
-    private void handOffToBluetooth(AudioRecord phoneRecorder, AudioRecord bluetoothRecorder,
-            int captureSession, int bluetoothRate) {
-        handler.post(() -> {
-            if (isVoiceCaptureSessionActive(phoneRecorder, captureSession) && mode == RadioMode.TX) {
-                audioRecord.set(bluetoothRecorder);
-                Log.i(TAG, "Switched TX microphone to separate Bluetooth recorder");
-                startCaptureThread(bluetoothRecorder, captureSession, bluetoothRate, true);
-                releaseRecorder(phoneRecorder);
-            } else {
-                releaseRecorder(bluetoothRecorder);
-            }
-        });
-    }
-
     private boolean waitForBluetoothRoute() {
         try {
             Thread.sleep(50);
@@ -1326,15 +1274,6 @@ public class RadioAudioService extends Service {
             Thread.currentThread().interrupt();
             return false;
         }
-    }
-
-    private void onBluetoothRouteUnavailable(AudioRecord phoneRecorder, int captureSession) {
-        handler.post(() -> {
-            if (isVoiceCaptureSessionActive(phoneRecorder, captureSession) && mode == RadioMode.TX) {
-                Log.w(TAG, "Bluetooth microphone did not connect; continuing TX on built-in mic");
-                releaseBluetoothCaptureRoute();
-            }
-        });
     }
 
     private boolean isBluetoothHeadset(AudioDeviceInfo device) {
@@ -1437,6 +1376,10 @@ public class RadioAudioService extends Service {
         short[] radioFrame = captureRate == AUDIO_SAMPLE_RATE ? audioBuffer
                 : new short[AUDIO_FRAME_SAMPLES];
         int frameSamples = 0;
+        int configuredFramesToSkip = activeTransport.get() instanceof BleKissRadioTransport
+                ? bleTxInitialFramesToSkip : 0;
+        int framesToSkip = configuredFramesToSkip;
+        int skippedFrames = 0;
         while (isVoiceCaptureSessionActive(recorder, captureSession)) {
             int samples = recorder.read(audioBuffer, 0, AUDIO_FRAME_SAMPLES, AudioRecord.READ_BLOCKING);
             if (requireBluetooth && !isBluetoothHeadset(recorder.getRoutedDevice())) {
@@ -1444,9 +1387,104 @@ public class RadioAudioService extends Service {
                 return;
             }
             if (samples > 0) {
+                if (framesToSkip > 0) {
+                    framesToSkip--;
+                    skippedFrames++;
+                    if (framesToSkip == 0) {
+                        Log.i(TAG, "BLE TX discarded " + skippedFrames
+                                + " initial AudioRecord frames before sending audio");
+                    }
+                    continue;
+                }
                 frameSamples = sendCapturedAudio(recorder, captureSession, captureRate,
                         audioBuffer, samples, radioFrame, frameSamples);
             }
+        }
+        if (framesToSkip > 0 && skippedFrames > 0) {
+            Log.i(TAG, "BLE TX ended after discarding " + skippedFrames
+                    + " of " + configuredFramesToSkip + " initial AudioRecord frames");
+        }
+    }
+
+    private void playBluetoothTxReadyBeep(AudioRecord recorder, int captureSession) {
+        if (!isVoiceCaptureSessionActive(recorder, captureSession)) return;
+        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        AudioDeviceInfo routedInput = recorder.getRoutedDevice();
+        if (!isBluetoothHeadset(routedInput)) return;
+        AudioDeviceInfo headset = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            headset = audioManager.getCommunicationDevice();
+            if (headset == null || headset.getType() != routedInput.getType()) {
+                for (AudioDeviceInfo device : audioManager.getAvailableCommunicationDevices()) {
+                    if (device.getType() == routedInput.getType()) {
+                        headset = device;
+                        break;
+                    }
+                }
+            }
+        }
+        if (headset == null || headset.getType() != routedInput.getType()) {
+            for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+                if (device.getType() == routedInput.getType()) {
+                    headset = device;
+                    break;
+                }
+            }
+        }
+        if (!isBluetoothHeadset(headset)) {
+            Log.w(TAG, "Bluetooth TX ready beep skipped: no output for input type " + routedInput.getType());
+            return;
+        }
+        int leadInSamples = AUDIO_SAMPLE_RATE * 300 / 1000;
+        int toneSamples = AUDIO_SAMPLE_RATE * 70 / 1000;
+        short[] samples = new short[leadInSamples + toneSamples];
+        int fadeSamples = AUDIO_SAMPLE_RATE / 200;
+        for (int i = 0; i < toneSamples; i++) {
+            int fade = Math.min(Math.min(i, toneSamples - 1 - i), fadeSamples);
+            double level = 0.10 * fade / fadeSamples;
+            samples[leadInSamples + i] = (short) (Short.MAX_VALUE * level
+                    * Math.sin(2 * Math.PI * 880 * i / AUDIO_SAMPLE_RATE));
+        }
+        AudioTrack beepTrack = null;
+        try {
+            beepTrack = new AudioTrack.Builder()
+                    .setAudioAttributes(new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build())
+                    .setAudioFormat(new AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(AUDIO_SAMPLE_RATE)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build())
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .setBufferSizeInBytes(Math.max(samples.length * 2,
+                            AudioTrack.getMinBufferSize(AUDIO_SAMPLE_RATE,
+                                    AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)))
+                    .build();
+            if (beepTrack.getState() != AudioTrack.STATE_INITIALIZED) {
+                Log.w(TAG, "Bluetooth TX ready beep track was not initialized");
+                return;
+            }
+            boolean preferred = beepTrack.setPreferredDevice(headset);
+            beepTrack.play();
+            int written = beepTrack.write(samples, 0, samples.length, AudioTrack.WRITE_BLOCKING);
+            Log.i(TAG, "Bluetooth TX ready beep output " + headset.getType()
+                    + ", preferred=" + preferred + ", samples written=" + written);
+            if (written != samples.length) return;
+            AudioTrack track = beepTrack;
+            handler.postDelayed(() -> {
+                AudioDeviceInfo routed = track.getRoutedDevice();
+                Log.i(TAG, "Bluetooth TX ready beep routed to "
+                        + (routed == null ? "unknown" : routed.getType()));
+                if (routed != null && !isBluetoothHeadset(routed)) track.stop();
+            }, 50);
+            handler.postDelayed(track::release, 900);
+            beepTrack = null;
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Could not play Bluetooth TX ready beep", error);
+        } finally {
+            if (beepTrack != null) beepTrack.release();
         }
     }
 
