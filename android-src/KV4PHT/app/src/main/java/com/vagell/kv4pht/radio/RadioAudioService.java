@@ -1257,7 +1257,7 @@ public class RadioAudioService extends Service {
         onBluetoothRouteUnavailable(phoneRecorder, captureSession);
     }
 
-    private AudioRecord createBluetoothRecorder(AudioManager audioManager, int bluetoothRate) {
+    protected AudioRecord createBluetoothRecorder(AudioManager audioManager, int bluetoothRate) {
         AudioDeviceInfo device = findBluetoothInput(audioManager);
         if (device == null || checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {

@@ -15,6 +15,8 @@ import android.app.Application;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.media.AudioFormat;
+import android.media.MediaRecorder;
 import android.os.Handler;
 import android.os.Looper;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
@@ -27,6 +29,8 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
@@ -659,6 +663,67 @@ public class RadioAudioServiceTest {
         assertNull(audioManager.getCommunicationDevice());
     }
 
+    @Test @Config(sdk = 32) public void blePttKeysOnceAfterHeadsetMicRoutesAndReleasesIt() throws Exception {
+        RoutedBluetoothService routedService = Robolectric.buildService(RoutedBluetoothService.class).get();
+        service = routedService;
+        Shadows.shadowOf((Application) service.getApplicationContext())
+                .grantPermissions(Manifest.permission.RECORD_AUDIO, Manifest.permission.BLUETOOTH_CONNECT);
+        AudioManager audioManager = service.getSystemService(AudioManager.class);
+        ShadowAudioManager audio = Shadows.shadowOf(audioManager);
+        audio.setInputDevices(List.of(audioInputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC),
+                audioInputDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        audio.setOutputDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)));
+        audio.setAvailableCommunicationDevices(List.of(audioDevice(AudioDeviceInfo.TYPE_BLE_HEADSET)));
+        ReflectionHelpers.setField(service, "activeTransport",
+                new BleKissRadioTransport(service, new Handler(Looper.getMainLooper())));
+        Protocol.Sender sender = new Protocol.Sender(frame -> { }, false);
+        ReflectionHelpers.setField(service, "hostToEsp32", sender);
+        service.getRadioModule().attachSender(sender);
+        service.getRadioModule().markTransportReady();
+        int initialSequence = desiredState().getSequence();
+        int[] started = {0};
+        int[] ended = {0};
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void txStarted() { started[0]++; }
+            @Override public void txEnded() { ended[0]++; }
+        });
+        service.setMode(RadioMode.TX);
+
+        try {
+            assertTrue(startVoiceCapture(false));
+            assertEquals(0, started[0]);
+            assertEquals(0, desiredState().getFlags() & Protocol.HOST_STATE_PTT_REQUESTED);
+            assertFalse(service.isVoiceCaptureActive());
+            assertTrue(routedService.created.await(1, TimeUnit.SECONDS));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+            while (!service.isVoiceCaptureActive() && System.nanoTime() < deadline) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle();
+                Thread.sleep(1);
+            }
+
+            assertTrue(service.isVoiceCaptureActive());
+            assertEquals(1, started[0]);
+            assertEquals(initialSequence + 1, desiredState().getSequence());
+            assertTrue((desiredState().getFlags() & Protocol.HOST_STATE_PTT_REQUESTED) != 0);
+            assertSame(routedService.recorder, currentRecorder());
+            assertTrue(routedService.recorder.readStarted.await(1, TimeUnit.SECONDS));
+            assertEquals(AudioDeviceInfo.TYPE_BLE_HEADSET,
+                    audioManager.getCommunicationDevice().getType());
+
+            service.endPtt();
+            assertEquals(1, started[0]);
+            assertEquals(1, ended[0]);
+            assertEquals(initialSequence + 2, desiredState().getSequence());
+            assertEquals(0, desiredState().getFlags() & Protocol.HOST_STATE_PTT_REQUESTED);
+            assertFalse(service.isVoiceCaptureActive());
+            assertNull(currentRecorder());
+            assertTrue(routedService.recorder.released);
+            assertNull(audioManager.getCommunicationDevice());
+        } finally {
+            if (service.getMode() == RadioMode.TX) service.endPtt();
+        }
+    }
+
     @Test public void largeBleMtuBatchesTwoVoiceBlocksAndSmallMtuUsesSingleBlocks() throws Exception {
         List<byte[]> frames = new ArrayList<>();
         Field sender = RadioAudioService.class.getDeclaredField("hostToEsp32");
@@ -771,6 +836,65 @@ public class RadioAudioServiceTest {
         Field field = RadioAudioService.class.getDeclaredField("voiceCaptureSession");
         field.setAccessible(true);
         return ((AtomicInteger) field.get(service)).get();
+    }
+
+    private Protocol.HostDesiredState desiredState() {
+        return ReflectionHelpers.getField(service.getRadioModule(), "desiredState");
+    }
+
+    public static class RoutedBluetoothService extends RadioAudioService {
+        final CountDownLatch created = new CountDownLatch(1);
+        RoutedAudioRecord recorder;
+
+        @Override protected AudioRecord createBluetoothRecorder(AudioManager audioManager, int rate) {
+            AudioDeviceInfo headset = null;
+            for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
+                if (device.getType() == AudioDeviceInfo.TYPE_BLE_HEADSET) headset = device;
+            }
+            if (headset == null) return null;
+            recorder = new RoutedAudioRecord(rate, headset);
+            recorder.setPreferredDevice(headset);
+            recorder.startRecording();
+            created.countDown();
+            return recorder;
+        }
+    }
+
+    private static class RoutedAudioRecord extends AudioRecord {
+        final CountDownLatch readStarted = new CountDownLatch(1);
+        final CountDownLatch stopped = new CountDownLatch(1);
+        final AudioDeviceInfo routedDevice;
+        volatile boolean released;
+
+        RoutedAudioRecord(int rate, AudioDeviceInfo routedDevice) {
+            super(MediaRecorder.AudioSource.VOICE_COMMUNICATION, rate, AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    Math.max(getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT), RadioAudioService.AUDIO_FRAME_SAMPLES * 2));
+            this.routedDevice = routedDevice;
+        }
+
+        @Override public AudioDeviceInfo getRoutedDevice() { return routedDevice; }
+
+        @Override public int read(short[] data, int offset, int size, int readMode) {
+            readStarted.countDown();
+            try {
+                stopped.await(1, TimeUnit.SECONDS);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            }
+            return 0;
+        }
+
+        @Override public void stop() {
+            stopped.countDown();
+            super.stop();
+        }
+
+        @Override public void release() {
+            released = true;
+            super.release();
+        }
     }
 
     private boolean startVoiceCapture(boolean forceInternalMic) throws Exception {
