@@ -281,7 +281,9 @@ public class RadioAudioServiceTest {
         int[] attempts = {0};
         setActiveTransport(new RadioTransport() {
             @Override public void start(Listener listener) { throw new UnsupportedOperationException(); }
-            @Override public void close() { }
+            @Override public void close() {
+                // This test transport owns no resources to release.
+            }
             @Override public boolean isReady() { return true; }
             @Override public void writeAsync(byte[] bytes) { throw new UnsupportedOperationException(); }
             @Override public boolean supportsFirmwareFlashing() { return true; }
