@@ -180,14 +180,27 @@ You can use either Platform IO or Arduino IDE as your build environment.
      - Select the ZIP file and click **Open**.
      - A confirmation message should appear indicating that the library was added successfully.
 
-4. **Install esp32-afsk:**
+4. **Install FreeDv2400b:**
+
+   - **Download the FreeDv2400b Library ZIP:**
+     - Visit the [FreeDv2400b Release Page](https://github.com/dkaukov/esp32-freedv2400b).
+     - Click on the **"Source code (zip)"** link to download the ZIP file of the library.
+
+   - **Add the FreeDv2400b Library to Arduino IDE:**
+     - Open the Arduino IDE.
+     - Go to `Sketch` > `Include Library` > `Add .ZIP Library...`.
+     - In the file dialog, navigate to the location where you downloaded the `esp32-freedv2400b-main.zip` file.
+     - Select the ZIP file and click **Open**.
+     - A confirmation message should appear indicating that the library was added successfully.
+
+5. **Install esp32-afsk:**
 
    - Navigate to `Sketch` > `Include Library` > `Manage Libraries`.
    - In the **Library Manager** window, enter **"esp32-afsk"** into the search bar.
    - Locate the **esp32-afsk** library by **Dmitry Kaukov** in the search results.
    - Click the **Install** button to add the library to your Arduino environment.
 
-5. **Confirm All Libraries Are Installed:**
+6. **Confirm All Libraries Are Installed:**
 
    - After completing the above steps, go to `Sketch` > `Include Library` and scroll down to the bottom where you will find the section labeled `Contributed Libraries` (light gray). Ensure that **adpcm**, **audio-tools**,  **DRA818** and **esp32-afk** are listed.
    - If any libraries are missing, revisit the installation steps to ensure they were added correctly.
