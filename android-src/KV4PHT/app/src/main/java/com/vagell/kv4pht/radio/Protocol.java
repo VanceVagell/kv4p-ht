@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -334,11 +335,14 @@ public final class Protocol {
 
     public static class Sender {
 
+        private static final long FLOW_CONTROL_WAIT_MS = 100;
+
         private final AtomicInteger flowControlWindow = new AtomicInteger(1024);
         private final AsyncFrameWriter writer;
         private final boolean flowControlEnabled;
         private final Lock lock = new ReentrantLock();
         private final Condition canSendCondition = lock.newCondition();
+        private byte[] pendingDesiredStateFrame;
         private final byte[] kissEncodeBuffer = new byte[KISS_MAX_ENCODED_FRAME_SIZE];
         private final ByteBuffer desiredStateBuffer =
             ByteBuffer.allocate(HostDesiredState.BYTE_LEN).order(ByteOrder.LITTLE_ENDIAN);
@@ -354,12 +358,12 @@ public final class Protocol {
 
         private synchronized void sendKissFrame(int kissCommand, byte[] payload, int len) {
             int frameSize = encodeKissFrame(kissCommand, payload, len);
-            writeEncodedFrame(frameSize);
+            writeEncodedFrame(frameSize, 0);
         }
 
         private synchronized void sendKv4pVendorFrame(SndCommand commandType, byte[] param, int len) {
             int frameSize = encodeKv4pVendorFrame(commandType.getValue(), param, len);
-            writeEncodedFrame(frameSize);
+            writeEncodedFrame(frameSize, 0);
         }
 
         private void sendKissDataFrame(byte[] ax25Bytes) {
@@ -370,7 +374,14 @@ public final class Protocol {
         }
 
         public void txAudio(byte[] audio, int len) {
-            sendKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO, audio, len);
+            byte[] frame;
+            synchronized (this) {
+                int frameSize = encodeKv4pVendorFrame(SndCommand.COMMAND_HOST_TX_AUDIO.getValue(), audio, len);
+                frame = Arrays.copyOf(kissEncodeBuffer, frameSize);
+            }
+            // Flow control can pause while the radio switches routes. Do not hold the
+            // encoder monitor while waiting: device-state updates use it on the main thread.
+            writeEncodedFrame(frame, FLOW_CONTROL_WAIT_MS);
         }
 
         public void txDigital(byte[] frame) {
@@ -469,12 +480,13 @@ public final class Protocol {
             return pos;
         }
 
-        private void writeEncodedFrame(int frameSize) {
-            if (!flowControlEnabled || waitUntilCanSend(frameSize)) {
-                writer.writeAsync(Arrays.copyOf(kissEncodeBuffer, frameSize));
-                if (flowControlEnabled) {
-                    flowControlWindow.addAndGet(-frameSize);
-                }
+        private void writeEncodedFrame(int frameSize, long maxWaitMs) {
+            writeEncodedFrame(Arrays.copyOf(kissEncodeBuffer, frameSize), maxWaitMs);
+        }
+
+        private void writeEncodedFrame(byte[] frame, long maxWaitMs) {
+            if (!flowControlEnabled || waitUntilCanSend(frame.length, maxWaitMs)) {
+                writer.writeAsync(frame);
             }
         }
 
@@ -492,28 +504,49 @@ public final class Protocol {
             return Math.min(len, Math.min(payload.limit() - offset, PROTO_MTU));
         }
         
-        // Waits until it can send (windowSize > 0)
-        private boolean waitUntilCanSend(int size) {
+        // Drop stale voice frames after a short stall so route changes do not build a backlog.
+        private boolean waitUntilCanSend(int size, long maxWaitMs) {
             lock.lock();
             try {
-                while (flowControlWindow.get() < size) {
+                long remainingNanos = TimeUnit.MILLISECONDS.toNanos(maxWaitMs);
+                while (pendingDesiredStateFrame != null || flowControlWindow.get() < size) {
                     try {
-                        canSendCondition.await();  // Waits until the flow-control window has enough space for this encoded frame.
+                        if (maxWaitMs == 0) {
+                            canSendCondition.await();
+                        } else {
+                            if (remainingNanos <= 0) {
+                                return false;
+                            }
+                            remainingNanos = canSendCondition.awaitNanos(remainingNanos);
+                        }
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         return false;
                     }
                 }
+                flowControlWindow.addAndGet(-size);
             } finally {
                 lock.unlock();
             }
             return true;
         }
 
+        private void flushPendingDesiredState() {
+            if (pendingDesiredStateFrame != null
+                    && flowControlWindow.get() >= pendingDesiredStateFrame.length) {
+                byte[] frame = pendingDesiredStateFrame;
+                pendingDesiredStateFrame = null;
+                flowControlWindow.addAndGet(-frame.length);
+                writer.writeAsync(frame);
+                canSendCondition.signalAll();
+            }
+        }
+
         public void setFlowControlWindow(int size) {
             lock.lock();
             try {
                 flowControlWindow.set(size);
+                flushPendingDesiredState();
                 canSendCondition.signalAll();  // Signal all waiting threads that they can proceed
             } finally {
                 lock.unlock();
@@ -524,6 +557,7 @@ public final class Protocol {
             lock.lock();
             try {
                 flowControlWindow.addAndGet(size);
+                flushPendingDesiredState();
                 canSendCondition.signalAll();  // Signal all waiting threads that they can proceed
             } finally {
                 lock.unlock();
@@ -535,7 +569,18 @@ public final class Protocol {
             state.writeTo(desiredStateBuffer);
             desiredStateBuffer.flip();
             int frameSize = encodeKv4pVendorFrame(SndCommand.COMMAND_HOST_DESIRED_STATE.getValue(), desiredStateBuffer, 0, HostDesiredState.BYTE_LEN);
-            writeEncodedFrame(frameSize);
+            byte[] frame = Arrays.copyOf(kissEncodeBuffer, frameSize);
+            if (!flowControlEnabled) {
+                writer.writeAsync(frame);
+                return;
+            }
+            lock.lock();
+            try {
+                pendingDesiredStateFrame = frame;
+                flushPendingDesiredState();
+            } finally {
+                lock.unlock();
+            }
         }
     }
 

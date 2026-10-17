@@ -21,9 +21,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "utils.h"
 
-void test_timeout_is_derived_from_fifty_audio_frames() {
-  TEST_ASSERT_EQUAL_UINT16(50, TX_AUDIO_TIMEOUT_FRAMES);
-  TEST_ASSERT_EQUAL_UINT32(778, TX_AUDIO_TIMEOUT_MS);
+void test_timeout_is_derived_from_one_hundred_audio_frames() {
+  TEST_ASSERT_EQUAL_UINT16(100, TX_AUDIO_TIMEOUT_FRAMES);
+  TEST_ASSERT_EQUAL_UINT32(1556, TX_AUDIO_TIMEOUT_MS);
 }
 
 void test_watchdog_remains_active_before_timeout() {
@@ -56,7 +56,7 @@ void test_timeout_handles_millis_wraparound() {
 
 int main(int, char **) {
   UNITY_BEGIN();
-  RUN_TEST(test_timeout_is_derived_from_fifty_audio_frames);
+  RUN_TEST(test_timeout_is_derived_from_one_hundred_audio_frames);
   RUN_TEST(test_watchdog_remains_active_before_timeout);
   RUN_TEST(test_watchdog_expires_at_timeout);
   RUN_TEST(test_audio_frame_restarts_timeout);
