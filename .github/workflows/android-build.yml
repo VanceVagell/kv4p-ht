@@ -72,12 +72,6 @@ jobs:
         with:
           java-version: 17
           distribution: 'zulu' # Alternative distribution options are available
-      - name: Cache SonarCloud packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
       - name: Cache Gradle packages
         uses: actions/cache@v6
         with:
@@ -101,7 +95,6 @@ jobs:
       - name: Gradle Check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: ./gradlew check -x lint --stacktrace
       - name: Gradle Tests
         run: ./gradlew jacocoTestReport --stacktrace
@@ -142,25 +135,3 @@ jobs:
           path: pr-dist/
           if-no-files-found: error
           retention-days: 14
-      # Keep the artifact handoff in-repository rather than relying on the
-      # composite action, whose pinned upload-artifact@v4 runtime is deprecated.
-      - name: Prepare Sonar analysis artifact
-        working-directory: ${{ github.workspace }}
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: |
-          printf '%s\n%s\n%s\n' "$PR_NUMBER" "$PR_HEAD_REF" "$PR_BASE_REF" > pr-event.txt
-          find android-src/KV4PHT -type d -iname '*build' -print0 \
-            | tar --null --files-from=- -cf output.tar
-
-      - name: Upload Sonar analysis artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: sonar-artifact
-          path: |
-            pr-event.txt
-            output.tar
-          if-no-files-found: error
-          retention-days: 1
