@@ -9,6 +9,11 @@
     </group>
 
     <group>
+        <item android:id="@+id/delete_group"
+            android:title="@string/delete_this_group" />
+    </group>
+
+    <group>
         <item android:id="@+id/settings"
             android:title="@string/settings" />
     </group>
