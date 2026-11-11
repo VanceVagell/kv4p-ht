@@ -49,7 +49,9 @@ void test_voice_response() {
     previousDe = de;
   }
   TEST_ASSERT_FLOAT_WITHIN(0.02f, 1.0f, gainAt<TxVoicePreEmphasis>(1000));
-  TEST_ASSERT_FLOAT_WITHIN(0.02f, 0.976f, gainAt<RxVoiceDeEmphasis>(1000));
+  TEST_ASSERT_FLOAT_WITHIN(0.02f, 1.0f, gainAt<RxVoiceDeEmphasis>(1000));
+  TEST_ASSERT_TRUE(gainAt<RxVoiceDeEmphasis>(50) < 0.6f);
+  TEST_ASSERT_FLOAT_WITHIN(0.15f, 2.73f, gainAt<RxVoiceDeEmphasis>(300));
 }
 
 void test_rx_high_pass_and_limiter_contain_static() {

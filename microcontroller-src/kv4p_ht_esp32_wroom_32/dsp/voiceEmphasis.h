@@ -62,18 +62,18 @@ public:
 
   void reset() {
     FirstOrderIIR::reset();
-    highPassPreviousInput = 0.0f;
-    previousHighPass = 0.0f;
+    highPassState1 = 0.0f;
+    highPassState2 = 0.0f;
     limiterGain = 1.0f;
   }
 
   int16_t process(int16_t sample) {
-    // High-pass before de-emphasis removes sub-voice static without the
-    // existing 65-tap low-stop FIR's severe attenuation at 300 Hz.
+    // A 180 Hz Butterworth high-pass suppresses the sub-300 Hz gain hump
+    // while retaining over 94% amplitude at 300 Hz.
     const float x = (float)sample;
-    const float highPass = HIGH_PASS_ALPHA * (previousHighPass + x - highPassPreviousInput);
-    highPassPreviousInput = x;
-    previousHighPass = highPass;
+    const float highPass = HP_B0 * x + highPassState1;
+    highPassState1 = HP_B1 * x - HP_A1 * highPass + highPassState2;
+    highPassState2 = HP_B2 * x - HP_A2 * highPass;
     float output = processWithDry(highPass, x);
     if (wetLevel() == 0.0f) {
       limiterGain = 1.0f;
@@ -88,11 +88,16 @@ public:
   }
 
 private:
-  static constexpr float HIGH_PASS_ALPHA = 0.96149116f; // 100 Hz at 16 kHz
+  // Second-order Butterworth high-pass, 180 Hz at 16 kHz.
+  static constexpr float HP_B0 = 0.95124542f;
+  static constexpr float HP_B1 = -1.90249084f;
+  static constexpr float HP_B2 = 0.95124542f;
+  static constexpr float HP_A1 = -1.90011242f;
+  static constexpr float HP_A2 = 0.90486927f;
   static constexpr float LIMIT = 30000.0f;
   static constexpr float RELEASE = 0.000780945f; // 80 ms at 16 kHz
-  float highPassPreviousInput = 0.0f;
-  float previousHighPass = 0.0f;
+  float highPassState1 = 0.0f;
+  float highPassState2 = 0.0f;
   float limiterGain = 1.0f;
 };
 
