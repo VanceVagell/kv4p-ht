@@ -83,7 +83,7 @@ public:
     const float neededGain = magnitude > LIMIT ? LIMIT / magnitude : 1.0f;
     // Immediate attack prevents hard clipping; an 80 ms release avoids
     // rapid gain modulation on loud unsquelched noise.
-    limiterGain = fminf(neededGain, limiterGain + RELEASE * (1.0f - limiterGain));
+    limiterGain = fminf(neededGain, limiterGain + LIMITER_RELEASE_PER_SAMPLE * (1.0f - limiterGain));
     return clampToInt16(output * limiterGain);
   }
 
@@ -95,7 +95,7 @@ private:
   static constexpr float HP_A1 = -1.90011242f;
   static constexpr float HP_A2 = 0.90486927f;
   static constexpr float LIMIT = 30000.0f;
-  static constexpr float RELEASE = 0.000780945f; // 80 ms at 16 kHz
+  static constexpr float LIMITER_RELEASE_PER_SAMPLE = 0.000780945f; // 80 ms at 16 kHz
   float highPassState1 = 0.0f;
   float highPassState2 = 0.0f;
   float limiterGain = 1.0f;
