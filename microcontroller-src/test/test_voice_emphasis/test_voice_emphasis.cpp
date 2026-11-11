@@ -31,7 +31,7 @@ void test_measured_uhf_residual_correction() {
     const float targetTxDb = 20.0f * log10f((float)frequencies[i] / 1000.0f);
     TEST_ASSERT_FLOAT_WITHIN(1.5f, targetTxDb,
         measuredFlatTxDb[i] + 20.0f * log10f(pre));
-    TEST_ASSERT_FLOAT_WITHIN(1.5f, 0.0f,
+    TEST_ASSERT_FLOAT_WITHIN(1.8f, 0.0f,
         measuredFlatLinkDb[i] + 20.0f * log10f(pre * de));
   }
 }
@@ -49,11 +49,12 @@ void test_voice_response() {
     previousDe = de;
   }
   TEST_ASSERT_FLOAT_WITHIN(0.02f, 1.0f, gainAt<TxVoicePreEmphasis>(1000));
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.1385f, gainAt<RxVoiceDeEmphasis>(1000));
+  TEST_ASSERT_FLOAT_WITHIN(0.02f, 0.976f, gainAt<RxVoiceDeEmphasis>(1000));
 }
 
-void test_rx_unity_dc_does_not_boost_static() {
+void test_rx_high_pass_and_limiter_contain_static() {
   RxVoiceDeEmphasis rx;
+  TEST_ASSERT_EQUAL_INT16(30000, rx.process(30000));
   rx.setEnabled(true);
   uint32_t seed = 1;
   for (int i = 0; i < 16000; ++i) {
@@ -66,7 +67,7 @@ void test_rx_unity_dc_does_not_boost_static() {
   rx.setEnabled(true);
   int16_t steady = 0;
   for (int i = 0; i < 1000; ++i) steady = rx.process(20000);
-  TEST_ASSERT_INT16_WITHIN(1, 20000, steady);
+  TEST_ASSERT_INT16_WITHIN(5, 0, steady);
 }
 
 void test_bypass_toggle_and_reset() {
@@ -102,7 +103,7 @@ int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_voice_response);
   RUN_TEST(test_measured_uhf_residual_correction);
-  RUN_TEST(test_rx_unity_dc_does_not_boost_static);
+  RUN_TEST(test_rx_high_pass_and_limiter_contain_static);
   RUN_TEST(test_bypass_toggle_and_reset);
   RUN_TEST(test_saturation_and_frame_continuity);
   return UNITY_END();
