@@ -28,6 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "state.h"
 #include "utils.h"
 #include "dsp/audioResampler.h"
+#include "dsp/voiceEmphasis.h"
 
 bool txStreamConfigured = false;
 bool txDecodeStreamStarted = false;
@@ -35,7 +36,9 @@ I2SStream out;
 AudioInfo txInfo(AUDIO_SAMPLE_RATE, 1, 16);
 AudioInfo txAudioInfo(AUDIO_WIRE_SAMPLE_RATE, 1, 16);
 AudioUpsampleOutput txUpsample(out);
-VolumeMeter txVolumeMeter(txUpsample);
+TxVoicePreEmphasisEffect txVoicePreEmphasisEffect;
+AudioEffectStream txVoiceEffects(txUpsample);
+VolumeMeter txVolumeMeter(txVoiceEffects);
 ADPCMDecoder txAdpcmDecoder(AV_CODEC_ID_ADPCM_IMA_WAV, AUDIO_FRAME_BYTES);
 EncodedAudioStream txDecodeStream(&txVolumeMeter, &txAdpcmDecoder);
 
@@ -113,6 +116,10 @@ void initI2STx() {
   config.signal_type = PDM;
   out.begin(config);
   txUpsample.begin();
+  txVoicePreEmphasisEffect.configure();
+  txVoiceEffects.clear();
+  txVoiceEffects.addEffect(txVoicePreEmphasisEffect);
+  txVoiceEffects.begin(txAudioInfo);
   txVolumeMeter.begin(txAudioInfo);
   if (!txDecodeStreamStarted) {
     txDecodeStream.begin(txAudioInfo);
@@ -134,6 +141,7 @@ void endI2STx() {
     pinMode(hw.pins.pinAudioOut, INPUT);
     // ADPCMDecoder::end() is not safe to re-begin on the pinned adpcm library.
     // Keep the decoder alive across PTT transitions and only stop the hardware output path.
+    txVoiceEffects.end();
     txUpsample.end();
     out.end();
   }
@@ -183,6 +191,7 @@ void releaseHostPtt() {
 
 void inline txAudioLoop() {
   if (mode == MODE_TX) {
+    txVoicePreEmphasisEffect.setActive((desiredState.flags & HOST_STATE_FILTER_PRE) != 0);
     if ((desiredState.flags & HOST_STATE_PTT_REQUESTED) && txWatchDog.expired(millis())) {
       _LOGW("TX audio timeout; releasing host PTT");
       releaseHostPtt();
