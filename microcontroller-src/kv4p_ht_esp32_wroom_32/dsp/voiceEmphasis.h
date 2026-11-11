@@ -3,8 +3,9 @@
 #include <math.h>
 #include <stdint.h>
 
-// First-order voice sections at the 16 kHz ADPCM PCM rate. Coefficients are
-// normalized at 1 kHz and fitted to the measured 446 MHz TX/RX link response.
+// First-order voice sections at the 16 kHz ADPCM PCM rate. Their relative
+// responses are fitted to the measured 446 MHz TX/RX link response. TX has
+// unity gain at 1 kHz; RX has unity gain at DC to avoid boosting static.
 // The same provisional coefficients are used for both RF module types.
 class FirstOrderIIR {
 public:
@@ -48,8 +49,10 @@ private:
 
 class RxVoiceDeEmphasis : public FirstOrderIIR {
 public:
+  // Unity DC gain: (b0 + b1) / (1 - pole) = 1. The nonnegative impulse
+  // response cannot amplify a bounded PCM input into clipping.
   RxVoiceDeEmphasis()
-      : FirstOrderIIR(0.55857897f, -0.19756946f, 0.95000000f) {}
+      : FirstOrderIIR(0.07736347f, -0.02736347f, 0.95000000f) {}
 };
 
 class TxVoicePreEmphasis : public FirstOrderIIR {

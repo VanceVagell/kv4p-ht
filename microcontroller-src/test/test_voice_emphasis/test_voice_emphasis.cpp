@@ -24,9 +24,10 @@ void test_measured_uhf_residual_correction() {
   const int frequencies[] = {300, 500, 1000, 1500, 2500, 3000};
   const float measuredFlatTxDb[] = {-1.06f, -0.25f, 0.0f, 0.0f, -0.73f, -1.06f};
   const float measuredFlatLinkDb[] = {-0.82f, -0.08f, 0.0f, -0.44f, -2.40f, -3.00f};
+  const float rxReference = gainAt<RxVoiceDeEmphasis>(1000);
   for (int i = 0; i < 6; ++i) {
     const float pre = gainAt<TxVoicePreEmphasis>(frequencies[i]);
-    const float de = gainAt<RxVoiceDeEmphasis>(frequencies[i]);
+    const float de = gainAt<RxVoiceDeEmphasis>(frequencies[i]) / rxReference;
     const float targetTxDb = 20.0f * log10f((float)frequencies[i] / 1000.0f);
     TEST_ASSERT_FLOAT_WITHIN(1.5f, targetTxDb,
         measuredFlatTxDb[i] + 20.0f * log10f(pre));
@@ -48,7 +49,24 @@ void test_voice_response() {
     previousDe = de;
   }
   TEST_ASSERT_FLOAT_WITHIN(0.02f, 1.0f, gainAt<TxVoicePreEmphasis>(1000));
-  TEST_ASSERT_FLOAT_WITHIN(0.02f, 1.0f, gainAt<RxVoiceDeEmphasis>(1000));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.1385f, gainAt<RxVoiceDeEmphasis>(1000));
+}
+
+void test_rx_unity_dc_does_not_boost_static() {
+  RxVoiceDeEmphasis rx;
+  rx.setEnabled(true);
+  uint32_t seed = 1;
+  for (int i = 0; i < 16000; ++i) {
+    seed = seed * 1664525u + 1013904223u;
+    const int16_t input = (seed & 0x80000000u) ? 30000 : -30000;
+    const int16_t output = rx.process(input);
+    TEST_ASSERT_TRUE(output >= -30000 && output <= 30000);
+  }
+  rx.reset();
+  rx.setEnabled(true);
+  int16_t steady = 0;
+  for (int i = 0; i < 1000; ++i) steady = rx.process(20000);
+  TEST_ASSERT_INT16_WITHIN(1, 20000, steady);
 }
 
 void test_bypass_toggle_and_reset() {
@@ -84,6 +102,7 @@ int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_voice_response);
   RUN_TEST(test_measured_uhf_residual_correction);
+  RUN_TEST(test_rx_unity_dc_does_not_boost_static);
   RUN_TEST(test_bypass_toggle_and_reset);
   RUN_TEST(test_saturation_and_frame_continuity);
   return UNITY_END();
