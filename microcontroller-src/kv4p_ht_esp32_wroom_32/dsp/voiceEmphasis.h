@@ -68,8 +68,7 @@ public:
   }
 
   int16_t process(int16_t sample) {
-    // A 180 Hz Butterworth high-pass suppresses the sub-300 Hz gain hump
-    // while retaining over 94% amplitude at 300 Hz.
+    // A 180 Hz Butterworth high-pass suppresses the sub-300 Hz gain hump while retaining over 94% amplitude at 300 Hz.
     const float x = (float)sample;
     const float highPass = HP_B0 * x + highPassState1;
     highPassState1 = HP_B1 * x - HP_A1 * highPass + highPassState2;
