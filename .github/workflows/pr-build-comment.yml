@@ -1,0 +1,93 @@
+name: PR build artifact link
+
+on:
+  workflow_run:
+    workflows: ["Android Build"]
+    types: [completed]
+
+# This privileged workflow must never checkout, download, or execute PR content.
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Link PR build
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create or update PR build comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_HEAD_REPO_ID: ${{ github.event.workflow_run.head_repository.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Only inspect artifact metadata, never download or run untrusted files.
+          artifact="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" |
+              jq -r --arg sha "$RUN_HEAD_SHA" '
+                [.artifacts[]
+                 | select(.name | test("^kv4p-ht-pr-[0-9]+-[0-9a-f]{40}$"))
+                 | select(.name | endswith("-" + $sha))
+                 | [.id, .name] | @tsv] | first // empty'
+          )"
+          if [[ -z "$artifact" ]]; then
+            echo "No matching PR build artifact in run $RUN_ID."
+            exit 0
+          fi
+
+          IFS=$'\t' read -r artifact_id artifact_name <<< "$artifact"
+          if [[ "$artifact_name" =~ ^kv4p-ht-pr-([0-9]+)-([0-9a-f]{40})$ ]]; then
+            pr_number="${BASH_REMATCH[1]}"
+            head_sha="${BASH_REMATCH[2]}"
+          else
+            echo "Unexpected artifact name."
+            exit 1
+          fi
+
+          # A stale run must not replace the link for a newer PR commit.
+          # The source repository must match the completed workflow run.
+          pr="$(
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number"
+          )"
+          if ! jq -e --arg sha "$head_sha" --argjson repo "$RUN_HEAD_REPO_ID" '
+            .head.sha == $sha and .head.repo.id == $repo
+          ' <<< "$pr" > /dev/null; then
+            echo "PR head or source repository changed; skipping stale or mismatched run."
+            exit 0
+          fi
+
+          short_sha="${head_sha:0:7}"
+          artifact_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts/$artifact_id"
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          {
+            echo '<!-- kv4p-pr-build -->'
+            echo '### PR test build'
+            echo
+            printf '[Download the APK and firmware artifact](%s) built from `%s`.\n' "$artifact_url" "$short_sha"
+            echo
+            printf 'The artifact also contains SHA-256 checksums and a change summary. It expires after 14 days. [View the workflow run](%s).\n' "$run_url"
+          } > "$RUNNER_TEMP/pr-comment.md"
+
+          # Preserve the existing comment rather than posting duplicates.
+          comment_id="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments?per_page=100" |
+              jq -rs '[.[][] | select(.body | contains("<!-- kv4p-pr-build -->")) | .id] | first // empty'
+          )"
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              -F "body=@$RUNNER_TEMP/pr-comment.md" > /dev/null
+          else
+            gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments" \
+              -F "body=@$RUNNER_TEMP/pr-comment.md" > /dev/null
+          fi
