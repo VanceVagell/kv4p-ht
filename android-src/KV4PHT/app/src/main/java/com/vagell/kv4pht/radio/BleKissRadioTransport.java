@@ -39,7 +39,8 @@ final class BleKissRadioTransport implements RadioTransport {
     // Low-latency scans normally receive an advertising radio within one interval.
     // Keep a few seconds of margin, then let the periodic reconciler start a new window.
     private static final int SCAN_TIMEOUT_MS = 3_000;
-    private static final int REQUESTED_MTU = 247;
+    private static final int REQUESTED_MTU = 517;
+    private static final int MIN_BATCHED_AUDIO_PAYLOAD = 300;
     private static final int WRITE_RETRY_DELAY_MS = 8;
 
     private final Context context;
@@ -56,7 +57,7 @@ final class BleKissRadioTransport implements RadioTransport {
     private boolean drainScheduled = false;
     private boolean useWriteNoResponse = false;
     private final Runnable scanTimeout;
-    private int attPayloadSize = 20;
+    private volatile int attPayloadSize = 20;
     private int writeStartFailures = 0;
 
     BleKissRadioTransport(Context context, Handler handler) {
@@ -116,6 +117,7 @@ final class BleKissRadioTransport implements RadioTransport {
         drainScheduled = false;
         useWriteNoResponse = false;
         writeStartFailures = 0;
+        attPayloadSize = 20;
         handler.removeCallbacks(drainRunnable);
         pendingWrites.clear();
         pendingNotifications.clear();
@@ -138,6 +140,10 @@ final class BleKissRadioTransport implements RadioTransport {
     @Override
     public boolean isReady() {
         return ready && gatt != null && txCharacteristic != null;
+    }
+
+    boolean supportsBatchedTxAudio() {
+        return attPayloadSize >= MIN_BATCHED_AUDIO_PAYLOAD;
     }
 
     @Override
@@ -313,7 +319,7 @@ final class BleKissRadioTransport implements RadioTransport {
             return;
         }
         if (status == BluetoothGatt.GATT_SUCCESS) {
-            attPayloadSize = Math.max(20, mtu - 3);
+            attPayloadSize = Math.max(20, Math.min(mtu - 3, 512));
             Log.i(TAG, "BLE KISS MTU=" + mtu + " payload=" + attPayloadSize);
         }
         BluetoothGattService service = callbackGatt.getService(SERVICE_UUID);

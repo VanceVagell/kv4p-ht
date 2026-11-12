@@ -48,7 +48,7 @@ char bleKissDeviceName[12] = "kv4p";
 Kv4pBleKissStream::Config bleKissConfig() {
   Kv4pBleKissStream::Config cfg;
   cfg.deviceName = bleKissDeviceName;
-  cfg.preferredMtu = 247;
+  cfg.preferredMtu = 517;
   cfg.requireNotifySubscription = true;
   cfg.maxNotifyChunksPerLoop = 4;
   cfg.minNotifyIntervalMs = 0;
