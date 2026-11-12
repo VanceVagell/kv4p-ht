@@ -37,7 +37,7 @@ jobs:
                 [.artifacts[]
                  | select(.name | test("^kv4p-ht-pr-[0-9]+-[0-9a-f]{40}$"))
                  | select(.name | endswith("-" + $sha))
-                 | [.id, .name] | @tsv] | first // empty'
+                 | [.id, .name] | @tsv] | .[0] // empty'
           )"
           if [[ -z "$artifact" ]]; then
             echo "No matching PR build artifact in run $RUN_ID."
@@ -80,7 +80,7 @@ jobs:
           # Preserve the existing comment rather than posting duplicates.
           comment_id="$(
             gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments?per_page=100" |
-              jq -rs '[.[][] | select(.body | contains("<!-- kv4p-pr-build -->")) | .id] | first // empty'
+              jq -rs '[.[][] | select(.body | contains("<!-- kv4p-pr-build -->")) | .id] | .[0] // empty'
           )"
           if [[ -n "$comment_id" ]]; then
             gh api --method PATCH \
