@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <string.h>
 #include "../globals.h"
+#include "voiceEmphasis.h"
 #include <AfskDemodulator.h>
 
 #ifndef PIO_NATIVE_TEST
@@ -115,13 +116,21 @@ public:
   bool begin() {
     captureSamples = 0;
     hasPendingByte = false;
-    return decimator.begin(highStop, lowStop);
+    emphasis.reset();
+    emphasis.setEnabled(voiceEmphasisEnabled);
+    decimatorConfigured = decimator.begin(highStop, lowStop);
+    return decimatorConfigured;
   }
 
-  bool setFilters(bool useHighStop, bool useLowStop) {
+  bool setFilters(bool useHighStop, bool useLowStop, bool useEmphasis) {
+    const bool updateFir = !decimatorConfigured || highStop != useHighStop || lowStop != useLowStop;
     highStop = useHighStop;
     lowStop = useLowStop;
-    return decimator.begin(highStop, lowStop);
+    voiceEmphasisEnabled = useEmphasis;
+    emphasis.setEnabled(useEmphasis);
+    if (!updateFir) return true;
+    decimatorConfigured = decimator.begin(highStop, lowStop);
+    return decimatorConfigured;
   }
 
   size_t convert(uint8_t *src, size_t size) override {
@@ -147,6 +156,9 @@ public:
 
 private:
   AudioFirDecimator decimator;
+  RxVoiceDeEmphasis emphasis;
+  bool voiceEmphasisEnabled = false;
+  bool decimatorConfigured = false;
   int16_t capture48k[AUDIO_FRAME_SAMPLES_48K] AUDIO_DSP_ALIGN16;
   size_t captureSamples = 0;
   uint8_t pendingByte = 0;
@@ -157,6 +169,7 @@ private:
   size_t decimateFrame(uint8_t *dst) {
     int16_t *pcmWire = (int16_t *)dst;
     size_t samplesWire = decimator.process(capture48k, AUDIO_FRAME_SAMPLES_48K, pcmWire, AUDIO_FRAME_SAMPLES_WIRE);
+    for (size_t i = 0; i < samplesWire; ++i) pcmWire[i] = emphasis.process(pcmWire[i]);
     return samplesWire * sizeof(int16_t);
   }
 };
