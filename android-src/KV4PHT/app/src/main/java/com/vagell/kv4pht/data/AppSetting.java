@@ -44,6 +44,7 @@ public class AppSetting {
     public static final String SETTING_DIGIPEAT_PACKETS = "digipeatPackets";
     public static final String SETTING_APRS_IGATE = "aprsIgate";
     public static final String SETTING_APRS_IS_DISPLAY = "aprsIsDisplay";
+    public static final String SETTING_REPEATERBOOK_API_TOKEN = "repeaterbookApiToken";
 
     public AppSetting(@NonNull String name, String value) {
         this.name = name;

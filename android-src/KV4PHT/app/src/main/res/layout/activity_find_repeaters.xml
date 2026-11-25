@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    tools:context=".ui.FirmwareActivity"
+    tools:context=".ui.FindRepeatersActivity"
     android:background="@drawable/bg"
     android:paddingTop="96dp"
     android:paddingBottom="24dp"
@@ -36,11 +36,47 @@
         android:layout_marginLeft="24dp"
         android:layout_marginRight="24dp"/>
 
+    <ProgressBar
+        android:id="@+id/findRepeatersProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:visibility="gone"/>
+
     <WebView
         android:id="@+id/repeaterBookWebView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"/>
+        android:layout_weight="1"
+        android:visibility="gone"/>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/findRepeatersManualTokenHolder"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="0"
+        android:layout_marginTop="8dp"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:hint="@string/find_repeaters_token_hint"
+        app:hintTextColor="@color/primary_deselected"
+        app:boxStrokeColor="@color/primary"
+        android:textColorHint="@color/primary_deselected"
+        android:paddingBottom="16dp"
+        android:paddingLeft="24dp"
+        android:paddingRight="24dp"
+        android:visibility="gone">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/findRepeatersTokenEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="18dp"
+            android:textColor="@color/primary"
+            android:fontFamily="monospace"
+            android:inputType="textNoSuggestions"
+            android:importantForAutofill="no"/>
+    </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/findRepeatersGroupInputHolder"
@@ -72,28 +108,54 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="32dp"
+        android:gravity="right"
+        android:layout_marginLeft="24dp"
+        android:layout_marginRight="24dp">
+
+        <Button
+            android:id="@+id/findRepeatersManualTokenButton"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_weight="0"
+            android:background="?android:attr/selectableItemBackground"
+            android:text="@string/enter_token_manually_display"
+            android:textSize="20dp"
+            android:textFontWeight="500"
+            android:textColor="@color/primary"
+            android:textAllCaps="false"
+            android:enabled="true"
+            android:onClick="findRepeatersManualTokenButtonClicked"
+            android:visibility="gone"
+            android:layout_marginRight="8dp"/>
+
+        <Button
+            android:id="@+id/findRepeatersSaveTokenButton"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_weight="0"
+            android:background="?android:attr/selectableItemBackground"
+            android:text="@string/save_token_display"
+            android:textSize="20dp"
+            android:textFontWeight="500"
+            android:textColor="@color/primary"
+            android:textAllCaps="false"
+            android:enabled="true"
+            android:onClick="findRepeatersSaveTokenButtonClicked"
+            android:visibility="gone"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp"
         android:gravity="right"
         android:layout_marginLeft="24dp"
         android:layout_marginRight="24dp"
         android:layout_marginBottom="32dp">
 
         <Button
-            android:id="@+id/findRepeatersDownloadButton"
-            android:layout_width="wrap_content"
-            android:layout_height="56dp"
-            android:layout_weight="0"
-            android:background="?android:attr/selectableItemBackground"
-            android:text="@string/download_display"
-            android:textSize="20dp"
-            android:textFontWeight="500"
-            android:textColor="@color/primary"
-            android:textAllCaps="false"
-            android:enabled="true"
-            android:onClick="findRepeatersDownloadButtonClicked"
-            android:layout_marginRight="8dp"/>
-
-        <Button
+            android:id="@+id/findRepeatersCancelButton"
             android:layout_width="wrap_content"
             android:layout_height="56dp"
             android:layout_weight="0"

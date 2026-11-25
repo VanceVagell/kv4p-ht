@@ -19,29 +19,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package com.vagell.kv4pht.ui;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.DownloadManager;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Address;
 import android.location.Geocoder;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.util.Log;
 import android.view.View;
 import android.webkit.CookieManager;
-import android.webkit.DownloadListener;
-import android.webkit.URLUtil;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -49,8 +45,8 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-
 import androidx.lifecycle.ViewModelProvider;
+
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -59,15 +55,18 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.CancellationTokenSource;
 import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
+import com.google.android.material.textfield.TextInputEditText;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.radio.RadioAudioService;
 import com.vagell.kv4pht.radio.RadioServiceConnector;
+import com.vagell.kv4pht.repeaterbook.RepeaterBookApiClient;
+import com.vagell.kv4pht.repeaterbook.RepeaterBookTokenStore;
 
-import java.io.BufferedReader;
+import org.json.JSONException;
+import org.json.JSONTokener;
+
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -77,26 +76,90 @@ import java.util.concurrent.TimeUnit;
 
 public class FindRepeatersActivity extends AppCompatActivity {
     private static final String TAG = "FindRepeatersActivity";
-    private static final String URL_LONGITUDE_PARAMETER = "&long=";
-    private final ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+    private static final String TOKEN_SETUP_URL = "https://www.repeaterbook.com/user/api_apps.php";
+
+    // Runs on RepeaterBook's API apps page after the user signs in. It finds the
+    // kv4p HT app card and submits the "issue token" form automatically, then reads
+    // the newly revealed token. RepeaterBook shows a token's value only once, so we
+    // try the known token field first, then any matching input, then visible page text.
+    // A matching active token means we can't read its value; that case is reported so
+    // the activity can ask before rotating it.
+    private static final String TOKEN_SETUP_JS =
+            "(function(){try{"
+                    + "if(location.protocol!=='https:'||(location.hostname!=='www.repeaterbook.com'&&location.hostname!=='repeaterbook.com')){return 'ignore';}"
+                    + "if(location.pathname.indexOf('/user/api_apps.php')===-1){return 'ignore';}"
+                    + "var input=document.getElementById('rbv2UserAppBoundTokenField');"
+                    + "var token=input&&input.value?input.value.trim():'';"
+                    + "if(!/^rbuapp_[0-9a-fA-F]{64}$/.test(token)){"
+                    + "var inputs=document.querySelectorAll('input,textarea');"
+                    + "for(var k=0;k<inputs.length;k++){var v=inputs[k].value?inputs[k].value.trim():'';"
+                    + "if(/^rbuapp_[0-9a-fA-F]{64}$/.test(v)){token=v;break;}}}"
+                    + "if(!/^rbuapp_[0-9a-fA-F]{64}$/.test(token)){"
+                    + "var m=(document.body.innerText||'').match(/rbuapp_[0-9a-fA-F]{64}/);token=m?m[0]:'';}"
+                    + "if(token){try{sessionStorage.removeItem('kv4pTokenRequested');}catch(e){}"
+                    + "try{if((window.name||'').indexOf('kv4pTokenRequested=')===0){window.name='';}}catch(e){}"
+                    + "return 'token:'+token;}"
+                    + "var cards=document.querySelectorAll('#rb-app-list article');var card=null;"
+                    + "for(var i=0;i<cards.length;i++){"
+                    + "if((cards[i].getAttribute('data-app-name')||'').toLowerCase()==='kv4p ht'){card=cards[i];break;}}"
+                    + "if(!card){return (document.body.innerText||'').indexOf('Get a token for your app')===-1?'ignore':'noapp';}"
+                    + "var forms=card.querySelectorAll('form');var issue=null;var rotate=null;"
+                    + "for(var j=0;j<forms.length;j++){var a=forms[j].querySelector('input[name=action]');"
+                    + "if(a&&a.value==='issue_user_app_token'){issue=forms[j];}"
+                    + "if(a&&a.value==='rotate_user_app_token'){rotate=forms[j];}}"
+                    + "if(issue){var requested=0;"
+                    + "try{requested=Number(sessionStorage.getItem('kv4pTokenRequested')||0);}catch(e){"
+                    + "try{if((window.name||'').indexOf('kv4pTokenRequested=')===0){"
+                    + "requested=Number(window.name.substring(19))||0;}}catch(e2){}}"
+                    + "if(requested&&Date.now()-requested<30000){return 'pending';}"
+                    + "var stamp=String(Date.now());"
+                    + "try{sessionStorage.setItem('kv4pTokenRequested',stamp);}catch(e){"
+                    + "try{window.name='kv4pTokenRequested='+stamp;}catch(e2){}}"
+                    + "issue.submit();return 'submitted';}"
+                    + "if(rotate){try{if(sessionStorage.getItem('kv4pTokenRotateOffered')==='1'){return 'existing';}"
+                    + "sessionStorage.setItem('kv4pTokenRotateOffered','1');}catch(e){}return 'existing';}"
+                    + "return (document.body.innerText||'').indexOf('Get a token for your app')===-1?'ignore':'noform';"
+                    + "}catch(e){return 'error';}})();";
+
+    private static final String TOKEN_ROTATE_JS =
+            "(function(){try{var cards=document.querySelectorAll('#rb-app-list article');var card=null;"
+                    + "for(var i=0;i<cards.length;i++){"
+                    + "if((cards[i].getAttribute('data-app-name')||'').toLowerCase()==='kv4p ht'){card=cards[i];break;}}"
+                    + "if(!card){return 'missing';}"
+                    + "var forms=card.querySelectorAll('form');"
+                    + "for(var j=0;j<forms.length;j++){var a=forms[j].querySelector('input[name=action]');"
+                    + "if(a&&a.value==='rotate_user_app_token'){forms[j].submit();return 'submitted';}}"
+                    + "return 'missing';}catch(e){return 'error';}})();";
+
+    private final ThreadPoolExecutor threadPoolExecutor =
+            new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+    private final RepeaterBookApiClient apiClient = new RepeaterBookApiClient();
+
     private Snackbar errorSnackbar = null;
-    private long downloadId = 0; // So we can tell when the download is done
-    private List<RepeaterInfo> nearbyRepeaters = null;
+    private Snackbar attributionSnackbar = null;
+    private List<RepeaterBookApiClient.RepeaterInfo> nearbyRepeaters = null;
     private String locality = null;
+    private String countryName = null;
+    private String adminArea = null;
     private MainViewModel viewModel;
     private RadioServiceConnector serviceConnector;
     private RadioAudioService radioAudioService;
+    private WebView repeaterBookWebView;
+    private ProgressBar findRepeatersProgress;
     private double latitude = 0;
     private double longitude = 0;
-    private String[] downloadUrls = null;
-    private int downloadUrlIndex = 0;
-    private WebView downloadWebView;
-    private WebView webViewForDownloads;
-    private boolean isManualDownloadAttempt = false;
 
-    // Android permission stuff
+    private String apiToken = null;
+    private boolean tokenLoaded = false;
+    private boolean locationDetailsReady = false;
+    private boolean tokenSetupVisible = false;
+    private boolean existingTokenPromptShown = false;
+    private boolean pendingFetch = false;
+    private boolean isFetching = false;
+    private boolean fetchCompleted = false;
+    private boolean destroyed = false;
+
     private static final int REQUEST_LOCATION_PERMISSION_CODE = 1;
-    private static final int REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE = 2;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -105,241 +168,458 @@ public class FindRepeatersActivity extends AppCompatActivity {
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
         setContentView(R.layout.activity_find_repeaters);
 
-        // Listen for file downloads so we can detect when CSV download is done.
-        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        ContextCompat.registerReceiver(this, onDownloadComplete, filter,
-            "android.permission.SEND_DOWNLOAD_COMPLETED_INTENTS", null,
-            ContextCompat.RECEIVER_EXPORTED);
+        repeaterBookWebView = findViewById(R.id.repeaterBookWebView);
+        findRepeatersProgress = findViewById(R.id.findRepeatersProgress);
 
+        configureWebView();
         populateMemoryGroups();
-        requestPermissions();
+        loadSavedToken();
+        requestLocationPermission();
     }
 
-    private void getGpsLocation() {
-        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext()) != ConnectionResult.SUCCESS) {
-            Log.d(TAG, "Unable to get nearby repeaters because Android device is missing Google Play Services, needed to get GPS location.");
-            showErrorSnackbar("Google Play Services is missing, it's needed for GPS location.");
-            return;
-        }
+    @SuppressLint("SetJavaScriptEnabled")
+    private void configureWebView() {
+        WebSettings settings = repeaterBookWebView.getSettings();
+        settings.setJavaScriptEnabled(true); // Required by RepeaterBook's sign-in page.
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
 
-        FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions();
-            return;
-        }
-
-        fusedLocationClient.getCurrentLocation(LocationRequest.PRIORITY_HIGH_ACCURACY, cancellationTokenSource.getToken())
-                .addOnSuccessListener(location -> {
-                    if (location == null) {
-                        showErrorSnackbar("Failed to find your GPS location (it came back null).");
-                        return;
-                    }
-                    double currentLatitude = location.getLatitude();
-                    double currentLongitude = location.getLongitude();
-                    findLocalityAsync(currentLatitude, currentLongitude);
-                    latitude = currentLatitude;
-                    longitude = currentLongitude;
-                    startCSVDownload();
-                }).addOnFailureListener(e -> showErrorSnackbar("Failed to find your GPS location."));
-    }
-
-    protected void requestPermissions() {
-        // Location permission...
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION)) {
-
-                new AlertDialog.Builder(this)
-                        .setTitle("Permission needed")
-                        .setMessage("This app needs the fine location permission")
-                        .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
-                                FindRepeatersActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                REQUEST_LOCATION_PERMISSION_CODE))
-                        .create()
-                        .show();
-
-            } else {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                        REQUEST_LOCATION_PERMISSION_CODE);
-            }
-        } else {
-            // Start the location-dependent download after permission is confirmed.
-            getGpsLocation();
-        }
-
-        requestLegacyStoragePermissionIfNeeded();
-    }
-
-    private void requestLegacyStoragePermissionIfNeeded() {
-        if (!requiresLegacyStoragePermission(Build.VERSION.SDK_INT)
-                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-        if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Permission needed")
-                    .setMessage("This app needs to write to external storage to find nearby repeaters")
-                    .setPositiveButton("OK", (dialog, which) -> ActivityCompat.requestPermissions(
-                            FindRepeatersActivity.this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                            REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE))
-                    .create()
-                    .show();
-            return;
-        }
-        ActivityCompat.requestPermissions(this,
-                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE);
-    }
-
-    /** WRITE_EXTERNAL_STORAGE is needed for public DownloadManager destinations only through API 28. */
-    static boolean requiresLegacyStoragePermission(int sdkInt) {
-        return sdkInt <= Build.VERSION_CODES.P;
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        if (requestCode == REQUEST_LOCATION_PERMISSION_CODE) {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Permission granted.
-                    getGpsLocation();
-                } else {
-                    // Permission denied
-                    Log.d(TAG, "Warning: Need fine location permission to find nearby repeaters, but user denied it.");
-                    showErrorSnackbar("Can't get your GPS location because the permission was denied.");
-                }
-        } else if (requestCode == REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_CODE) {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Permission granted.
-                } else {
-                    // Permission denied
-                    Log.d(TAG, "Warning: Need to write to external storage to find nearby repeaters, but user denied it.");
-                    showErrorSnackbar("Can't find nearby repeaters because storage permission was denied.");
-                    finishActivity(Activity.RESULT_CANCELED);
-                }
-        }
-    }
-
-    private String[] getDownloadRepeatersUrls() {
-        if (radioAudioService.getRadioType() == RadioAudioService.RadioModuleType.VHF) {
-            String usVhfURL = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
-                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=25&Dunit=m&band=4&call=&use=OPEN&status_id=1";
-            String internationalVhfURL = "https://www.repeaterbook.com/row_repeaters/downloads/csv/index.php?func=prox2&city=&lat=" +
-                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=40&Dunit=k&band=4&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
-                    latitude + URL_LONGITUDE_PARAMETER + longitude; // RepeaterBook requires latitude/longitude twice for international results.
-            return new String[]{usVhfURL, internationalVhfURL};
-        } else { // UHF
-            String usUhfURL = "https://www.repeaterbook.com/repeaters/downloads/csv/index.php?func=prox&features%5B0%5D=FM&lat=" +
-                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=25&Dunit=m&band=16&band2=&call=&use=OPEN&status_id=1";
-            String internationalUhfURL = "https://www.repeaterbook.com/row_repeaters/downloads/csv/index.php?func=prox2&city=&lat=" +
-                    latitude + URL_LONGITUDE_PARAMETER + longitude + "&distance=40&Dunit=k&band=16&freq=0&feature=0&call=&mode=1&net=0&status_id=%&use=&lat=" +
-                    latitude + URL_LONGITUDE_PARAMETER + longitude; // RepeaterBook requires latitude/longitude twice for international results.
-            return new String[]{usUhfURL, internationalUhfURL};
-        }
-    }
-
-    private void attemptNextDownload() {
-        if (downloadUrls == null) {
-            downloadUrls = getDownloadRepeatersUrls();
-        }
-        if (downloadUrlIndex < downloadUrls.length) {
-            String url = downloadUrls[downloadUrlIndex];
-            Log.d(TAG, "Attempting download from URL #" + downloadUrlIndex + ": " + url);
-            webViewForDownloads.loadUrl(url);
-        } else if (isManualDownloadAttempt) {
-            showErrorSnackbar("No nearby repeaters found.");
-        } else {
-            Log.d(TAG, "Silent download attempt failed, user may not be logged in yet.");
-        }
-    }
-
-    private DownloadListener createDownloadListener() {
-        return (url, userAgent, contentDisposition, mimeType, contentLength) -> {
-                Log.d(TAG, "RepeaterBook CSV download started.");
-
-                // Fetch cookies to maintain session
-                String cookies = CookieManager.getInstance().getCookie(url);
-
-                // Now download the file using Android's DownloadManager
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                request.addRequestHeader("Cookie", cookies);
-                request.addRequestHeader("User-Agent", userAgent);
-                request.setMimeType(mimeType);
-                request.setDescription("Downloading repeater CSV...");
-                String filename = URLUtil.guessFileName(url, contentDisposition, mimeType);
-                request.setTitle(filename);
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename);
-
-                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                downloadId = dm.enqueue(request);
-        };
-    }
-
-    private void startCSVDownload() {
-        downloadUrls = getDownloadRepeatersUrls();
-        downloadUrlIndex = 0;
-
-        // Initialize the WebView
-        WebView webView = findViewById(R.id.repeaterBookWebView);
-
-        // For silent downloads
-        downloadWebView = new WebView(this);
-        downloadWebView.setDownloadListener(createDownloadListener());
-
-        // RepeaterBook's authenticated download page requires JavaScript.
-        webView.getSettings().setJavaScriptEnabled(true); // NOSONAR java:S6362
-
-        // Set a WebViewClient to handle page loading inside the app
-        webView.setWebViewClient(new WebViewClient() {
+        repeaterBookWebView.setWebViewClient(new WebViewClient() {
             @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                Log.d(TAG, "Navigating to: " + url);
-                view.loadUrl(url); // Continue loading inside the WebView
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if ("about".equals(uri.getScheme()) || isRepeaterBookHost(uri.getHost())) {
+                    return false;
+                }
+                // Keep the RepeaterBook login session inside our WebView, but send
+                // unrelated links (for example donation or app-store links) out.
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (Exception e) {
+                    Log.d(TAG, "Unable to open external link.", e);
+                }
                 return true;
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (nearbyRepeaters == null) {
-                    Log.d(TAG, "Page finished loading: " + url + ". Attempting silent download.");
-                    isManualDownloadAttempt = false;
-                    webViewForDownloads = downloadWebView;
-                    downloadUrlIndex = 0;
-                    attemptNextDownload();
-                }
+                processTokenPage(url);
             }
         });
-
-        webView.setDownloadListener(createDownloadListener());
-
-        // Load your initial URL
-        webView.loadUrl("https://www.repeaterbook.com");
     }
 
-    /** Alternative method for people who's webview doesn't let us track when login is complete. */
-    @SuppressWarnings("java:S1172") // Called from the layout's android:onClick attribute.
-    public void findRepeatersDownloadButtonClicked(View view) {
-        isManualDownloadAttempt = true;
-        webViewForDownloads = findViewById(R.id.repeaterBookWebView);
-        downloadUrlIndex = 0;
-        attemptNextDownload();
+    private static boolean isRepeaterBookHost(String host) {
+        return host != null
+                && (host.equals("repeaterbook.com") || host.endsWith(".repeaterbook.com"));
+    }
+
+    private void loadSavedToken() {
+        threadPoolExecutor.execute(() -> {
+            String token = RepeaterBookTokenStore.loadToken(viewModel.getAppDb());
+            if (!RepeaterBookApiClient.looksLikeUserAppToken(token)) {
+                token = null;
+            }
+            final String loadedToken = token;
+            runOnUiThread(() -> {
+                if (destroyed) {
+                    return;
+                }
+                if (apiToken == null) {
+                    apiToken = loadedToken;
+                }
+                tokenLoaded = true;
+                continueWhenReady();
+            });
+        });
+    }
+
+    private void requestLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.ACCESS_FINE_LOCATION)) {
+                new AlertDialog.Builder(this)
+                        .setTitle(R.string.find_repeaters_permission_title)
+                        .setMessage(R.string.find_repeaters_permission_message)
+                        .setPositiveButton(R.string.ok_display, (dialog, which) ->
+                                ActivityCompat.requestPermissions(
+                                        FindRepeatersActivity.this,
+                                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                                        REQUEST_LOCATION_PERMISSION_CODE))
+                        .create()
+                        .show();
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                        REQUEST_LOCATION_PERMISSION_CODE);
+            }
+            return;
+        }
+        getGpsLocation();
+    }
+
+    private void getGpsLocation() {
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getBaseContext())
+                != ConnectionResult.SUCCESS) {
+            Log.d(TAG, "Unable to get nearby repeaters because Google Play Services is missing.");
+            showFatalErrorSnackbar(getString(R.string.find_repeaters_play_services_missing));
+            return;
+        }
+
+        FusedLocationProviderClient fusedLocationClient =
+                LocationServices.getFusedLocationProviderClient(this);
+        CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestLocationPermission();
+            return;
+        }
+
+        fusedLocationClient.getCurrentLocation(
+                        LocationRequest.PRIORITY_HIGH_ACCURACY,
+                        cancellationTokenSource.getToken())
+                .addOnSuccessListener(location -> {
+                    if (location == null) {
+                        showFatalErrorSnackbar(getString(R.string.find_repeaters_location_failed));
+                        return;
+                    }
+                    latitude = location.getLatitude();
+                    longitude = location.getLongitude();
+                    resolveLocationDetails(latitude, longitude);
+                })
+                .addOnFailureListener(e ->
+                        showFatalErrorSnackbar(getString(R.string.find_repeaters_location_failed)));
+    }
+
+    private void resolveLocationDetails(double latitude, double longitude) {
+        threadPoolExecutor.execute(() -> {
+            String country = null;
+            String admin = null;
+            String city = null;
+            try {
+                Geocoder geocoder = new Geocoder(this, Locale.US);
+                List<Address> addresses = geocoder.getFromLocation(latitude, longitude, 1);
+                if (addresses != null && !addresses.isEmpty()) {
+                    Address address = addresses.get(0);
+                    country = address.getCountryName();
+                    admin = address.getAdminArea();
+                    city = address.getLocality();
+                    if (city == null || city.trim().isEmpty()) {
+                        city = address.getSubAdminArea();
+                    }
+                }
+            } catch (IOException e) {
+                Log.d(TAG, "Exception while reverse geocoding the user's location.", e);
+            }
+
+            final String resolvedCountry = country;
+            final String resolvedAdmin = admin;
+            final String resolvedCity = city;
+            runOnUiThread(() -> {
+                if (destroyed) {
+                    return;
+                }
+                if (resolvedCountry == null || resolvedCountry.trim().isEmpty()) {
+                    showFatalErrorSnackbar(getString(R.string.find_repeaters_location_details_failed));
+                    return;
+                }
+                countryName = resolvedCountry;
+                adminArea = resolvedAdmin;
+                locality = resolvedCity;
+                locationDetailsReady = true;
+                continueWhenReady();
+            });
+        });
+    }
+
+    private void continueWhenReady() {
+        if (!tokenLoaded || !locationDetailsReady) {
+            return;
+        }
+        if (apiToken == null || apiToken.isEmpty()) {
+            showTokenSetup();
+            return;
+        }
+        tryStartFetch();
+    }
+
+    private void showTokenSetup() {
+        if (tokenSetupVisible) {
+            return;
+        }
+        tokenSetupVisible = true;
+        existingTokenPromptShown = false;
+        nearbyRepeaters = null;
+        fetchCompleted = false;
+        pendingFetch = false;
+
+        findViewById(R.id.findRepeatersGroupInputHolder).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersSaveButton).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenHolder).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersSaveTokenButton).setVisibility(View.GONE);
+        findRepeatersProgress.setVisibility(View.GONE);
+        repeaterBookWebView.setVisibility(View.VISIBLE);
+        findViewById(R.id.findRepeatersManualTokenButton).setVisibility(View.VISIBLE);
+
+        setStatus(getString(R.string.find_repeaters_instructions));
+        repeaterBookWebView.loadUrl(TOKEN_SETUP_URL);
+    }
+
+    private void hideTokenSetup() {
+        tokenSetupVisible = false;
+        repeaterBookWebView.setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenButton).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenHolder).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersSaveTokenButton).setVisibility(View.GONE);
+        TextInputEditText tokenField = findViewById(R.id.findRepeatersTokenEditText);
+        tokenField.setText("");
+        repeaterBookWebView.stopLoading();
+        repeaterBookWebView.clearHistory();
+        repeaterBookWebView.clearFormData();
+        repeaterBookWebView.clearCache(true);
+        // Drop the token page (and its visible token) from the WebView.
+        repeaterBookWebView.loadUrl("about:blank");
+        // Don't leave a logged-in RepeaterBook session behind after setup.
+        CookieManager cookieManager = CookieManager.getInstance();
+        cookieManager.removeAllCookies(null);
+        cookieManager.flush();
+    }
+
+    private void processTokenPage(String url) {
+        if (!tokenSetupVisible || url == null || !url.contains("/user/api_apps.php")) {
+            return;
+        }
+        repeaterBookWebView.evaluateJavascript(TOKEN_SETUP_JS, rawResult -> {
+            String result = jsString(rawResult);
+            if (result.startsWith("token:")) {
+                saveTokenAndFetch(result.substring("token:".length()));
+            } else if ("submitted".equals(result) || "pending".equals(result)) {
+                setStatus(getString(R.string.find_repeaters_creating_token));
+            } else if ("existing".equals(result)) {
+                promptReplaceExistingToken();
+            } else if ("noapp".equals(result)) {
+                showManualTokenEntry(getString(R.string.find_repeaters_app_not_available));
+            } else if ("noform".equals(result)) {
+                showManualTokenEntry(getString(R.string.find_repeaters_manual_token_instructions));
+            }
+        });
+    }
+
+    private void promptReplaceExistingToken() {
+        if (existingTokenPromptShown) {
+            return;
+        }
+        existingTokenPromptShown = true;
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.find_repeaters_existing_token_title)
+                .setMessage(R.string.find_repeaters_existing_token_message)
+                .setPositiveButton(R.string.replace_token_display, (dialog, which) -> rotateExistingToken())
+                .setNegativeButton(R.string.enter_token_manually_display, (dialog, which) ->
+                        showManualTokenEntry(getString(R.string.find_repeaters_manual_token_instructions)))
+                .show();
+    }
+
+    private void rotateExistingToken() {
+        setStatus(getString(R.string.find_repeaters_creating_token));
+        repeaterBookWebView.evaluateJavascript(TOKEN_ROTATE_JS, rawResult -> {
+            String result = jsString(rawResult);
+            if (!"submitted".equals(result)) {
+                showManualTokenEntry(getString(R.string.find_repeaters_manual_token_instructions));
+            }
+        });
+    }
+
+    private void showManualTokenEntry(String message) {
+        tokenSetupVisible = true;
+        findViewById(R.id.findRepeatersGroupInputHolder).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersSaveButton).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenHolder).setVisibility(View.VISIBLE);
+        findViewById(R.id.findRepeatersSaveTokenButton).setVisibility(View.VISIBLE);
+        findViewById(R.id.findRepeatersManualTokenButton).setVisibility(View.GONE);
+        findRepeatersProgress.setVisibility(View.GONE);
+        repeaterBookWebView.setVisibility(View.VISIBLE);
+        setStatus(message);
+        TextInputEditText tokenField = findViewById(R.id.findRepeatersTokenEditText);
+        tokenField.requestFocus();
+    }
+
+    private void saveTokenAndFetch(String token) {
+        String trimmed = token == null ? "" : token.trim();
+        if (!RepeaterBookApiClient.looksLikeUserAppToken(trimmed)) {
+            showManualTokenEntry(getString(R.string.find_repeaters_token_invalid));
+            return;
+        }
+        threadPoolExecutor.execute(() -> {
+            RepeaterBookTokenStore.saveToken(viewModel.getAppDb(), trimmed);
+            runOnUiThread(() -> {
+                if (destroyed) {
+                    return;
+                }
+                apiToken = trimmed;
+                tokenLoaded = true;
+                fetchCompleted = false;
+                nearbyRepeaters = null;
+                hideTokenSetup();
+                setStatus(getString(R.string.find_repeaters_token_saved));
+                tryStartFetch();
+            });
+        });
+    }
+
+    private void tryStartFetch() {
+        if (isFetching || fetchCompleted || !tokenLoaded || !locationDetailsReady) {
+            return;
+        }
+        if (apiToken == null || apiToken.isEmpty()) {
+            showTokenSetup();
+            return;
+        }
+        if (radioAudioService == null) {
+            pendingFetch = true;
+            return;
+        }
+
+        float minFreq = radioAudioService.getMinRadioFreq();
+        float maxFreq = radioAudioService.getMaxRadioFreq();
+        if (minFreq <= 0 || maxFreq <= 0) {
+            showFatalErrorSnackbar(getString(R.string.find_repeaters_radio_not_ready));
+            return;
+        }
+
+        pendingFetch = false;
+        isFetching = true;
+        showFetchingUi();
+
+        final String token = apiToken;
+        final String country = countryName;
+        final String state = adminArea;
+        threadPoolExecutor.execute(() -> {
+            try {
+                List<RepeaterBookApiClient.RepeaterInfo> repeaters =
+                        apiClient.fetchNearbyRepeaters(token, latitude, longitude, country, state,
+                                minFreq, maxFreq);
+                runOnUiThread(() -> onFetchSuccess(repeaters));
+            } catch (RepeaterBookApiClient.ApiException e) {
+                Log.d(TAG, "RepeaterBook request failed: " + e.getCode());
+                runOnUiThread(() -> onFetchError(e));
+            }
+        });
+    }
+
+    private void showFetchingUi() {
+        setStatus(getString(R.string.find_repeaters_fetching));
+        findRepeatersProgress.setVisibility(View.VISIBLE);
+        repeaterBookWebView.setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenHolder).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenButton).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersSaveTokenButton).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersGroupInputHolder).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersSaveButton).setVisibility(View.GONE);
+    }
+
+    private void onFetchSuccess(List<RepeaterBookApiClient.RepeaterInfo> repeaters) {
+        if (destroyed) {
+            return;
+        }
+        isFetching = false;
+        fetchCompleted = true;
+        pendingFetch = false;
+        nearbyRepeaters = repeaters;
+        findRepeatersProgress.setVisibility(View.GONE);
+
+        if (repeaters.isEmpty()) {
+            setStatus(getString(R.string.find_repeaters_no_repeaters));
+            showAttributionSnackbar();
+            return;
+        }
+        promptUserForMemoryGroup();
+        showAttributionSnackbar();
+    }
+
+    private void onFetchError(RepeaterBookApiClient.ApiException error) {
+        if (destroyed) {
+            return;
+        }
+        isFetching = false;
+        pendingFetch = false;
+        findRepeatersProgress.setVisibility(View.GONE);
+
+        String code = error.getCode();
+        if (code != null && code.startsWith("auth_")) {
+            String message = getString(R.string.find_repeaters_auth_error);
+            setStatus(message);
+            showErrorSnackbar(message,
+                    getString(R.string.update_token_display), this::clearTokenAndShowSetup);
+        } else if ("rate_limited".equals(code)) {
+            String message = getString(R.string.find_repeaters_rate_limited);
+            setStatus(message);
+            showFatalErrorSnackbar(message);
+        } else if ("network".equals(code)) {
+            String message = getString(R.string.find_repeaters_network_error);
+            setStatus(message);
+            showErrorSnackbar(message,
+                    getString(R.string.retry_display), this::tryStartFetch);
+        } else {
+            String message = getString(R.string.find_repeaters_api_error);
+            setStatus(message);
+            showFatalErrorSnackbar(message);
+        }
+    }
+
+    private void clearTokenAndShowSetup() {
+        threadPoolExecutor.execute(() -> {
+            RepeaterBookTokenStore.clearToken(viewModel.getAppDb());
+            runOnUiThread(() -> {
+                if (destroyed) {
+                    return;
+                }
+                apiToken = null;
+                fetchCompleted = false;
+                nearbyRepeaters = null;
+                showTokenSetup();
+            });
+        });
+    }
+
+    private void showAttributionSnackbar() {
+        attributionSnackbar = Snackbar.make(findViewById(R.id.firmwareTopLevelView),
+                getString(R.string.repeaterbook_attribution), Snackbar.LENGTH_SHORT);
+        TextView snackbarTextView = attributionSnackbar.getView()
+                .findViewById(com.google.android.material.R.id.snackbar_text);
+        snackbarTextView.setTextSize(20);
+        attributionSnackbar.show();
+    }
+
+    private void setStatus(String message) {
+        TextView status = findViewById(R.id.findRepeatersStatusText);
+        status.setText(message);
+    }
+
+    private static String jsString(String rawResult) {
+        if (rawResult == null) {
+            return "";
+        }
+        try {
+            Object value = new JSONTokener(rawResult).nextValue();
+            return value instanceof String ? (String) value : String.valueOf(value);
+        } catch (JSONException e) {
+            return rawResult.replaceAll("^\"|\"$", "");
+        }
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        serviceConnector.bind(rs -> this.radioAudioService = rs);
+        serviceConnector.bind(service -> {
+            radioAudioService = service;
+            if (pendingFetch) {
+                tryStartFetch();
+            }
+        });
     }
 
     @Override
@@ -348,33 +628,59 @@ public class FindRepeatersActivity extends AppCompatActivity {
         if (errorSnackbar != null) {
             errorSnackbar.dismiss();
         }
+        if (attributionSnackbar != null) {
+            attributionSnackbar.dismiss();
+        }
     }
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
         super.onDestroy();
-        unregisterReceiver(onDownloadComplete);
         threadPoolExecutor.shutdownNow();
         serviceConnector.unbind();
+        if (repeaterBookWebView != null) {
+            if (tokenSetupVisible) {
+                CookieManager cookieManager = CookieManager.getInstance();
+                cookieManager.removeAllCookies(null);
+                cookieManager.flush();
+            }
+            repeaterBookWebView.loadUrl("about:blank");
+            repeaterBookWebView.destroy();
+        }
     }
 
     /**
-     * Displays an error snackbar with the given message, and a "Close" action that exits the activity.
+     * Displays a fatal error snackbar with a "Close" action that exits the activity.
      */
     @SuppressWarnings("javasecurity:S6384") // This sets a fixed result code and never forwards an Intent.
-    private void showErrorSnackbar(String msg) {
-        errorSnackbar = Snackbar.make(this, findViewById(R.id.firmwareTopLevelView), msg, BaseTransientBottomBar.LENGTH_INDEFINITE)
-                .setBackgroundTint(Color.rgb(140, 20, 0)).setActionTextColor(Color.WHITE).setTextColor(Color.WHITE);
-        errorSnackbar.setAction("Close", view -> {
-            errorSnackbar.dismiss();
+    private void showFatalErrorSnackbar(String msg) {
+        showErrorSnackbar(msg, getString(R.string.close_display), () -> {
             setResult(Activity.RESULT_CANCELED);
             finish();
         });
+    }
 
-        // Make the text of the snackbar larger.
-        TextView snackbarActionTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_action);
+    @SuppressWarnings("javasecurity:S6384") // This sets a fixed result code and never forwards an Intent.
+    private void showErrorSnackbar(String msg, String actionText, Runnable action) {
+        if (errorSnackbar != null) {
+            errorSnackbar.dismiss();
+        }
+        errorSnackbar = Snackbar.make(this, findViewById(R.id.firmwareTopLevelView), msg,
+                        BaseTransientBottomBar.LENGTH_INDEFINITE)
+                .setBackgroundTint(Color.rgb(140, 20, 0))
+                .setActionTextColor(Color.WHITE)
+                .setTextColor(Color.WHITE);
+        errorSnackbar.setAction(actionText, view -> {
+            errorSnackbar.dismiss();
+            action.run();
+        });
+
+        TextView snackbarActionTextView = errorSnackbar.getView()
+                .findViewById(com.google.android.material.R.id.snackbar_action);
         snackbarActionTextView.setTextSize(20);
-        TextView snackbarTextView = (TextView) errorSnackbar.getView().findViewById(com.google.android.material.R.id.snackbar_text);
+        TextView snackbarTextView = errorSnackbar.getView()
+                .findViewById(com.google.android.material.R.id.snackbar_text);
         snackbarTextView.setTextSize(20);
 
         errorSnackbar.show();
@@ -386,247 +692,38 @@ public class FindRepeatersActivity extends AppCompatActivity {
         finish();
     }
 
-    private BroadcastReceiver onDownloadComplete = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-
-            if (id == downloadId) {
-                DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                Uri uri = dm.getUriForDownloadedFile(downloadId);
-                Log.d(TAG, "Download complete for URL #" + downloadUrlIndex);
-                try {
-                    String csvData = readDownloadedCsvFile(uri);
-                    Log.d(TAG, "CSV Contents:\n" + csvData);
-                    nearbyRepeaters = parseRepeaterList(csvData);
-                    Log.d(TAG, "Num repeaters found: " + nearbyRepeaters.size());
-                    if (nearbyRepeaters.isEmpty()) {
-                        downloadUrlIndex++;
-                        attemptNextDownload();
-                    } else {
-                        // Ask the user what memory group to dump these repeaters in.
-                        promptUserForMemoryGroup();
-                    }
-                } catch (Exception e) {
-                    Log.d(TAG, "Error while trying to parse repeater CSV file.", e);
-                    downloadUrlIndex++;
-                    attemptNextDownload();
-                }
-            }
-        }
-    };
-
-    @SuppressWarnings({"java:S3398", "java:S2583"}) // Keep file I/O separate; ContentResolver can return null despite the analyzer's contract.
-    private String readDownloadedCsvFile(Uri fileUri) throws IOException {
-        if (fileUri == null) {
-            throw new IOException("Downloaded CSV file URI is null.");
-        }
-        InputStream inputStream = getContentResolver().openInputStream(fileUri);
-        if (inputStream == null) {
-            throw new IOException("Could not open input stream for downloaded CSV file.");
-        }
-
-        // Read file into a String
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append('\n');
-            }
-        }
-        return sb.toString();
+    @SuppressWarnings("java:S1172") // Called from the layout's android:onClick attribute.
+    public void findRepeatersManualTokenButtonClicked(View view) {
+        showManualTokenEntry(getString(R.string.find_repeaters_manual_token_instructions));
     }
 
-    public class RepeaterInfo {
-        public double freq;
-        public double input;
-        public double offset;
-        public String tone;
-        public String location;
-        public String state;
-        public String county;
-        public String call;
-        public String use;
-        public double miles;
-        public String bearing;
-        public double degrees;
-
-        @Override
-        public String toString() {
-            return String.format("%s @ %s (%.5f MHz)", call, location, freq);
-        }
-    }
-
-    public List<RepeaterInfo> parseRepeaterList(String csvData) {
-        List<RepeaterInfo> repeaters = new ArrayList<>();
-        List<String> records = splitCsvRecords(csvData);
-        if (records.isEmpty()) {
-            return repeaters;
-        }
-
-        String header = records.get(0);
-        boolean isUsFormat = header.startsWith("Freq,Input,Offset,Tone,Location");
-        if (!isUsFormat && !header.startsWith("Output Freq,Input Freq,Offset,Uplink Tone")) {
-            return repeaters; // Unknown format
-        }
-
-        for (int recordIndex = 1; recordIndex < records.size(); recordIndex++) {
-            String csvRecord = records.get(recordIndex);
-            if (csvRecord.trim().isEmpty()) {
-                continue;
-            }
-            String[] cols = splitCSVLine(csvRecord);
-            RepeaterInfo repeater = isUsFormat ? parseUsRepeater(cols) : parseInternationalRepeater(cols);
-            if (repeater != null && isWithinRadioRange(repeater)) {
-                repeaters.add(repeater);
-            }
-        }
-        return repeaters;
-    }
-
-    private RepeaterInfo parseUsRepeater(String[] cols) {
-        if (cols.length < 12) {
-            return null;
-        }
-        RepeaterInfo repeater = parseCommonRepeaterFields(cols);
-        repeater.location = cleanLocation(cols[4]);
-        repeater.state = cols[5];
-        repeater.county = cols[6];
-        repeater.call = cols[7];
-        repeater.use = cols[8];
-        repeater.miles = tryParseDouble(cols[9]);
-        repeater.bearing = cols[10];
-        repeater.degrees = tryParseDouble(cols[11]);
-        return repeater;
-    }
-
-    private RepeaterInfo parseInternationalRepeater(String[] cols) {
-        if (cols.length < 11) {
-            return null;
-        }
-        RepeaterInfo repeater = parseCommonRepeaterFields(cols);
-        repeater.call = cols[5];
-        repeater.location = cleanLocation(cols[6]);
-        repeater.county = cols[7];
-        repeater.state = cols[8];
-        return repeater;
-    }
-
-    private RepeaterInfo parseCommonRepeaterFields(String[] cols) {
-        RepeaterInfo repeater = new RepeaterInfo();
-        repeater.freq = tryParseDouble(cols[0]);
-        repeater.input = tryParseDouble(cols[1]);
-        repeater.offset = tryParseDouble(cols[2]);
-        repeater.tone = ToneHelper.normalizeTone(cols[3].trim());
-        return repeater;
-    }
-
-    private String cleanLocation(String location) {
-        return location.replace("\n", " ").replace("\r", "");
-    }
-
-    private boolean isWithinRadioRange(RepeaterInfo repeater) {
-        return radioAudioService != null
-                && repeater.freq >= radioAudioService.getMinRadioFreq()
-                && repeater.freq <= radioAudioService.getMaxRadioFreq();
-    }
-
-    private List<String> splitCsvRecords(String csvData) {
-        List<String> records = new ArrayList<>();
-        boolean insideQuotes = false;
-        StringBuilder csvRecord = new StringBuilder();
-
-        for (int i = 0; i < csvData.length(); i++) {
-            char c = csvData.charAt(i);
-            if (c == '"') {
-                insideQuotes = !insideQuotes;
-            }
-
-            if (c == '\n' && !insideQuotes) {
-                records.add(csvRecord.toString());
-                csvRecord.setLength(0);
-            } else {
-                csvRecord.append(c);
-            }
-        }
-        if (csvRecord.length() > 0) {
-            records.add(csvRecord.toString());
-        }
-        return records;
-    }
-
-    /**
-     * Basic CSV line splitter that handles quoted fields
-     * (commas inside quotes are not treated as separators).
-     */
-    private String[] splitCSVLine(String line) {
-        List<String> cols = new ArrayList<>();
-        boolean inQuotes = false;
-        StringBuilder cur = new StringBuilder();
-
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (c == '"') {
-                inQuotes = !inQuotes;
-            } else if (c == ',' && !inQuotes) {
-                cols.add(cur.toString().trim());
-                cur.setLength(0);
-            } else {
-                cur.append(c);
-            }
-        }
-        cols.add(cur.toString().trim());
-        return cols.toArray(new String[0]);
-    }
-
-    private double tryParseDouble(String s) {
-        try {
-            return Double.parseDouble(s);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
-    private void findLocalityAsync(double latitude, double longitude) {
-        new Thread(() -> {
-                try {
-                    Geocoder geocoder = new Geocoder(this, Locale.getDefault());
-                    List<Address> list = geocoder.getFromLocation(latitude, longitude, 1);
-
-                    if (list != null && !list.isEmpty()) {
-                        Address addr = list.get(0);
-                        locality = addr.getLocality(); // e.g. city name
-                    }
-                } catch (IOException e) {
-                    Log.d(TAG, "Exception while trying to get name of user's locality (city).", e);
-                }
-        }).start();
+    @SuppressWarnings("java:S1172") // Called from the layout's android:onClick attribute.
+    public void findRepeatersSaveTokenButtonClicked(View view) {
+        TextInputEditText tokenField = findViewById(R.id.findRepeatersTokenEditText);
+        String token = tokenField.getText() == null ? "" : tokenField.getText().toString();
+        saveTokenAndFetch(token);
     }
 
     // Kept as an Activity helper because it coordinates multiple views and workflow stages.
     @SuppressWarnings("java:S3398")
     private void promptUserForMemoryGroup() {
-        // Hide the web view.
-        findViewById(R.id.repeaterBookWebView).setVisibility(View.GONE);
+        repeaterBookWebView.setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenHolder).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersManualTokenButton).setVisibility(View.GONE);
+        findViewById(R.id.findRepeatersSaveTokenButton).setVisibility(View.GONE);
+        findRepeatersProgress.setVisibility(View.GONE);
 
-        // Update instructions to instead list the number of repeaters found.
-        TextView findRepeatersStatusText = (TextView) findViewById(R.id.findRepeatersStatusText);
-        String nearbyRepeatersFound = getString(R.string.nearby_repeaters_found) + nearbyRepeaters.size() + "\n\n" + getString(R.string.save_repeaters_group_instructions);
-        findRepeatersStatusText.setText(nearbyRepeatersFound);
+        String nearbyRepeatersFound = getString(R.string.nearby_repeaters_found)
+                + nearbyRepeaters.size() + "\n\n"
+                + getString(R.string.save_repeaters_group_instructions);
+        setStatus(nearbyRepeatersFound);
 
-        // Show a memory group picker.
         findViewById(R.id.findRepeatersGroupInputHolder).setVisibility(View.VISIBLE);
-
-        // If we know the locality (e.g. city), suggest it as a name for the new group.
-        if (locality != null && !locality.trim().isEmpty()) { // Locality lookup may not have completed yet.
-            AutoCompleteTextView autoCompleteTextView = (AutoCompleteTextView) findViewById(R.id.findRepeatersGroupTextInputEditText);
+        if (locality != null && !locality.trim().isEmpty()) {
+            AutoCompleteTextView autoCompleteTextView =
+                    findViewById(R.id.findRepeatersGroupTextInputEditText);
             autoCompleteTextView.setText(locality);
         }
-
-        // Hide "Download" button.
-        findViewById(R.id.findRepeatersDownloadButton).setVisibility(View.GONE);
-
-        // Show a "SAVE" button to the right of Cancel.
         findViewById(R.id.findRepeatersSaveButton).setVisibility(View.VISIBLE);
     }
 
@@ -636,8 +733,10 @@ public class FindRepeatersActivity extends AppCompatActivity {
             List<String> memoryGroups = viewModel.getAppDb().channelMemoryDao().getGroups();
             memoryGroups.removeIf(name -> name == null || name.trim().isEmpty());
             activity.runOnUiThread(() -> {
-                AutoCompleteTextView editMemoryGroupTextView = findViewById(R.id.findRepeatersGroupTextInputEditText);
-                ArrayAdapter arrayAdapter = new ArrayAdapter(activity, R.layout.dropdown_item, memoryGroups);
+                AutoCompleteTextView editMemoryGroupTextView =
+                        findViewById(R.id.findRepeatersGroupTextInputEditText);
+                ArrayAdapter<String> arrayAdapter =
+                        new ArrayAdapter<>(activity, R.layout.dropdown_item, memoryGroups);
                 editMemoryGroupTextView.setAdapter(arrayAdapter);
             });
         }));
@@ -645,11 +744,11 @@ public class FindRepeatersActivity extends AppCompatActivity {
 
     @SuppressWarnings({"java:S1172", "javasecurity:S6384"}) // Called from XML; this only sets a fixed result code.
     public void findRepeatersSaveButtonClicked(View view) {
-        String group = ((AutoCompleteTextView) findViewById(R.id.findRepeatersGroupTextInputEditText)).getText().toString().trim();
+        String group = ((AutoCompleteTextView) findViewById(
+                R.id.findRepeatersGroupTextInputEditText)).getText().toString().trim();
         final List<ChannelMemory> memoriesToAdd = new ArrayList<>();
 
-        for (RepeaterInfo repeater : nearbyRepeaters) {
-
+        for (RepeaterBookApiClient.RepeaterInfo repeater : nearbyRepeaters) {
             ChannelMemory memory = new ChannelMemory();
             memory.name = repeater.call + " • " + repeater.location;
             memory.group = group;
@@ -657,7 +756,7 @@ public class FindRepeatersActivity extends AppCompatActivity {
                 memory.frequency = radioAudioService.makeSafeHamFreq(String.valueOf(repeater.freq));
             } else {
                 Log.e(TAG, "radioAudioService is null. Cannot set frequency.");
-                continue; // Skip this repeater if radioAudioService is unavailable
+                continue;
             }
             if (repeater.offset < 0) {
                 memory.offset = ChannelMemory.OFFSET_DOWN;
@@ -666,9 +765,9 @@ public class FindRepeatersActivity extends AppCompatActivity {
             } else {
                 memory.offset = ChannelMemory.OFFSET_NONE;
             }
-            memory.txTone = String.valueOf(repeater.tone);
+            memory.txTone = repeater.tone;
             memory.rxTone = getString(R.string.none_display);
-            memory.offsetKhz = Math.abs((int) (repeater.offset * 1000));
+            memory.offsetKhz = Math.abs((int) Math.round(repeater.offset * 1000));
             memory.skipDuringScan = false;
 
             memoriesToAdd.add(memory);
