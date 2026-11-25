@@ -34,12 +34,15 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.*;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import androidx.lifecycle.ViewModelProvider;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.Slider;
 
 import static com.google.android.material.snackbar.Snackbar.LENGTH_LONG;
@@ -50,6 +53,7 @@ import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AprsFeedPolicy;
 import com.vagell.kv4pht.data.AppSetting;
 import com.vagell.kv4pht.radio.RadioAudioService;
+import com.vagell.kv4pht.repeaterbook.RepeaterBookTokenStore;
 
 import java.util.Arrays;
 import java.util.List;
@@ -93,6 +97,7 @@ public class SettingsActivity extends AppCompatActivity {
     private RadioAudioService radioAudioService = null;
     private boolean radioAudioServiceBound = false;
     private boolean doneClicked = false;
+    private String repeaterBookApiKey = null;
 
     private int initialSquelch = 0;
     private boolean initialEmphasis = false;
@@ -363,6 +368,9 @@ public class SettingsActivity extends AppCompatActivity {
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIN_70_CM_TX_FREQ, R.id.min70cmFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MAX_70_CM_TX_FREQ, R.id.max70cmFreqTextView, mhz);
                 setDropdownIfPresent(settings, AppSetting.SETTING_MIC_GAIN_BOOST, R.id.micGainBoostTextView);
+                String savedApiKey = settings.get(AppSetting.SETTING_REPEATERBOOK_API_TOKEN);
+                repeaterBookApiKey = (savedApiKey == null || savedApiKey.trim().isEmpty())
+                        ? null : savedApiKey.trim();
                 callback.run();
             });
         });
@@ -562,6 +570,48 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void setMicGainBoost(String level) {
         saveAppSettingAsync(AppSetting.SETTING_MIC_GAIN_BOOST, level);
+    }
+
+    private void setRepeaterBookApiKey(String apiKey) {
+        String trimmedKey = apiKey == null ? "" : apiKey.trim();
+        repeaterBookApiKey = trimmedKey.isEmpty() ? null : trimmedKey;
+        threadPoolExecutor.execute(() -> {
+            if (trimmedKey.isEmpty()) {
+                RepeaterBookTokenStore.clearToken(viewModel.getAppDb());
+            } else {
+                RepeaterBookTokenStore.saveToken(viewModel.getAppDb(), trimmedKey);
+            }
+        });
+    }
+
+    /**
+     * Shows a dialog for viewing and editing the RepeaterBook API key. The key is
+     * stored in Room like every other setting, so it can be copied to another device.
+     */
+    public void repeaterBookApiKeyButtonClicked(View view) { // NOSONAR S1172: XML onClick signature requires View.
+        View content = getLayoutInflater().inflate(R.layout.dialog_repeaterbook_api_key, null);
+        TextInputEditText apiKeyEditText = content.findViewById(R.id.repeaterBookApiKeyEditText);
+        apiKeyEditText.setText(repeaterBookApiKey == null ? "" : repeaterBookApiKey);
+
+        AlertDialog apiKeyDialog = new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.repeaterbook_api_key)
+            .setView(content)
+            .setNegativeButton(R.string.cancel_display, (dialog, which) -> dialog.dismiss())
+            .setPositiveButton(R.string.save_display, (dialog, which) -> {
+                CharSequence editedKey = apiKeyEditText.getText();
+                setRepeaterBookApiKey(editedKey == null ? "" : editedKey.toString());
+            })
+            .create();
+
+        // Let the dialog fill the screen width so a full API key fits on one line.
+        apiKeyDialog.setOnShowListener(dialog -> {
+            Window window = apiKeyDialog.getWindow();
+            if (window != null) {
+                window.setLayout(WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.WRAP_CONTENT);
+            }
+        });
+        apiKeyDialog.show();
     }
 
     private void setCallsign(String callsign) {

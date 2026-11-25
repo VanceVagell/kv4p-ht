@@ -77,6 +77,8 @@
     <string name="min_70cm_tx_frequency">70cm波段最小发射频率</string>
     <string name="max_70cm_tx_frequency">70cm波段最大发射频率</string>
     <string name="mic_gain_boost">麦克风增益调节</string>
+    <string name="repeaterbook_api_key">RepeaterBook API 密钥</string>
+    <string name="repeaterbook_api_key_hint">粘贴或输入密钥</string>
     <string name="message_body_example">滚滚长江东逝水</string>
     <string name="all_memories">全部频道</string>
     <string name="edit">编辑</string>
