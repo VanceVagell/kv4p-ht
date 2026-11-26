@@ -115,8 +115,6 @@ public class MainActivity extends AppCompatActivity {
     @Nullable private Consumer<Boolean> pendingGrantCallback = null;
     @Nullable private List<String> pendingPerms;
 
-    private static final String ACTION_USB_PERMISSION = "com.vagell.kv4pht.USB_PERMISSION";
-
     // Radio params and related settings
     private String activeFrequencyStr = "0.0000";
     private String callsign = null;
@@ -281,7 +279,6 @@ public class MainActivity extends AppCompatActivity {
         });
         attachListeners();
         IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_USB_PERMISSION);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         ContextCompat.registerReceiver(this, usbReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
@@ -1524,15 +1521,8 @@ public class MainActivity extends AppCompatActivity {
 
             String action = intent.getAction();
             synchronized (this) {
-                if (ACTION_USB_PERMISSION.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
-                    if (ACTION_USB_PERMISSION.equals(action)
-                        && !intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        Log.w(LOG_TAG, "USB permission denied by user.");
-                        if (radioAudioService != null) {
-                            radioAudioService.onUsbPermissionDenied();
-                        }
-                        return;
-                    }
+                // USB permission results are handled by RadioAudioService, which owns the request.
+                if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                     if (radioAudioService != null) {
                         radioAudioService.reconnectViaUSB();
                     }
@@ -1838,6 +1828,8 @@ public class MainActivity extends AppCompatActivity {
                             .show();
                 } else if (item.getItemId() == R.id.settings) {
                     startSettingsActivity();
+                } else if (item.getItemId() == R.id.connect_radio) {
+                    startActivity(new Intent(this, ConnectRadioActivity.class));
                 }
                 return true;
         });
@@ -1845,6 +1837,11 @@ public class MainActivity extends AppCompatActivity {
         boolean showRadioOptions = radioAudioService != null && radioAudioService.isRadioConnected();
         moreMenu.getMenu().findItem(R.id.flash_firmware).setEnabled(canFlashFirmware());
         moreMenu.getMenu().findItem(R.id.import_from_repeaterbook).setEnabled(showRadioOptions);
+        String activeRadioLabel = radioAudioService != null
+                ? radioAudioService.getActiveRadioLabel() : null;
+        if (activeRadioLabel != null && !activeRadioLabel.isEmpty()) {
+            moreMenu.getMenu().findItem(R.id.connect_radio).setTitle(activeRadioLabel);
+        }
         moreMenu.show();
     }
 

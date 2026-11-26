@@ -13,12 +13,21 @@ final class UsbSerialRadioTransport implements RadioTransport {
 
     private final UsbSerialPort serialPort;
     private final Handler handler;
+    private final String deviceId;
+    private final String displayName;
     private SerialInputOutputManager ioManager;
     private Listener listener;
 
     UsbSerialRadioTransport(UsbSerialPort serialPort, Handler handler) {
+        this(serialPort, handler, "usb", "USB radio");
+    }
+
+    UsbSerialRadioTransport(UsbSerialPort serialPort, Handler handler, String deviceId,
+            String displayName) {
         this.serialPort = serialPort;
         this.handler = handler;
+        this.deviceId = deviceId;
+        this.displayName = displayName;
     }
 
     @Override
@@ -116,6 +125,21 @@ final class UsbSerialRadioTransport implements RadioTransport {
 
     @Override
     public String getName() {
-        return "USB serial";
+        return "USB " + displayName;
+    }
+
+    @Override
+    public String getDeviceId() {
+        return deviceId;
+    }
+
+    @Override
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    @Override
+    public RadioLinkType getLinkType() {
+        return RadioLinkType.USB;
     }
 }

@@ -197,4 +197,18 @@
     <string name="flash_firmware_button">Flash</string>
     <string name="firmware_flash_requires_usb">Connect the radio by USB to flash firmware</string>
     <string name="aprs_message_not_accepted">APRS message was not accepted for transmission.</string>
+    <string name="connect_radio">Connect radio</string>
+    <string name="connect_radio_description">You can plug a kv4p HT radio into your phone via USB, or plug it into a power bank or charger to pair it via Bluetooth.</string>
+    <string name="connect_radio_scanning">Scanning with Bluetooth…</string>
+    <string name="connect_radio_no_paired">No radios paired via Bluetooth</string>
+    <string name="connect_radio_pair">Pair</string>
+    <string name="connect_radio_forget">Forget</string>
+    <string name="connect_radio_disconnect">Disconnect</string>
+    <string name="connect_radio_connect">Connect</string>
+    <string name="connect_radio_plugged_in">Plugged in</string>
+    <string name="connect_radio_connecting">Connecting…</string>
+    <string name="connect_radio_old_firmware">Old firmware</string>
+    <string name="connect_radio_old_firmware_message">Update the firmware by plugging it into your phone via USB, or on the web at kv4p.com/firmware.html.</string>
+    <string name="connect_radio_more_options">More options</string>
+    <string name="connect_radio_bt_off">Bluetooth is off</string>
 </resources>

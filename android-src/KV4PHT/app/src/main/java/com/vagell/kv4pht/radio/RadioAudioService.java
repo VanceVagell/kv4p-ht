@@ -25,10 +25,13 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.hardware.usb.UsbDevice;
@@ -54,7 +57,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.RequiresPermission;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -93,11 +98,16 @@ import lombok.Getter;
 import lombok.Setter;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -132,8 +142,8 @@ public class RadioAudioService extends Service {
 
 
     // === USB Device Matching ===
-    private static final int[] ESP32_VENDOR_IDS = {4292, 6790};
-    private static final int[] ESP32_PRODUCT_IDS = {60000, 29987};
+    private static final int[] ESP32_VENDOR_IDS = {4292, 6790, 9114};
+    private static final int[] ESP32_PRODUCT_IDS = {60000, 29987, 33041};
 
     // === Audio Constants ===
     public static final int AUDIO_SAMPLE_RATE = 16000;
@@ -216,7 +226,8 @@ public class RadioAudioService extends Service {
     // === USB / Serial ===
     private UsbManager usbManager;
     private final AtomicReference<RadioTransport> activeTransport = new AtomicReference<>();
-    private boolean usbPermissionRequestPending = false;
+    private String pendingUsbPermissionDeviceId;
+    private String usbPermissionDeniedDeviceId;
     @Getter
     private Protocol.Sender hostToEsp32;
     @Getter
@@ -224,6 +235,24 @@ public class RadioAudioService extends Service {
     private final KissParser esp32DataStreamParser = new KissParser(this::handleParsedCommand, this::handleEsp32Ax25Packet);
     private int usbConnectAttemptSeq = 0;
     private int activeUsbConnectAttemptId = 0;
+
+    // === Connection management ===
+    private static final long BLE_SUPPRESSION_GRACE_MS = 5_000L;
+    private static final long CONNECTION_STATE_PUBLISH_DELAY_MS = 150L;
+    private final MutableLiveData<RadioConnectionState> connectionState =
+            new MutableLiveData<>(RadioConnectionState.empty());
+    private final Set<String> suppressedBleAddresses = new HashSet<>();
+    private final Map<String, Long> suppressedBleLastSeen = new HashMap<>();
+    private final Map<String, FirmwareStatus> firmwareStatusByDevice = new HashMap<>();
+    private volatile List<PairedRadio> pairedRadios = Collections.emptyList();
+    private PairedRadioStore pairedRadioStore;
+    private ExecutorService connectionStoreExecutor;
+    private BleRadioScanner bleScanner;
+    private String connectingDeviceId;
+    private RadioLinkType connectingLink = RadioLinkType.NONE;
+    private String lastConnectionError;
+    private boolean connectionStatePublishScheduled;
+    private String lastReconcileLogSummary;
 
     // === APRS State ===
     private String aprsBeaconFrequency = CURRENT_FREQUENCY;
@@ -494,6 +523,9 @@ public class RadioAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        initializePairedRadios();
+        ContextCompat.registerReceiver(this, usbPermissionReceiver,
+                new IntentFilter(ACTION_USB_PERMISSION), ContextCompat.RECEIVER_NOT_EXPORTED);
         aprsExecutor = Executors.newSingleThreadScheduledExecutor();
         aprsController = createAprsController();
         aprsIsClient = new AprsIsClient("kv4p-ht", BuildConfig.VERSION_NAME,
@@ -636,9 +668,24 @@ public class RadioAudioService extends Service {
      */
     public void start() {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        if (bleScanner == null) {
+            bleScanner = new BleRadioScanner(this, handler, new BleRadioScanner.Listener() {
+                @Override
+                public void onScanResultsChanged(List<BleRadioScanner.ScanEntry> entries) {
+                    scheduleConnectionStatePublish();
+                }
+
+                @Override
+                public void onScanStateChanged(boolean enabled, boolean activelyScanning,
+                        String error) {
+                    scheduleConnectionStatePublish();
+                }
+            });
+        }
         createNotificationChannels();
         initAudioTrack();
         connectionController.start();
+        scheduleConnectionStatePublish();
     }
 
     @Override
@@ -789,6 +836,19 @@ public class RadioAudioService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        try {
+            unregisterReceiver(usbPermissionReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Receiver was already unregistered or never registered.
+        }
+        if (bleScanner != null) {
+            bleScanner.stop();
+            bleScanner = null;
+        }
+        if (connectionStoreExecutor != null) {
+            connectionStoreExecutor.shutdownNow();
+            connectionStoreExecutor = null;
+        }
         tryToStopRadioModule();
         connectionController.stop();
         if (aprsIsClient != null) {
@@ -1597,9 +1657,13 @@ public class RadioAudioService extends Service {
 
     public void reconnectViaUSB() {
         Log.i(TAG, connectLog("reconnectViaUSB(): clearing pending state for next attempt"));
-        usbPermissionRequestPending = false;
         // Re-plug is an explicit user/device action; allow connection attempts again.
         radioMissingNotified = false;
+        usbPermissionDeniedDeviceId = null;
+        handler.post(() -> {
+            lastConnectionError = null;
+            reconcileConnections();
+        });
     }
 
     public void renegotiateAfterFlashing() {
@@ -1609,9 +1673,114 @@ public class RadioAudioService extends Service {
     }
 
     public void onUsbPermissionDenied() {
-        Log.w(TAG, connectLog("USB permission denied by system dialog"));
-        usbPermissionRequestPending = false;
-        radioMissing();
+        handler.post(() -> handleUsbPermissionResult(pendingUsbPermissionDeviceId, false));
+    }
+
+    public LiveData<RadioConnectionState> getConnectionState() {
+        return connectionState;
+    }
+
+    /**
+     * Consumes the last connection error. The Connect radio screen shows it once as a transient
+     * snackbar, so a stale error must not become the screen's permanent status text.
+     */
+    public void clearConnectionError() {
+        handler.post(() -> {
+            if (lastConnectionError != null) {
+                lastConnectionError = null;
+                scheduleConnectionStatePublish();
+            }
+        });
+    }
+
+    public void setBleScanForeground(boolean foreground) {
+        handler.post(() -> {
+            if (bleScanner != null) {
+                bleScanner.setForeground(foreground);
+            }
+        });
+    }
+
+    public void connectUsb(String deviceId) {
+        if (deviceId == null) {
+            return;
+        }
+        handler.post(() -> {
+            suppressedBleAddresses.clear();
+            suppressedBleLastSeen.clear();
+            usbPermissionDeniedDeviceId = null;
+            connectUsbInternal(deviceId);
+        });
+    }
+
+    public void connectBle(String address) {
+        if (address == null) {
+            return;
+        }
+        handler.post(() -> {
+            suppressedBleAddresses.remove(address);
+            suppressedBleLastSeen.remove(address);
+            connectBleInternal(address);
+        });
+    }
+
+    public void pairBle(String address) {
+        if (address == null) {
+            return;
+        }
+        handler.post(() -> {
+            String name = bleScanner != null ? bleScanner.getDisplayName(address) : address;
+            pairedRadios = Collections.unmodifiableList(withPairedRadio(pairedRadios, address, name));
+            suppressedBleAddresses.remove(address);
+            suppressedBleLastSeen.remove(address);
+            persistPairedRadios();
+            connectBleInternal(address);
+        });
+    }
+
+    public void forgetBle(String address) {
+        if (address == null) {
+            return;
+        }
+        handler.post(() -> {
+            pairedRadios = Collections.unmodifiableList(withoutPairedRadio(pairedRadios, address));
+            firmwareStatusByDevice.remove(address);
+            persistPairedRadios();
+            if (isActiveBle(address)) {
+                radioMissing();
+            } else {
+                scheduleConnectionStatePublish();
+            }
+        });
+    }
+
+    public void disconnectBle() {
+        handler.post(() -> {
+            RadioTransport transport = activeTransport.get();
+            if (transport != null && transport.getLinkType() == RadioLinkType.BLE) {
+                suppressedBleAddresses.add(transport.getDeviceId());
+                suppressedBleLastSeen.put(transport.getDeviceId(),
+                        android.os.SystemClock.elapsedRealtime());
+                radioMissing();
+            }
+        });
+    }
+
+    public String getActiveRadioLabel() {
+        RadioTransport transport = activeTransport.get();
+        if (transport == null) {
+            return null;
+        }
+        if (transport.getLinkType() == RadioLinkType.USB) {
+            // USB radios have no short unique name before the handshake, so avoid showing a long
+            // serial/VID:PID string in the overflow menu.
+            return getString(R.string.kv4p_ht) + " (USB)";
+        }
+        return transport.getDisplayName() + " (BT)";
+    }
+
+    public boolean hasActiveConnection() {
+        return activeTransport.get() != null;
     }
 
     private boolean isConnectionReady() {
@@ -1627,6 +1796,8 @@ public class RadioAudioService extends Service {
         abandonAudioFocus();
         radioModule.detachSender();
         hostToEsp32 = null;
+        connectingDeviceId = null;
+        connectingLink = RadioLinkType.NONE;
         RadioTransport transport = activeTransport.getAndSet(null);
         if (transport != null) {
             try {
@@ -1635,120 +1806,557 @@ public class RadioAudioService extends Service {
                 // Best-effort cleanup during teardown.
             }
         }
+        scheduleConnectionStatePublish();
     }
 
     private void reconcileConnections() {
         handler.post(this::tickPositionBeacon);
         activeUsbConnectAttemptId = ++usbConnectAttemptSeq;
-        Log.d(TAG, connectLog("reconcileConnections(): state=" + connectionStateSummary()));
-        Optional<UsbDevice> device = usbManager.getDeviceList().values().stream()
-            .filter(this::isESP32Device)
-            .findFirst();
-        if (isConnectionReady()) {
+        pruneBleSuppressions();
+        ConnectionPolicy.Input input = buildPolicyInput();
+        ConnectionPolicy.Decision decision = ConnectionPolicy.decide(input);
+        String summary = connectionStateSummary();
+        // This runs every 500 ms; only log when something actually changes so logcat stays usable.
+        if (decision.hasAction() || !summary.equals(lastReconcileLogSummary)) {
+            Log.d(TAG, connectLog("reconcileConnections(): state=" + summary
+                    + ",decision=" + decision.hasAction()));
+            lastReconcileLogSummary = summary;
+        }
+        applyConnectionDecision(decision);
+        scheduleConnectionStatePublish();
+    }
+
+    private ConnectionPolicy.Input buildPolicyInput() {
+        ConnectionPolicy.Input input = new ConnectionPolicy.Input();
+        input.bluetoothReady = bleScanner != null && bleScanner.isBluetoothReady();
+        input.scanning = bleScanner != null && bleScanner.isEnabled();
+        input.connecting = connectingDeviceId != null;
+        input.connectingLink = connectingLink;
+        RadioDeviceInfo activeDevice = buildActiveDeviceInfo();
+        input.activeDevice = activeDevice;
+        input.activeDeviceUnusable = activeDevice != null
+                && activeDevice.isFirmwareUpdateRequired();
+        input.usbDevices = buildUsbDeviceInfos();
+        input.visibleBleDevices = buildVisibleBleDeviceInfos();
+        input.pairedAddresses = pairedAddresses();
+        input.suppressedAddresses = new HashSet<>(suppressedBleAddresses);
+        return input;
+    }
+
+    private void applyConnectionDecision(ConnectionPolicy.Decision decision) {
+        if (!decision.hasAction()) {
             return;
         }
-        if (device.isPresent()) {
-            if (activeTransport.get() instanceof BleKissRadioTransport) {
+        if (decision.cancelBleAttempt) {
+            RadioTransport transport = activeTransport.get();
+            if (transport != null && transport.getLinkType() == RadioLinkType.BLE) {
                 closePortAndReset();
             }
-            setMode(RadioMode.STARTUP);
-            clearRadioTypeAndLimits();
-            Log.d(TAG, connectLog("reconcileConnections(): found ESP32 USB device"));
-            callbacks.hideSnackBar();
-            setupSerialConnection();
+        }
+        if (decision.stopScan && bleScanner != null) {
+            bleScanner.stop();
+        }
+        if (decision.connectUsbId != null) {
+            connectUsbInternal(decision.connectUsbId);
             return;
         }
-        if (activeTransport.get() == null) {
-            setMode(RadioMode.STARTUP);
-            clearRadioTypeAndLimits();
-            notifyRadioMissing();
-            Log.d(TAG, connectLog("reconcileConnections(): no USB device; starting BLE discovery"));
-            attemptBleConnect();
+        if (decision.connectBleAddress != null) {
+            connectBleInternal(decision.connectBleAddress);
+            return;
+        }
+        if (decision.startScan && bleScanner != null) {
+            bleScanner.start();
         }
     }
 
-    private boolean isESP32Device(UsbDevice device) {
-        int vendorId = device.getVendorId();
-        int productId = device.getProductId();
-        Log.d(TAG, String.format("Checking USB device: vendorId=%d, productId=%d, product=\"%s\"",
-            vendorId, productId, device.getProductName()));
-        for (int i = 0; i < ESP32_VENDOR_IDS.length; i++) {
-            if (vendorId == ESP32_VENDOR_IDS[i] && productId == ESP32_PRODUCT_IDS[i]) {
+    private void connectUsbInternal(String deviceId) {
+        if (deviceId != null && deviceId.equals(usbPermissionDeniedDeviceId)) {
+            // Don't keep re-prompting after the user denied access; wait for a manual retry or
+            // a re-plug, both of which clear this marker.
+            return;
+        }
+        UsbSerialDriver driver = findUsbDriver(deviceId);
+        if (driver == null) {
+            failConnection("USB radio not found");
+            return;
+        }
+        if (usbManager == null || !usbManager.hasPermission(driver.getDevice())) {
+            requestUsbPermission(driver);
+            return;
+        }
+        openUsbDriver(driver);
+    }
+
+    private void requestUsbPermission(UsbSerialDriver driver) {
+        UsbDevice device = driver.getDevice();
+        String deviceId = device.getDeviceName();
+        pendingUsbPermissionDeviceId = deviceId;
+        connectingDeviceId = deviceId;
+        connectingLink = RadioLinkType.USB;
+        lastConnectionError = null;
+        if (bleScanner != null) {
+            bleScanner.stop();
+        }
+        Log.i(TAG, connectLog("requestUsbPermission(): requesting permission for " + deviceId));
+        Intent permissionIntent = new Intent(ACTION_USB_PERMISSION)
+                .setPackage(getPackageName());
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+            this,
+            deviceId.hashCode(),
+            permissionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+        if (usbManager != null) {
+            usbManager.requestPermission(device, pendingIntent);
+        }
+        scheduleConnectionStatePublish();
+    }
+
+    private void openUsbDriver(UsbSerialDriver driver) {
+        UsbDevice device = driver.getDevice();
+        String deviceId = device.getDeviceName();
+        RadioTransport current = activeTransport.get();
+        if (current != null) {
+            closePortAndReset();
+        }
+        setMode(RadioMode.STARTUP);
+        clearRadioTypeAndLimits();
+        lastConnectionError = null;
+        connectingDeviceId = deviceId;
+        connectingLink = RadioLinkType.USB;
+        if (bleScanner != null) {
+            bleScanner.stop();
+        }
+        firmwareStatusByDevice.put(deviceId, FirmwareStatus.UNKNOWN);
+        UsbDeviceConnection connection = usbManager != null ? usbManager.openDevice(device) : null;
+        if (connection == null) {
+            failConnection("Could not open USB radio");
+            return;
+        }
+        UsbSerialPort serialPort = driver.getPorts().get(0);
+        Log.d(TAG, connectLog("openUsbDriver(): serialPort=" + serialPort));
+        try {
+            serialPort.open(connection);
+            serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1,
+                    UsbSerialPort.PARITY_NONE);
+        } catch (Exception error) {
+            Log.w(TAG, connectLog("openUsbDriver(): couldn't open USB serial port"), error);
+            try {
+                serialPort.close();
+            } catch (Exception ignored) {
+                // Best-effort cleanup after a partial open.
+            }
+            failConnection("Could not open USB radio");
+            return;
+        }
+        try { // These settings needed for better data transfer on Adafruit QT Py ESP32-S2
+            serialPort.setRTS(true);
+            serialPort.setDTR(true);
+        } catch (Exception ignored) {
+            // Ignore, may not be supported on all devices.
+        }
+        RadioTransport transport = new UsbSerialRadioTransport(serialPort, handler, deviceId,
+                usbDisplayName(device));
+        activeTransport.set(transport);
+        transport.start(createTransportListener(transport));
+        scheduleConnectionStatePublish();
+    }
+
+    private void connectBleInternal(String address) {
+        BleRadioScanner.ScanEntry entry = bleScanner != null ? bleScanner.find(address) : null;
+        if (entry == null) {
+            failConnection("Bluetooth radio not found");
+            return;
+        }
+        RadioTransport current = activeTransport.get();
+        if (current != null) {
+            closePortAndReset();
+        }
+        setMode(RadioMode.STARTUP);
+        clearRadioTypeAndLimits();
+        lastConnectionError = null;
+        connectingDeviceId = address;
+        connectingLink = RadioLinkType.BLE;
+        bleScanner.stop();
+        firmwareStatusByDevice.put(address, FirmwareStatus.UNKNOWN);
+        RadioTransport transport = new BleKissRadioTransport(this, handler,
+                entry.getDevice(), address, entry.getName());
+        activeTransport.set(transport);
+        transport.start(createTransportListener(transport));
+        scheduleConnectionStatePublish();
+    }
+
+    private void handleUsbPermissionResult(String deviceId, boolean granted) {
+        if (deviceId == null || !deviceId.equals(pendingUsbPermissionDeviceId)) {
+            return;
+        }
+        pendingUsbPermissionDeviceId = null;
+        if (!granted) {
+            usbPermissionDeniedDeviceId = deviceId;
+            failConnection("USB permission denied");
+            return;
+        }
+        usbPermissionDeniedDeviceId = null;
+        connectUsbInternal(deviceId);
+    }
+
+    private void failConnection(String message) {
+        connectingDeviceId = null;
+        connectingLink = RadioLinkType.NONE;
+        lastConnectionError = message;
+        radioMissing();
+    }
+
+    private final BroadcastReceiver usbPermissionReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!ACTION_USB_PERMISSION.equals(intent.getAction())) {
+                return;
+            }
+            boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
+            UsbDevice device = usbDeviceExtra(intent);
+            String deviceId = device != null ? device.getDeviceName()
+                    : pendingUsbPermissionDeviceId;
+            handleUsbPermissionResult(deviceId, granted);
+        }
+    };
+
+    @SuppressWarnings("deprecation")
+    private UsbDevice usbDeviceExtra(Intent intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice.class);
+        }
+        return intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+    }
+
+    private void initializePairedRadios() {
+        connectionStoreExecutor = Executors.newSingleThreadExecutor();
+        try {
+            pairedRadioStore = new RoomPairedRadioStore(
+                    AppDatabase.getInstance(getApplicationContext()));
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Unable to open paired radio storage", error);
+            return;
+        }
+        connectionStoreExecutor.execute(() -> {
+            List<PairedRadio> loaded;
+            try {
+                loaded = pairedRadioStore.getAll();
+            } catch (RuntimeException error) {
+                Log.w(TAG, "Unable to load paired radios", error);
+                return;
+            }
+            handler.post(() -> {
+                pairedRadios = Collections.unmodifiableList(new ArrayList<>(loaded));
+                scheduleConnectionStatePublish();
+            });
+        });
+    }
+
+    private void persistPairedRadios() {
+        List<PairedRadio> snapshot = new ArrayList<>(pairedRadios);
+        PairedRadioStore store = pairedRadioStore;
+        ExecutorService executor = connectionStoreExecutor;
+        if (store == null || executor == null) {
+            return;
+        }
+        try {
+            executor.execute(() -> {
+                try {
+                    store.saveAll(snapshot);
+                } catch (RuntimeException error) {
+                    Log.w(TAG, "Unable to save paired radios", error);
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException error) {
+            Log.d(TAG, "Ignoring paired radio save after service shutdown", error);
+        }
+    }
+
+    private List<PairedRadio> withPairedRadio(List<PairedRadio> current, String address,
+            String name) {
+        List<PairedRadio> result = new ArrayList<>(current);
+        for (int i = 0; i < result.size(); i++) {
+            if (result.get(i).getAddress().equals(address)) {
+                result.set(i, new PairedRadio(address, name));
+                return result;
+            }
+        }
+        result.add(new PairedRadio(address, name));
+        return result;
+    }
+
+    private List<PairedRadio> withoutPairedRadio(List<PairedRadio> current, String address) {
+        List<PairedRadio> result = new ArrayList<>();
+        for (PairedRadio radio : current) {
+            if (!radio.getAddress().equals(address)) {
+                result.add(radio);
+            }
+        }
+        return result;
+    }
+
+    private Set<String> pairedAddresses() {
+        Set<String> result = new HashSet<>();
+        for (PairedRadio radio : pairedRadios) {
+            result.add(radio.getAddress());
+        }
+        return result;
+    }
+
+    private boolean isPaired(String address) {
+        for (PairedRadio radio : pairedRadios) {
+            if (radio.getAddress().equals(address)) {
                 return true;
             }
         }
         return false;
     }
 
-    /**
-     * Sets up the USB serial connection to the ESP32, and starts listening for data.
-     * If no ESP32 is found, it will call radioMissing() on the callbacks.
-     */
-    public void setupSerialConnection() {
-        Log.d(TAG, connectLog("setupSerialConnection(): begin"));
-        // Find all available drivers from attached devices.
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
-        List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
-        if (availableDrivers.isEmpty()) {
-            Log.d(TAG, connectLog("setupSerialConnection(): no available USB drivers"));
-            radioMissing();
-            return;
-        }
-        // Open a connection to the first available driver.
-        UsbSerialDriver driver = availableDrivers.get(0);
-        if (!manager.hasPermission(driver.getDevice())) {
-            if (usbPermissionRequestPending) {
-                Log.d(TAG, connectLog("setupSerialConnection(): USB permission request already pending"));
-                return;
-            }
-            Log.i(TAG, connectLog("setupSerialConnection(): requesting USB permission"));
-            usbPermissionRequestPending = true;
-            PendingIntent permissionIntent = PendingIntent.getBroadcast(
-                this,
-                0,
-                new Intent(ACTION_USB_PERMISSION),
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-            );
-            manager.requestPermission(driver.getDevice(), permissionIntent);
-            return;
-        }
-        usbPermissionRequestPending = false;
-        UsbDeviceConnection connection = manager.openDevice(driver.getDevice());
-        if (connection == null) {
-            Log.w(TAG, connectLog("setupSerialConnection(): couldn't open USB device"));
-            radioMissing();
-            return;
-        }
-        UsbSerialPort serialPort = driver.getPorts().get(0); // Most devices have just one port (port 0)
-        Log.d(TAG, connectLog("setupSerialConnection(): serialPort=" + serialPort));
-        try {
-            serialPort.open(connection);
-            serialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
-        } catch (Exception e) {
-            Log.w(TAG, connectLog("setupSerialConnection(): couldn't open USB serial port"), e);
-            try {
-                serialPort.close();
-            } catch (Exception ignored) {
-                // Best-effort cleanup after a partial open.
-            }
-            radioMissing();
-            return;
-        }
-        try { // These settings needed for better data transfer on Adafruit QT Py ESP32-S2
-            serialPort.setRTS(true);
-            serialPort.setDTR(true);
-        } catch (Exception e) {
-            // Ignore, may not be supported on all devices.
-        }
-        RadioTransport transport = new UsbSerialRadioTransport(serialPort, handler);
-        activeTransport.set(transport);
-        transport.start(createTransportListener(transport));
+    private boolean isActiveBle(String address) {
+        RadioTransport transport = activeTransport.get();
+        return transport != null
+                && transport.getLinkType() == RadioLinkType.BLE
+                && transport.getDeviceId().equals(address);
     }
 
-    private void attemptBleConnect() {
-        RadioTransport transport = new BleKissRadioTransport(this, handler);
-        activeTransport.set(transport);
-        transport.start(createTransportListener(transport));
+    private boolean isActiveUsb(String deviceId) {
+        RadioTransport transport = activeTransport.get();
+        return transport != null
+                && transport.getLinkType() == RadioLinkType.USB
+                && transport.getDeviceId().equals(deviceId);
+    }
+
+    private void pruneBleSuppressions() {
+        if (suppressedBleAddresses.isEmpty()) {
+            return;
+        }
+        long now = android.os.SystemClock.elapsedRealtime();
+        List<String> expired = new ArrayList<>();
+        for (String address : suppressedBleAddresses) {
+            if (bleScanner != null && bleScanner.find(address) != null) {
+                suppressedBleLastSeen.put(address, now);
+                continue;
+            }
+            Long lastSeen = suppressedBleLastSeen.get(address);
+            if (lastSeen == null || now - lastSeen > BLE_SUPPRESSION_GRACE_MS) {
+                expired.add(address);
+            }
+        }
+        for (String address : expired) {
+            suppressedBleAddresses.remove(address);
+            suppressedBleLastSeen.remove(address);
+        }
+    }
+
+    private List<UsbSerialDriver> findSupportedUsbDrivers() {
+        UsbManager manager = usbManager;
+        if (manager == null) {
+            return Collections.emptyList();
+        }
+        List<UsbSerialDriver> result = new ArrayList<>();
+        for (UsbSerialDriver driver : UsbSerialProber.getDefaultProber().findAllDrivers(manager)) {
+            if (isESP32Device(driver.getDevice())) {
+                result.add(driver);
+            }
+        }
+        return result;
+    }
+
+    private UsbSerialDriver findUsbDriver(String deviceId) {
+        for (UsbSerialDriver driver : findSupportedUsbDrivers()) {
+            if (driver.getDevice().getDeviceName().equals(deviceId)) {
+                return driver;
+            }
+        }
+        return null;
+    }
+
+    private List<RadioDeviceInfo> buildUsbDeviceInfos() {
+        List<RadioDeviceInfo> result = new ArrayList<>();
+        for (UsbSerialDriver driver : findSupportedUsbDrivers()) {
+            UsbDevice device = driver.getDevice();
+            String deviceId = device.getDeviceName();
+            boolean connected = isActiveUsb(deviceId);
+            boolean connecting = deviceId.equals(connectingDeviceId)
+                    && connectingLink == RadioLinkType.USB;
+            result.add(new RadioDeviceInfo(RadioDeviceInfo.Kind.USB, deviceId,
+                    usbDisplayName(device), usbDetail(device), false, connected, connecting, true,
+                    firmwareStatus(deviceId), 0));
+        }
+        result.sort(java.util.Comparator
+                .comparing((RadioDeviceInfo device) -> !device.isConnected())
+                .thenComparing(RadioDeviceInfo::getName, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(RadioDeviceInfo::getId));
+        return result;
+    }
+
+    private List<RadioDeviceInfo> buildVisibleBleDeviceInfos() {
+        if (bleScanner == null) {
+            return Collections.emptyList();
+        }
+        List<RadioDeviceInfo> result = new ArrayList<>();
+        for (BleRadioScanner.ScanEntry entry : bleScanner.getEntries()) {
+            String address = entry.getAddress();
+            result.add(new RadioDeviceInfo(RadioDeviceInfo.Kind.BLE, address, entry.getName(),
+                    "", isPaired(address), isActiveBle(address),
+                    address.equals(connectingDeviceId) && connectingLink == RadioLinkType.BLE,
+                    true, firmwareStatus(address), entry.getRssi()));
+        }
+        return result;
+    }
+
+    private List<RadioDeviceInfo> buildPairedBleDeviceInfos() {
+        List<RadioDeviceInfo> result = new ArrayList<>();
+        for (PairedRadio radio : pairedRadios) {
+            String address = radio.getAddress();
+            BleRadioScanner.ScanEntry entry = bleScanner != null ? bleScanner.find(address) : null;
+            result.add(new RadioDeviceInfo(RadioDeviceInfo.Kind.BLE, address,
+                    entry != null ? entry.getName() : radio.getName(), "", true,
+                    isActiveBle(address),
+                    address.equals(connectingDeviceId) && connectingLink == RadioLinkType.BLE,
+                    entry != null, firmwareStatus(address), entry != null ? entry.getRssi() : 0));
+        }
+        result.sort(java.util.Comparator
+                .comparing((RadioDeviceInfo device) -> !device.isConnected())
+                .thenComparing(RadioDeviceInfo::getName, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(RadioDeviceInfo::getId));
+        return result;
+    }
+
+    private List<RadioDeviceInfo> buildDiscoveredBleDeviceInfos() {
+        Set<String> paired = pairedAddresses();
+        Set<String> included = new HashSet<>();
+        List<RadioDeviceInfo> result = new ArrayList<>();
+        if (bleScanner != null) {
+            for (BleRadioScanner.ScanEntry entry : bleScanner.getEntries()) {
+                String address = entry.getAddress();
+                if (paired.contains(address)) {
+                    continue;
+                }
+                included.add(address);
+                result.add(new RadioDeviceInfo(RadioDeviceInfo.Kind.BLE, address,
+                        entry.getName(), "", false, isActiveBle(address),
+                        address.equals(connectingDeviceId) && connectingLink == RadioLinkType.BLE,
+                        true, firmwareStatus(address), entry.getRssi()));
+            }
+        }
+        // A connected radio may no longer be advertising, but it must stay in the list so the
+        // user can disconnect it.
+        RadioTransport transport = activeTransport.get();
+        if (transport != null && transport.getLinkType() == RadioLinkType.BLE) {
+            String address = transport.getDeviceId();
+            if (!paired.contains(address) && !included.contains(address)) {
+                result.add(new RadioDeviceInfo(RadioDeviceInfo.Kind.BLE, address,
+                        transport.getDisplayName(), "", false, true, false, true,
+                        firmwareStatus(address), 0));
+            }
+        }
+        result.sort(java.util.Comparator
+                .comparing((RadioDeviceInfo device) -> !device.isConnected())
+                .thenComparing(RadioDeviceInfo::getName, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(RadioDeviceInfo::getId));
+        return result;
+    }
+
+    private RadioDeviceInfo buildActiveDeviceInfo() {
+        RadioTransport transport = activeTransport.get();
+        if (transport == null) {
+            return null;
+        }
+        RadioDeviceInfo.Kind kind = transport.getLinkType() == RadioLinkType.BLE
+                ? RadioDeviceInfo.Kind.BLE : RadioDeviceInfo.Kind.USB;
+        String deviceId = transport.getDeviceId();
+        String detail = kind == RadioDeviceInfo.Kind.USB ? usbDetailForId(deviceId) : "";
+        BleRadioScanner.ScanEntry entry = bleScanner != null ? bleScanner.find(deviceId) : null;
+        return new RadioDeviceInfo(kind, deviceId, transport.getDisplayName(), detail,
+                kind == RadioDeviceInfo.Kind.BLE && isPaired(deviceId), true, false, true,
+                firmwareStatus(deviceId), entry != null ? entry.getRssi() : 0);
+    }
+
+    private FirmwareStatus firmwareStatus(String deviceId) {
+        return firmwareStatusByDevice.getOrDefault(deviceId, FirmwareStatus.UNKNOWN);
+    }
+
+    private String usbDetailForId(String deviceId) {
+        for (UsbSerialDriver driver : findSupportedUsbDrivers()) {
+            if (driver.getDevice().getDeviceName().equals(deviceId)) {
+                return usbDetail(driver.getDevice());
+            }
+        }
+        return "";
+    }
+
+    private String usbDisplayName(UsbDevice device) {
+        String serial = safeUsbSerial(device);
+        if (serial != null && !serial.isEmpty()) {
+            return serial;
+        }
+        String product = device.getProductName();
+        if (product != null && !product.isEmpty()) {
+            return product;
+        }
+        return String.format(Locale.US, "USB %04X:%04X",
+                device.getVendorId(), device.getProductId());
+    }
+
+    private String usbDetail(UsbDevice device) {
+        String serial = safeUsbSerial(device);
+        String vidPid = String.format(Locale.US, "%04X:%04X",
+                device.getVendorId(), device.getProductId());
+        if (serial != null && !serial.isEmpty() && !serial.equals(usbDisplayName(device))) {
+            return serial + " · " + vidPid;
+        }
+        return vidPid;
+    }
+
+    private String safeUsbSerial(UsbDevice device) {
+        try {
+            return device.getSerialNumber();
+        } catch (SecurityException error) {
+            return null;
+        }
+    }
+
+    private void scheduleConnectionStatePublish() {
+        if (connectionStatePublishScheduled) {
+            return;
+        }
+        connectionStatePublishScheduled = true;
+        handler.postDelayed(() -> {
+            connectionStatePublishScheduled = false;
+            publishConnectionState();
+        }, CONNECTION_STATE_PUBLISH_DELAY_MS);
+    }
+
+    private void publishConnectionState() {
+        RadioConnectionState next = buildConnectionState();
+        if (!next.equals(connectionState.getValue())) {
+            connectionState.setValue(next);
+        }
+    }
+
+    private RadioConnectionState buildConnectionState() {
+        return new RadioConnectionState(
+                buildActiveDeviceInfo(),
+                buildUsbDeviceInfos(),
+                buildPairedBleDeviceInfos(),
+                buildDiscoveredBleDeviceInfos(),
+                bleScanner != null && bleScanner.isEnabled(),
+                bleScanner != null && bleScanner.isBluetoothReady(),
+                bleScanner != null ? bleScanner.getLastError() : null,
+                lastConnectionError);
+    }
+
+    private boolean isESP32Device(UsbDevice device) {
+        int vendorId = device.getVendorId();
+        int productId = device.getProductId();
+        for (int i = 0; i < ESP32_VENDOR_IDS.length; i++) {
+            if (vendorId == ESP32_VENDOR_IDS[i] && productId == ESP32_PRODUCT_IDS[i]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private RadioTransport.Listener createTransportListener(RadioTransport transport) {
@@ -1763,17 +2371,23 @@ public class RadioAudioService extends Service {
                 if (activeTransport.get() != transport) {
                     return;
                 }
+                connectingDeviceId = null;
+                connectingLink = RadioLinkType.NONE;
+                lastConnectionError = null;
+                firmwareStatusByDevice.put(transport.getDeviceId(), FirmwareStatus.UNKNOWN);
                 callbacks.hideSnackBar();
                 hostToEsp32 = new Protocol.Sender(transport::writeAsync);
                 radioModule.attachSender(hostToEsp32);
                 Log.i(TAG, connectLog(transport.getName() + " connected; starting handshake"));
                 startProtocolHandshake();
+                scheduleConnectionStatePublish();
             }
 
             @Override
             public void onDisconnected() {
                 if (activeTransport.get() == transport) {
                     Log.i(TAG, connectLog(transport.getName() + " disconnected"));
+                    lastConnectionError = null;
                     radioMissing();
                 }
             }
@@ -1784,6 +2398,12 @@ public class RadioAudioService extends Service {
                     Log.w(TAG, connectLog(transport.getName() + " transport error"), error);
                     if (audioTrack != null) {
                         audioTrack.stop();
+                    }
+                    lastConnectionError = "Connection failed";
+                    if (transport.getLinkType() == RadioLinkType.BLE) {
+                        suppressedBleAddresses.add(transport.getDeviceId());
+                        suppressedBleLastSeen.put(transport.getDeviceId(),
+                                android.os.SystemClock.elapsedRealtime());
                     }
                     radioMissing();
                 }
@@ -1822,6 +2442,7 @@ public class RadioAudioService extends Service {
             }
             waitingForHello = false;
             Log.w(TAG, handshakeLog(handshakeId, "waitForHello(): timed out after " + HELLO_TIMEOUT_MS + "ms"));
+            markActiveFirmwareStatus(FirmwareStatus.MISSING);
             setMode(RadioMode.BAD_FIRMWARE);
             callbacks.missingFirmware();
         };
@@ -1853,6 +2474,7 @@ public class RadioAudioService extends Service {
     private void validateHello(int handshakeId, Optional<Protocol.Hello> hello) {
         if (!hello.isPresent()) {
             Log.e(TAG, handshakeLog(handshakeId, "HELLO missing valid Hello payload; firmware upgrade required"));
+            markActiveFirmwareStatus(FirmwareStatus.OUTDATED);
             callbacks.outdatedFirmware(0);
             setMode(RadioMode.BAD_FIRMWARE);
             return;
@@ -1862,6 +2484,7 @@ public class RadioAudioService extends Service {
         Protocol.FirmwareVersion version = helloPayload.getVersion();
         Log.d(TAG, handshakeLog(handshakeId, "hello=" + helloPayload));
         if (version.getVer() < FirmwareUtils.PACKAGED_FIRMWARE_VER) {
+            markActiveFirmwareStatus(FirmwareStatus.OUTDATED);
             callbacks.outdatedFirmware(version.getVer());
             setMode(RadioMode.BAD_FIRMWARE);
             return;
@@ -1902,6 +2525,7 @@ public class RadioAudioService extends Service {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release(); // Don't keep screen on
         }
+        scheduleConnectionStatePublish();
     }
 
     private void notifyRadioMissing() {
@@ -1925,7 +2549,8 @@ public class RadioAudioService extends Service {
             + ",hostToEsp32=" + (hostToEsp32 != null)
             + ",activeTransport=" + (transport != null ? transport.getName() : "null")
             + ",activeTransportReady=" + (transport != null && transport.isReady())
-            + ",usbPermissionPending=" + usbPermissionRequestPending
+            + ",usbPermissionPending=" + (pendingUsbPermissionDeviceId != null)
+            + ",connecting=" + connectingDeviceId
             + ",radioMissingNotified=" + radioMissingNotified;
     }
 
@@ -1952,8 +2577,18 @@ public class RadioAudioService extends Service {
 
     public void handleHello(Protocol.Hello hello) {
         radioModule.seedFirmwareVersion(hello.getVersion());
+        markActiveFirmwareStatus(FirmwareStatus.OK);
         callbacks.setRadioType(getRadioType());
         updateTxLimitsForBand();
+    }
+
+    private void markActiveFirmwareStatus(FirmwareStatus status) {
+        RadioTransport transport = activeTransport.get();
+        if (transport == null) {
+            return;
+        }
+        firmwareStatusByDevice.put(transport.getDeviceId(), status);
+        scheduleConnectionStatePublish();
     }
 
     public void updateTxLimitsForBand() {
@@ -2215,7 +2850,8 @@ public class RadioAudioService extends Service {
     }
 
     public boolean isRadioConnected() {
-        return isConnectionReady() && mode != RadioMode.STARTUP;
+        return isConnectionReady() && mode != RadioMode.STARTUP
+                && mode != RadioMode.BAD_FIRMWARE;
     }
 
     public boolean canFlashFirmware() {

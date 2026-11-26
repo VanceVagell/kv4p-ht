@@ -3,4 +3,17 @@
     <style name="Widget.Theme.KV4PHT.MyView" parent="">
         <item name="android:background">@color/gray_400</item>
     </style>
+
+    <style name="ConnectRadioDeviceName">
+        <item name="android:fontFamily">@font/jost</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textColor">@color/primary_deselected</item>
+    </style>
+
+    <style name="ConnectRadioDeviceNameConnected" parent="ConnectRadioDeviceName">
+        <item name="android:textColor">@color/primary</item>
+        <!-- android:textFontWeight needs API 28; the AppCompat fontWeight attr covers older versions. -->
+        <item name="android:textFontWeight">500</item>
+        <item name="fontWeight">500</item>
+    </style>
 </resources>

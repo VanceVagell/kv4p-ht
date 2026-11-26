@@ -18,4 +18,16 @@ interface RadioTransport extends AutoCloseable {
     boolean supportsFirmwareFlashing();
     boolean prepareForFirmwareFlashing();
     String getName();
+
+    default String getDeviceId() {
+        return getName();
+    }
+
+    default String getDisplayName() {
+        return getName();
+    }
+
+    default RadioLinkType getLinkType() {
+        return RadioLinkType.NONE;
+    }
 }

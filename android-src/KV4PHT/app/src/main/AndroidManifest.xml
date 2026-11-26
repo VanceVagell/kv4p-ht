@@ -61,6 +61,10 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".ui.ConnectRadioActivity"
+            android:exported="false"
+            android:theme="@style/Theme.KV4PHT" />
+        <activity
             android:name=".ui.SettingsActivity"
             android:exported="true"
             android:theme="@style/Theme.KV4PHT"

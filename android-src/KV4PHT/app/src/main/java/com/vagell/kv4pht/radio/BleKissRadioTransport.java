@@ -11,70 +11,75 @@ import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.BluetoothLeScanner;
-import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Handler;
-import android.os.ParcelUuid;
 import android.util.Log;
 
 import androidx.core.content.ContextCompat;
 
 import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.UUID;
 
+/**
+ * Connects to one specific kv4p BLE KISS radio. Discovery lives in {@link BleRadioScanner} so the
+ * user can choose which radio to connect to.
+ */
 final class BleKissRadioTransport implements RadioTransport {
     private static final String TAG = BleKissRadioTransport.class.getSimpleName();
     private static final UUID SERVICE_UUID = UUID.fromString("00000001-ba2a-46c9-ae49-01b0961f68bb");
     private static final UUID TX_CHAR_UUID = UUID.fromString("00000002-ba2a-46c9-ae49-01b0961f68bb");
     private static final UUID RX_CHAR_UUID = UUID.fromString("00000003-ba2a-46c9-ae49-01b0961f68bb");
     private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-    // Low-latency scans normally receive an advertising radio within one interval.
-    // Keep a few seconds of margin, then let the periodic reconciler start a new window.
-    private static final int SCAN_TIMEOUT_MS = 3_000;
     private static final int REQUESTED_MTU = 517;
     private static final int MIN_BATCHED_AUDIO_PAYLOAD = 300;
     private static final int WRITE_RETRY_DELAY_MS = 8;
 
     private final Context context;
     private final Handler handler;
+    private final BluetoothDevice device;
+    private final String deviceAddress;
+    private final String displayName;
     private Listener listener;
     private final ArrayDeque<byte[]> pendingWrites = new ArrayDeque<>();
     private final ArrayDeque<byte[]> pendingNotifications = new ArrayDeque<>();
-    private BluetoothLeScanner scanner;
     private BluetoothGatt gatt;
     private BluetoothGattCharacteristic txCharacteristic;
-    private boolean scanning = false;
     private boolean ready = false;
     private boolean writeInFlight = false;
     private boolean drainScheduled = false;
     private boolean useWriteNoResponse = false;
-    private final Runnable scanTimeout;
     private volatile int attPayloadSize = 20;
     private int writeStartFailures = 0;
 
+    /**
+     * Test-only constructor retained for the MTU batching test. Production code must use the
+     * constructor that takes a specific device.
+     */
     BleKissRadioTransport(Context context, Handler handler) {
+        this(context, handler, null, "00:00:00:00:00:00", "BLE KISS");
+    }
+
+    BleKissRadioTransport(Context context, Handler handler, BluetoothDevice device,
+            String deviceAddress, String displayName) {
         this.context = context.getApplicationContext();
         this.handler = handler;
-        this.scanTimeout = () -> {
-            if (scanning) {
-                stopScan();
-                listener.onDisconnected();
-            }
-        };
+        this.device = device;
+        this.deviceAddress = deviceAddress;
+        this.displayName = displayName == null || displayName.isEmpty()
+                ? deviceAddress : displayName;
     }
 
     @SuppressLint("MissingPermission")
     @Override
     public void start(Listener listener) {
         this.listener = listener;
+        if (device == null) {
+            listener.onError(new IllegalStateException("No Bluetooth device selected"));
+            return;
+        }
         if (!hasBluetoothPermissions()) {
             listener.onError(new SecurityException("Missing Bluetooth permissions"));
             return;
@@ -85,33 +90,17 @@ final class BleKissRadioTransport implements RadioTransport {
             listener.onError(new IllegalStateException("Bluetooth is not available or enabled"));
             return;
         }
-        scanner = adapter.getBluetoothLeScanner();
-        if (scanner == null) {
-            listener.onError(new IllegalStateException("Bluetooth LE scanner is unavailable"));
-            return;
-        }
-        ScanFilter filter = new ScanFilter.Builder()
-            .setServiceUuid(new ParcelUuid(SERVICE_UUID))
-            .build();
-        ScanSettings settings = new ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build();
-        scanning = true;
         try {
-            scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
+            gatt = device.connectGatt(context, false, gattCallback,
+                    BluetoothDevice.TRANSPORT_LE);
         } catch (SecurityException error) {
-            scanning = false;
             listener.onError(error);
-            return;
         }
-        handler.postDelayed(scanTimeout, SCAN_TIMEOUT_MS);
-        Log.i(TAG, "Scanning for BLE KISS radio");
     }
 
     @Override
     @SuppressLint("MissingPermission")
     public void close() {
-        stopScan();
         ready = false;
         writeInFlight = false;
         drainScheduled = false;
@@ -175,39 +164,22 @@ final class BleKissRadioTransport implements RadioTransport {
 
     @Override
     public String getName() {
-        return "BLE KISS";
+        return "BLE " + displayName;
     }
 
-    private final ScanCallback scanCallback = new ScanCallback() {
-        @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            handler.post(() -> connectToScanResult(result));
-        }
+    @Override
+    public String getDeviceId() {
+        return deviceAddress;
+    }
 
-        @Override
-        public void onScanFailed(int errorCode) {
-            handler.post(() -> {
-                stopScan();
-                listener.onError(new IllegalStateException("BLE scan failed: " + errorCode));
-            });
-        }
-    };
+    @Override
+    public String getDisplayName() {
+        return displayName;
+    }
 
-    // Keep callback capture separate from handler-thread state processing.
-    @SuppressWarnings("java:S3398")
-    @SuppressLint("MissingPermission")
-    private void connectToScanResult(ScanResult result) {
-        if (!scanning) {
-            return;
-        }
-        BluetoothDevice device = result.getDevice();
-        Log.i(TAG, "Found BLE KISS radio: " + safeDeviceName(device));
-        stopScan();
-        try {
-            gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
-        } catch (SecurityException error) {
-            listener.onError(error);
-        }
+    @Override
+    public RadioLinkType getLinkType() {
+        return RadioLinkType.BLE;
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
@@ -458,33 +430,11 @@ final class BleKissRadioTransport implements RadioTransport {
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private void stopScan() {
-        handler.removeCallbacks(scanTimeout);
-        if (scanning && scanner != null) {
-            try {
-                scanner.stopScan(scanCallback);
-            } catch (Exception ignored) {
-                // Best-effort teardown.
-            }
-        }
-        scanning = false;
-    }
-
     private boolean hasBluetoothPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             return ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
                 && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
         }
         return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private String safeDeviceName(BluetoothDevice device) {
-        try {
-            String name = device.getName();
-            return name != null ? name : device.getAddress();
-        } catch (SecurityException e) {
-            return "unknown";
-        }
     }
 }

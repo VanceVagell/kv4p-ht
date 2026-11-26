@@ -7,17 +7,18 @@
     android:orientation="vertical"
     tools:context=".ui.SettingsActivity"
     android:background="@drawable/bg"
-    android:paddingTop="96dp"
-    android:paddingRight="24dp"
-    android:paddingBottom="24dp"
-    android:paddingLeft="24dp"
+    android:fitsSystemWindows="true"
     android:id="@+id/settingsTopLevelView">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingTop="32dp"
+        android:paddingRight="24dp"
+        android:paddingBottom="24dp"
+        android:paddingLeft="24dp">
 
         <TextView
             android:id="@+id/settingsToolbarTitle"
