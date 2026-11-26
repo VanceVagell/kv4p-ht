@@ -6,8 +6,9 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 ## Protocol Changelog
 
-### v2.0.0.2 (Unreleased, FW: 17)
+### v2.0.0.2 (Unreleased, FW: 18)
 
+* Firmware disables BLE KISS advertising and rejects new BLE connections once a USB host starts talking. USB takes precedence over BLE; switching back to BLE requires a power cycle (unplug/replug), consistent with the one-active-radio policy.
 * Live voice audio changed from Opus on command `0x07` to 16 kHz 4-bit ADPCM on command `0x0C`.
 * Added FreeDV 2400B digital voice negotiation with `FEATURE_HAS_FREEDV_2400B` and `HOST_STATE_FREEDV_2400B`. When enabled, 7-byte Codec2 1300 frames use `COMMAND_HOST_TX_DIGITAL` and `COMMAND_RX_DIGITAL` (`0x0E`) instead of ADPCM audio.
 * Added standard KISS `TXDELAY`, `PERSIST`, and `SLOTTIME` controls. Firmware performs CSMA/p-persistence channel access and queues up to two outbound AX.25 KISS DATA frames.

@@ -184,6 +184,9 @@ public:
   }
 
   void startAdvertising() {
+    if (!advertisingAllowed()) {
+      return;
+    }
     BLEAdvertising *adv = BLEDevice::getAdvertising();
     if (adv == nullptr) {
       return;
@@ -195,6 +198,28 @@ public:
     }
     BLEDevice::startAdvertising();
   }
+
+  // Called when another transport (USB) owns the radio. While set, the stream
+  // stops advertising and rejects new BLE clients. Existing clients are
+  // disconnected. This is intentionally sticky until the device is power
+  // cycled: switching to BLE requires unplugging USB anyway.
+  void setUsbHostConnected(bool connected) {
+    if (_usbHostConnected == connected) {
+      return;
+    }
+    _usbHostConnected = connected;
+    if (_usbHostConnected) {
+      _LOGI("BLE KISS disabled: USB host connected");
+      BLEDevice::stopAdvertising();
+      if (_connected) {
+        disconnectClient();
+      }
+    } else if (!_connected) {
+      startAdvertising();
+    }
+  }
+
+  bool isUsbHostConnected() const { return _usbHostConnected; }
 
   void setMaxNotifyChunksPerLoop(uint8_t chunks) {
     _config.maxNotifyChunksPerLoop = (chunks == 0) ? 1 : chunks;
@@ -216,7 +241,7 @@ public:
     }
     resetConnectionState();
 
-    if (_config.restartAdvertisingOnDisconnect) {
+    if (_config.restartAdvertisingOnDisconnect && advertisingAllowed()) {
       startAdvertising();
     }
   }
@@ -434,6 +459,8 @@ private:
     return instance;
   }
 
+  bool advertisingAllowed() const { return !_usbHostConnected; }
+
   Config _config;
   Stats _stats{};
 
@@ -449,6 +476,7 @@ private:
   bool _begun = false;
   bool _connected = false;
   bool _notifySubscribed = false;
+  bool _usbHostConnected = false;
   bool _hasConnId = false;
   bool _advertisingConfigured = false;
   bool _lastNotifySucceeded = false;
@@ -683,6 +711,14 @@ private:
   }
 
   void handleConnect(esp_ble_gatts_cb_param_t *param) {
+    if (!advertisingAllowed()) {
+      _LOGW("BLE KISS rejecting client: USB host is connected");
+      if (_server != nullptr && param != nullptr) {
+        _server->disconnect(param->connect.conn_id);
+      }
+      return;
+    }
+
     _connected = true;
     _notifySubscribed = false;
     resetNotifyDescriptor();
@@ -719,7 +755,7 @@ private:
     clearIncomingStream();
     clearQueue();
 
-    if (_config.restartAdvertisingOnDisconnect) {
+    if (_config.restartAdvertisingOnDisconnect && advertisingAllowed()) {
       startAdvertising();
     }
   }

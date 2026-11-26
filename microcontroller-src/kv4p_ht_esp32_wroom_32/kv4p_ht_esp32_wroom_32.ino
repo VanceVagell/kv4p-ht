@@ -34,7 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "utils.h"
 #include "board.h"
 
-const uint16_t FIRMWARE_VER = 17;
+const uint16_t FIRMWARE_VER = 18;
 
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint32_t DEVICE_STATE_REPORT_INTERVAL_MS = 500;
@@ -66,6 +66,11 @@ Kv4pBleKissStream bleKissStream(bleKissConfig());
 bool bluetoothStarted = false;
 bool bluetoothProtocolConnected = false;
 bool bleKissProtocolConnected = false;
+// Latched once any host frame arrives on USB. On UART-bridged ESP32 boards
+// there is no way to observe the USB cable or port-open state, so the first
+// complete frame from the host is the earliest reliable proof that USB is
+// connected. Once latched, BLE stays disabled until the next power cycle.
+bool usbHostConnected = false;
 KissParser bluetoothParser(protocolBtSession, &handleCommands, &handleAx25Data,
   &handleKissParameter);
 KissParser bleKissParser(protocolBleSession, &handleCommands, &handleAx25Data,
@@ -673,6 +678,16 @@ void deviceStateLoop() {
   END_EVERY_N_MILLISECONDS();
 }
 
+void usbHostLoop() {
+  if (usbHostConnected || !protocolUsbSession.hostActivitySeen) {
+    return;
+  }
+
+  usbHostConnected = true;
+  _LOGI("USB host connected; disabling BLE advertising");
+  bleKissStream.setUsbHostConnected(true);
+}
+
 void bluetoothLoop() {
   if (!bluetoothStarted) {
     return;
@@ -742,6 +757,7 @@ void loop() {
   ledLoop();
   buttonsLoop();
   protocolLoop();
+  usbHostLoop();
   bluetoothLoop();
   bleKissLoop();
   rxAudioLoop();

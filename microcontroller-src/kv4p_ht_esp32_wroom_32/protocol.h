@@ -127,6 +127,10 @@ struct ProtocolSession {
   bool connected;
   uint16_t flags;
   size_t windowSize;
+  // Latched when any complete KISS frame arrives from this session's host. The
+  // firmware uses this to detect that a USB host is actively connected (which
+  // is not otherwise observable on UART-bridged boards).
+  bool hostActivitySeen;
 };
 
 bool protocolSessionConnected(const ProtocolSession &session) {
@@ -496,6 +500,10 @@ private:
   }
 
   void processFrame() {
+    // Any complete frame proves that a host is actively talking on this
+    // transport. Record it before validating the frame so even a KISS client
+    // that never performs the kv4p HELLO exchange is detected.
+    _session.hostActivitySeen = true;
     uint8_t kissCommandByte = _frame[0];
     uint8_t kissPort = kissCommandByte >> 4;
     uint8_t kissCommand = kissCommandByte & 0x0F;
