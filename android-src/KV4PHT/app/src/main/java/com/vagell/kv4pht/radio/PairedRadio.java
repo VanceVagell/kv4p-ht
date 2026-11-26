@@ -6,10 +6,16 @@ import java.util.Objects;
 public final class PairedRadio {
     private final String address;
     private final String name;
+    private final long chipId;
 
     public PairedRadio(String address, String name) {
+        this(address, name, 0);
+    }
+
+    public PairedRadio(String address, String name, long chipId) {
         this.address = address;
         this.name = name == null || name.isEmpty() ? address : name;
+        this.chipId = chipId;
     }
 
     public String getAddress() {
@@ -18,6 +24,15 @@ public final class PairedRadio {
 
     public String getName() {
         return name;
+    }
+
+    /** Stable chip identity reported by the radio, or 0 when it is not known yet. */
+    public long getChipId() {
+        return chipId;
+    }
+
+    public boolean hasChipId() {
+        return chipId != 0;
     }
 
     @Override
@@ -29,11 +44,13 @@ public final class PairedRadio {
             return false;
         }
         PairedRadio that = (PairedRadio) other;
-        return Objects.equals(address, that.address) && Objects.equals(name, that.name);
+        return chipId == that.chipId
+                && Objects.equals(address, that.address)
+                && Objects.equals(name, that.name);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(address, name);
+        return Objects.hash(address, name, chipId);
     }
 }

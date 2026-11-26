@@ -34,7 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "utils.h"
 #include "board.h"
 
-const uint16_t FIRMWARE_VER = 18;
+const uint16_t FIRMWARE_VER = 17;
 
 const uint32_t RSSI_REPORT_INTERVAL_MS = 100;
 const uint32_t DEVICE_STATE_REPORT_INTERVAL_MS = 500;
@@ -187,7 +187,8 @@ uint8_t getFirmwareFeatures() {
   return (hw.features.hasHL ? FEATURE_HAS_HL : 0)
     | (hw.features.hasPhysPTT ? FEATURE_HAS_PHY_PTT : 0)
     | FEATURE_HAS_ESP32_AFSK
-    | FEATURE_HAS_FREEDV_2400B;
+    | FEATURE_HAS_FREEDV_2400B
+    | FEATURE_HAS_DEVICE_IDENTITY;
 }
 
 Mode rxIdleMode() {
@@ -435,6 +436,7 @@ void setup() {
     reconcileDesiredState(false);
   }
   sendHello(protocolUsbSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolUsbSession.flags));
+  sendDeviceIdentity(*protocolUsbSession.stream, bluetoothDeviceId(), bleKissDeviceName);
   _LOGI("Setup is finished");
 }
 
@@ -699,6 +701,7 @@ void bluetoothLoop() {
     protocolBtSession.connected = true;
     bluetoothParser.reset();
     sendHello(protocolBtSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolBtSession.flags));
+    sendDeviceIdentity(*protocolBtSession.stream, bluetoothDeviceId(), bleKissDeviceName);
   } else if (!connected && bluetoothProtocolConnected) {
     bluetoothProtocolConnected = false;
     protocolBtSession.connected = false;
@@ -722,6 +725,7 @@ void bleKissLoop() {
   if (protocolReady && !bleKissProtocolConnected) {
     bleKissParser.reset();
     sendHello(protocolBleSession, FIRMWARE_VER, radioModuleStatus, hw.rfModuleType, moduleMinRadioFreq(), moduleMaxRadioFreq(), getFirmwareFeatures(), currentDeviceState(protocolBleSession.flags));
+    sendDeviceIdentity(*protocolBleSession.stream, bluetoothDeviceId(), bleKissDeviceName);
     bleKissProtocolConnected = true;
     protocolBleSession.connected = true;
     _LOGI("BLE KISS sent HELLO after notify subscription: firmware=%u window=%u", FIRMWARE_VER, BLE_KISS_WINDOW_SIZE);

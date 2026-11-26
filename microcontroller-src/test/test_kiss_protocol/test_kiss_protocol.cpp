@@ -34,6 +34,10 @@ static_assert(COMMAND_RX_AUDIO == 0x0C, "RX audio command id must match Android"
 static_assert(COMMAND_HOST_TX_DIGITAL == 0x0E, "Host digital command id must match Android");
 static_assert(COMMAND_HOST_TX_AX25 == 0x0F, "Host AX.25 override command id must match Android");
 static_assert(COMMAND_RX_DIGITAL == 0x0E, "RX digital command id must match Android");
+static_assert(COMMAND_DEVICE_IDENTITY == 0x10, "Device identity command id must match Android");
+static_assert(FEATURE_HAS_DEVICE_IDENTITY == (1 << 4), "Device identity feature bit must match Android");
+static_assert(DEVICE_IDENTITY_HEADER_LEN == 5, "Device identity header size must match Android");
+static_assert(DEVICE_IDENTITY_MAX_NAME_LEN == 24, "Device identity name limit must match Android");
 
 struct CapturedCommand {
   bool called;
@@ -509,6 +513,38 @@ void test_send_kv4p_vendor_frame_escapes_payload() {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, stream.written(), sizeof(expected));
 }
 
+void test_send_device_identity_uses_chip_id_and_length_prefixed_name() {
+  FakeStream stream;
+  const uint32_t chipId = 0x00ACB71C;
+  const char *name = "kv4p-ACB71C";
+  const uint8_t expected[] = {
+    KISS_FEND, KISS_CMD_SETHARDWARE,
+    'K', 'V', '4', 'P', KV4P_PROTOCOL_VERSION, COMMAND_DEVICE_IDENTITY,
+    0x1C, 0xB7, 0xAC, 0x00, 11,
+    'k', 'v', '4', 'p', '-', 'A', 'C', 'B', '7', '1', 'C',
+    KISS_FEND
+  };
+
+  sendDeviceIdentity(stream, chipId, name);
+
+  TEST_ASSERT_EQUAL(sizeof(expected), stream.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, stream.written(), sizeof(expected));
+}
+
+void test_send_device_identity_truncates_long_name() {
+  FakeStream stream;
+  const char *name = "kv4p-0123456789ABCDEFGHIJ";
+
+  sendDeviceIdentity(stream, 1, name);
+
+  // FEND + SETHARDWARE + vendor header (6) + 4 chip bytes + length + 24 name bytes + FEND
+  TEST_ASSERT_EQUAL(1 + 1 + KV4P_VENDOR_HEADER_LEN + DEVICE_IDENTITY_HEADER_LEN
+                        + DEVICE_IDENTITY_MAX_NAME_LEN + 1,
+                    stream.writtenLen());
+  TEST_ASSERT_EQUAL_UINT8(DEVICE_IDENTITY_MAX_NAME_LEN,
+                          stream.written()[1 + 1 + KV4P_VENDOR_HEADER_LEN + 4]);
+}
+
 void test_send_audio_routes_only_to_rx_audio_open_sessions() {
   FakeStream usb;
   FakeStream secondary;
@@ -611,6 +647,8 @@ static int runKissProtocolTests() {
   RUN_TEST(test_send_kiss_data_frame_escapes_fend_and_fesc);
   RUN_TEST(test_send_kiss_data_frame_broadcasts_to_connected_secondary_stream);
   RUN_TEST(test_send_kv4p_vendor_frame_escapes_payload);
+  RUN_TEST(test_send_device_identity_uses_chip_id_and_length_prefixed_name);
+  RUN_TEST(test_send_device_identity_truncates_long_name);
   RUN_TEST(test_send_audio_routes_only_to_rx_audio_open_sessions);
   RUN_TEST(test_global_freedv_mode_selects_digital_routing);
   RUN_TEST(test_parser_ack_is_written_to_input_stream);

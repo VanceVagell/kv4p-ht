@@ -495,7 +495,7 @@ public class ProtocolKissTest {
         versionPayload.put((byte) 1);
         versionPayload.putFloat(400.0f);
         versionPayload.putFloat(480.0f);
-        versionPayload.put((byte) 0x0B);
+        versionPayload.put((byte) 0x1B);
 
         java.util.Optional<Protocol.FirmwareVersion> parsed = Protocol.FirmwareVersion.from(versionPayload, 0, versionPayload.array().length);
 
@@ -508,6 +508,66 @@ public class ProtocolKissTest {
         assertTrue(parsed.get().isHasHl());
         assertTrue(parsed.get().isHasPhysPtt());
         assertTrue(parsed.get().isHasFreeDv2400b());
+        assertTrue(parsed.get().isHasDeviceIdentity());
+    }
+
+    @Test
+    public void deviceIdentityParsesChipIdAndUtf8Name() {
+        assertEquals(0x10, Protocol.RcvCommand.COMMAND_DEVICE_IDENTITY.getValue());
+        byte[] name = "kv4p-ACB71C".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ByteBuffer identityPayload = ByteBuffer.allocate(5 + name.length)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        identityPayload.putInt(0x00ACB71C);
+        identityPayload.put((byte) name.length);
+        identityPayload.put(name);
+
+        java.util.Optional<Protocol.DeviceIdentity> parsed = Protocol.DeviceIdentity.from(
+                identityPayload, 0, identityPayload.array().length);
+
+        assertTrue(parsed.isPresent());
+        assertEquals(0x00ACB71CL, parsed.get().getChipId());
+        assertEquals("kv4p-ACB71C", parsed.get().getName());
+    }
+
+    @Test
+    public void deviceIdentityRejectsMalformedPayloadsWithoutThrowing() {
+        ByteBuffer valid = ByteBuffer.allocate(5 + 4).order(ByteOrder.LITTLE_ENDIAN);
+        valid.putInt(0x01020304);
+        valid.put((byte) 4);
+        valid.put(new byte[]{'k', 'v', '4', 'p'});
+
+        assertFalse(Protocol.DeviceIdentity.from(null, 0, 9).isPresent());
+        assertFalse(Protocol.DeviceIdentity.from(valid, 0, 4).isPresent());
+        assertFalse(Protocol.DeviceIdentity.from(valid, 0, 10).isPresent());
+        assertFalse(Protocol.DeviceIdentity.from(valid, 0, 8).isPresent());
+        assertFalse(Protocol.DeviceIdentity.from(valid, -1, 9).isPresent());
+
+        ByteBuffer oversizedName = ByteBuffer.allocate(5 + 25).order(ByteOrder.LITTLE_ENDIAN);
+        oversizedName.putInt(1);
+        oversizedName.put((byte) 25);
+        assertFalse(Protocol.DeviceIdentity.from(oversizedName, 0, 30).isPresent());
+    }
+
+    @Test
+    public void deviceIdentityVendorFrameDispatchesToCommandCallback() {
+        byte[] name = "kv4p-ACB71C".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ByteBuffer identityPayload = ByteBuffer.allocate(5 + name.length)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        identityPayload.putInt(0x00ACB71C);
+        identityPayload.put((byte) name.length);
+        identityPayload.put(name);
+        byte[] frame = buildKissFrame(Protocol.KISS_CMD_SETHARDWARE,
+                buildKv4pVendorPayload(Protocol.RcvCommand.COMMAND_DEVICE_IDENTITY.getValue(),
+                        identityPayload.array()));
+
+        newParser().processBytes(frame);
+
+        assertTrue(called);
+        assertEquals(Protocol.RcvCommand.COMMAND_DEVICE_IDENTITY, command);
+        java.util.Optional<Protocol.DeviceIdentity> parsed = Protocol.DeviceIdentity.from(
+                ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN), 0, payloadLen);
+        assertTrue(parsed.isPresent());
+        assertEquals("kv4p-ACB71C", parsed.get().getName());
     }
 
     @Test

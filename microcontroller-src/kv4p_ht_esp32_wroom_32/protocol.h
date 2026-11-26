@@ -63,6 +63,7 @@ enum SndCommand {
   COMMAND_WINDOW_UPDATE  = 0x09,
   COMMAND_DEVICE_STATE   = 0x0B, // [COMMAND_DEVICE_STATE(DeviceState)]
   COMMAND_RX_DIGITAL     = 0x0E, // [COMMAND_RX_DIGITAL(7-byte Codec2 1300 frame)]
+  COMMAND_DEVICE_IDENTITY = 0x10, // [uint32 chipId, uint8 nameLen, char name[nameLen]]
 };
 
 // COMMAND_HELLO parameters: Version + initial DeviceState
@@ -80,6 +81,12 @@ REQUIRE_TRIVIALLY_COPYABLE(Version);
 #define FEATURE_HAS_PHY_PTT (1 << 1)
 #define FEATURE_HAS_ESP32_AFSK (1 << 2)
 #define FEATURE_HAS_FREEDV_2400B (1 << 3)
+#define FEATURE_HAS_DEVICE_IDENTITY (1 << 4)
+
+// COMMAND_DEVICE_IDENTITY payload: uint32 chipId, uint8 nameLen, UTF-8 name.
+// The name is length-prefixed and bounded so the frame stays small.
+static constexpr size_t DEVICE_IDENTITY_HEADER_LEN = 5;
+static constexpr size_t DEVICE_IDENTITY_MAX_NAME_LEN = 24;
 
 #define HOST_STATE_RADIO_CONFIG_VALID (1 << 0)
 #define HOST_STATE_PTT_REQUESTED      (1 << 1)
@@ -336,6 +343,26 @@ void inline sendKv4pVendorFrame(uint8_t kv4pCommand, const uint8_t *payload, siz
   if (protocolHasBleSession()) {
     sendKv4pVendorFrame(*protocolBleSession.stream, kv4pCommand, payload, len);
   }
+}
+
+void inline sendDeviceIdentity(Stream &out, uint32_t chipId, const char *name) {
+  uint8_t payload[DEVICE_IDENTITY_HEADER_LEN + DEVICE_IDENTITY_MAX_NAME_LEN];
+  payload[0] = (uint8_t)(chipId & 0xFF);
+  payload[1] = (uint8_t)((chipId >> 8) & 0xFF);
+  payload[2] = (uint8_t)((chipId >> 16) & 0xFF);
+  payload[3] = (uint8_t)((chipId >> 24) & 0xFF);
+  size_t nameLen = 0;
+  if (name != nullptr) {
+    while (name[nameLen] != '\0' && nameLen < DEVICE_IDENTITY_MAX_NAME_LEN) {
+      ++nameLen;
+    }
+  }
+  payload[4] = (uint8_t)nameLen;
+  if (nameLen > 0) {
+    memcpy(payload + DEVICE_IDENTITY_HEADER_LEN, name, nameLen);
+  }
+  sendKv4pVendorFrame(out, COMMAND_DEVICE_IDENTITY, payload,
+                      DEVICE_IDENTITY_HEADER_LEN + nameLen);
 }
 
 void inline sendHello(Stream &out, uint16_t ver, char radioModuleStatus, size_t windowSize, RfModuleType rfModuleType, float minRadioFreq, float maxRadioFreq, uint8_t features, const DeviceState &deviceState) {

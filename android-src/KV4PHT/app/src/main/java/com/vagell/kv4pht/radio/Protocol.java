@@ -2,6 +2,7 @@ package com.vagell.kv4pht.radio;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +27,10 @@ public final class Protocol {
     // APRS maximum AX.25 UI frame excluding the FCS: ten 7-byte address fields,
     // control/PID, and a 256-byte information field.
     public static final int AX25_MAX_KISS_DATA_LEN = (10 * 7) + 2 + 256;
+    // COMMAND_DEVICE_IDENTITY payload: uint32 chipId + uint8 nameLen + name.
+    static final int DEVICE_IDENTITY_HEADER_LEN = 5;
+    static final int DEVICE_IDENTITY_MAX_NAME_LEN = 24;
+    static final int FEATURE_HAS_DEVICE_IDENTITY = 1 << 4;
 
     // KV4P KISS transport. Standard KISS DATA frames carry AX.25 packets.
     // kv4p-specific commands are carried in KISS SETHARDWARE vendor frames:
@@ -80,7 +85,8 @@ public final class Protocol {
         COMMAND_RX_AUDIO(0x0C),         // [COMMAND_RX_AUDIO(int8_t[])]
         COMMAND_WINDOW_UPDATE(0x09),    // [COMMAND_WINDOW_UPDATE()]
         COMMAND_DEVICE_STATE(0x0B),
-        COMMAND_RX_DIGITAL(0x0E);
+        COMMAND_RX_DIGITAL(0x0E),
+        COMMAND_DEVICE_IDENTITY(0x10);
         private static final RcvCommand[] VALUES = values();
         private final int value;
         RcvCommand(int value) {
@@ -282,6 +288,7 @@ public final class Protocol {
         private final boolean hasHl;
         private final boolean hasPhysPtt;
         private final boolean hasFreeDv2400b;
+        private final boolean hasDeviceIdentity;
         public static Optional<FirmwareVersion> from(final ByteBuffer buffer, int offset, Integer len) {
             return Optional.ofNullable(buffer)
                 .filter(b -> len != null && len == BYTE_LEN && offset >= 0 && b.limit() >= offset + len)
@@ -298,6 +305,7 @@ public final class Protocol {
                         .hasHl((features & 0x01) != 0)
                         .hasPhysPtt((features & 0x02) != 0)
                         .hasFreeDv2400b((features & 0x08) != 0)
+                        .hasDeviceIdentity((features & FEATURE_HAS_DEVICE_IDENTITY) != 0)
                         .build();
                 });
         }
@@ -318,6 +326,36 @@ public final class Protocol {
                             .version(version)
                             .deviceState(deviceState)
                             .build())));
+        }
+    }
+
+    @Data
+    @Builder
+    public static class DeviceIdentity {
+        private final long chipId;
+        private final String name;
+
+        public static Optional<DeviceIdentity> from(final ByteBuffer buffer, int offset, Integer len) {
+            if (buffer == null || len == null || offset < 0
+                    || len < DEVICE_IDENTITY_HEADER_LEN
+                    || len > DEVICE_IDENTITY_HEADER_LEN + DEVICE_IDENTITY_MAX_NAME_LEN
+                    || buffer.limit() < offset + len) {
+                return Optional.empty();
+            }
+            ByteBuffer b = littleEndianView(buffer);
+            int nameLen = b.get(offset + 4) & 0xFF;
+            if (nameLen > DEVICE_IDENTITY_MAX_NAME_LEN
+                    || len != DEVICE_IDENTITY_HEADER_LEN + nameLen) {
+                return Optional.empty();
+            }
+            byte[] nameBytes = new byte[nameLen];
+            for (int i = 0; i < nameLen; i++) {
+                nameBytes[i] = b.get(offset + DEVICE_IDENTITY_HEADER_LEN + i);
+            }
+            return Optional.of(DeviceIdentity.builder()
+                    .chipId(b.getInt(offset) & 0xFFFFFFFFL)
+                    .name(new String(nameBytes, StandardCharsets.UTF_8))
+                    .build());
         }
     }
 

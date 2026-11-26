@@ -244,6 +244,7 @@ public class RadioAudioService extends Service {
     private final Set<String> suppressedBleAddresses = new HashSet<>();
     private final Map<String, Long> suppressedBleLastSeen = new HashMap<>();
     private final Map<String, FirmwareStatus> firmwareStatusByDevice = new HashMap<>();
+    private final Map<String, Protocol.DeviceIdentity> deviceIdentityByDeviceId = new HashMap<>();
     private volatile List<PairedRadio> pairedRadios = Collections.emptyList();
     private PairedRadioStore pairedRadioStore;
     private ExecutorService connectionStoreExecutor;
@@ -1729,8 +1730,13 @@ public class RadioAudioService extends Service {
             return;
         }
         handler.post(() -> {
-            String name = bleScanner != null ? bleScanner.getDisplayName(address) : address;
-            pairedRadios = Collections.unmodifiableList(withPairedRadio(pairedRadios, address, name));
+            Protocol.DeviceIdentity identity = deviceIdentityByDeviceId.get(address);
+            String name = identity != null && !identity.getName().isEmpty()
+                    ? identity.getName()
+                    : (bleScanner != null ? bleScanner.getDisplayName(address) : address);
+            long chipId = identity != null ? identity.getChipId() : 0;
+            pairedRadios = Collections.unmodifiableList(
+                    withPairedRadio(pairedRadios, address, name, chipId));
             suppressedBleAddresses.remove(address);
             suppressedBleLastSeen.remove(address);
             persistPairedRadios();
@@ -1771,12 +1777,53 @@ public class RadioAudioService extends Service {
         if (transport == null) {
             return null;
         }
-        if (transport.getLinkType() == RadioLinkType.USB) {
-            // USB radios have no short unique name before the handshake, so avoid showing a long
-            // serial/VID:PID string in the overflow menu.
-            return getString(R.string.kv4p_ht) + " (USB)";
+        return displayNameForTransport(transport)
+                + (transport.getLinkType() == RadioLinkType.USB ? " (USB)" : " (BT)");
+    }
+
+    private String displayNameForTransport(RadioTransport transport) {
+        if (transport == null) {
+            return "";
         }
-        return transport.getDisplayName() + " (BT)";
+        if (transport.getLinkType() == RadioLinkType.USB) {
+            return usbDisplayNameForId(transport.getDeviceId());
+        }
+        Protocol.DeviceIdentity identity = deviceIdentityByDeviceId.get(transport.getDeviceId());
+        if (identity != null && !identity.getName().isEmpty()) {
+            return identity.getName();
+        }
+        return transport.getDisplayName();
+    }
+
+    private String usbDisplayNameForId(String deviceId) {
+        return usbDisplayNameForIdentity(getString(R.string.kv4p_ht),
+                deviceIdentityByDeviceId.get(deviceId), pairedRadios);
+    }
+
+    static String usbDisplayNameForIdentity(String fallback, Protocol.DeviceIdentity identity,
+            List<PairedRadio> pairedRadios) {
+        if (identity != null) {
+            PairedRadio paired = pairedRadioForChipId(pairedRadios, identity.getChipId());
+            if (paired != null && !paired.getName().isEmpty()) {
+                return paired.getName();
+            }
+            if (!identity.getName().isEmpty()) {
+                return identity.getName();
+            }
+        }
+        return fallback;
+    }
+
+    private static PairedRadio pairedRadioForChipId(List<PairedRadio> radios, long chipId) {
+        if (radios == null || chipId == 0) {
+            return null;
+        }
+        for (PairedRadio radio : radios) {
+            if (radio.getChipId() == chipId) {
+                return radio;
+            }
+        }
+        return null;
     }
 
     public boolean hasActiveConnection() {
@@ -1800,6 +1847,7 @@ public class RadioAudioService extends Service {
         connectingLink = RadioLinkType.NONE;
         RadioTransport transport = activeTransport.getAndSet(null);
         if (transport != null) {
+            deviceIdentityByDeviceId.remove(transport.getDeviceId());
             try {
                 transport.close();
             } catch (Exception ignored) {
@@ -2074,15 +2122,18 @@ public class RadioAudioService extends Service {
     }
 
     private List<PairedRadio> withPairedRadio(List<PairedRadio> current, String address,
-            String name) {
+            String name, long chipId) {
         List<PairedRadio> result = new ArrayList<>(current);
         for (int i = 0; i < result.size(); i++) {
-            if (result.get(i).getAddress().equals(address)) {
-                result.set(i, new PairedRadio(address, name));
+            PairedRadio existing = result.get(i);
+            if (existing.getAddress().equals(address)) {
+                String nextName = name == null || name.isEmpty() ? existing.getName() : name;
+                long nextChipId = chipId != 0 ? chipId : existing.getChipId();
+                result.set(i, new PairedRadio(address, nextName, nextChipId));
                 return result;
             }
         }
-        result.add(new PairedRadio(address, name));
+        result.add(new PairedRadio(address, name, chipId));
         return result;
     }
 
@@ -2181,8 +2232,8 @@ public class RadioAudioService extends Service {
             boolean connecting = deviceId.equals(connectingDeviceId)
                     && connectingLink == RadioLinkType.USB;
             result.add(new RadioDeviceInfo(RadioDeviceInfo.Kind.USB, deviceId,
-                    usbDisplayName(device), usbDetail(device), false, connected, connecting, true,
-                    firmwareStatus(deviceId), 0));
+                    usbDisplayNameForId(deviceId), usbDetail(device), false, connected, connecting,
+                    true, firmwareStatus(deviceId), 0));
         }
         result.sort(java.util.Comparator
                 .comparing((RadioDeviceInfo device) -> !device.isConnected())
@@ -2248,7 +2299,7 @@ public class RadioAudioService extends Service {
             String address = transport.getDeviceId();
             if (!paired.contains(address) && !included.contains(address)) {
                 result.add(new RadioDeviceInfo(RadioDeviceInfo.Kind.BLE, address,
-                        transport.getDisplayName(), "", false, true, false, true,
+                        displayNameForTransport(transport), "", false, true, false, true,
                         firmwareStatus(address), 0));
             }
         }
@@ -2269,7 +2320,7 @@ public class RadioAudioService extends Service {
         String deviceId = transport.getDeviceId();
         String detail = kind == RadioDeviceInfo.Kind.USB ? usbDetailForId(deviceId) : "";
         BleRadioScanner.ScanEntry entry = bleScanner != null ? bleScanner.find(deviceId) : null;
-        return new RadioDeviceInfo(kind, deviceId, transport.getDisplayName(), detail,
+        return new RadioDeviceInfo(kind, deviceId, displayNameForTransport(transport), detail,
                 kind == RadioDeviceInfo.Kind.BLE && isPaired(deviceId), true, false, true,
                 firmwareStatus(deviceId), entry != null ? entry.getRssi() : 0);
     }
@@ -2375,6 +2426,7 @@ public class RadioAudioService extends Service {
                 connectingLink = RadioLinkType.NONE;
                 lastConnectionError = null;
                 firmwareStatusByDevice.put(transport.getDeviceId(), FirmwareStatus.UNKNOWN);
+                deviceIdentityByDeviceId.remove(transport.getDeviceId());
                 callbacks.hideSnackBar();
                 hostToEsp32 = new Protocol.Sender(transport::writeAsync);
                 radioModule.attachSender(hostToEsp32);
@@ -2580,6 +2632,27 @@ public class RadioAudioService extends Service {
         markActiveFirmwareStatus(FirmwareStatus.OK);
         callbacks.setRadioType(getRadioType());
         updateTxLimitsForBand();
+    }
+
+    void handleDeviceIdentity(Protocol.DeviceIdentity identity) {
+        if (identity == null) {
+            return;
+        }
+        RadioTransport transport = activeTransport.get();
+        if (transport == null) {
+            return;
+        }
+        String deviceId = transport.getDeviceId();
+        deviceIdentityByDeviceId.put(deviceId, identity);
+        if (transport.getLinkType() == RadioLinkType.BLE && isPaired(deviceId)) {
+            List<PairedRadio> updated = withPairedRadio(pairedRadios, deviceId,
+                    identity.getName(), identity.getChipId());
+            if (!updated.equals(pairedRadios)) {
+                pairedRadios = Collections.unmodifiableList(updated);
+                persistPairedRadios();
+            }
+        }
+        scheduleConnectionStatePublish();
     }
 
     private void markActiveFirmwareStatus(FirmwareStatus status) {
@@ -2920,6 +2993,10 @@ public class RadioAudioService extends Service {
 
             case COMMAND_DEVICE_STATE:
                 Protocol.DeviceState.from(param, offset, len).ifPresent(this::handleDeviceState);
+                break;
+
+            case COMMAND_DEVICE_IDENTITY:
+                Protocol.DeviceIdentity.from(param, offset, len).ifPresent(this::handleDeviceIdentity);
                 break;
 
             default:

@@ -45,7 +45,8 @@ public final class RoomPairedRadioStore implements PairedRadioStore {
                 if (address.isEmpty()) {
                     continue;
                 }
-                result.add(new PairedRadio(address, item.optString("name", address)));
+                result.add(new PairedRadio(address, item.optString("name", address),
+                        item.optLong("chipId", 0)));
             }
         } catch (JSONException error) {
             Log.w(TAG, "Ignoring malformed paired radio list", error);
@@ -62,6 +63,7 @@ public final class RoomPairedRadioStore implements PairedRadioStore {
             try {
                 item.put("address", radio.getAddress());
                 item.put("name", radio.getName());
+                item.put("chipId", radio.getChipId());
             } catch (JSONException error) {
                 Log.w(TAG, "Unable to serialize paired radio " + radio.getAddress(), error);
                 continue;

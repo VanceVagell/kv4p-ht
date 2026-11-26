@@ -28,6 +28,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
@@ -97,6 +98,33 @@ public class RadioAudioServiceTest {
         } finally {
             Locale.setDefault(previous);
         }
+    }
+
+    @Test public void usbIdentityUsesPairedRadioShortNameForMatchingChipId() {
+        Protocol.DeviceIdentity identity = Protocol.DeviceIdentity.builder()
+                .chipId(0x00ACB71CL)
+                .name("kv4p-ACB71C")
+                .build();
+        List<PairedRadio> paired = Arrays.asList(
+                new PairedRadio("AA:BB:CC:DD:EE:FF", "kv4p-OTHER", 0x00000001L),
+                new PairedRadio("11:22:33:44:55:66", "kv4p-ACB71C", 0x00ACB71CL));
+
+        assertEquals("kv4p-ACB71C",
+                RadioAudioService.usbDisplayNameForIdentity("kv4p HT", identity, paired));
+    }
+
+    @Test public void usbIdentityFallsBackToIdentityNameThenGenericName() {
+        Protocol.DeviceIdentity identity = Protocol.DeviceIdentity.builder()
+                .chipId(0x00ACB71CL)
+                .name("kv4p-ACB71C")
+                .build();
+        List<PairedRadio> paired = Arrays.asList(
+                new PairedRadio("AA:BB:CC:DD:EE:FF", "kv4p-OTHER", 0x00000001L));
+
+        assertEquals("kv4p-ACB71C",
+                RadioAudioService.usbDisplayNameForIdentity("kv4p HT", identity, paired));
+        assertEquals("kv4p HT",
+                RadioAudioService.usbDisplayNameForIdentity("kv4p HT", null, paired));
     }
 
     @Test public void startupRejectsTuningUntilInitializationFinishes() {

@@ -6,9 +6,10 @@ The KV4P-HT protocol defines the communication interface between the microcontro
 
 ## Protocol Changelog
 
-### v2.0.0.2 (Unreleased, FW: 18)
+### v2.0.0.2 (Unreleased, FW: 17)
 
 * Firmware disables BLE KISS advertising and rejects new BLE connections once a USB host starts talking. USB takes precedence over BLE; switching back to BLE requires a power cycle (unplug/replug), consistent with the one-active-radio policy.
+* Added `COMMAND_DEVICE_IDENTITY` (`0x10`) with the stable chip ID and short device name, sent after HELLO on USB, Bluetooth Classic, and BLE. `FEATURE_HAS_DEVICE_IDENTITY` advertises support. The message is additive; KISS-only clients can ignore it.
 * Live voice audio changed from Opus on command `0x07` to 16 kHz 4-bit ADPCM on command `0x0C`.
 * Added FreeDV 2400B digital voice negotiation with `FEATURE_HAS_FREEDV_2400B` and `HOST_STATE_FREEDV_2400B`. When enabled, 7-byte Codec2 1300 frames use `COMMAND_HOST_TX_DIGITAL` and `COMMAND_RX_DIGITAL` (`0x0E`) instead of ADPCM audio.
 * Added standard KISS `TXDELAY`, `PERSIST`, and `SLOTTIME` controls. Firmware performs CSMA/p-persistence channel access and queues up to two outbound AX.25 KISS DATA frames.
@@ -140,6 +141,7 @@ Audio command ID `0x07` was used by the historical Opus voice stream. Current fi
 | `0x09`       | `COMMAND_WINDOW_UPDATE` | Updates available receive window            |
 | `0x0B`       | `COMMAND_DEVICE_STATE`  | Applied radio/control state snapshot         |
 | `0x0E`       | `COMMAND_RX_DIGITAL`    | Sends one demodulated 7-byte Codec2 1300 frame |
+| `0x10`       | `COMMAND_DEVICE_IDENTITY` | Stable chip ID and short device name        |
 
 ## Command Parameters
 
@@ -162,6 +164,7 @@ typedef struct version Version;
 #define FEATURE_HAS_PHY_PTT (1 << 1)
 #define FEATURE_HAS_ESP32_AFSK (1 << 2)
 #define FEATURE_HAS_FREEDV_2400B (1 << 3)
+#define FEATURE_HAS_DEVICE_IDENTITY (1 << 4)
 
 struct hello {
   Version     version;
@@ -171,6 +174,17 @@ typedef struct hello Hello;
 ```
 
 Firmware sends `COMMAND_HELLO(Hello)` after boot-time radio initialization. Android validates the version/status fields, adopts `minRadioFreq`/`maxRadioFreq` as the module's usable RX range, and seeds its initial radio-module state from the appended `DeviceState`.
+
+### `COMMAND_DEVICE_IDENTITY` Parameters
+
+Sent immediately after `COMMAND_HELLO` on USB, Bluetooth Classic, and BLE:
+
+```c
+// uint32 chipId (little-endian), uint8 nameLen, UTF-8 name[nameLen]
+// nameLen is 0..24; total payload is 5 + nameLen bytes.
+```
+
+`chipId` is the same stable 24-bit value used to build the `kv4p-XXXXXX` Bluetooth name. Android uses it to correlate a USB connection with a previously paired Bluetooth radio so the USB row and overflow-menu label can show the short name. The message is optional metadata: KISS-only hosts can ignore it, and apps should use `FEATURE_HAS_DEVICE_IDENTITY` to detect support rather than relying on the firmware version alone.
 
 ### `COMMAND_HOST_DESIRED_STATE` Parameters
 
