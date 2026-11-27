@@ -213,6 +213,7 @@ typedef struct host_desired_state HostDesiredState;
 #define HOST_STATE_TX_ALLOWED          (1 << 11)
 #define HOST_STATE_ENABLE_STATUS_REPORTS (1 << 12)
 #define HOST_STATE_FREEDV_2400B          (1 << 13)
+#define HOST_STATE_SQ_OPEN_OVERRIDE       (1 << 15)
 ```
 
 Android sends the full desired-state snapshot whenever one field changes. Firmware applies changed radio/filter/control fields, derives its mode, and marks device state dirty so `deviceStateLoop()` can report the result with `COMMAND_DEVICE_STATE`.
@@ -220,6 +221,8 @@ Android sends the full desired-state snapshot whenever one field changes. Firmwa
 `HOST_STATE_TX_ALLOWED` is a persisted host-controlled safety flag that defaults off. Firmware only accepts standard KISS DATA AX.25 frames and host PTT requests while this flag is set. Frequency-override AX.25 jobs use the requested frequency instead; the host must validate it before sending.
 
 `HOST_STATE_ENABLE_STATUS_REPORTS` is a non-persisted session flag that defaults off. kv4p HT Android sets it after HELLO so firmware sends `COMMAND_DEVICE_STATE`; generic KISS TNC hosts can leave it off to receive only standard KISS DATA frames.
+
+`HOST_STATE_SQ_OPEN_OVERRIDE` is a transient session flag. While any connected host requests it, RX audio bypasses the squelch mute and `DEVICE_STATE_SQUELCHED` clears. It does not change the saved squelch level. A disconnected Bluetooth session loses its override.
 
 `HOST_STATE_FREEDV_2400B` is a non-persisted global flag. When it and a session's `HOST_STATE_RX_AUDIO_OPEN` flag are set, firmware sends 7-byte Codec2 frames on `COMMAND_RX_DIGITAL` instead of ADPCM audio. During host-requested PTT, the host must continuously send 7-byte `COMMAND_HOST_TX_DIGITAL` frames. Each frame represents 320 speech samples at 8 kHz and 1,920 modem samples at 48 kHz (40 ms).
 
@@ -245,9 +248,10 @@ struct device_state {
 } __attribute__((__packed__));
 typedef struct device_state DeviceState;
 
-#define DEVICE_STATE_PHYS_PTT_DOWN (1 << 8)
+#define DEVICE_STATE_PHYS_PTT_DOWN (1 << 8)  // Physical button 1
 #define DEVICE_STATE_TX_ACTIVE     (1 << 9)
 #define DEVICE_STATE_SQUELCHED     (1 << 10)
+#define DEVICE_STATE_PHYS_PTT2_DOWN (1 << 14) // Physical button 2
 #define DEVICE_STATE_TX_ALLOWED     HOST_STATE_TX_ALLOWED
 #define DEVICE_STATE_ENABLE_STATUS_REPORTS HOST_STATE_ENABLE_STATUS_REPORTS
 ```
@@ -256,7 +260,7 @@ When `HOST_STATE_ENABLE_STATUS_REPORTS` is set, firmware sends `COMMAND_DEVICE_S
 
 Scanning remains Android-owned because Android owns the memory list, memory groups, skip-during-scan flags, offsets, and UI selection. Firmware reports the current squelch state with `DEVICE_STATE_SQUELCHED`; Android uses that received state to decide when to advance to the next memory.
 
-Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: memory id, bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, filter flags, and TX allowed. If NVS is empty, firmware loads safe defaults, marks radio config valid, and starts with TX disabled until the host sends an allowed TX frequency. If persisted TX/RX frequencies are outside the configured RF module's range, firmware clamps them into range and clears `memoryId` to `-1` before applying radio config. Transient state is not restored: sequence, PTT requested, RX audio open, and status-report enablement always start clear.
+Firmware persists stable radio settings in NVS and restores them on startup before sending `COMMAND_HELLO`: memory id, bandwidth, TX/RX frequencies, TX/RX tones, squelch level, high-power preference, RSSI preference, filter flags, and TX allowed. If NVS is empty, firmware loads safe defaults, marks radio config valid, and starts with TX disabled until the host sends an allowed TX frequency. If persisted TX/RX frequencies are outside the configured RF module's range, firmware clamps them into range and clears `memoryId` to `-1` before applying radio config. Transient state is not restored: sequence, PTT requested, RX audio open, status-report enablement, and SQ open override always start clear.
 
 ### `COMMAND_WINDOW_UPDATE` Parameters **(ESP32 → Android)**
 

@@ -951,6 +951,7 @@ public class ProtocolKissTest {
             .flags(Protocol.HOST_STATE_RADIO_CONFIG_VALID
                 | Protocol.HOST_STATE_PTT_REQUESTED
                 | Protocol.HOST_STATE_RX_AUDIO_OPEN
+                | Protocol.HOST_STATE_SQ_OPEN_OVERRIDE
                 | Protocol.HOST_STATE_HIGH_POWER
                 | Protocol.HOST_STATE_FREEDV_2400B)
             .bw(Protocol.DRA818_25K)
@@ -973,9 +974,50 @@ public class ProtocolKissTest {
         int flags = sender.sentStates.get(1).getFlags();
         assertEquals(0, flags & Protocol.HOST_STATE_PTT_REQUESTED);
         assertEquals(0, flags & Protocol.HOST_STATE_RX_AUDIO_OPEN);
+        assertEquals(0, flags & Protocol.HOST_STATE_SQ_OPEN_OVERRIDE);
         assertNotEquals(0, flags & Protocol.HOST_STATE_HIGH_POWER);
         assertNotEquals(0, flags & Protocol.HOST_STATE_FREEDV_2400B);
         assertNotEquals(0, flags & Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
+    }
+
+    @Test
+    public void physicalButtonBitsAndSquelchOverrideAreIndependent() {
+        RadioModuleController controller = new RadioModuleController();
+        Protocol.DeviceState first = Protocol.DeviceState.builder()
+            .flags(Protocol.DEVICE_STATE_PHYS_PTT_DOWN)
+            .mode(Protocol.DeviceMode.DEVICE_MODE_RX)
+            .build();
+        controller.seedFromDeviceState(first);
+        assertTrue(controller.isPhysPttDown());
+        assertFalse(controller.isPhysPtt2Down());
+
+        controller.updateDeviceState(Protocol.DeviceState.builder()
+            .flags(Protocol.DEVICE_STATE_PHYS_PTT2_DOWN | Protocol.HOST_STATE_SQ_OPEN_OVERRIDE)
+            .mode(Protocol.DeviceMode.DEVICE_MODE_RX)
+            .build());
+        assertTrue(controller.didPhysPttChange());
+        assertTrue(controller.didPhysPtt2Change());
+        assertFalse(controller.isPhysPttDown());
+        assertTrue(controller.isPhysPtt2Down());
+        assertFalse(controller.isSquelched());
+    }
+
+    @Test
+    public void squelchOverrideSendsTransientFlagWithoutChangingLevel() {
+        CapturingSender sender = new CapturingSender();
+        RadioModuleController controller = new RadioModuleController();
+        controller.attachSender(sender);
+        controller.markTransportReady();
+        controller.setSquelch(4);
+        controller.setSquelchOpenOverride(true);
+
+        Protocol.HostDesiredState override = sender.sentStates.get(sender.sentStates.size() - 1);
+        assertEquals(4, override.getSquelch());
+        assertNotEquals(0, override.getFlags() & Protocol.HOST_STATE_SQ_OPEN_OVERRIDE);
+
+        controller.setSquelchOpenOverride(false);
+        assertEquals(0, sender.sentStates.get(sender.sentStates.size() - 1).getFlags()
+            & Protocol.HOST_STATE_SQ_OPEN_OVERRIDE);
     }
 
     @Test

@@ -46,10 +46,12 @@ public class RadioModuleController {
             | Protocol.HOST_STATE_FILTER_LOW
             | Protocol.HOST_STATE_TX_ALLOWED
             | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS
-            | Protocol.HOST_STATE_FREEDV_2400B;
+            | Protocol.HOST_STATE_FREEDV_2400B
+            | Protocol.HOST_STATE_SQ_OPEN_OVERRIDE;
     private static final int SESSION_FLAGS_MASK =
         Protocol.HOST_STATE_RX_AUDIO_OPEN
-            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS;
+            | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS
+            | Protocol.HOST_STATE_SQ_OPEN_OVERRIDE;
     private static final int DEFAULT_DESIRED_FLAGS =
         Protocol.HOST_STATE_HIGH_POWER | Protocol.HOST_STATE_RSSI_ENABLED | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS;
 
@@ -70,6 +72,7 @@ public class RadioModuleController {
     private Protocol.HostDesiredState lastDesiredStateSent;
     private Protocol.DeviceState lastDeviceState;
     private boolean lastPhysPttDown = false;
+    private boolean lastPhysPtt2Down = false;
     private boolean appliedStateInSync = false;
     private boolean transportReady = false;
     private int desiredStateRetries = 0;
@@ -89,6 +92,7 @@ public class RadioModuleController {
     synchronized void detachSender() {
         sender = null;
         transportReady = false;
+        desiredState = desiredState.withFlags(desiredState.getFlags() & ~Protocol.HOST_STATE_SQ_OPEN_OVERRIDE);
         lastDesiredStateSent = null;
         lastDeviceState = null;
         firmwareVersion = null;
@@ -107,6 +111,7 @@ public class RadioModuleController {
     synchronized void seedFromDeviceState(Protocol.DeviceState state) {
         lastDeviceState = state;
         lastPhysPttDown = isPhysPttDown();
+        lastPhysPtt2Down = isPhysPtt2Down();
         desiredState = desiredFromDeviceState(state);
         lastDesiredStateSent = desiredState.withFlags(desiredState.getFlags() & ~Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
         appliedStateInSync = isDeviceStateInSyncWithDesired(state, lastDesiredStateSent);
@@ -187,6 +192,7 @@ public class RadioModuleController {
     synchronized void stop() {
         clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN
             | Protocol.HOST_STATE_PTT_REQUESTED
+            | Protocol.HOST_STATE_SQ_OPEN_OVERRIDE
             | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
     }
 
@@ -199,6 +205,7 @@ public class RadioModuleController {
     synchronized void closeAudio() {
         clearDesiredFlags(Protocol.HOST_STATE_RX_AUDIO_OPEN
             | Protocol.HOST_STATE_PTT_REQUESTED
+            | Protocol.HOST_STATE_SQ_OPEN_OVERRIDE
             | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS);
     }
 
@@ -208,6 +215,10 @@ public class RadioModuleController {
 
     synchronized void setRssi(boolean on) {
         setDesiredFlag(Protocol.HOST_STATE_RSSI_ENABLED, on);
+    }
+
+    synchronized void setSquelchOpenOverride(boolean open) {
+        setDesiredFlag(Protocol.HOST_STATE_SQ_OPEN_OVERRIDE, open);
     }
 
     public synchronized void setTxAllowed(boolean allowed) {
@@ -228,6 +239,7 @@ public class RadioModuleController {
 
     synchronized void updateDeviceState(Protocol.DeviceState state) {
         lastPhysPttDown = isPhysPttDown();
+        lastPhysPtt2Down = isPhysPtt2Down();
         lastDeviceState = state;
         if (state.getAppliedSequence() > desiredState.getSequence()) {
             boolean hadUnsentChange = lastDesiredStateSent != null && !desiredState.equals(lastDesiredStateSent);
@@ -342,6 +354,10 @@ public class RadioModuleController {
         return hasDeviceFlag(Protocol.DEVICE_STATE_PHYS_PTT_DOWN);
     }
 
+    synchronized boolean isPhysPtt2Down() {
+        return hasDeviceFlag(Protocol.DEVICE_STATE_PHYS_PTT2_DOWN);
+    }
+
     synchronized boolean isSquelched() {
         return hasDeviceFlag(Protocol.DEVICE_STATE_SQUELCHED);
     }
@@ -366,6 +382,10 @@ public class RadioModuleController {
         return lastPhysPttDown != isPhysPttDown();
     }
 
+    synchronized boolean didPhysPtt2Change() {
+        return lastPhysPtt2Down != isPhysPtt2Down();
+    }
+
     synchronized void flushDesiredState() {
         sendDesiredStateIfChanged();
     }
@@ -387,7 +407,8 @@ public class RadioModuleController {
         return Protocol.HostDesiredState.builder()
             .sequence(state.getAppliedSequence())
             .memoryId(state.getMemoryId())
-            .flags((state.getFlags() & DESIRED_DEVICE_FLAGS_MASK & ~(Protocol.HOST_STATE_PTT_REQUESTED | Protocol.HOST_STATE_RX_AUDIO_OPEN))
+            .flags((state.getFlags() & DESIRED_DEVICE_FLAGS_MASK & ~(Protocol.HOST_STATE_PTT_REQUESTED
+                | Protocol.HOST_STATE_RX_AUDIO_OPEN | Protocol.HOST_STATE_SQ_OPEN_OVERRIDE))
                 | Protocol.HOST_STATE_ENABLE_STATUS_REPORTS)
             .bw(state.getBw())
             .freqTx(state.getFreqTx())

@@ -232,6 +232,84 @@
                     android:layout_marginTop="8dp"
                     android:trackTintMode="add"/>
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/jost"
+                        android:labelFor="@id/physicalButton1Action"
+                        android:text="@string/physical_button_1"
+                        android:textColor="@color/primary"
+                        android:textSize="18sp"/>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_weight="0"
+                        android:padding="0dp"
+                        android:textColorHint="@color/primary_deselected"
+                        app:boxStrokeColor="@color/primary"
+                        app:hintTextColor="@color/primary_deselected">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/physicalButton1Action"
+                            android:layout_width="160dp"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:padding="0dp"
+                            android:text="@string/physical_button_ptt"
+                            android:textColor="@color/primary"
+                            android:textSize="20sp"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/jost"
+                        android:labelFor="@id/physicalButton2Action"
+                        android:text="@string/physical_button_2"
+                        android:textColor="@color/primary"
+                        android:textSize="18sp"/>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_weight="0"
+                        android:padding="0dp"
+                        android:textColorHint="@color/primary_deselected"
+                        app:boxStrokeColor="@color/primary"
+                        app:hintTextColor="@color/primary_deselected">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/physicalButton2Action"
+                            android:layout_width="160dp"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:padding="0dp"
+                            android:text="@string/physical_button_ptt"
+                            android:textColor="@color/primary"
+                            android:textSize="20sp"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
                 <Switch
                     android:id="@+id/noAnimationsSwitch"
                     android:layout_width="match_parent"

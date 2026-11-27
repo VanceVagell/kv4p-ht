@@ -280,6 +280,9 @@ public class RadioAudioService extends Service {
     @Getter
     private @NonNull String activeFrequencyStr = "";
     private int activeMemoryId = -1;
+    private boolean button1OpensSquelch;
+    private boolean button2OpensSquelch;
+    private boolean physicalPttOwned;
     private int scanBaseSquelch = -1;
     private static final int DEFAULT_SCAN_SQUELCH = 7;
     private Runnable pendingScanAdvance;
@@ -1153,6 +1156,32 @@ public class RadioAudioService extends Service {
         }
     }
 
+    public void setPhysicalButtonAssignments(boolean button1OpenSq, boolean button2OpenSq) {
+        button1OpensSquelch = button1OpenSq;
+        button2OpensSquelch = button2OpenSq;
+        handlePhysicalButtons();
+    }
+
+    private void handlePhysicalButtons() {
+        boolean button1Down = radioModule.isPhysPttDown();
+        boolean button2Down = radioModule.isPhysPtt2Down();
+        radioModule.setSquelchOpenOverride(
+            (button1Down && button1OpensSquelch) || (button2Down && button2OpensSquelch));
+        boolean pttButtonDown = (button1Down && !button1OpensSquelch)
+            || (button2Down && !button2OpensSquelch);
+        if (pttButtonDown && !physicalPttOwned && getMode() == RadioMode.RX && isTxAllowed()) {
+            startPtt();
+            if (getMode() == RadioMode.TX) {
+                physicalPttOwned = true;
+                callbacks.forcedPttStart();
+            }
+        } else if (!pttButtonDown && physicalPttOwned) {
+            physicalPttOwned = false;
+            endPtt();
+            callbacks.forcedPttEnd();
+        }
+    }
+
     public boolean isVoiceCaptureActive() {
         return voiceCaptureActive;
     }
@@ -1841,6 +1870,10 @@ public class RadioAudioService extends Service {
         waitingForHello = false;
         cancelHelloTimeout();
         abandonAudioFocus();
+        if (physicalPttOwned) {
+            physicalPttOwned = false;
+            callbacks.forcedPttEnd();
+        }
         radioModule.detachSender();
         hostToEsp32 = null;
         connectingDeviceId = null;
@@ -3049,17 +3082,8 @@ public class RadioAudioService extends Service {
             callbacks.sMeterUpdate(radioModule.getSMeterBarValue());
         }
         checkScanDueToSquelch();
-        if (radioModule.didPhysPttChange()) {
-            boolean physPttDown = radioModule.isPhysPttDown();
-            if (physPttDown) {
-                if (getMode() == RadioMode.RX && isTxAllowed()) {
-                    startPtt();
-                    callbacks.forcedPttStart();
-                }
-            } else if (getMode() == RadioMode.TX) {
-                endPtt();
-                callbacks.forcedPttEnd();
-            }
+        if (radioModule.didPhysPttChange() || radioModule.didPhysPtt2Change()) {
+            handlePhysicalButtons();
         }
     }
 

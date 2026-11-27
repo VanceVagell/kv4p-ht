@@ -177,4 +177,8 @@
     <string name="flash_firmware_button">刷写</string>
     <string name="firmware_flash_requires_usb">请通过 USB 连接电台以刷写固件</string>
     <string name="aprs_message_not_accepted">APRS 消息未被接受发送。</string>
+    <string name="physical_button_1">按钮 1</string>
+    <string name="physical_button_2">按钮 2</string>
+    <string name="physical_button_ptt">PTT</string>
+    <string name="physical_button_open_sq">打开静噪</string>
 </resources>

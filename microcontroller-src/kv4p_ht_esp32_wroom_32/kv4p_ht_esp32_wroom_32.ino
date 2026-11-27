@@ -210,13 +210,16 @@ bool freeDv2400bEnabled() {
 uint16_t deviceStateFlags(uint16_t sessionFlags) {
   uint16_t flags = desiredState.flags;
   flags |= sessionFlags & HOST_STATE_SESSION_FLAG_MASK;
-  if (isPhysPttDown) {
+  if (isPhysPtt1Down) {
     flags |= DEVICE_STATE_PHYS_PTT_DOWN;
+  }
+  if (isPhysPtt2Down) {
+    flags |= DEVICE_STATE_PHYS_PTT2_DOWN;
   }
   if (mode == MODE_TX) {
     flags |= DEVICE_STATE_TX_ACTIVE;
   }
-  if (squelched) {
+  if (squelched && !protocolAnySessionFlag(HOST_STATE_SQ_OPEN_OVERRIDE)) {
     flags |= DEVICE_STATE_SQUELCHED;
   }
   return flags;

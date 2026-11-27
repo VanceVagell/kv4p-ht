@@ -132,6 +132,8 @@ public final class Protocol {
     static final int DEVICE_STATE_PHYS_PTT_DOWN = 1 << 8;
     static final int DEVICE_STATE_TX_ACTIVE = 1 << 9;
     static final int DEVICE_STATE_SQUELCHED = 1 << 10;
+    static final int DEVICE_STATE_PHYS_PTT2_DOWN = 1 << 14;
+    static final int HOST_STATE_SQ_OPEN_OVERRIDE = 1 << 15;
     static final int HOST_STATE_TX_ALLOWED = 1 << 11;
     static final int HOST_STATE_ENABLE_STATUS_REPORTS = 1 << 12;
     static final int HOST_STATE_FREEDV_2400B = 1 << 13;
