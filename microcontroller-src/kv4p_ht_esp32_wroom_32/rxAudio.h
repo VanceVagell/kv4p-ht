@@ -92,7 +92,8 @@ static void onFreeDvFrameDecoded(const uint8_t *frame, size_t len,
     squelched = nextSquelched;
     markDeviceStateDirty();
   }
-  if (frame && len == freedv2400b::PAYLOAD_BYTES && accepted) {
+  if (frame && len == freedv2400b::PAYLOAD_BYTES &&
+      (accepted || protocolAnySessionFlag(HOST_STATE_SQ_OPEN_OVERRIDE))) {
     sendDigitalFrame(frame, len);
   }
 }
@@ -256,7 +257,7 @@ void endI2SRx() {
 void rxAudioLoop() {
   softSquelchEffect.setHardwareSquelched(digitalRead(hw.pins.pinSq) == HIGH);
   if (mode == MODE_RX || mode == MODE_STOPPED) {
-    mute.setActive(squelched);
+    mute.setActive(squelched && !protocolAnySessionFlag(HOST_STATE_SQ_OPEN_OVERRIDE));
     rxCopier.copy();
     esp_task_wdt_reset();
   }

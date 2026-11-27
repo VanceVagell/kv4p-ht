@@ -84,8 +84,8 @@ static constexpr size_t AX25_MAX_KISS_DATA_LEN =
 #define DEFAULT_PIN_PTT       18  // Keys up the radio module
 #define DEFAULT_PIN_PD        19
 #define DEFAULT_PIN_SQ        32  //
-#define DEFAULT_PIN_PHYS_PTT1 5   // Optional. Buttons may be attached to either or both of this and next pin. They behave the same.
-#define DEFAULT_PIN_PHYS_PTT2 33  // Optional. See above.
+#define DEFAULT_PIN_PHYS_PTT1 5   // Optional physical button 1.
+#define DEFAULT_PIN_PHYS_PTT2 33  // Optional physical button 2; reported separately.
 #define DEFAULT_PIN_LED        2  // Built in LED
 #define DEFAULT_PIN_PIXELS    13  // NeoPixel data pin
 #define DEFAULT_PIN_HL        -1  // High/Low pin for the radio module. -1 means not used.

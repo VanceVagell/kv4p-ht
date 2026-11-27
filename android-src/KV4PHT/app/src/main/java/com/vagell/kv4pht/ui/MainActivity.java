@@ -72,6 +72,7 @@ import com.vagell.kv4pht.BR;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AprsFeedPolicy;
 import com.vagell.kv4pht.data.AppSetting;
+import com.vagell.kv4pht.data.PhysicalButtonSetting;
 import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.databinding.ActivityMainBinding;
 import com.vagell.kv4pht.radio.RadioAudioService;
@@ -513,6 +514,11 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
+                public void beaconNowRequested() {
+                    runOnUiThread(() -> singleBeaconButtonClicked(null));
+                }
+
+                @Override
                 public void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
                     doShowNotification(notificationChannelId, notificationTypeId, title, message, tapIntentName);
                 }
@@ -872,6 +878,11 @@ public class MainActivity extends AppCompatActivity {
 
         stickyPTT = Boolean.parseBoolean(settings.getOrDefault(
             AppSetting.SETTING_STICKY_PTT, DEFAULT_BOOLEAN_FALSE));
+        if (radioAudioService != null) {
+            radioAudioService.setPhysicalButtonAssignments(
+                settings.getOrDefault(PhysicalButtonSetting.BUTTON_1, PhysicalButtonSetting.PTT),
+                settings.getOrDefault(PhysicalButtonSetting.BUTTON_2, PhysicalButtonSetting.PTT));
+        }
     }
 
     private void applyAprsSettings(Map<String, String> settings) {

@@ -52,6 +52,7 @@ import com.vagell.kv4pht.BuildConfig;
 import com.vagell.kv4pht.R;
 import com.vagell.kv4pht.data.AprsFeedPolicy;
 import com.vagell.kv4pht.data.AppSetting;
+import com.vagell.kv4pht.data.PhysicalButtonSetting;
 import com.vagell.kv4pht.radio.RadioAudioService;
 import com.vagell.kv4pht.repeaterbook.RepeaterBookTokenStore;
 
@@ -146,6 +147,7 @@ public class SettingsActivity extends AppCompatActivity {
         populateAprsIcons();
         populateRadioOptions();
         populateVersions();
+        populatePhysicalButtonOptions();
     }
 
     @Override
@@ -346,6 +348,10 @@ public class SettingsActivity extends AppCompatActivity {
                 String mhz = getString(R.string.mhz);
                 setTextIfPresent(settings, AppSetting.SETTING_CALLSIGN, R.id.callsignTextInputEditText);
                 setSwitchIfPresent(settings, AppSetting.SETTING_STICKY_PTT, R.id.stickyPTTSwitch);
+                setPhysicalButtonAction(R.id.physicalButton1Action,
+                    settings.get(PhysicalButtonSetting.BUTTON_1));
+                setPhysicalButtonAction(R.id.physicalButton2Action,
+                    settings.get(PhysicalButtonSetting.BUTTON_2));
                 setSwitchIfPresent(settings, AppSetting.SETTING_DISABLE_ANIMATIONS, R.id.noAnimationsSwitch);
                 setSwitchIfPresent(settings, AppSetting.SETTING_APRS_BEACON_POSITION, R.id.aprsPositionSwitch);
                 if (settings.containsKey(AppSetting.SETTING_APRS_BEACON_FREQUENCY)) {
@@ -472,6 +478,38 @@ public class SettingsActivity extends AppCompatActivity {
         ((Switch) findViewById(id)).setOnCheckedChangeListener((buttonView, isChecked) -> onChange.accept(isChecked));
     }
 
+    private void populatePhysicalButtonOptions() {
+        List<String> actions = List.of(
+            getString(R.string.physical_button_ptt),
+            getString(R.string.physical_button_open_sq),
+            getString(R.string.physical_button_becon));
+        setDropdownOptions(R.id.physicalButton1Action, actions);
+        setDropdownOptions(R.id.physicalButton2Action, actions);
+    }
+
+    private void setPhysicalButtonAction(int id, String action) {
+        int label = R.string.physical_button_ptt;
+        if (PhysicalButtonSetting.OPEN_SQ.equals(action)) {
+            label = R.string.physical_button_open_sq;
+        } else if (PhysicalButtonSetting.BEACON.equals(action)) {
+            label = R.string.physical_button_becon;
+        }
+        this.<AutoCompleteTextView>findViewById(id).setText(
+            getString(label), false);
+    }
+
+    private void attachPhysicalButtonAction(int id, String setting) {
+        this.<AutoCompleteTextView>findViewById(id).setOnItemClickListener((parent, view, position, itemId) -> {
+            String action = PhysicalButtonSetting.PTT;
+            if (position == 1) {
+                action = PhysicalButtonSetting.OPEN_SQ;
+            } else if (position == 2) {
+                action = PhysicalButtonSetting.BEACON;
+            }
+            saveAppSettingAsync(setting, action);
+        });
+    }
+
     private void attachListeners() {
         attachTextView(R.id.callsignTextInputEditText, text -> setCallsign(text.toUpperCase()));
         attachTextView(R.id.aprsPositionAccuracyTextView, this::setAprsPositionAccuracy);
@@ -483,6 +521,8 @@ public class SettingsActivity extends AppCompatActivity {
         attachTextView(R.id.max70cmFreqTextView, text -> setMax70cmTxFreq(extractPrefix(text)));
         attachTextView(R.id.micGainBoostTextView, this::setMicGainBoost);
         attachSwitch(R.id.stickyPTTSwitch, this::setStickyPTT);
+        attachPhysicalButtonAction(R.id.physicalButton1Action, PhysicalButtonSetting.BUTTON_1);
+        attachPhysicalButtonAction(R.id.physicalButton2Action, PhysicalButtonSetting.BUTTON_2);
         attachSwitch(R.id.noAnimationsSwitch, this::setNoAnimations);
         attachSwitch(R.id.aprsPositionSwitch, this::setAprsBeaconPosition);
         attachTextView(R.id.aprsBeaconFreqTextView, this::setAprsBeaconFrequency);

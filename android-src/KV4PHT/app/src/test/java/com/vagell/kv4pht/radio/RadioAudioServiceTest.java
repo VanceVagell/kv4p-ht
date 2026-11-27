@@ -23,6 +23,7 @@ import android.os.Looper;
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule;
 import androidx.lifecycle.MutableLiveData;
 import com.vagell.kv4pht.data.ChannelMemory;
+import com.vagell.kv4pht.data.PhysicalButtonSetting;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -78,6 +79,29 @@ public class RadioAudioServiceTest {
         assertSame(service, ((RadioAudioService.RadioBinder) service.onBind(new Intent())).getService());
         assertEquals(3, service.getRadioModule().getDesiredSquelch());
         assertEquals(RadioMode.STARTUP, service.getMode());
+    }
+
+    @Test public void beaconButtonRequestsOneBeaconPerPress() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        service.setCallbacks(new RadioAudioService.RadioAudioServiceCallbacks() {
+            @Override public void beaconNowRequested() {
+                requests.incrementAndGet();
+            }
+        });
+        service.setPhysicalButtonAssignments(PhysicalButtonSetting.BEACON, PhysicalButtonSetting.PTT);
+        service.getRadioModule().updateDeviceState(Protocol.DeviceState.builder()
+            .flags(Protocol.DEVICE_STATE_PHYS_PTT_DOWN).build());
+
+        invokeService("handlePhysicalButtons", new Class<?>[]{boolean.class, boolean.class}, true, false);
+        invokeService("handlePhysicalButtons", new Class<?>[]{boolean.class, boolean.class}, false, false);
+        assertEquals(1, requests.get());
+
+        service.getRadioModule().updateDeviceState(Protocol.DeviceState.builder().flags(0).build());
+        invokeService("handlePhysicalButtons", new Class<?>[]{boolean.class, boolean.class}, false, false);
+        service.getRadioModule().updateDeviceState(Protocol.DeviceState.builder()
+            .flags(Protocol.DEVICE_STATE_PHYS_PTT_DOWN).build());
+        invokeService("handlePhysicalButtons", new Class<?>[]{boolean.class, boolean.class}, true, false);
+        assertEquals(2, requests.get());
     }
 
     @Test public void frequencyInputNormalizesClampsAndFallsBackWithinSelectedBand() {

@@ -85,6 +85,7 @@ import com.vagell.kv4pht.data.ChannelMemory;
 import com.vagell.kv4pht.data.AprsFeedRepository;
 import com.vagell.kv4pht.data.AprsFeedRow;
 import com.vagell.kv4pht.data.AppDatabase;
+import com.vagell.kv4pht.data.PhysicalButtonSetting;
 import com.vagell.kv4pht.data.RoomAprsRepository;
 import com.vagell.kv4pht.firmware.FirmwareUtils;
 import com.vagell.kv4pht.javAX25.ax25.Packet;
@@ -280,6 +281,9 @@ public class RadioAudioService extends Service {
     @Getter
     private @NonNull String activeFrequencyStr = "";
     private int activeMemoryId = -1;
+    private String button1Action = PhysicalButtonSetting.PTT;
+    private String button2Action = PhysicalButtonSetting.PTT;
+    private boolean physicalPttOwned;
     private int scanBaseSquelch = -1;
     private static final int DEFAULT_SCAN_SQUELCH = 7;
     private Runnable pendingScanAdvance;
@@ -343,6 +347,7 @@ public class RadioAudioService extends Service {
         default void unknownLocation() {}
         default void forcedPttStart() {}
         default void forcedPttEnd() {}
+        default void beaconNowRequested() {}
         default void setRadioType(RadioModuleType ratioType) {}
         default void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {}
     }
@@ -1153,6 +1158,39 @@ public class RadioAudioService extends Service {
         }
     }
 
+    public void setPhysicalButtonAssignments(String button1Action, String button2Action) {
+        this.button1Action = button1Action;
+        this.button2Action = button2Action;
+        handlePhysicalButtons(false, false);
+    }
+
+    private void handlePhysicalButtons(boolean button1Pressed, boolean button2Pressed) {
+        boolean button1Down = radioModule.isPhysPttDown();
+        boolean button2Down = radioModule.isPhysPtt2Down();
+        radioModule.setSquelchOpenOverride(
+            (button1Down && PhysicalButtonSetting.OPEN_SQ.equals(button1Action))
+                || (button2Down && PhysicalButtonSetting.OPEN_SQ.equals(button2Action)));
+        boolean pttButtonDown = (button1Down && !PhysicalButtonSetting.OPEN_SQ.equals(button1Action)
+            && !PhysicalButtonSetting.BEACON.equals(button1Action))
+            || (button2Down && !PhysicalButtonSetting.OPEN_SQ.equals(button2Action)
+            && !PhysicalButtonSetting.BEACON.equals(button2Action));
+        if ((button1Pressed && PhysicalButtonSetting.BEACON.equals(button1Action))
+            || (button2Pressed && PhysicalButtonSetting.BEACON.equals(button2Action))) {
+            callbacks.beaconNowRequested();
+        }
+        if (pttButtonDown && !physicalPttOwned && getMode() == RadioMode.RX && isTxAllowed()) {
+            startPtt();
+            if (getMode() == RadioMode.TX) {
+                physicalPttOwned = true;
+                callbacks.forcedPttStart();
+            }
+        } else if (!pttButtonDown && physicalPttOwned) {
+            physicalPttOwned = false;
+            endPtt();
+            callbacks.forcedPttEnd();
+        }
+    }
+
     public boolean isVoiceCaptureActive() {
         return voiceCaptureActive;
     }
@@ -1841,6 +1879,10 @@ public class RadioAudioService extends Service {
         waitingForHello = false;
         cancelHelloTimeout();
         abandonAudioFocus();
+        if (physicalPttOwned) {
+            physicalPttOwned = false;
+            callbacks.forcedPttEnd();
+        }
         radioModule.detachSender();
         hostToEsp32 = null;
         connectingDeviceId = null;
@@ -3049,17 +3091,11 @@ public class RadioAudioService extends Service {
             callbacks.sMeterUpdate(radioModule.getSMeterBarValue());
         }
         checkScanDueToSquelch();
-        if (radioModule.didPhysPttChange()) {
-            boolean physPttDown = radioModule.isPhysPttDown();
-            if (physPttDown) {
-                if (getMode() == RadioMode.RX && isTxAllowed()) {
-                    startPtt();
-                    callbacks.forcedPttStart();
-                }
-            } else if (getMode() == RadioMode.TX) {
-                endPtt();
-                callbacks.forcedPttEnd();
-            }
+        boolean button1Changed = radioModule.didPhysPttChange();
+        boolean button2Changed = radioModule.didPhysPtt2Change();
+        if (button1Changed || button2Changed) {
+            handlePhysicalButtons(button1Changed && radioModule.isPhysPttDown(),
+                button2Changed && radioModule.isPhysPtt2Down());
         }
     }
 
