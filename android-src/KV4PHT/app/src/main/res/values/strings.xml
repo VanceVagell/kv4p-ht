@@ -215,4 +215,5 @@
     <string name="physical_button_2">Button 2</string>
     <string name="physical_button_ptt">PTT</string>
     <string name="physical_button_open_sq">Open SQ</string>
+    <string name="physical_button_becon">Becon</string>
 </resources>

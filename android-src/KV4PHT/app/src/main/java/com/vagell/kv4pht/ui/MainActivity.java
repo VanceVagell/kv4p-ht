@@ -514,6 +514,11 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 @Override
+                public void beaconNowRequested() {
+                    runOnUiThread(() -> singleBeaconButtonClicked(null));
+                }
+
+                @Override
                 public void showNotification(String notificationChannelId, int notificationTypeId, String title, String message, String tapIntentName) {
                     doShowNotification(notificationChannelId, notificationTypeId, title, message, tapIntentName);
                 }
@@ -875,8 +880,8 @@ public class MainActivity extends AppCompatActivity {
             AppSetting.SETTING_STICKY_PTT, DEFAULT_BOOLEAN_FALSE));
         if (radioAudioService != null) {
             radioAudioService.setPhysicalButtonAssignments(
-                PhysicalButtonSetting.OPEN_SQ.equals(settings.get(PhysicalButtonSetting.BUTTON_1)),
-                PhysicalButtonSetting.OPEN_SQ.equals(settings.get(PhysicalButtonSetting.BUTTON_2)));
+                settings.getOrDefault(PhysicalButtonSetting.BUTTON_1, PhysicalButtonSetting.PTT),
+                settings.getOrDefault(PhysicalButtonSetting.BUTTON_2, PhysicalButtonSetting.PTT));
         }
     }
 

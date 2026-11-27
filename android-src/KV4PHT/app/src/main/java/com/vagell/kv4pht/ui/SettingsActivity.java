@@ -480,21 +480,34 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void populatePhysicalButtonOptions() {
         List<String> actions = List.of(
-            getString(R.string.physical_button_ptt), getString(R.string.physical_button_open_sq));
+            getString(R.string.physical_button_ptt),
+            getString(R.string.physical_button_open_sq),
+            getString(R.string.physical_button_becon));
         setDropdownOptions(R.id.physicalButton1Action, actions);
         setDropdownOptions(R.id.physicalButton2Action, actions);
     }
 
     private void setPhysicalButtonAction(int id, String action) {
+        int label = R.string.physical_button_ptt;
+        if (PhysicalButtonSetting.OPEN_SQ.equals(action)) {
+            label = R.string.physical_button_open_sq;
+        } else if (PhysicalButtonSetting.BEACON.equals(action)) {
+            label = R.string.physical_button_becon;
+        }
         this.<AutoCompleteTextView>findViewById(id).setText(
-            getString(PhysicalButtonSetting.OPEN_SQ.equals(action)
-                ? R.string.physical_button_open_sq : R.string.physical_button_ptt), false);
+            getString(label), false);
     }
 
     private void attachPhysicalButtonAction(int id, String setting) {
-        this.<AutoCompleteTextView>findViewById(id).setOnItemClickListener(
-            (parent, view, position, itemId) -> saveAppSettingAsync(setting,
-                position == 1 ? PhysicalButtonSetting.OPEN_SQ : PhysicalButtonSetting.PTT));
+        this.<AutoCompleteTextView>findViewById(id).setOnItemClickListener((parent, view, position, itemId) -> {
+            String action = PhysicalButtonSetting.PTT;
+            if (position == 1) {
+                action = PhysicalButtonSetting.OPEN_SQ;
+            } else if (position == 2) {
+                action = PhysicalButtonSetting.BEACON;
+            }
+            saveAppSettingAsync(setting, action);
+        });
     }
 
     private void attachListeners() {
